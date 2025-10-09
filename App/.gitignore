@@ -1,0 +1,17 @@
+# --- Dossiers à ignorer ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+logs/
+.env
+.vscode/
+.idea/
+.venv/
+.DS_Store
+*.zip
+*.log
+
+# --- Fichiers temporaires ---
+Thumbs.db
+desktop.ini
