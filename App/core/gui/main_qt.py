@@ -1,16 +1,15 @@
 import sys, os, datetime as dt
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QListWidget, QScrollArea,
-    QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QAction, QMessageBox, QMenu
+    QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QMessageBox, QFrame 
 )
-from PyQt5.QtCore import Qt, QUrl
-from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent 
+from PyQt5.QtGui import QDesktopServices, QIcon
 
-# Thème clair + cartes pastel
-from core.gui.ui_theme import EmacTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard
+# Importe EmacDarkTheme et apply_soft_shadow
+from core.gui.ui_theme import EmacTheme, EmacDarkTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard, apply_soft_shadow
 
-# Modules applicatifs (inchangés)
-from core.gui.liste_et_grilles import GrillesDialog
+from .liste_et_grilles import GrillesDialog
 from core.gui.creation_modification_poste import CreationModificationPosteDialog
 from core.gui.liste_personnel import ListePersonnelDialog
 from core.gui.manage_operateur import ManageOperatorsDialog
@@ -18,6 +17,8 @@ from core.gui.historique import HistoriqueDialog
 from core.gui.gestion_evaluation import GestionEvaluationDialog
 from core.gui.evaluation_calendar import EvaluationCalendarDialog
 from core.db.configbd import get_connection as get_db_connection
+from core.gui.ui_theme import HamburgerButton, EmacButton
+
 
 try:
     from core.services.log_exporter import export_day
@@ -26,10 +27,20 @@ except ImportError:
 
 
 class MainWindow(QMainWindow):
+    # Largeur du menu latéral
+    DRAWER_WIDTH = 280
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Gestion du Personnel")
         self.setGeometry(80, 80, 1180, 720)
+        
+        # État initial du thème
+        self.current_theme = EmacTheme
+
+        # État initial du Drawer et Event Filter 
+        self.is_drawer_open = False
+        self.installEventFilter(self) 
 
         # ---------- Widget central + layout principal ----------
         rootw = QWidget(); self.setCentralWidget(rootw)
@@ -40,78 +51,283 @@ class MainWindow(QMainWindow):
         rootw.setLayout(root)
 
         # =====================
-        # Colonne gauche — cartes pastel
+        # Colonne gauche – cartes pastel (Rendues self. pour rebuild_status_cards)
         # =====================
         left = QVBoxLayout(); left.setSpacing(18)
 
         # Retards (bandeau rouge pastel)
-        retard_card = EmacStatusCard("Retard Évaluations", variant='danger')
+        self.retard_card = EmacStatusCard("Retard Évaluations", variant='danger')
         self.retard_filter = QComboBox(); self.retard_filter.addItem("Tous les postes", "")
         self.retard_filter.currentIndexChanged.connect(self.load_evaluations)
         self.retard_scroll, self.retard_list = self.create_scrollable_list()
-        retard_card.body.addWidget(self.retard_filter)
-        retard_card.body.addWidget(self.retard_scroll)
-        left.addWidget(retard_card)
+        self.retard_card.body.addWidget(self.retard_filter)
+        self.retard_card.body.addWidget(self.retard_scroll)
+        left.addWidget(self.retard_card)
 
         # Prochaines (bandeau vert pastel)
-        next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="10 prochaines")
+        self.next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="10 prochaines")
         self.next_eval_filter = QComboBox(); self.next_eval_filter.addItem("Tous les postes", "")
         self.next_eval_filter.currentIndexChanged.connect(self.load_evaluations)
         self.next_eval_scroll, self.next_eval_list = self.create_scrollable_list()
-        next_card.body.addWidget(self.next_eval_filter)
-        next_card.body.addWidget(self.next_eval_scroll)
-        left.addWidget(next_card)
+        self.next_card.body.addWidget(self.next_eval_filter)
+        self.next_card.body.addWidget(self.next_eval_scroll)
+        left.addWidget(self.next_card)
 
         root.addLayout(left, 0, 0, 2, 1)
 
         # =====================
-        # Colonne droite — header + actions
+        # Colonne droite – header + actions
         # =====================
         right = QVBoxLayout(); right.setSpacing(18)
 
-        header = EmacHeader("Gestion du Personnel")
-        # bouton menu en action à droite
-        self.menu = QMenu(self)
-        menu_btn = EmacButton("Menu")
-        menu_btn.clicked.connect(self.show_menu)
-        header.add_action(menu_btn)
-        right.addWidget(header)
+        # Header avec menu burger bien visible
+        header_widget = QWidget()
+        header_layout = QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 8)
+        header_layout.setSpacing(12)
+        
+        # Titre
+        title_layout = QVBoxLayout()
+        title_layout.setSpacing(2)
+        h1 = QLabel("Gestion du Personnel")
+        h1.setProperty('class', 'h1')
+        title_layout.addWidget(h1)
+        header_layout.addLayout(title_layout, 1)
+        
+        # Menu burger à droite (Connecté au Drawer)
+        self.menu_btn = HamburgerButton(self, variant="primary")
+        self.menu_btn.setToolTip("Menu")
+        self.menu_btn.clicked.connect(self.toggle_drawer) 
+        header_layout.addWidget(self.menu_btn, 0, Qt.AlignRight | Qt.AlignVCenter)
+        
+        right.addWidget(header_widget)
 
-        actions_wrap = EmacCard()
+        # Actions rapides
+        self.actions_wrap = EmacCard()
         title = QLabel("Actions rapides"); title.setProperty('class','h2')
-        actions_wrap.body.addWidget(title)
+        self.actions_wrap.body.addWidget(title)
 
+        # AMÉLIORATION VISUELLE: Boutons secondaires en 'ghost'
         rows = QVBoxLayout(); rows.setSpacing(8)
         r1 = QHBoxLayout(); b1 = EmacButton("Liste du Personnel", 'primary'); b1.clicked.connect(self.show_liste_personnel); r1.addWidget(b1)
-        r2 = QHBoxLayout(); b2 = EmacButton("Liste et Grilles"); b2.clicked.connect(self.show_listes_grilles_dialog); r2.addWidget(b2)
-        r3 = QHBoxLayout(); b3 = EmacButton("Gestion des Évaluations"); b3.clicked.connect(self.show_gestion_evaluations); r3.addWidget(b3)
-        r4 = QHBoxLayout(); b4 = EmacButton("Historique"); b4.clicked.connect(self.show_historique); r4.addWidget(b4)
-        r5 = QHBoxLayout(); b5 = EmacButton("Calendrier"); b5.clicked.connect(self.show_calendrier_evaluations); r5.addWidget(b5)
-        r6 = QHBoxLayout(); b6 = EmacButton("Quitter"); b6.clicked.connect(self.close); r6.addWidget(b6)
+        r2 = QHBoxLayout(); b2 = EmacButton("Liste et Grilles", 'ghost'); b2.clicked.connect(self.show_listes_grilles_dialog); r2.addWidget(b2)
+        r3 = QHBoxLayout(); b3 = EmacButton("Gestion des Évaluations", 'ghost'); b3.clicked.connect(self.show_gestion_evaluations); r3.addWidget(b3)
+        r4 = QHBoxLayout(); b4 = EmacButton("Historique", 'ghost'); b4.clicked.connect(self.show_historique); r4.addWidget(b4)
+        r5 = QHBoxLayout(); b5 = EmacButton("Calendrier", 'ghost'); b5.clicked.connect(self.show_calendrier_evaluations); r5.addWidget(b5)
+        r6 = QHBoxLayout(); b6 = EmacButton("Quitter", 'ghost'); b6.clicked.connect(self.close); r6.addWidget(b6)
         for r in (r1, r2, r3, r4, r5, r6):
             rows.addLayout(r)
-        actions_wrap.body.addLayout(rows)
-        right.addWidget(actions_wrap)
+        self.actions_wrap.body.addLayout(rows)
+        right.addWidget(self.actions_wrap)
 
         root.addLayout(right, 0, 1)
+        
+        # =====================
+        # Menu Latéral (Drawer) - Rétabli
+        # =====================
+        self.create_drawer()
 
         # --- Data init ---
         self.populate_filters()
         self.load_evaluations()
 
-        # --- Menu déroulant (fonctions existantes) ---
-        self.add_menu_action("Ajouter un opérateur", self.show_manage_operator)
-        self.add_menu_action("Création/Suppression de poste", self.show_poste_form)
-        self.add_menu_action("Calendrier des évaluations", self.show_calendrier_evaluations)
+    # ================= Filtre d'événements pour clic extérieur =================
+    def eventFilter(self, source, event):
+        """
+        Filtre les événements de clic de souris pour fermer le menu latéral 
+        s'il est ouvert et que l'événement ne provient pas du menu ou du bouton menu.
+        """
+        if self.is_drawer_open and event.type() == QEvent.MouseButtonPress:
+            # Vérifie si le clic est en dehors du drawer
+            if not self.drawer.geometry().contains(self.mapFromGlobal(event.globalPos())):
+                # Assurez-vous que le clic ne vient pas du bouton menu lui-même
+                if source is not self.menu_btn:
+                    self.toggle_drawer()
+                    return True  # L'événement est consommé, empêchant la propagation
+        return super().eventFilter(source, event)
+
+
+    # ================= Menu Latéral (Drawer) =================
+    def create_drawer(self):
+        """Crée et initialise le menu latéral coulissant."""
+        if hasattr(self, 'drawer'):
+            self.drawer.deleteLater() 
+            del self.drawer
+            
+        self.drawer = QFrame(self)
+        self.drawer.setObjectName("card")
+        
+        # Applique l'ombre au QFrame
+        apply_soft_shadow(self, radius=22, alpha=36) # Ombre appliquée à MainWindow dans l'ancienne version, corrigée ici
+
+        apply_soft_shadow(self.drawer, radius=22, alpha=36)
+        
+        self.drawer.setFixedSize(self.DRAWER_WIDTH, self.height())
+        
+        # Style pour le drawer. Utilise self.current_theme.
+        ThemeCls = self.current_theme
+        border_color = ThemeCls.BDR_STRONG
+        bg_card = ThemeCls.BG_CARD
+        
+        self.drawer.setStyleSheet(f"""
+            QFrame#card {{
+                background: {bg_card};
+                border-left: 1px solid {border_color};
+                border-radius: 0px; 
+            }}
+        """)
+        
+        # Initialise la position et l'état
+        self.is_drawer_open = getattr(self, 'is_drawer_open', False)
+        
+        # Calcule la position idéale (ouverte ou fermée) en fonction de la taille actuelle de la fenêtre
+        current_x = self.width() - self.DRAWER_WIDTH if self.is_drawer_open else self.width()
+        
+        # Force le déplacement du nouveau Drawer à la bonne position (essentiel après recréation)
+        self.drawer.move(current_x, 0)
+        self.drawer.updateGeometry() 
+        
+        # Cache par défaut si fermé
+        if not self.is_drawer_open:
+             self.drawer.hide()
+        
+        # Layout du Drawer
+        drawer_layout = QVBoxLayout(self.drawer)
+        drawer_layout.setContentsMargins(16, 16, 16, 16)
+        drawer_layout.setAlignment(Qt.AlignTop)
+        
+        # Titre dans le Drawer
+        title = QLabel("Menu")
+        title.setProperty('class', 'h2')
+        drawer_layout.addWidget(title)
+        drawer_layout.addSpacing(15)
+
+        # Ajout des boutons dans le Drawer
+        self.add_drawer_button(drawer_layout, "Changer de Thème (Light/Dark)", self.toggle_theme, 'primary')
+        drawer_layout.addSpacing(15)
+        self.add_drawer_button(drawer_layout, "Ajouter un opérateur", self.show_manage_operator, 'ghost')
+        self.add_drawer_button(drawer_layout, "Création/Modification de poste", self.show_poste_form, 'ghost')
+        
         if export_day:
-            self.add_menu_action("Exporter les logs du jour", self.export_logs_today)
+            self.add_drawer_button(drawer_layout, "Exporter les logs du jour", self.export_logs_today, 'ghost')
 
-    # ================= Helpers UI =================
-    def add_menu_action(self, title, action):
-        act = QAction(title, self); act.triggered.connect(action); self.menu.addAction(act)
+        drawer_layout.addStretch(1)
 
-    def show_menu(self):
-        self.menu.exec_(self.mapToGlobal(self.rect().topRight()))
+
+    def add_drawer_button(self, layout: QVBoxLayout, text: str, action: callable, variant: str = None):
+        """Ajoute un bouton de menu au layout du Drawer."""
+        btn = EmacButton(text, variant=variant)
+        btn.setFixedHeight(44)
+        btn.clicked.connect(action)
+        # Ferme le drawer après l'action 
+        if action not in (self.close, self.export_logs_today, self.toggle_theme):
+            btn.clicked.connect(self.toggle_drawer)
+        layout.addWidget(btn)
+
+    def _recreate_drawer_safe(self):
+        """
+        Méthode intermédiaire pour recréer le drawer et forcer 
+        le rafraîchissement visuel après un changement de thème.
+        """
+        self.create_drawer()
+        
+        # On force la mise à jour des layouts et le rafraîchissement
+        self.centralWidget().update()
+        self.update()
+        
+    def toggle_theme(self):
+        """Bascule entre le thème clair et le thème sombre."""
+        # 1. Détermine le nouveau thème
+        new_theme = EmacDarkTheme if self.current_theme == EmacTheme else EmacTheme
+        self.current_theme = new_theme
+        
+        # 2. Applique le nouveau thème
+        new_theme.apply(QApplication.instance())
+        
+        # 3. Recrée les widgets qui dépendent des couleurs (StatusCard/Drawer)
+        self.rebuild_status_cards()
+        
+        # 4. Utilise QTimer.singleShot pour appeler la fonction de recréation sécurisée. 
+        # C'est la solution stable aux conflits de géométrie.
+        QTimer.singleShot(50, self._recreate_drawer_safe) 
+
+    def rebuild_status_cards(self):
+        """
+        Recrée les EmacStatusCard pour appliquer les couleurs pastel du nouveau thème.
+        """
+        
+        main_layout = self.centralWidget().layout().itemAtPosition(0, 0).layout()
+        
+        # --- GESTION DES RETARDS ---
+        retard_filter_widget = self.retard_card.body.takeAt(0).widget() 
+        retard_scroll_widget = self.retard_card.body.takeAt(0).widget() 
+
+        main_layout.removeWidget(self.retard_card)
+        self.retard_card.deleteLater()
+
+        self.retard_card = EmacStatusCard("Retard Évaluations", variant='danger')
+        main_layout.insertWidget(0, self.retard_card)
+        self.retard_card.body.addWidget(retard_filter_widget)
+        self.retard_card.body.addWidget(retard_scroll_widget)
+        
+        # --- GESTION DES PROCHAINES ÉVALUATIONS ---
+        next_filter_widget = self.next_card.body.takeAt(0).widget() 
+        next_scroll_widget = self.next_card.body.takeAt(0).widget() 
+
+        main_layout.removeWidget(self.next_card)
+        self.next_card.deleteLater()
+
+        self.next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="10 prochaines")
+        main_layout.insertWidget(1, self.next_card)
+        self.next_card.body.addWidget(next_filter_widget)
+        self.next_card.body.addWidget(next_scroll_widget)
+        
+        self.load_evaluations()
+
+    
+    def resizeEvent(self, event):
+        """Met à jour la taille et la position du Drawer au redimensionnement."""
+        super().resizeEvent(event)
+        if hasattr(self, 'drawer'):
+            self.drawer.setFixedHeight(self.height())
+            
+            # S'assurer que la position est mise à jour pour le nouvel état 
+            current_x = self.width() - self.DRAWER_WIDTH if self.is_drawer_open else self.width()
+            self.drawer.move(current_x, 0)
+    
+    
+    def toggle_drawer(self):
+        """Anime l'ouverture et la fermeture du menu latéral."""
+        self.is_drawer_open = not self.is_drawer_open
+        
+        # DÉFINITION DE LA POSITION DE FIN
+        end_x = self.width() - self.DRAWER_WIDTH if self.is_drawer_open else self.width()
+        
+        # Crée l'animation
+        self.animation = QPropertyAnimation(self.drawer, b"pos")
+        self.animation.setDuration(250) 
+        self.animation.setEasingCurve(QEasingCurve.OutCubic)
+        
+        # DÉFINITION DE LA POSITION DE DÉPART (part de la position actuelle)
+        self.animation.setStartValue(self.drawer.pos())
+        self.animation.setEndValue(QPoint(end_x, 0))
+        
+        # Gère la visibilité du Drawer
+        if self.is_drawer_open:
+            # Si on ouvre, on affiche et on s'assure qu'il est au premier plan
+            self.drawer.show() 
+            self.drawer.raise_()
+            # Déconnecter l'ancien signal de fermeture s'il existe
+            try: self.animation.finished.disconnect()
+            except: pass
+        else:
+            # Si on ferme, on le cache uniquement quand l'animation est terminée
+            try: self.animation.finished.disconnect()
+            except: pass
+            self.animation.finished.connect(self.drawer.hide)
+
+        self.animation.start()
+
 
     def create_scrollable_list(self):
         sc = QScrollArea(); sc.setWidgetResizable(True)
@@ -134,17 +350,19 @@ class MainWindow(QMainWindow):
     def show_calendrier_evaluations(self):
         EvaluationCalendarDialog(self).exec_()
 
-    # ================= Données / DB =================
+    # ================= Données / DB (Fonctions inchangées) =================
     def populate_filters(self):
         conn = get_db_connection(); cur = conn.cursor()
         try:
             cur.execute("SELECT DISTINCT poste_code FROM postes ORDER BY poste_code;")
             for (poste,) in cur.fetchall():
-                self.retard_filter.addItem(poste, poste)
-                self.next_eval_filter.addItem(poste, poste)
+                # Vérifie si l'élément existe déjà pour éviter le doublon (cas rare)
+                if self.retard_filter.findData(poste) == -1: 
+                    self.retard_filter.addItem(poste, poste)
+                    self.next_eval_filter.addItem(poste, poste)
         finally:
             cur.close(); conn.close()
-
+            
     def load_evaluations(self):
         conn = get_db_connection(); cur = conn.cursor()
         try:
@@ -194,7 +412,7 @@ class MainWindow(QMainWindow):
         finally:
             cur.close(); conn.close()
 
-    # ================= Export =================
+    # ================= Export (Fonction inchangée) =================
     def export_logs_today(self):
         if not export_day:
             QMessageBox.warning(self, "Non disponible", "Module d'export non chargé.")

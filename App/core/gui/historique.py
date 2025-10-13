@@ -5,6 +5,7 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QDateEdit, QMessageBox, QComboBox
 )
 from PyQt5.QtCore import QDate
+from PyQt5 import QtGui
 
 # ⬇️ Nouveaux imports ABSOLUS alignés sur ta structure
 #    - on garde le nom get_db_connection via un alias pour ne rien casser dans le fichier
@@ -14,6 +15,68 @@ from core.services.log_exporter import export_day
 import json
 import datetime as dt
 import os
+
+# --- Traductions & rendu lisible ---
+ACTION_LABEL = {
+    "INSERT": "Création",
+    "UPDATE": "Modification",
+    "DELETE": "Suppression",
+    "ERROR":  "Erreur",
+}
+
+TABLE_LABEL = {
+    "postes": "Postes",
+    "operateurs": "Opérateurs",
+    "polyvalence": "Polyvalence",
+    "historique": "Historique",
+}
+
+def fr_action(a: str) -> str:
+    return ACTION_LABEL.get((a or "").upper(), a or "")
+
+def fr_table(t: str) -> str:
+    return TABLE_LABEL.get((t or ""), t or "")
+
+def make_resume(row: dict) -> str:
+    """
+    Construit une phrase lisible : ex.
+    'Modification de Polyvalence — opérateur 12 sur poste 34 : niveau 3'
+    """
+    act = fr_action(row.get("action"))
+    tab = fr_table(row.get("table_name"))
+    rec = row.get("record_id") or ""
+    desc = row.get("description") or ""
+
+    # Extra depuis details si JSON
+    details = row.get("details")
+    if isinstance(details, (bytes, bytearray)):
+        try:
+            details = details.decode("utf-8", "ignore")
+        except Exception:
+            pass
+    extra = ""
+    try:
+        parsed = json.loads(details) if isinstance(details, str) else details
+        if isinstance(parsed, dict):
+            op = parsed.get("operateur_id")
+            po = parsed.get("poste_id") or parsed.get("poste_code")
+            niv = parsed.get("niveau") or parsed.get("nouveau")
+            bits = []
+            if op is not None: bits.append(f"opérateur {op}")
+            if po is not None: bits.append(f"poste {po}")
+            if niv not in (None, ""): bits.append(f"niveau {niv}")
+            if bits:
+                extra = " — " + ", ".join(bits)
+    except Exception:
+        pass
+
+    base = f"{act} de {tab}"
+    if rec:
+        base += f" (réf. {rec})"
+    if desc:
+        base += f" — {desc}"
+    base += extra
+    return base
 
 
 class HistoriqueDialog(QDialog):
@@ -66,6 +129,11 @@ class HistoriqueDialog(QDialog):
         self.search = QLineEdit(placeholderText="Recherche (action, table, description, etc.)")
         self.search.returnPressed.connect(self.reload)
         filters.addWidget(self.search, stretch=1)
+        # Affichage : Mode simple/ détaillé
+        self.simple_mode = QComboBox()
+        self.simple_mode.addItems(["Affichage détaillé", "Mode simple"])
+        self.simple_mode.currentIndexChanged.connect(self.reload)
+        filters.addWidget(self.simple_mode)
 
         self.btn_refresh = QPushButton("Actualiser")
         self.btn_refresh.clicked.connect(self.reload)
@@ -79,10 +147,10 @@ class HistoriqueDialog(QDialog):
 
         # --- Table ---
         self.table = QTableWidget()
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels([
-            "Date/Heure", "Utilisateur", "Action", "Table",
-            "Record ID", "Description", "Détails", "Source"
+            "Résumé", "Date/Heure", "Utilisateur", "Action", "Table",
+            "Référence", "Description", "Détails", "Source"
         ])
         self.table.setSortingEnabled(True)
         root.addWidget(self.table)
@@ -103,162 +171,86 @@ class HistoriqueDialog(QDialog):
                 except Exception:
                     self.conn = get_db_connection()
         except Exception:
-            raise
+            QMessageBox.critical(self, "Historique", "Impossible de se connecter à la base de données.")
+            self.conn = None
 
     def _cursor(self):
-        """Retourne (cursor, dict_mode) sur self.conn."""
-        self._ensure_conn()
-        try:
-            cur = self.conn.cursor(dictionary=True)  # mysql-connector
-            return cur, True
-        except TypeError:
-            cur = self.conn.cursor()                  # PyMySQL / MySQLdb
-            return cur, False
-
-    def closeEvent(self, event):
-        """Ferme la connexion quand on ferme le viewer."""
-        try:
-            if self.conn:
-                self.conn.close()
-        except Exception:
-            pass
-        self.conn = None
-        super().closeEvent(event)
-
-    # ----------------- Data helpers -----------------
-
-    def _populate_table_filter(self, cur, date_col: str, df: str, dt_to: str, has):
-        """Peuple le combo 'Table' avec les valeurs distinctes de la période (même curseur)."""
-        if not has("table_name"):
-            self.table_filter.blockSignals(True)
-            self.table_filter.clear()
-            self.table_filter.addItem("(Toutes)")
-            self.table_filter.setEnabled(False)
-            self.table_filter.blockSignals(False)
-            return
-
-        cur.execute(
-            f"SELECT DISTINCT `table_name` FROM historique "
-            f"WHERE `{date_col}` BETWEEN %s AND %s ORDER BY `table_name`",
-            (df, dt_to),
-        )
-        rows = cur.fetchall()
-        vals = []
-        if isinstance(rows, list) and rows and isinstance(rows[0], dict):
-            vals = [r.get("table_name") for r in rows]
-        else:
-            vals = [r[0] for r in rows]
-
-        current = self.table_filter.currentText()
-        self.table_filter.blockSignals(True)
-        self.table_filter.clear()
-        self.table_filter.addItem("(Toutes)")
-        for v in vals:
-            if v is not None:
-                self.table_filter.addItem(str(v))
-        self.table_filter.setEnabled(True)
-        if current:
-            idx = self.table_filter.findText(current)
-            if idx >= 0:
-                self.table_filter.setCurrentIndex(idx)
-        self.table_filter.blockSignals(False)
+        if self.conn is None:
+            self._ensure_conn()
+        if self.conn is None:
+            raise RuntimeError("Connexion DB indisponible")
+        cur = self.conn.cursor(dictionary=True)
+        return cur
 
     # ----------------- Fetch -----------------
 
-    def _fetch_logs(self, date_from: QDate, date_to: QDate, query_text: str, action_sel: str, table_sel: str):
-        """Récupère les logs via la connexion persistante."""
-        df = date_from.toString("yyyy-MM-dd") + " 00:00:00"
-        dt_to = date_to.toString("yyyy-MM-dd") + " 23:59:59"
-        like_txt = query_text.strip()
-
-        cur, dict_mode = self._cursor()
+    def _fetch_logs(self, d_from: QDate, d_to: QDate, search_text: str, action_filter: str, table_filter: str):
+        cur = None
         try:
-            # Schéma (MySQL-like) — on adaptera pour Postgres plus tard
-            cur.execute("SHOW TABLES LIKE %s", ("historique",))
-            if not cur.fetchone():
-                raise RuntimeError("La table 'historique' n'existe pas.")
+            cur = self._cursor()
 
-            cur.execute("SHOW COLUMNS FROM historique;")
-            cols_raw = cur.fetchall()
-            colnames = {row["Field"] for row in cols_raw} if dict_mode else {row[0] for row in cols_raw}
-            has = colnames.__contains__
-
-            date_candidates = ["date_time", "created_at", "date", "timestamp", "ts"]
-            date_col = next((c for c in date_candidates if has(c)), None)
-            if not date_col:
-                raise RuntimeError("La table 'historique' doit contenir une colonne date/heure.")
-
-            # Peuple le filtre Table
-            self._populate_table_filter(cur, date_col, df, dt_to, has)
-
-            # Colonne utilisateur facultative
-            user_candidates = ["utilisateur", "user", "user_id", "utilisateur_id", "login", "username"]
-            user_col = next((c for c in user_candidates if has(c)), None)
-
-            def sel_or_null(c):
-                return f"`{c}`" if has(c) else f"NULL AS `{c}`"
-
-            select_list = [
-                f"`{date_col}` AS date_time",
-                (f"`{user_col}` AS utilisateur") if user_col else "NULL AS utilisateur",
-                sel_or_null("action"),
-                sel_or_null("table_name"),
-                sel_or_null("record_id"),
-                sel_or_null("description"),
-                sel_or_null("details"),
-                sel_or_null("source"),
+            where = [
+                "date_time >= %s",
+                "date_time < %s"
+            ]
+            params = [
+                dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
+                dt.datetime(d_to.year(),   d_to.month(),   d_to.day(),   23, 59, 59)
             ]
 
-            sql = f"SELECT {', '.join(select_list)} FROM historique WHERE `{date_col}` BETWEEN %s AND %s"
-            params = [df, dt_to]
+            if action_filter and action_filter != "(Toutes)":
+                where.append("action = %s")
+                params.append(action_filter)
 
-            # Masque la ligne "planification"
-            if has("description"):
-                sql += " AND IFNULL(`description`, '') <> 'Planification prochaine évaluation'"
+            # Table filter activé seulement si la colonne existe
+            has_table_col = False
+            try:
+                cur.execute("SHOW COLUMNS FROM historique LIKE 'table_name'")
+                has_table_col = cur.fetchone() is not None
+            except Exception:
+                has_table_col = False
 
-            # Filtre Action
-            if action_sel and action_sel != "(Toutes)" and has("action"):
-                sql += " AND `action` = %s"
-                params.append(action_sel)
+            if has_table_col:
+                self.table_filter.setEnabled(True)
+                if self.table_filter.count() == 1:
+                    # Remplir la liste des tables distinctes
+                    cur.execute("SELECT DISTINCT table_name FROM historique WHERE table_name IS NOT NULL ORDER BY 1")
+                    self.table_filter.blockSignals(True)
+                    for row in cur.fetchall():
+                        name = row.get("table_name")
+                        if name:
+                            self.table_filter.addItem(name)
+                    self.table_filter.blockSignals(False)
 
-            # Filtre Table
-            if table_sel and table_sel != "(Toutes)" and has("table_name"):
-                sql += " AND `table_name` = %s"
-                params.append(table_sel)
+                if table_filter and table_filter != "(Toutes)":
+                    where.append("table_name = %s")
+                    params.append(table_filter)
+            else:
+                self.table_filter.setEnabled(False)
 
-            # Filtre texte
-            if like_txt:
-                like = f"%{like_txt}%"
-                search_cols = [c for c in ["action", "table_name", "record_id", "description", "source"] if has(c)]
-                if user_col:
-                    search_cols.append(user_col)
-                preds = [f"IFNULL(`{c}`,'') LIKE %s" for c in search_cols]
-                if has("details"):
-                    preds.append("IFNULL(CAST(`details` AS CHAR),'') LIKE %s")
-                if preds:
-                    sql += " AND (" + " OR ".join(preds) + ")"
-                    params += [like] * len(preds)
+            if search_text:
+                like = f"%{search_text}%"
+                where.append("(action LIKE %s OR table_name LIKE %s OR description LIKE %s OR details LIKE %s OR source LIKE %s)")
+                params += [like, like, like, like, like]
 
-            # Tri
-            order_by = f" ORDER BY `{date_col}` ASC"
-            if has("id"):
-                order_by += ", `id` ASC"
-            sql += order_by
+            sql = (
+                "SELECT id, date_time, utilisateur, action, table_name, record_id, description, details, source "
+                "FROM historique "
+                f"WHERE {' AND '.join(where)} "
+                "ORDER BY date_time DESC, id DESC"
+            )
 
             cur.execute(sql, params)
-
-            if dict_mode:
-                return cur.fetchall()
-
-            columns = [d[0] for d in cur.description]
-            rows = cur.fetchall()
-            return [dict(zip(columns, row)) for row in rows]
-
+            rows = cur.fetchall() or []
+            return rows
         finally:
             try:
-                cur.close()
+                if cur:
+                    cur.close()
             except Exception:
                 pass
+
+    # ----------------- UI Reload -----------------
 
     def reload(self):
         try:
@@ -277,13 +269,27 @@ class HistoriqueDialog(QDialog):
 
         self.table.setRowCount(len(rows))
         for r, row in enumerate(rows):
-            self.table.setItem(r, 0, QTableWidgetItem(str(row.get("date_time", ""))))
-            self.table.setItem(r, 1, QTableWidgetItem(str(row.get("utilisateur", ""))))
-            self.table.setItem(r, 2, QTableWidgetItem(str(row.get("action", ""))))
-            self.table.setItem(r, 3, QTableWidgetItem(str(row.get("table_name", ""))))
-            self.table.setItem(r, 4, QTableWidgetItem(str(row.get("record_id", ""))))
-            self.table.setItem(r, 5, QTableWidgetItem(str(row.get("description", ""))))
+            # Résumé lisible
+            resume = make_resume(row)
 
+            # Date formatée FR
+            dt_txt = str(row.get("date_time", ""))
+            try:
+                from datetime import datetime
+                if not isinstance(dt_txt, str) and hasattr(dt_txt, "strftime"):
+                    dt_txt = row["date_time"].strftime("%d/%m/%Y %H:%M:%S")
+                else:
+                    try:
+                        dt_txt = datetime.fromisoformat(dt_txt).strftime("%d/%m/%Y %H:%M:%S")
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            action_txt = fr_action(row.get("action", ""))
+            table_txt  = fr_table(row.get("table_name", ""))
+
+            # Détails jolis + tooltip
             details_val = row.get("details", "")
             try:
                 if isinstance(details_val, (bytes, bytearray)):
@@ -292,74 +298,102 @@ class HistoriqueDialog(QDialog):
                 details_str = json.dumps(parsed, ensure_ascii=False, indent=2)
             except Exception:
                 details_str = str(details_val) if details_val is not None else ""
-            self.table.setItem(r, 6, QTableWidgetItem(details_str))
-            self.table.setItem(r, 7, QTableWidgetItem(str(row.get("source", ""))))
+
+            vals = [
+                resume,
+                dt_txt,
+                str(row.get("utilisateur", "") or ""),
+                action_txt,
+                table_txt,
+                str(row.get("record_id", "") or ""),
+                str(row.get("description", "") or ""),
+                details_str,
+                str(row.get("source", "") or ""),
+            ]
+            for c, v in enumerate(vals):
+                item = QTableWidgetItem(v)
+                if c in (0, 7):  # tooltips utiles
+                    item.setToolTip(v)
+                self.table.setItem(r, c, item)
+
+            # Couleurs selon action
+            if action_txt == "Erreur":
+                for c in range(self.table.columnCount()):
+                    it = self.table.item(r, c)
+                    if it: it.setBackground(QtGui.QColor(255, 235, 238))
+            elif action_txt == "Suppression":
+                for c in range(self.table.columnCount()):
+                    it = self.table.item(r, c)
+                    if it: it.setBackground(QtGui.QColor(255, 243, 224))
+            elif action_txt == "Création":
+                for c in range(self.table.columnCount()):
+                    it = self.table.item(r, c)
+                    if it: it.setBackground(QtGui.QColor(232, 245, 233))
+
+        # Mode simple : masque colonnes techniques
+        simple = (self.simple_mode.currentIndex() == 1)
+        cols_to_hide = [2,4,5,7,8] if simple else []
+        for c in range(self.table.columnCount()):
+            self.table.setColumnHidden(c, c in cols_to_hide)
 
     # ----------------- Clear + export optionnel -----------------
 
     def _export_range(self, d_from: QDate, d_to: QDate):
         """
-        Exporte la période :
-        - ≤ 31 jours  : un dossier par jour (comportement actuel)
-        - > 31 jours  : un dossier par mois (YYYY-MM) avec tous les jours dedans
+        Exporte la journée si d_from == d_to, sinon export multi-jours.
+        Utilise export_day() pour la granularité jour.
         """
-        start = dt.date.fromisoformat(d_from.toString("yyyy-MM-dd"))
-        end = dt.date.fromisoformat(d_to.toString("yyyy-MM-dd"))
-        nb_jours = (end - start).days + 1
-
-        day = start
-        if nb_jours <= 31:
-            # export "classique" : logs/YYYY-MM-DD
-            while day <= end:
-                export_day(day, base_dir="logs", make_zip=False)
-                day += dt.timedelta(days=1)
-            return
-
-        # export groupé par mois : logs/YYYY-MM/ (contient les CSV de chaque jour)
-        while day <= end:
-            month_dir = os.path.join("logs", day.strftime("%Y-%m"))
-            export_day(day, base_dir=month_dir, make_zip=False)
-            day += dt.timedelta(days=1)
+        base_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+        if d_from == d_to:
+            export_day(self.conn,
+                       dt.date(d_from.year(), d_from.month(), d_from.day()),
+                       output_dir=base_dir)
+            QMessageBox.information(self, "Export",
+                                    f"Export du {d_from.toString('dd/MM/yyyy')} effectué sur le Bureau.")
+        else:
+            # multi-jours : dossier par jour
+            d = dt.date(d_from.year(), d_from.month(), d_from.day())
+            end = dt.date(d_to.year(), d_to.month(), d_to.day())
+            while d <= end:
+                export_day(self.conn, d, output_dir=base_dir)
+                d += dt.timedelta(days=1)
+            QMessageBox.information(self, "Export", "Exports journaliers effectués sur le Bureau.")
 
     def _clear_range_with_optional_export(self):
-        """Demande export puis supprime tous les logs de la période affichée."""
-        dfrom = self.from_date.date()
-        dto = self.to_date.date()
-        txt_from = dfrom.toString("dd/MM/yyyy")
-        txt_to = dto.toString("dd/MM/yyyy")
+        """Propose d'exporter avant la suppression, puis supprime la période."""
+        d_from = self.from_date.date()
+        d_to   = self.to_date.date()
 
+        # Demande export
         resp = QMessageBox.question(
-            self,
-            "Vider l'historique",
-            f"Voulez-vous exporter les logs de la période\n"
-            f"du {txt_from} au {txt_to} avant suppression ?",
+            self, "Historique",
+            "Voulez-vous exporter les logs de la période avant suppression ?",
             QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
             QMessageBox.Yes
         )
         if resp == QMessageBox.Cancel:
             return
+        if resp == QMessageBox.Yes:
+            try:
+                self._export_range(d_from, d_to)
+            except Exception as e:
+                QMessageBox.warning(self, "Export", f"Échec de l'export :\n{e}")
+                return
 
+        # Suppression
+        cur = None
         try:
-            if resp == QMessageBox.Yes:
-                self._export_range(dfrom, dto)
-
-            df = dfrom.toString("yyyy-MM-dd") + " 00:00:00"
-            dt_to = dto.toString("yyyy-MM-dd") + " 23:59:59"
-
-            cur, dict_mode = self._cursor()
-
-            # Détection colonne date
-            cur.execute("SHOW COLUMNS FROM historique;")
-            cols_raw = cur.fetchall()
-            colnames = {row["Field"] for row in cols_raw} if dict_mode else {row[0] for row in cols_raw}
-            has = colnames.__contains__
-            date_candidates = ["date_time", "created_at", "date", "timestamp", "ts"]
-            date_col = next((c for c in date_candidates if has(c)), None)
-            if not date_col:
-                raise RuntimeError("La table 'historique' doit contenir une colonne date/heure.")
-
-            cur.execute(f"DELETE FROM historique WHERE `{date_col}` BETWEEN %s AND %s", (df, dt_to))
-            deleted = cur.rowcount
+            cur = self._cursor()
+            sql = (
+                "DELETE FROM historique "
+                "WHERE date_time >= %s AND date_time <= %s"
+            )
+            params = [
+                dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
+                dt.datetime(d_to.year(),   d_to.month(),   d_to.day(),   23, 59, 59)
+            ]
+            cur.execute(sql, params)
+            deleted = cur.rowcount or 0
             self.conn.commit()
 
             QMessageBox.information(self, "Historique", f"Suppression effectuée.\n{deleted} ligne(s) supprimée(s).")

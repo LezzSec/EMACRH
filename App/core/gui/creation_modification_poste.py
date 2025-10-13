@@ -6,8 +6,11 @@ from PyQt5.QtWidgets import (
     QMessageBox, QComboBox
 )
 
-# ⬇️ Nouveau point d'entrée DB
 from core.db.configbd import get_connection as get_db_connection
+from .besoin_poste_dialog import BesoinPosteDialog
+from core.services.logger import log_hist
+
+
 
 
 def _cursor(conn):
@@ -99,6 +102,8 @@ class CreationModificationPosteDialog(QDialog):
         if len(post_name) == 3 and post_name.isdigit():
             post_name = f"0{post_name}"
 
+        connection = None
+        cursor = None
         try:
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
@@ -108,26 +113,52 @@ class CreationModificationPosteDialog(QDialog):
             exists = cursor.fetchone()
             if exists:
                 QMessageBox.warning(self, "Attention", f"Le poste '{post_name}' existe déjà.")
-            else:
-                cursor.execute("INSERT INTO postes (poste_code) VALUES (%s)", (post_name,))
-                connection.commit()
-                QMessageBox.information(self, "Succès",
-                                        f"Le poste '{post_name}' a été créé avec succès.")
-                self.add_input.clear()
-                self.load_posts()
+                return
+
+            # 1) INSERT du poste (visible=1 par défaut si tu veux)
+            cursor.execute("INSERT INTO postes (poste_code, visible) VALUES (%s, 1)", (post_name,))
+
+            # 2) Pop-up besoin (obligatoire)
+            dlg = BesoinPosteDialog(parent=self, titre_poste=post_name)
+            if dlg.exec_() != dlg.Accepted:
+                # Annulation -> rollback, rien n'est créé
+                connection.rollback()
+                QMessageBox.information(self, "Création annulée", "Le poste n'a pas été créé.")
+                return
+
+            besoin_val = dlg.get_besoin_int_or_none()
+
+            # 3) MAJ besoin + commit
+            cursor.execute(
+                "UPDATE postes SET besoins_postes = %s WHERE poste_code = %s",
+                (besoin_val, post_name)
+            )
+            connection.commit()
+
+            QMessageBox.information(self, "Succès", f"Le poste '{post_name}' a été créé avec succès.")
+            self.add_input.clear()
+            self.load_posts()
 
         except Exception as e:
+            try:
+                if connection:
+                    connection.rollback()
+            except Exception:
+                pass
             QMessageBox.critical(self, "Erreur",
                                  f"Une erreur s'est produite lors de la création du poste :\n{e}")
         finally:
             try:
-                cursor.close()
+                if cursor:
+                    cursor.close()
             except Exception:
                 pass
             try:
-                connection.close()
+                if connection:
+                    connection.close()
             except Exception:
                 pass
+
 
     def delete_post(self):
         post_name = self.delete_combobox.currentText().strip()

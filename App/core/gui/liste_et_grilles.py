@@ -13,16 +13,17 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 from core.db.configbd import get_connection as get_db_connection
-# from core.gui.manage_operateur import ManageOperatorsDialog  # si besoin
+from .besoin_poste_dialog import BesoinPosteDialog
+from core.services.logger import log_hist
 
-# ========= Helpers DB (compat mysql-connector / psycopg) =========
+
 def _cursor(conn):
     """Retourne (cursor, dict_mode). dict_mode=True si le curseur supporte dictionary=True."""
     try:
-        cur = conn.cursor(dictionary=True)  # mysql-connector like
+        cur = conn.cursor(dictionary=True)  
         return cur, True
     except TypeError:
-        cur = conn.cursor()                 # psycopg / pymysql
+        cur = conn.cursor()                
         return cur, False
 
 def _rows(cur, dict_mode):
@@ -587,9 +588,27 @@ class GrillesDialog(QDialog):
             if choice == "Colonne":
                 col_name, name_ok = QInputDialog.getText(self, "Nom de Colonne", "Entrez un nom pour la nouvelle colonne :")
                 if name_ok and col_name:
-                    cursor.execute("INSERT INTO postes (poste_code, visible) VALUES (%s, 1)", (col_name,))
-                    connection.commit()
-                    self.load_data()
+                    # Vérifier doublon
+                    cursor.execute("SELECT id FROM postes WHERE poste_code = %s", (col_name,))
+                    if cursor.fetchone():
+                        QMessageBox.warning(self, "Attention", f"Le poste '{col_name}' existe déjà.")
+                    else:
+                        # INSERT poste
+                        cursor.execute("INSERT INTO postes (poste_code, visible) VALUES (%s, 1)", (col_name,))
+
+                        # Pop-up besoin (obligatoire en création)
+                        dlg = BesoinPosteDialog(parent=self, titre_poste=col_name)
+                        if dlg.exec_() != dlg.Accepted:
+                            connection.rollback()
+                            QMessageBox.information(self, "Création annulée", "Le poste n'a pas été créé.")
+                        else:
+                            besoin_val = dlg.get_besoin_int_or_none()
+                            cursor.execute(
+                                "UPDATE postes SET besoins_postes = %s WHERE poste_code = %s",
+                                (besoin_val, col_name)
+                            )
+                            connection.commit()
+                            self.load_data()
             elif choice == "Ligne":
                 row_name, name_ok = QInputDialog.getText(self, "Nom de Ligne", "Entrez le nom pour la nouvelle ligne (Nom) :")
                 if name_ok and row_name:
@@ -905,19 +924,15 @@ class GrillesDialog(QDialog):
 
 
     def export_to_pdf(self, file_name, export_current_state):
-        """
-        Export PDF format A4 portrait avec colonnes de postes optimisées
-        """
+        """Export PDF format A4 portrait avec colonnes de postes optimisées"""
         try:
             from datetime import datetime
             from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
             from reportlab.lib import colors
-            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.lib.pagesizes import A4
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib.units import mm
-            from reportlab.pdfbase import pdfmetrics
     
-            # -------- 1) Récupération des données visibles --------
             headers = []
             for c in range(self.main_table.columnCount()):
                 if export_current_state and self.main_table.isColumnHidden(c):
@@ -948,27 +963,23 @@ class GrillesDialog(QDialog):
                 QMessageBox.warning(self, "Exportation annulée", "Aucune donnée à exporter.")
                 return
     
-            # -------- 2) Identification des lignes de synthèse --------
-            # Les 7 dernières lignes sont les statistiques
             synthesis_start = len(data_rows) - 7
             operator_rows = data_rows[:synthesis_start]
             operator_headers = row_headers[:synthesis_start]
             synthesis_rows = data_rows[synthesis_start:]
             synthesis_headers = row_headers[synthesis_start:]
     
-            # -------- 3) Pas de colonnes supplémentaires pour les opérateurs --------
-            # On garde les données telles quelles
             operator_rows_with_levels = operator_rows
             synthesis_rows_with_levels = synthesis_rows
     
-            # -------- 4) Styles --------
             styles = getSampleStyleSheet()
             title_style = ParagraphStyle("T", parent=styles["Title"],
                                          fontName="Helvetica-Bold", fontSize=14,
                                          alignment=1, spaceAfter=3*mm)
             
-            # Tailles de police plus grandes pour meilleure lisibilité
-            th_size = 8; td_size = 7.5; leading = 9
+            th_size = 8
+            td_size = 7.5
+            leading = 9
             th = ParagraphStyle("TH", parent=styles["BodyText"], fontName="Helvetica-Bold",
                                 fontSize=th_size, leading=leading, alignment=1)
             td_c = ParagraphStyle("TDc", parent=styles["BodyText"], fontName="Helvetica",
@@ -976,81 +987,72 @@ class GrillesDialog(QDialog):
             td_l = ParagraphStyle("TDl", parent=styles["BodyText"], fontName="Helvetica",
                                   fontSize=td_size, leading=leading, alignment=0)
     
-            # -------- 5) Mise en page A4 portrait --------
-            page = A4  # Format portrait
+            page = A4
             LM, RM, TM, BM = 8*mm, 8*mm, 15*mm, 12*mm
             usable_w = page[0] - LM - RM
     
-            # Largeurs des colonnes - plus serrées pour le format portrait
-            first_col_w = 32*mm  # Colonne "Nom" réduite
-            
+            first_col_w = 32*mm
             n_poste_cols = len(headers)
-            remaining_w = usable_w - first_col_w
-            poste_col_w = remaining_w / n_poste_cols if n_poste_cols > 0 else 5*mm
+            poste_col_w = 5*mm
             
-            # Ajuster la taille de police si les colonnes sont trop étroites
-            if poste_col_w < 3.5*mm:
-                th_size = max(6.5, th_size * 0.85)
-                td_size = max(6.5, td_size * 0.85)
-                leading = max(7.5, leading * 0.85)
-                th.fontSize = th_size
-                th.leading = leading
-                td_c.fontSize = td_size
-                td_c.leading = leading
-                td_l.fontSize = td_size
-                td_l.leading = leading
+            total_poste_w = poste_col_w * n_poste_cols
+            if first_col_w + total_poste_w > usable_w:
+                remaining_w = usable_w - first_col_w
+                poste_col_w = max(4*mm, remaining_w / n_poste_cols)
     
             col_widths = [first_col_w] + [poste_col_w] * n_poste_cols
     
-            # -------- 6) Construction du tableau --------
-            # En-tête
-            header_row = [""] + [Paragraph(h, th) for h in headers]
+            from reportlab.platypus import Flowable
             
-            # Données opérateurs
+            class RotatedText(Flowable):
+                def __init__(self, text, fontSize=8):
+                    Flowable.__init__(self)
+                    self.text = text
+                    self.fontSize = fontSize
+                    self.width = fontSize * 1.2
+                    self.height = len(text) * fontSize * 0.7
+                    
+                def draw(self):
+                    canvas = self.canv
+                    canvas.saveState()
+                    canvas.translate(self.width / 2, 0)
+                    canvas.rotate(90)
+                    canvas.setFont("Helvetica-Bold", self.fontSize)
+                    canvas.drawString(2, -self.fontSize/3, self.text)
+                    canvas.restoreState()
+            
+            header_row = [""] + [RotatedText(h, th_size) for h in headers]
+            
             data = [header_row]
             for i, row in enumerate(operator_rows_with_levels):
                 data.append([Paragraph(operator_headers[i], td_l)] + 
                            [Paragraph(str(v), td_c) for v in row])
     
-            # Lignes de synthèse
             for i, row in enumerate(synthesis_rows_with_levels):
                 data.append([Paragraph(f"<b>{synthesis_headers[i]}</b>", td_l)] + 
                            [Paragraph(str(v) if v else "", td_c) for v in row])
     
-            # -------- 7) Style du tableau --------
             table = Table(data, colWidths=col_widths, repeatRows=1)
             
-            n_total_cols = len(headers) + 1  # +1 pour la colonne Nom
+            n_total_cols = len(headers) + 1
             n_rows = len(data)
-            n_op_rows = len(operator_rows_with_levels) + 1  # +1 pour l'en-tête
+            n_op_rows = len(operator_rows_with_levels) + 1
             
             table_style = [
-                # Bordures
                 ("GRID", (0, 0), (-1, -1), 0.3, colors.black),
                 ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
-                
-                # En-tête - plus de hauteur pour les numéros de postes
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#BFBFBF")),
                 ("FONTSIZE", (0, 0), (-1, 0), th_size),
                 ("ALIGN", (0, 0), (0, 0), "LEFT"),
                 ("ALIGN", (1, 0), (-1, 0), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                
-                # Rotation des en-têtes de postes avec plus d'espace
-                ("ROTATE", (1, 0), (-1, 0), 90),
-                
-                # Zone des données opérateurs
                 ("FONTSIZE", (0, 1), (-1, n_op_rows - 1), td_size),
                 ("ALIGN", (1, 1), (-1, -1), "CENTER"),
-                
-                # Lignes de synthèse - fond gris
                 ("BACKGROUND", (0, n_op_rows), (-1, -1), colors.HexColor("#D0D0D0")),
                 ("FONTSIZE", (0, n_op_rows), (-1, -1), th_size),
-                
-                # Paddings - augmentés pour plus d'espace
-                ("LEFTPADDING", (0, 0), (-1, -1), 2),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 2),
-                ("TOPPADDING", (0, 0), (-1, 0), 2),  # Plus d'espace pour l'en-tête
+                ("LEFTPADDING", (0, 0), (-1, -1), 1),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 1),
+                ("TOPPADDING", (0, 0), (-1, 0), 2),
                 ("BOTTOMPADDING", (0, 0), (-1, 0), 2),
                 ("TOPPADDING", (0, 1), (-1, -1), 1.5),
                 ("BOTTOMPADDING", (0, 1), (-1, -1), 1.5),
@@ -1058,14 +1060,31 @@ class GrillesDialog(QDialog):
             
             table.setStyle(TableStyle(table_style))
     
-            # -------- 8) Légende --------
             legend_title = Paragraph("<b>Définition</b>", styles["Heading4"])
+            
+            legend_header_style = ParagraphStyle("LegHeader", parent=styles["BodyText"], 
+                                                fontName="Helvetica-Bold", fontSize=9, 
+                                                alignment=1, leading=10)
+            legend_cell_style = ParagraphStyle("LegCell", parent=styles["BodyText"], 
+                                              fontName="Helvetica", fontSize=8, 
+                                              alignment=0, leading=10)
+            
             leg = [
-                ["Niveau", "Définition", "Valeur de la dernière évaluation"],
-                ["1", "Opérateur nouveau à encadrer par titulaire N3/4 ou absent du poste depuis plus de 12 mois", "< 80%"],
-                ["2", "Opérateur formé et apte à conduire le poste seul. Certaines notions sont en cours d'acquisition", "≥ 80%"],
-                ["3", "Opérateur titulaire, formé, apte à conduire le poste et apte à former", "> 90%"],
-                ["4", "N3 + Leader ou Polyvalent (maîtrise ≥ 3 postes d'une ligne: mél. interne, cylindres, conditionnement)", "> 90%"],
+                [Paragraph("Niveau", legend_header_style), 
+                 Paragraph("Définition", legend_header_style), 
+                 Paragraph("Valeur de la<br/>dernière<br/>évaluation", legend_header_style)],
+                [Paragraph("1", legend_cell_style), 
+                 Paragraph("Opérateur nouveau à encadrer par titulaire N3/4 ou absent du poste depuis plus de 12 mois", legend_cell_style), 
+                 Paragraph("&lt; 80%", legend_cell_style)],
+                [Paragraph("2", legend_cell_style), 
+                 Paragraph("Opérateur formé et apte à conduire le poste seul. Certaines notions sont en cours d'acquisition", legend_cell_style), 
+                 Paragraph("≥ 80%", legend_cell_style)],
+                [Paragraph("3", legend_cell_style), 
+                 Paragraph("Opérateur titulaire, formé, apte à conduire le poste et apte à former", legend_cell_style), 
+                 Paragraph("&gt; 90%", legend_cell_style)],
+                [Paragraph("4", legend_cell_style), 
+                 Paragraph("N3 + Leader ou Polyvalent (maîtrise ≥ 3 postes d'une ligne: mél. interne, cylindres, conditionnement)", legend_cell_style), 
+                 Paragraph("&gt; 90%", legend_cell_style)],
             ]
             
             legend_w = usable_w
@@ -1074,17 +1093,14 @@ class GrillesDialog(QDialog):
                 ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#D9D9D9")),
                 ("ALIGN", (0, 0), (0, -1), "CENTER"),
-                ("ALIGN", (2, 1), (2, -1), "CENTER"),
+                ("ALIGN", (2, 0), (2, -1), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("FONTSIZE", (0, 0), (-1, 0), 9),
-                ("FONTSIZE", (0, 1), (-1, -1), 8),
                 ("LEFTPADDING", (0, 0), (-1, -1), 4),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 4),
                 ("TOPPADDING", (0, 0), (-1, -1), 3),
                 ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
             ]))
     
-            # -------- 9) Header/Footer --------
             def on_page(canvas, doc):
                 canvas.saveState()
                 canvas.setFont("Helvetica", 7)

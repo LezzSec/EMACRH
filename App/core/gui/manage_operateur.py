@@ -8,6 +8,7 @@ from PyQt5.QtCore import Qt, QDate, pyqtSignal
 
 # ✅ imports absolus (nouvelle arbo)
 from core.db.configbd import get_connection as get_db_connection
+from core.services.logger import log_hist
 try:
     from core.services.audit_logger import log_insert, log_action  # si dispo dans ton projet
 except Exception:
