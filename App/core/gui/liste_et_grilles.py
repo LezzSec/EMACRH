@@ -1,13 +1,10 @@
-# liste_et_grilles.py — Grilles Polyvalence (UI PyQt5)
-# - Conserve la logique existante (filtres, tri, exports, duplication…)
-# - Ajoute l’affichage + édition persistante de la ligne "Besoins par poste"
-
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
     QLabel, QMessageBox, QInputDialog, QDialogButtonBox, QListWidget, QListWidgetItem,
     QLineEdit, QFileDialog, QAbstractItemView
 )
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
 import sys
 import pandas as pd
 from datetime import datetime, timedelta
@@ -15,6 +12,13 @@ from datetime import datetime, timedelta
 from core.db.configbd import get_connection as get_db_connection
 from .besoin_poste_dialog import BesoinPosteDialog
 from core.services.logger import log_hist
+
+# 💥 IMPORT DU THÈME pour adaptation dynamique
+try:
+    from core.gui.ui_theme import get_current_theme
+    THEME_AVAILABLE = True
+except ImportError:
+    THEME_AVAILABLE = False
 
 
 def _cursor(conn):
@@ -43,6 +47,8 @@ class GrillesDialog(QDialog):
         self.layout = QVBoxLayout()
         self.is_editable = False
         self.modified_cells = set()
+
+        self._setup_theme_colors()
 
         # Boutons de modification au-dessus
         self.add_edit_buttons()
@@ -73,6 +79,23 @@ class GrillesDialog(QDialog):
         self.operateurs = []
         self.postes = []
         self.load_data()
+
+    def _setup_theme_colors(self):
+        """Définit les couleurs adaptées au thème actuel (clair ou sombre)."""
+        if THEME_AVAILABLE:
+            ThemeCls = get_current_theme()
+            # Couleurs pour lignes de synthèse (non éditables)
+            self.color_synthesis_bg = QColor(ThemeCls.BG_CARD)
+            self.color_synthesis_text = QColor(ThemeCls.TXT)
+            # Couleurs pour ligne "Besoins par poste" (éditable)
+            self.color_besoins_bg = QColor(ThemeCls.BG_ELEV)
+            self.color_besoins_text = QColor(ThemeCls.TXT)
+        else:
+            # Fallback si thème non disponible (mode clair par défaut)
+            self.color_synthesis_bg = QColor(211, 211, 211)  # lightGray
+            self.color_synthesis_text = QColor(17, 24, 39)   # texte sombre
+            self.color_besoins_bg = QColor(255, 255, 255)    # white
+            self.color_besoins_text = QColor(17, 24, 39)
 
     # ----------------- UI haut -----------------
     def add_edit_buttons(self):
@@ -365,7 +388,7 @@ class GrillesDialog(QDialog):
             row_lvl4 = n_ops + 3
             row_total_ops = n_ops + 4
             row_total_34  = n_ops + 5
-            row_besoins   = n_ops + 6  # éditable, on NE l’écrase PAS
+            row_besoins   = n_ops + 6  # éditable, on NE l'écrase PAS
 
             for col in range(self.main_table.columnCount()):
                 niveaux = []
@@ -391,8 +414,10 @@ class GrillesDialog(QDialog):
                         self.main_table.setItem(r, col, it)
                     it.setText("" if (val is None or val == 0) else str(val))
                     it.setTextAlignment(Qt.AlignCenter)
+                    # 💥 Application des couleurs selon le thème
+                    it.setForeground(self.color_synthesis_text)
 
-                # Option styling initial (col 0 pour coupure visuelle — conservé)
+                # Option styling initial (col 0 pour coupure visuelle – conservé)
                 if col == 0:
                     _set(row_lvl1, None)
                 else:
@@ -485,7 +510,7 @@ class GrillesDialog(QDialog):
                     item.setTextAlignment(Qt.AlignCenter)
                     self.main_table.setItem(row_idx, col_idx, item)
 
-            # Style : 6 premières lignes de synthèse non éditables (gris), la dernière (besoins) éditable
+            # 💥 Style : 6 premières lignes de synthèse non éditables (avec couleurs thème)
             start_row = n_ops  # première ligne de synthèse
             for r in range(start_row, start_row + len(SUMMARY_ROWS) - 1):
                 for c in range(self.main_table.columnCount()):
@@ -494,8 +519,11 @@ class GrillesDialog(QDialog):
                         it = QTableWidgetItem("")
                         self.main_table.setItem(r, c, it)
                     it.setFlags(it.flags() & ~Qt.ItemIsEditable)
-                    it.setBackground(Qt.lightGray)
+                    # 💥 Couleurs adaptées au thème
+                    it.setBackground(self.color_synthesis_bg)
+                    it.setForeground(self.color_synthesis_text)
 
+            # 💥 Ligne "Besoins par poste" éditable (avec couleurs thème)
             besoins_row = start_row + len(SUMMARY_ROWS) - 1
             for c in range(self.main_table.columnCount()):
                 it = self.main_table.item(besoins_row, c)
@@ -503,7 +531,9 @@ class GrillesDialog(QDialog):
                     it = QTableWidgetItem("")
                     self.main_table.setItem(besoins_row, c, it)
                 it.setFlags((it.flags() | Qt.ItemIsEditable))
-                it.setBackground(Qt.white)
+                # 💥 Couleurs adaptées au thème pour la ligne éditable
+                it.setBackground(self.color_besoins_bg)
+                it.setForeground(self.color_besoins_text)
                 it.setTextAlignment(Qt.AlignCenter)
 
             # --- Récupération et affichage des besoins_postes alignés aux colonnes ---
@@ -516,6 +546,8 @@ class GrillesDialog(QDialog):
                     val = besoins_by_id.get(poste_id, "")
                     it = self.main_table.item(besoins_row, col_idx)
                     it.setText("" if val in (None, "") else str(val))
+                    # 💥 Réapplication des couleurs après setText
+                    it.setForeground(self.color_besoins_text)
             except Exception as _e:
                 # On n'empêche pas l'écran de se charger si les besoins ne sont pas dispos
                 pass

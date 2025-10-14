@@ -13,7 +13,7 @@ from PyQt5.QtCore import Qt, QRectF
 from PyQt5.QtGui import QFont, QColor, QPalette, QPainterPath
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton, QFrame,
-    QToolButton, QGraphicsDropShadowEffect
+    QToolButton
 )
 
 
@@ -127,6 +127,17 @@ class EmacTheme:
         QCalendarWidget QToolButton {{
             color: {cls.TXT};
         }}
+        
+        /* FIX GRILLE: Assure que le jour sélectionné est bien visible (thème clair) */
+        QCalendarWidget QAbstractItemView:enabled {{
+            selection-background-color: #3b82f6; 
+            selection-color: #ffffff; /* CORRECTION: Texte du jour sélectionné en blanc */
+            color: {cls.TXT}; 
+        }}
+        /* FIX GRILLE: Assure que les jours estompés (disabled) sont lisibles */
+        QCalendarWidget QAbstractItemView:disabled {{
+            color: {cls.TXT_DIM}; /* Jours d'un autre mois en gris estompé */
+        }}
 
 
         /* Scrollbars fines */
@@ -163,16 +174,17 @@ class EmacTheme:
 class EmacDarkTheme(EmacTheme):
     """Palette + QSS centralisés (version sombre) avec FIX généralisé."""
     # Palette sombre (neutres + accents)
-    BG = "#111827"          # fond application
-    BG_CARD = "#1f2937"     # cartes (légèrement plus clair pour la profondeur)
-    BG_ELEV = "#1f2937"     # surfaces élevées
-    BG_TABLE = "#0f172a"    # listes/tableaux (plus sombre pour les listes)
+    # 💥 RESTAURÉ : Couleurs sombres originales (gris profonds)
+    BG = "#121212"          # fond application
+    BG_CARD = "#1e1e1e"     # cartes
+    BG_ELEV = "#1e1e1e"     # surfaces élevées
+    BG_TABLE = "#0a0a0a"    # listes/tableaux
 
-    TXT = "#f3f4f6"         # texte principal (gris très clair)
-    TXT_DIM = "#9ca3af"     # texte secondaire (gris moyen)
+    TXT = "#e0e0e0"         # texte principal (blanc cassé)
+    TXT_DIM = "#9c9c9c"     # texte secondaire (gris moyen)
 
-    BDR = "#374151"         # bordures
-    BDR_STRONG = "#4b5563"  # bordures fortes (en-têtes)
+    BDR = "#2c2c2c"         # Bordures: Gris très sombre, visible
+    BDR_STRONG = "#3f3f3f"  # Bordures fortes: un peu plus de contraste
 
     PRI = "#4f46e5"         # Bleu Indigo (primary)
     PRI_H = "#4338ca"
@@ -194,7 +206,7 @@ class EmacDarkTheme(EmacTheme):
         /* Cartes */
         QFrame#card {{
             background: {cls.BG_CARD};
-            border: 1px solid {cls.BDR};
+            border: 1px solid {cls.BDR}; 
             border-radius: 14px;
         }}
         
@@ -214,9 +226,9 @@ class EmacDarkTheme(EmacTheme):
         }}
         QPushButton:hover {{
             border-color: {cls.BDR_STRONG};
-            background: #1f2937;
+            background: {cls.BG_CARD};
         }}
-        QPushButton:pressed {{ background: #273444; }}
+        QPushButton:pressed {{ background: {cls.BDR}; }}
 
         /* Variantes */
         QPushButton[class="primary"] {{
@@ -232,18 +244,25 @@ class EmacDarkTheme(EmacTheme):
             border: 1px solid {cls.BDR};
             color: {cls.TXT};
         }}
-        QPushButton[class="ghost"]:hover {{ background: #1f2937; border-color: {cls.BDR_STRONG};}}
+        QPushButton[class="ghost"]:hover {{ background: {cls.BG_CARD}; border-color: {cls.BDR_STRONG};}}
         
         /* Inputs & listes */
-        QComboBox, QListWidget, QLineEdit {{
+        QComboBox, QLineEdit {{
             background: {cls.BG_TABLE};
             border: 1px solid {cls.BDR};
             border-radius: 10px;
             padding: 6px 8px;
             color: {cls.TXT}; 
         }}
+        QListWidget {{
+            background: {cls.BG_TABLE};
+            border: 1px solid {cls.BDR}; /* Bordure rétablie pour QListWidget */
+            border-radius: 10px;
+            padding: 0px; 
+            color: {cls.TXT};
+        }}
         QListWidget::item {{ padding: 8px 10px; height: 28px; }}
-        QListWidget::item:selected {{ background: #374151; color: {cls.TXT}; }}
+        QListWidget::item:selected {{ background: {cls.BDR_STRONG}; color: {cls.TXT}; }}
         QListView::item {{ border-bottom: 1px solid {cls.BDR}; }}
 
         /* Tables / QAbstractItemView */
@@ -251,8 +270,8 @@ class EmacDarkTheme(EmacTheme):
             background: {cls.BG_TABLE};
             color: {cls.TXT};
             gridline-color: {cls.BDR_STRONG};
-            selection-background-color: #374151;
-            selection-color: {cls.TXT};
+            selection-background-color: {cls.PRI}; 
+            selection-color: #ffffff; 
         }}
         QHeaderView::section {{
             background: {cls.BG_CARD};
@@ -260,14 +279,30 @@ class EmacDarkTheme(EmacTheme):
             border: 1px solid {cls.BDR_STRONG};
             padding: 6px 10px;
         }}
+        
+        /* FIX TABLEAUX: Alternance de lignes pour meilleure lisibilité */
+        QTableView {{
+            alternate-background-color: {cls.BG_CARD};
+            background: {cls.BG_TABLE};
+        }}
+        QTableView::item {{
+            color: {cls.TXT};
+            padding: 4px;
+        }}
+        QTableView::item:selected {{
+            background: {cls.PRI};
+            color: #ffffff;
+        }}
 
         /* Scrollbars fines */
         QScrollBar:vertical {{ width: 10px; background: transparent; }}
-        QScrollBar::handle:vertical {{ min-height: 24px; background: {cls.BDR}; border-radius: 6px; }}
-        QScrollBar::handle:vertical:hover {{ background: {cls.BDR_STRONG}; }}
+        QScrollBar::handle:vertical {{ min-height: 24px; background: {cls.BDR_STRONG}; border-radius: 6px; }}
+        QScrollBar::handle:vertical:hover {{ background: {cls.BDR}; }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 
-        /* 💥 FIX CALENDRIER pour Thème Sombre 💥 (Navigation) */
+        /* 💥 FIX CALENDRIER pour Thème Sombre 💥 */
+        
+        /* Barre de navigation du calendrier (mois/année) */
         QCalendarWidget QWidget#qt_calendar_navigationbar {{
             background-color: {cls.BG_CARD}; 
             border-bottom: 1px solid {cls.BDR_STRONG};
@@ -278,8 +313,40 @@ class EmacDarkTheme(EmacTheme):
             font-size: 16px;
         }}
         QCalendarWidget QToolButton:hover {{
-            background: {cls.BG_CARD};
+            background: {cls.BG};
             border-radius: 4px;
+        }}
+        QCalendarWidget QMenu {{
+            background: {cls.BG_CARD};
+            color: {cls.TXT};
+        }}
+
+        /* FIX GRILLE: Jours du mois en cours (enabled) */
+        QCalendarWidget QTableView {{
+            background: {cls.BG_TABLE};
+            color: {cls.TXT}; /* Texte blanc cassé pour les jours normaux */
+        }}
+        
+        /* FIX CRITIQUE: Jour sélectionné visible */
+        QCalendarWidget QAbstractItemView:enabled {{
+            selection-background-color: {cls.PRI}; /* Fond indigo */
+            selection-color: #ffffff; /* Texte blanc */
+        }}
+
+        /* FIX: Jours d'autres mois (disabled) en gris estompé */
+        QCalendarWidget QAbstractItemView:disabled {{
+            color: {cls.TXT_DIM}; /* Gris moyen pour les jours inactifs */
+        }}
+        
+        /* FIX: En-têtes des jours de la semaine */
+        QCalendarWidget QWidget {{
+            alternate-background-color: {cls.BG_CARD};
+        }}
+        QCalendarWidget QWidget QHeaderView::section {{
+            background: {cls.BG_CARD};
+            color: {cls.TXT};
+            border: none;
+            padding: 4px;
         }}
         
         '''
@@ -292,17 +359,18 @@ class EmacDarkTheme(EmacTheme):
         pal = app.palette()
         pal.setColor(QPalette.Window, QColor(cls.BG))
         pal.setColor(QPalette.WindowText, QColor(cls.TXT))
-        pal.setColor(QPalette.Base, QColor(cls.BG_TABLE))
+        pal.setColor(QPalette.Base, QColor(cls.BG_TABLE)) # Fond des cellules
+        pal.setColor(QPalette.AlternateBase, QColor(cls.BG_CARD)) # Alternance lignes
         pal.setColor(QPalette.Text, QColor(cls.TXT))
         pal.setColor(QPalette.Button, QColor(cls.BG_CARD))
         pal.setColor(QPalette.ButtonText, QColor(cls.TXT))
         pal.setColor(QPalette.Highlight, QColor(cls.PRI)) # pour la sélection
         pal.setColor(QPalette.HighlightedText, QColor("#ffffff"))
         
-        # FIX CRITIQUE POUR CALENDRIER ET AUTRES WIDGETS NATIFS (QPalette.Light/Midlight)
-        # Ces couleurs définissent l'arrière-plan des jours du calendrier.
-        pal.setColor(QPalette.Light, QColor(cls.BG_TABLE)) 
-        pal.setColor(QPalette.Midlight, QColor(cls.BG_TABLE))
+        # 💥 FIX CALENDRIER: Couleurs pour les jours
+        pal.setColor(QPalette.Light, QColor(cls.BG_TABLE)) # Fond des cellules du calendrier
+        pal.setColor(QPalette.Midlight, QColor(cls.TXT_DIM)) # Jours d'autres mois
+        pal.setColor(QPalette.Dark, QColor(cls.TXT)) # Texte des jours du mois courant
         
         app.setPalette(pal)
         # QSS global
@@ -310,26 +378,29 @@ class EmacDarkTheme(EmacTheme):
 
 
 # -------------------------------------------------------------------
-# === Classes de Composants ===
+# === Fonction utilitaire de Thème ===
 # -------------------------------------------------------------------
 
-def apply_soft_shadow(widget, radius=22, alpha=36):
-    """Applique un effet d'ombre douce (à utiliser sur les QFrame#card)."""
-    shadow = QGraphicsDropShadowEffect(widget)
-    shadow.setBlurRadius(radius)
-    shadow.setXOffset(0)
-    shadow.setYOffset(4)
-    # L'ombre est moins opaque en mode sombre. Tente de détecter le thème.
-    try:
-        # Tente de deviner le thème à partir du QStyleSheet de l'application
-        is_dark = QApplication.instance().styleSheet().find(EmacDarkTheme.BG) != -1
-    except:
-        # En cas d'erreur ou si l'app n'est pas encore lancée, suppose le thème clair
-        is_dark = False
+def get_current_theme():
+    """
+    Retourne la classe de thème (EmacTheme ou EmacDarkTheme) appliquée 
+    à l'application principale via la QSS.
+    """
+    app = QApplication.instance()
+    if not app:
+        # Retourne le thème par défaut si l'application n'est pas encore démarrée
+        return EmacTheme
 
-    color = "#000000" if not is_dark else "#000000"
-    shadow.setColor(QColor(color).lighter(100).darker(30).lighter(100 - alpha))
-    widget.setGraphicsEffect(shadow)
+    # Tente de détecter le thème sombre en cherchant une couleur sombre 
+    # spécifique au DarkTheme dans le QSS actuel.
+    if app.styleSheet().find(EmacDarkTheme.BG) != -1:
+        return EmacDarkTheme
+    return EmacTheme
+
+
+# -------------------------------------------------------------------
+# === Classes de Composants ===
+# -------------------------------------------------------------------
 
 
 class EmacCard(QFrame):
@@ -337,7 +408,7 @@ class EmacCard(QFrame):
     def __init__(self, title: str = None, subtitle: str = None, parent=None):
         super().__init__(parent)
         self.setObjectName("card")
-        apply_soft_shadow(self, radius=22, alpha=36)
+        # 💥 SUPPRESSION DE L'OMBRE (apply_soft_shadow)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 16, 16, 16)
         lay.setSpacing(10)
@@ -366,33 +437,38 @@ class EmacCard(QFrame):
 
 
 class EmacStatusCard(EmacCard):
-    """Carte avec bandeau coloré type alerte/succès, style pastel."""
-    COLORS = {
-        'danger': { 'bg': '#fee2e2', 'txt': '#991b1b', 'chip': '#fecaca', 'icon': '⚠️' },
-        'success': { 'bg': '#dcfce7', 'txt': '#065f46', 'chip': '#bbf7d0', 'icon': '📅' },
-        'info': { 'bg': '#e0f2fe', 'txt': '#075985', 'chip': '#bae6fd', 'icon': 'ℹ️' },
+    """Carte avec bandeau coloré type alerte/succès, style vif."""
+    COLORS_MAP = {
+        'danger': { 'icon': '⚠️', 'acc_key': 'ERR' },
+        'success': { 'icon': '📅', 'acc_key': 'ACC' },
+        'info': { 'icon': 'ℹ️', 'acc_key': 'PRI' }, # Utilise PRI (Primary) pour info
     }
 
     def __init__(self, title: str, variant: str = 'info', subtitle: str = None, parent=None):
         # Appelle le constructeur de EmacCard sans titre pour gérer l'entête soi-même
         super().__init__(None, None, parent) 
         
-        c = self.COLORS.get(variant, self.COLORS['info'])
+        c = self.COLORS_MAP.get(variant, self.COLORS_MAP['info'])
         header = QHBoxLayout(); header.setSpacing(8)
         
-        # Détermination du thème pour le texte (même si le fond est fixe)
-        try:
-            ThemeCls = EmacDarkTheme if QApplication.instance().styleSheet().find(EmacDarkTheme.BG) != -1 else EmacTheme
-        except:
-            ThemeCls = EmacTheme
+        # Détermination du thème actuel pour obtenir les couleurs (via la nouvelle fonction)
+        ThemeCls = get_current_theme()
+        
+        # Récupération de la couleur vive (ERR, ACC, PRI) du thème actuel
+        accent_color = getattr(ThemeCls, c['acc_key'])
+        
+        # Le texte sera blanc si la couleur est foncée (Dark/Primary/Error/Success du thème)
+        is_dark_background = ThemeCls == EmacDarkTheme or c['acc_key'] in ['PRI', 'ERR', 'ACC']
+        text_color = "#ffffff" if is_dark_background else ThemeCls.TXT
             
         pill = QLabel(f" {c['icon']}  {title}")
         pill.setStyleSheet(
-            f"background:{c['bg']}; color:{ThemeCls.TXT}; font-weight:600; padding:6px 10px; border-radius:8px;")
+            f"background:{accent_color}; color:{text_color}; font-weight:600; padding:6px 10px; border-radius:8px;")
         header.addWidget(pill, 0, Qt.AlignLeft)
         header.addStretch(1)
         if subtitle:
-            sub = QLabel(subtitle); sub.setStyleSheet("color:#6b7280;")
+            # Texte du sous-titre utilise la couleur TXT_DIM du thème
+            sub = QLabel(subtitle); sub.setStyleSheet(f"color:{ThemeCls.TXT_DIM};")
             header.addWidget(sub, 0, Qt.AlignRight)
         w = QWidget(); w.setLayout(header)
         
@@ -450,11 +526,8 @@ class HamburgerButton(QToolButton):
         self.setFixedSize(diameter, diameter)
 
         # Détermine le thème pour les couleurs des barres
-        try:
-            is_dark = QApplication.instance().styleSheet().find(EmacDarkTheme.BG) != -1
-            ThemeCls = EmacDarkTheme if is_dark else EmacTheme
-        except:
-            ThemeCls = EmacTheme
+        ThemeCls = get_current_theme()
+        is_dark = ThemeCls == EmacDarkTheme
 
         # ----- STYLE selon variante (utilisant le thème actuel) -----
         if variant == "primary":
@@ -503,9 +576,7 @@ class HamburgerButton(QToolButton):
         self._hover = False
         self.setAttribute(QtCore.Qt.WA_Hover, True)
         
-        # Ombre douce pour plus de visibilité
-        if variant != 'primary':
-            apply_soft_shadow(self, radius=12, alpha=24) 
+        # 💥 SUPPRESSION DE L'OMBRE
 
     def enterEvent(self, e):
         self._hover = True; self.update(); return super().enterEvent(e)

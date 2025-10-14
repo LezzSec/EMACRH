@@ -5,10 +5,10 @@ Composants et thèmes réutilisables pour garder la même identité visuelle par
 
 Contenu :
 - get_stylesheet(theme="light"|"dark") → QSS prêt à appliquer sur QApplication ou un widget racine
-- Card(QFrame) → carte avec ombre, coins arrondis, header (title/subtitle) et body
+- Card(QFrame) → carte avec coins arrondis, header (title/subtitle) et body
 - TopBar(QFrame) → barre supérieure avec titre, champ de recherche, actions
 - SideNav(QFrame) → barre latérale avec boutons de navigation checkables
-- apply_shadow(widget, radius=24, y_offset=8, alpha=40) → ombre douce
+# apply_shadow(widget, radius=24, y_offset=8, alpha=40) → Rétiré
 
 Usage minimal :
 
@@ -34,200 +34,264 @@ _THEME_BASE = """
 * { font-family: 'Segoe UI', 'Roboto', 'Helvetica', 'Arial'; }
 
 QMainWindow { background: {BG}; }
-QWidget { color: {TXT}; }
 
-/* SideNav */
-#SideNav { background: {SIDE_BG}; border-right: 1px solid {BORDER}; }
-#SideNav QPushButton {
-    color: {TXT_MUTED}; text-align: left; padding: 10px 14px; border: none; border-radius: 10px;
+/* FIX: Ajout de QDialog pour que les fenêtres secondaires s'inversent en Dark Mode. */
+QWidget, QDialog { 
+    color: {TXT};
+    background: {BG};
 }
-#SideNav QPushButton:hover { background: {HOVER}; color: {TXT}; }
-#SideNav QPushButton:checked { background: {ACCENT_SOFT}; color: {ACCENT_TXT}; }
 
-/* TopBar */
-#TopBar { background: {TOP_BG}; border-bottom: 1px solid {BORDER}; }
-#TitleLabel { color: {TXT}; font-size: 18px; font-weight: 600; }
-
-/* Inputs */
-QLineEdit, QComboBox, QDateEdit, QTextEdit {
-    background: {CARD_BG}; border: 1px solid {BORDER}; border-radius: 10px; padding: 8px 10px; color: {TXT};
+QComboBox, QLineEdit {
+    background: {BG_INPUT};
+    border: 1px solid {BDR};
+    border-radius: 8px;
+    padding: 6px 8px;
+    color: {TXT};
 }
-QLineEdit:focus, QComboBox:focus, QDateEdit:focus, QTextEdit:focus { border: 1px solid {ACCENT}; }
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: top right;
+    width: 20px;
+    border-left-width: 0px;
+    border-left-color: {BDR};
+    border-left-style: solid;
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+}
+QComboBox::down-arrow {
+    image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiN7VFhUfSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iNiA5IDEyIDE1IDE4IDkiPjwvcG9seWxpbmU+PC9zdmc+);
+    subcontrol-position: center;
+    width: 16px;
+    height: 16px;
+}
+QComboBox:on { /* style de QComboBox lorsque la liste est déroulée */
+    padding-top: 2px;
+    padding-left: 9px;
+}
 
-/* Buttons */
-QPushButton#Primary { background: {ACCENT}; color: white; border: none; border-radius: 12px; padding: 10px 14px; font-weight: 600; }
-QPushButton#Primary:disabled { background: {DISABLED_BG}; color: {DISABLED_TXT}; }
-QPushButton#Soft { background: {ACCENT_SOFT}; color: {ACCENT_TXT}; border: none; border-radius: 12px; padding: 10px 14px; font-weight: 600; }
+QListWidget {
+    background: {BG_INPUT};
+    border: 1px solid {BDR};
+    border-radius: 8px;
+}
+QListWidget::item { padding: 6px; }
+QListWidget::item:selected { 
+    background: {ACC_BG}; 
+    color: {ACC_TXT};
+}
+QListWidget::item:hover { background: {HOVER}; }
 
-/* Tables */
-QTableWidget, QTableView { background: {CARD_BG}; border: 1px solid {BORDER}; border-radius: 12px; gridline-color: {BORDER}; }
-QHeaderView::section { background: {SIDE_BG}; color: {TXT}; border: none; padding: 8px; }
+/* Boutons */
+QPushButton {
+    background: {BG_INPUT};
+    border: 1px solid {BDR};
+    border-radius: 8px;
+    padding: 8px 12px;
+    color: {TXT};
+}
+QPushButton:hover {
+    background: {HOVER};
+    border-color: {BDR_STRONG};
+}
+QPushButton:pressed { background: {BDR}; }
 
-/* Cards */
-#Card { background: {CARD_BG}; border: 1px solid {BORDER}; border-radius: 16px; }
-#CardTitle { color: {TXT}; font-weight: 600; }
-#CardSub { color: {TXT_MUTED}; }
+/* Bouton Primaire (Couleur forte) */
+QPushButton[class="primary"] {
+    background: {PRI};
+    color: #ffffff;
+    border: 1px solid {PRI};
+    font-weight: 600;
+}
+QPushButton[class="primary"]:hover { background: {PRI_H}; border-color: {PRI_H}; }
 
-/* Scrollbar */
-QScrollBar:vertical { background: transparent; width: 10px; margin: 10px 0; }
-QScrollBar::handle:vertical { background: {SCROLL}; border-radius: 5px; min-height: 20px; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
+/* Barre de défilement (Scrollbar) */
+QScrollBar:vertical { width: 10px; background: transparent; }
+QScrollBar::handle:vertical { min-height: 24px; background: {BDR}; border-radius: 5px; }
+QScrollBar::handle:vertical:hover { background: {BDR_STRONG}; }
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 """
 
 _THEME_LIGHT = {
-    "BG": "#F6F7FB",
-    "TOP_BG": "#FFFFFF",
-    "SIDE_BG": "#FFFFFF",
-    "CARD_BG": "#FFFFFF",
-    "BORDER": "#E5E7EB",
-    "TXT": "#111827",
-    "TXT_MUTED": "#6B7280",
-    "ACCENT": "#2563EB",
-    "ACCENT_SOFT": "#DBEAFE",
-    "ACCENT_TXT": "#1E3A8A",
-    "HOVER": "#F3F4F6",
-    "DISABLED_BG": "#E5E7EB",
-    "DISABLED_TXT": "#9CA3AF",
-    "SCROLL": "#D1D5DB",
+    "BG": "#f6f7fb", 
+    "BG_CARD": "#ffffff",
+    "BG_INPUT": "#ffffff",
+    "TXT": "#111827", 
+    "TXT_DIM": "#6b7280",
+    "BDR": "#e5e7eb",
+    "BDR_STRONG": "#d1d5db",
+    "HOVER": "#f3f4f6",
+    "PRI": "#0f172a",
+    "PRI_H": "#0b1220",
+    "ACC_BG": "#e8eefc",
+    "ACC_TXT": "#111827",
 }
 
 _THEME_DARK = {
-    "BG": "#0B0F14",
-    "TOP_BG": "#0F172A",
-    "SIDE_BG": "#0F172A",
-    "CARD_BG": "#111827",
-    "BORDER": "#1F2937",
-    "TXT": "#E5E7EB",
-    "TXT_MUTED": "#9CA3AF",
-    "ACCENT": "#3B82F6",
-    "ACCENT_SOFT": "#1E3A8A",
-    "ACCENT_TXT": "#BFDBFE",
-    "HOVER": "#111827",
-    "DISABLED_BG": "#374151",
-    "DISABLED_TXT": "#9CA3AF",
-    "SCROLL": "#374151",
+    # Palette sombre utilisée pour la désactivation de l'ombre
+    "BG": "#121212", 
+    "BG_CARD": "#1e1e1e",
+    "BG_INPUT": "#0a0a0a",
+    "TXT": "#e0e0e0", 
+    "TXT_DIM": "#9c9c9c",
+    "BDR": "#2c2c2c",
+    "BDR_STRONG": "#3f3f3f",
+    "HOVER": "#3f3f3f",
+    "PRI": "#4f46e5",
+    "PRI_H": "#4338ca",
+    "ACC_BG": "#374151",
+    "ACC_TXT": "#e0e0e0",
 }
 
+def get_stylesheet(theme="light"):
+    """
+    Retourne la chaîne QSS pour le thème demandé (light ou dark).
+    """
+    if theme == "dark":
+        colors = _THEME_DARK
+    else:
+        colors = _THEME_LIGHT
+    
+    # Remplacer {TXT} dans l'icône de la flèche du QComboBox avec la couleur du thème
+    arrow_svg_template = "image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5uZy92ZzIwMDAvc3ZnIiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIje1RYVH0iIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjYgOSAxMiAxNSAxOCA5Ij48L3BvbHlsaW5lPjwvc3ZnPg==);"
+    arrow_svg = arrow_svg_template.replace('{TXT}', colors['TXT'].lstrip('#'))
 
-def get_stylesheet(theme: str = "light") -> str:
-    """Retourne un QSS prêt à appliquer. theme in {"light", "dark"}."""
-    tokens = _THEME_LIGHT if theme.lower() == "light" else _THEME_DARK
-    return _THEME_BASE.format(**tokens)
-
-
-# =============================
-# Helpers
-# =============================
-
-def apply_shadow(widget: QtWidgets.QWidget, radius: int = 24, y_offset: int = 8, alpha: int = 40):
-    shadow = QtWidgets.QGraphicsDropShadowEffect(widget)
-    shadow.setBlurRadius(radius)
-    shadow.setXOffset(0)
-    shadow.setYOffset(y_offset)
-    shadow.setColor(QtGui.QColor(0, 0, 0, alpha))
-    widget.setGraphicsEffect(shadow)
+    # NOTE: J'ai retiré le placeholder commenté du QSS pour éviter toute confusion lors du formatage.
+    return _THEME_BASE.format(**colors).replace("image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiN7VFhUfSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iNiA5IDEyIDE1IDE4IDkiPjwvcG9seWxpbmU+PC9zdmc+);", arrow_svg)
 
 
 # =============================
-# Composants
+# Composants de Base
 # =============================
+
+# La fonction apply_shadow a été retirée.
+# L'importation de QGraphicsDropShadowEffect n'est plus nécessaire mais est laissée pour compatibilité.
 
 class Card(QtWidgets.QFrame):
-    """Carte réutilisable. Contient body_layout pour y placer votre contenu."""
-    def __init__(self, title: str = "", subtitle: str = "", parent=None):
+    """Conteneur carte avec coins arrondis."""
+    def __init__(self, title: str = None, subtitle: str = None, parent=None):
         super().__init__(parent)
         self.setObjectName("Card")
+        self.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.setFrameShadow(QtWidgets.QFrame.Plain)
+        
+        # Suppression de l'appel à apply_shadow :
+        # apply_shadow(self, radius=22, y_offset=4, alpha=36) 
+        
+        # Layout principal de la carte
         lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(14, 14, 14, 14)
+        lay.setContentsMargins(16, 16, 16, 16)
         lay.setSpacing(10)
-
-        if title:
-            ttl = QtWidgets.QLabel(title, objectName="CardTitle")
-            ttl.setWordWrap(True)
-            lay.addWidget(ttl)
-        if subtitle:
-            sub = QtWidgets.QLabel(subtitle, objectName="CardSub")
-            sub.setWordWrap(True)
-            lay.addWidget(sub)
-
-        apply_shadow(self)
-
-        self.body = QtWidgets.QWidget(self)
-        lay.addWidget(self.body)
-        self.body_layout = QtWidgets.QVBoxLayout(self.body)
-        self.body_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Layout pour le contenu (Body)
+        self.body_layout = QtWidgets.QVBoxLayout()
         self.body_layout.setSpacing(8)
+        bodyw = QtWidgets.QWidget()
+        bodyw.setLayout(self.body_layout)
+        
+        if title:
+            # Création du Header
+            header = QtWidgets.QHBoxLayout(); header.setSpacing(8)
+            lbl = QtWidgets.QLabel(title); lbl.setObjectName('TitleLabel')
+            header.addWidget(lbl)
+            header.addStretch(1)
+            if subtitle:
+                sub = QtWidgets.QLabel(subtitle); sub.setObjectName('SubtitleLabel')
+                header.addWidget(sub, 0, QtCore.Qt.AlignRight)
+            wrap = QtWidgets.QWidget(); wrap.setLayout(header)
+            lay.addWidget(wrap)
+        
+        lay.addWidget(bodyw)
+        # Référence au layout principal pour insertion facile
+        self.layout = lay
 
 
 class TopBar(QtWidgets.QFrame):
-    """Barre supérieure standard avec titre + recherche + 2 actions.
-    Tu peux masquer des éléments si tu n'en veux pas.
-    """
-    def __init__(self, title: str = "", parent=None):
+    """Barre supérieure pour la navigation et les actions globales."""
+    def __init__(self, title: str, parent=None):
         super().__init__(parent)
         self.setObjectName("TopBar")
-        lay = QtWidgets.QHBoxLayout(self)
-        lay.setContentsMargins(16, 10, 16, 10)
-        lay.setSpacing(10)
+        self.setFixedHeight(64)
+        self.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        self.setFrameShadow(QtWidgets.QFrame.Plain)
+        
+        root = QtWidgets.QHBoxLayout(self)
+        root.setContentsMargins(16, 0, 16, 0)
+        root.setSpacing(10)
 
-        self.title = QtWidgets.QLabel(title, objectName="TitleLabel")
-        lay.addWidget(self.title, 0, QtCore.Qt.AlignVCenter)
-        lay.addStretch(1)
+        self.title_label = QtWidgets.QLabel(title)
+        self.title_label.setObjectName("TopBarTitle") # Pour cibler par QSS
 
-        self.search = QtWidgets.QLineEdit(); self.search.setPlaceholderText("Rechercher…"); self.search.setFixedWidth(280)
-        self.btnTheme = QtWidgets.QPushButton("🌓 Thème", objectName="Soft")
-        self.btnPrimary = QtWidgets.QPushButton("✔ Action", objectName="Primary")
+        root.addWidget(self.title_label)
+        root.addStretch(1)
 
-        lay.addWidget(self.search)
-        lay.addWidget(self.btnTheme)
-        lay.addWidget(self.btnPrimary)
+        self.actions = QtWidgets.QHBoxLayout()
+        self.actions.setSpacing(8)
+        root.addLayout(self.actions)
+
+    def add_action(self, widget: QtWidgets.QWidget):
+        self.actions.addWidget(widget)
+
+
+class SideNavButton(QtWidgets.QPushButton):
+    """Bouton de navigation latérale (checkable)."""
+    def __init__(self, text: str, icon_path: str = None, parent=None):
+        super().__init__(text, parent)
+        self.setCheckable(True)
+        self.setObjectName("SideNavButton")
+        self.setFixedHeight(48)
+        self.setCursor(QtCore.Qt.PointingHandCursor)
+        self.setStyleSheet("""
+            QPushButton#SideNavButton { 
+                padding-left: 16px; 
+                text-align: left; 
+                border: none;
+                border-radius: 8px;
+            }
+            QPushButton#SideNavButton:hover { 
+                background: rgba(255, 255, 255, 0.1); 
+            }
+            QPushButton#SideNavButton:checked { 
+                background: #4f46e5; 
+                color: #ffffff;
+            }
+        """)
 
 
 class SideNav(QtWidgets.QFrame):
-    """Barre de navigation latérale. Emet le signal navigate(index)."""
-    navigate = QtCore.pyqtSignal(int)
-
-    def __init__(self, labels=None, title="EMAC • Console", parent=None):
+    """Barre de navigation latérale pour les vues principales."""
+    def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("SideNav")
-        lay = QtWidgets.QVBoxLayout(self)
-        lay.setContentsMargins(12, 16, 12, 16)
-        lay.setSpacing(8)
+        self.setFixedWidth(240)
+        self.setFrameShape(QtWidgets.QFrame.StyledPanel)
+        self.setFrameShadow(QtWidgets.QFrame.Plain)
+        
+        root = QtWidgets.QVBoxLayout(self)
+        root.setContentsMargins(8, 16, 8, 16)
+        root.setSpacing(4)
+        
+        self.nav_area = QtWidgets.QVBoxLayout()
+        root.addLayout(self.nav_area)
+        root.addStretch(1)
+        
+        self.actions_area = QtWidgets.QVBoxLayout()
+        self.actions_area.setSpacing(4)
+        root.addLayout(self.actions_area)
 
-        # Brand
-        brand = QtWidgets.QLabel(title)
-        font = brand.font(); font.setPointSize(14); font.setBold(True)
-        brand.setFont(font)
-        lay.addWidget(brand)
-        lay.addSpacing(8)
+    def add_nav_button(self, btn: SideNavButton):
+        """Ajoute un bouton à la section de navigation principale."""
+        self.nav_area.addWidget(btn)
 
-        # Nav buttons
-        self.btns = []
-        labels = labels or ["📊 Dashboard", "🧰 Gestion", "🗂 Historique"]
-        for i, text in enumerate(labels):
-            b = QtWidgets.QPushButton(text)
-            b.setCheckable(True)
-            b.clicked.connect(lambda _, idx=i: self._on_click(idx))
-            lay.addWidget(b)
-            self.btns.append(b)
-        if self.btns:
-            self.btns[0].setChecked(True)
-
-        lay.addStretch(1)
-
-    def _on_click(self, idx: int):
-        for i, b in enumerate(self.btns):
-            b.setChecked(i == idx)
-        self.navigate.emit(idx)
+    def add_action_button(self, btn: SideNavButton):
+        """Ajoute un bouton à la section d'actions (bas de la nav)."""
+        self.actions_area.addWidget(btn)
 
 
-# =============================
-# Démo locale (facultatif)
-# =============================
 if __name__ == "__main__":
+    from PyQt5 import QtWidgets
     import sys
     app = QtWidgets.QApplication(sys.argv)
-    app.setStyleSheet(get_stylesheet("light"))
+    app.setStyleSheet(get_stylesheet("light")) # Test en light mode
 
     win = QtWidgets.QMainWindow()
     win.resize(1100, 720)
@@ -235,6 +299,9 @@ if __name__ == "__main__":
     wrapper = QtWidgets.QWidget(); root = QtWidgets.QHBoxLayout(wrapper); root.setContentsMargins(0,0,0,0); root.setSpacing(0)
 
     sidenav = SideNav()
+    sidenav.add_nav_button(SideNavButton("Tableau de bord"))
+    sidenav.add_nav_button(SideNavButton("Personnel"))
+    sidenav.add_nav_button(SideNavButton("Évaluations"))
     root.addWidget(sidenav)
 
     right = QtWidgets.QWidget(); rlay = QtWidgets.QVBoxLayout(right); rlay.setContentsMargins(0,0,0,0); rlay.setSpacing(0)
@@ -250,15 +317,24 @@ if __name__ == "__main__":
 
     blay.addWidget(c1, 0, 0)
     blay.addWidget(c2, 0, 1)
-    blay.addWidget(c3, 0, 2)
-
-    big = Card("Vue générale"); big.body_layout.addWidget(QtWidgets.QLabel("(Graphique ou calendrier ici)"))
-    blay.addWidget(big, 1, 0, 1, 3)
-
+    blay.addWidget(c3, 1, 0)
+    
     rlay.addWidget(body)
-
     root.addWidget(right, 1)
-    win.setCentralWidget(wrapper)
 
+    win.setCentralWidget(wrapper)
     win.show()
+    
+    # Test d'une QDialog
+    dialog = QtWidgets.QDialog(win)
+    dialog.setWindowTitle("Test QDialog (Light)")
+    dlay = QtWidgets.QVBoxLayout(dialog)
+    dlay.addWidget(QtWidgets.QLabel("Ceci est une fenêtre modale."))
+    dlay.addWidget(QtWidgets.QLineEdit("Champ de texte"))
+    dlay.addWidget(QtWidgets.QPushButton("Bouton"))
+    dialog.resize(300, 200)
+    
+    QtCore.QTimer.singleShot(100, dialog.show)
+
+
     sys.exit(app.exec_())

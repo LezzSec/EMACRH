@@ -6,8 +6,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent 
 from PyQt5.QtGui import QDesktopServices, QIcon
 
-# Importe EmacDarkTheme et apply_soft_shadow
-from core.gui.ui_theme import EmacTheme, EmacDarkTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard, apply_soft_shadow
+# Importe EmacDarkTheme et les composants (apply_soft_shadow retiré)
+from core.gui.ui_theme import EmacTheme, EmacDarkTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard 
 
 from .liste_et_grilles import GrillesDialog
 from core.gui.creation_modification_poste import CreationModificationPosteDialog
@@ -17,7 +17,10 @@ from core.gui.historique import HistoriqueDialog
 from core.gui.gestion_evaluation import GestionEvaluationDialog
 from core.gui.evaluation_calendar import EvaluationCalendarDialog
 from core.db.configbd import get_connection as get_db_connection
-from core.gui.ui_theme import HamburgerButton, EmacButton
+from core.gui.ui_theme import (
+    EmacTheme, EmacDarkTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard, 
+    HamburgerButton, get_current_theme 
+) 
 
 
 try:
@@ -51,11 +54,12 @@ class MainWindow(QMainWindow):
         rootw.setLayout(root)
 
         # =====================
-        # Colonne gauche – cartes pastel (Rendues self. pour rebuild_status_cards)
+        # Colonne gauche – cartes neutres (Rendues self. pour rebuild_status_cards)
         # =====================
         left = QVBoxLayout(); left.setSpacing(18)
 
-        # Retards (bandeau rouge pastel)
+        # Retards (puce rouge, carte neutre)
+        # apply_shadow=False est maintenant par défaut dans EmacCard
         self.retard_card = EmacStatusCard("Retard Évaluations", variant='danger')
         self.retard_filter = QComboBox(); self.retard_filter.addItem("Tous les postes", "")
         self.retard_filter.currentIndexChanged.connect(self.load_evaluations)
@@ -64,7 +68,8 @@ class MainWindow(QMainWindow):
         self.retard_card.body.addWidget(self.retard_scroll)
         left.addWidget(self.retard_card)
 
-        # Prochaines (bandeau vert pastel)
+        # Prochaines (puce verte, carte neutre)
+        # apply_shadow=False est maintenant par défaut dans EmacCard
         self.next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="10 prochaines")
         self.next_eval_filter = QComboBox(); self.next_eval_filter.addItem("Tous les postes", "")
         self.next_eval_filter.currentIndexChanged.connect(self.load_evaluations)
@@ -80,7 +85,7 @@ class MainWindow(QMainWindow):
         # =====================
         right = QVBoxLayout(); right.setSpacing(18)
 
-        # Header avec menu burger bien visible
+        # Header avec menu burger discret
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 8)
@@ -95,7 +100,8 @@ class MainWindow(QMainWindow):
         header_layout.addLayout(title_layout, 1)
         
         # Menu burger à droite (Connecté au Drawer)
-        self.menu_btn = HamburgerButton(self, variant="primary")
+        # MODIFICATION: HamburgerButton n'a plus la couleur bleue (voir ui_theme.py)
+        self.menu_btn = HamburgerButton(self, variant="default") # 'default' pour un style non primaire
         self.menu_btn.setToolTip("Menu")
         self.menu_btn.clicked.connect(self.toggle_drawer) 
         header_layout.addWidget(self.menu_btn, 0, Qt.AlignRight | Qt.AlignVCenter)
@@ -103,7 +109,8 @@ class MainWindow(QMainWindow):
         right.addWidget(header_widget)
 
         # Actions rapides
-        self.actions_wrap = EmacCard()
+        # apply_shadow=False est maintenant par défaut dans EmacCard
+        self.actions_wrap = EmacCard() 
         title = QLabel("Actions rapides"); title.setProperty('class','h2')
         self.actions_wrap.body.addWidget(title)
 
@@ -157,23 +164,28 @@ class MainWindow(QMainWindow):
         self.drawer = QFrame(self)
         self.drawer.setObjectName("card")
         
-        # Applique l'ombre au QFrame
-        apply_soft_shadow(self, radius=22, alpha=36) # Ombre appliquée à MainWindow dans l'ancienne version, corrigée ici
-
-        apply_soft_shadow(self.drawer, radius=22, alpha=36)
+        # MODIFICATION: L'ombre du drawer est supprimée ici aussi.
+        # apply_soft_shadow(self.drawer, radius=22, alpha=36)
         
         self.drawer.setFixedSize(self.DRAWER_WIDTH, self.height())
         
         # Style pour le drawer. Utilise self.current_theme.
         ThemeCls = self.current_theme
-        border_color = ThemeCls.BDR_STRONG
+        border_color = ThemeCls.BDR
         bg_card = ThemeCls.BG_CARD
         
+        # Le style du drawer est hérité de QFrame#card, mais on force border-left et border-radius
         self.drawer.setStyleSheet(f"""
             QFrame#card {{
                 background: {bg_card};
                 border-left: 1px solid {border_color};
-                border-radius: 0px; 
+                border-top: 1px solid {border_color};
+                border-bottom: 1px solid {border_color};
+                border-right: 0px; /* S'assure qu'il n'y a pas de bordure à droite */
+                border-top-left-radius: 0px; 
+                border-bottom-left-radius: 0px;
+                border-top-right-radius: 14px; 
+                border-bottom-right-radius: 14px;
             }}
         """)
         
@@ -259,13 +271,16 @@ class MainWindow(QMainWindow):
         main_layout = self.centralWidget().layout().itemAtPosition(0, 0).layout()
         
         # --- GESTION DES RETARDS ---
+        # NOTE: On utilise takeAt(0).widget() pour retirer les widgets enfants sans les détruire
+        # Le 0 est le filtre, le 1 est le QScrollArea (liste)
         retard_filter_widget = self.retard_card.body.takeAt(0).widget() 
         retard_scroll_widget = self.retard_card.body.takeAt(0).widget() 
 
         main_layout.removeWidget(self.retard_card)
         self.retard_card.deleteLater()
 
-        self.retard_card = EmacStatusCard("Retard Évaluations", variant='danger')
+        # RECREATION de la carte SANS ombre ni bordure colorée (maintenant géré par EmacStatusCard)
+        self.retard_card = EmacStatusCard("Retard Évaluations", variant='danger') 
         main_layout.insertWidget(0, self.retard_card)
         self.retard_card.body.addWidget(retard_filter_widget)
         self.retard_card.body.addWidget(retard_scroll_widget)
@@ -277,6 +292,7 @@ class MainWindow(QMainWindow):
         main_layout.removeWidget(self.next_card)
         self.next_card.deleteLater()
 
+        # RECREATION de la carte SANS ombre ni bordure colorée
         self.next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="10 prochaines")
         main_layout.insertWidget(1, self.next_card)
         self.next_card.body.addWidget(next_filter_widget)
