@@ -16,6 +16,8 @@ from core.gui.manage_operateur import ManageOperatorsDialog
 from core.gui.historique import HistoriqueDialog
 from core.gui.gestion_evaluation import GestionEvaluationDialog
 from core.gui.evaluation_calendar import EvaluationCalendarDialog
+from core.gui.operateurs_inactifs import OperateursInactifsDialog
+from core.gui.regularisation import RegularisationDialog
 from core.db.configbd import get_connection as get_db_connection
 from core.gui.ui_theme import (
     EmacTheme, EmacDarkTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard, 
@@ -218,7 +220,9 @@ class MainWindow(QMainWindow):
         self.add_drawer_button(drawer_layout, "Changer de Thème (Light/Dark)", self.toggle_theme, 'primary')
         drawer_layout.addSpacing(15)
         self.add_drawer_button(drawer_layout, "Ajouter un opérateur", self.show_manage_operator, 'ghost')
-        self.add_drawer_button(drawer_layout, "Création/Modification de poste", self.show_poste_form, 'ghost')
+        self.add_drawer_button(drawer_layout, "Création/Suppression de poste", self.show_poste_form, 'ghost')
+        self.add_drawer_button(drawer_layout, "Régularisation Opérateur", self.show_regularisation, 'ghost')
+        self.add_drawer_button(drawer_layout, "Opérateurs Inactifs", self.show_operateurs_inactifs, 'ghost')
         
         if export_day:
             self.add_drawer_button(drawer_layout, "Exporter les logs du jour", self.export_logs_today, 'ghost')
@@ -365,6 +369,10 @@ class MainWindow(QMainWindow):
         HistoriqueDialog().exec_()
     def show_calendrier_evaluations(self):
         EvaluationCalendarDialog(self).exec_()
+    def show_regularisation(self):
+        RegularisationDialog(self).exec_()
+    def show_operateurs_inactifs(self):
+        OperateursInactifsDialog(self).exec_()
 
     # ================= Données / DB (Fonctions inchangées) =================
     def populate_filters(self):
@@ -384,41 +392,53 @@ class MainWindow(QMainWindow):
         try:
             poste_retard = self.retard_filter.currentData()
             poste_next = self.next_eval_filter.currentData()
-
-            # Retards
+    
+            # --------------------
+            # Retards (opérateurs Actifs uniquement)
+            # --------------------
             q1 = """
                 SELECT o.nom, o.prenom, p.poste_code, poly.prochaine_evaluation
                 FROM polyvalence poly
                 JOIN operateurs o ON o.id = poly.operateur_id
                 LEFT JOIN postes p ON p.id = poly.poste_id
                 WHERE poly.prochaine_evaluation < CURDATE()
-            """; pr = []
+                  AND o.statut = 'Actif'
+            """
+            pr = []
             if poste_retard:
-                q1 += " AND p.poste_code = %s"; pr.append(poste_retard)
+                q1 += " AND p.poste_code = %s"
+                pr.append(poste_retard)
             q1 += " ORDER BY poly.prochaine_evaluation ASC"
-            cur.execute(q1, tuple(pr)); retard = cur.fetchall()
-
-            # Prochaines (limité 10)
+            cur.execute(q1, tuple(pr))
+            retard = cur.fetchall()
+    
+            # --------------------
+            # Prochaines (opérateurs Actifs uniquement, limité à 10)
+            # --------------------
             q2 = """
                 SELECT o.nom, o.prenom, p.poste_code, poly.prochaine_evaluation
                 FROM polyvalence poly
                 JOIN operateurs o ON o.id = poly.operateur_id
                 LEFT JOIN postes p ON p.id = poly.poste_id
                 WHERE poly.prochaine_evaluation >= CURDATE()
-                ORDER BY poly.prochaine_evaluation ASC LIMIT 10
-            """; pn = []
+                  AND o.statut = 'Actif'
+            """
+            pn = []
             if poste_next:
-                q2 = q2.replace("WHERE poly.prochaine_evaluation >= CURDATE()",
-                                "WHERE poly.prochaine_evaluation >= CURDATE() AND p.poste_code = %s")
+                q2 += " AND p.poste_code = %s"
                 pn.append(poste_next)
-            cur.execute(q2, tuple(pn)); prochaines = cur.fetchall()
-
-            # Rendu
+            q2 += " ORDER BY poly.prochaine_evaluation ASC LIMIT 10"
+            cur.execute(q2, tuple(pn))
+            prochaines = cur.fetchall()
+    
+            # --------------------
+            # Rendu UI
+            # --------------------
             self.retard_list.clear()
             for nom, prenom, poste, date_ev in retard:
                 date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
                 self.retard_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
-
+    
             self.next_eval_list.clear()
             for nom, prenom, poste, date_ev in prochaines:
                 date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
