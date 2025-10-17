@@ -1,15 +1,16 @@
-# operateurs_inactifs.py – Consultation des opérateurs inactifs et leurs historiques
-# Affiche tous les opérateurs INACTIF avec leurs polyvalences (postes, niveaux, dates)
+# operateurs_inactifs.py – Gestion complète des opérateurs inactifs
+# Vue détaillée avec possibilité de réactivation et historique complet
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QGroupBox,
-    QMessageBox, QAbstractItemView, QWidget
+    QMessageBox, QAbstractItemView, QWidget, QTextEdit, QTabWidget, QCheckBox
 )
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
 from core.db.configbd import get_connection as get_db_connection
+from core.services.logger import log_hist
 
 import datetime as dt
 
@@ -33,122 +34,123 @@ def _rows(cur, dict_mode):
     return [dict(zip(names, r)) for r in cur.fetchall()]
 
 
-class OperateursInactifsDialog(QDialog):
-    """
-    Fenêtre d'affichage des opérateurs inactifs avec leurs statistiques complètes :
-    - Liste des opérateurs INACTIF
-    - Détails de toutes leurs polyvalences (postes, niveaux, dates)
-    - Filtres : recherche par nom, filtre par poste
-    - Export possible des données
-    """
+class DetailOperateurDialog(QDialog):
+    """Fenêtre modale affichant tous les détails d'un opérateur inactif."""
     
-    def __init__(self, parent=None):
+    operateur_reactivated = pyqtSignal(int)  # Signal émis si réactivation
+    
+    def __init__(self, operateur_id, nom, prenom, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Historique des Opérateurs Inactifs")
-        self.setGeometry(100, 100, 1200, 700)
-        
-        self.operateurs_inactifs = []  # Liste complète des opérateurs inactifs
-        self.current_operateur_id = None
+        self.operateur_id = operateur_id
+        self.setWindowTitle(f"Détails - {nom} {prenom}")
+        self.setGeometry(200, 150, 900, 600)
         
         layout = QVBoxLayout(self)
         
-        # === Header ===
-        header = QLabel("📋 Opérateurs Inactifs - Historique Complet")
-        header.setFont(QFont("Arial", 16, QFont.Bold))
+        # === Header avec infos opérateur ===
+        header = QLabel(f" {nom} {prenom}")
+        header.setFont(QFont("Arial", 18, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
         layout.addWidget(header)
         
-        # === Section Filtres ===
-        filters_group = QGroupBox("Filtres")
-        filters_layout = QHBoxLayout()
+        status_label = QLabel("Statut : INACTIF")
+        status_label.setStyleSheet("color: #dc2626; font-weight: bold; font-size: 14px;")
+        status_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(status_label)
         
-        filters_layout.addWidget(QLabel("Recherche :"))
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Nom ou prénom de l'opérateur...")
-        self.search_input.textChanged.connect(self.filter_operateurs)
-        filters_layout.addWidget(self.search_input, 1)
+        # === Onglets ===
+        tabs = QTabWidget()
         
-        filters_layout.addWidget(QLabel("Poste occupé :"))
-        self.poste_filter = QComboBox()
-        self.poste_filter.addItem("(Tous)", None)
-        self.poste_filter.currentIndexChanged.connect(self.filter_operateurs)
-        filters_layout.addWidget(self.poste_filter)
+        # Onglet 1 : Polyvalences
+        poly_tab = QWidget()
+        poly_layout = QVBoxLayout(poly_tab)
         
-        self.refresh_btn = QPushButton("Actualiser")
-        self.refresh_btn.clicked.connect(self.load_data)
-        filters_layout.addWidget(self.refresh_btn)
+        poly_label = QLabel(" Polyvalences et Compétences")
+        poly_label.setFont(QFont("Arial", 12, QFont.Bold))
+        poly_layout.addWidget(poly_label)
         
-        filters_group.setLayout(filters_layout)
-        layout.addWidget(filters_group)
-        
-        # === Section Principale (2 colonnes) ===
-        main_content = QHBoxLayout()
-        
-        # Colonne gauche : Liste des opérateurs inactifs
-        left_panel = QVBoxLayout()
-        
-        left_header = QLabel("Opérateurs Inactifs")
-        left_header.setFont(QFont("Arial", 12, QFont.Bold))
-        left_panel.addWidget(left_header)
-        
-        self.operateurs_table = QTableWidget()
-        self.operateurs_table.setColumnCount(3)
-        self.operateurs_table.setHorizontalHeaderLabels(["Nom", "Prénom", "Nb Postes"])
-        self.operateurs_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.operateurs_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.operateurs_table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.operateurs_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.operateurs_table.itemSelectionChanged.connect(self.on_operateur_selected)
-        left_panel.addWidget(self.operateurs_table)
-        
-        # Stats rapides
-        self.stats_label = QLabel("Total : 0 opérateur(s) inactif(s)")
-        self.stats_label.setStyleSheet("color: #6b7280; font-style: italic;")
-        left_panel.addWidget(self.stats_label)
-        
-        main_content.addLayout(left_panel, 1)
-        
-        # Colonne droite : Détails des polyvalences
-        right_panel = QVBoxLayout()
-        
-        self.detail_header = QLabel("Sélectionnez un opérateur")
-        self.detail_header.setFont(QFont("Arial", 12, QFont.Bold))
-        right_panel.addWidget(self.detail_header)
-        
-        self.polyvalences_table = QTableWidget()
-        self.polyvalences_table.setColumnCount(5)
-        self.polyvalences_table.setHorizontalHeaderLabels([
-            "Poste", "Niveau", "Date Évaluation", "Prochaine Éval.", "Ancienneté"
+        self.poly_table = QTableWidget()
+        self.poly_table.setColumnCount(6)
+        self.poly_table.setHorizontalHeaderLabels([
+            "Poste", "Niveau", "Date Évaluation", "Prochaine Éval.", "Ancienneté", "Statut"
         ])
-        self.polyvalences_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.polyvalences_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        right_panel.addWidget(self.polyvalences_table)
+        self.poly_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.poly_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        poly_layout.addWidget(self.poly_table)
         
-        # Statistiques détaillées
-        stats_panel = QHBoxLayout()
+        # Stats des niveaux
+        stats_box = QHBoxLayout()
+        self.stat_n1 = self._create_mini_stat("N1", "0", "#ef4444")
+        self.stat_n2 = self._create_mini_stat("N2", "0", "#f59e0b")
+        self.stat_n3 = self._create_mini_stat("N3", "0", "#10b981")
+        self.stat_n4 = self._create_mini_stat("N4", "0", "#3b82f6")
+        self.stat_total = self._create_mini_stat("Total", "0", "#6b7280")
         
-        self.stat_n1 = self._create_stat_card("Niveau 1", "0", "#ef4444")
-        self.stat_n2 = self._create_stat_card("Niveau 2", "0", "#f59e0b")
-        self.stat_n3 = self._create_stat_card("Niveau 3", "0", "#10b981")
-        self.stat_n4 = self._create_stat_card("Niveau 4", "0", "#3b82f6")
+        stats_box.addWidget(self.stat_n1)
+        stats_box.addWidget(self.stat_n2)
+        stats_box.addWidget(self.stat_n3)
+        stats_box.addWidget(self.stat_n4)
+        stats_box.addWidget(self.stat_total)
+        poly_layout.addLayout(stats_box)
         
-        stats_panel.addWidget(self.stat_n1)
-        stats_panel.addWidget(self.stat_n2)
-        stats_panel.addWidget(self.stat_n3)
-        stats_panel.addWidget(self.stat_n4)
+        tabs.addTab(poly_tab, "Polyvalences")
         
-        right_panel.addLayout(stats_panel)
+        # Onglet 2 : Résumé / Notes
+        summary_tab = QWidget()
+        summary_layout = QVBoxLayout(summary_tab)
         
-        main_content.addLayout(right_panel, 2)
+        summary_label = QLabel(" Résumé du Parcours")
+        summary_label.setFont(QFont("Arial", 12, QFont.Bold))
+        summary_layout.addWidget(summary_label)
         
-        layout.addLayout(main_content, 1)
+        self.summary_text = QTextEdit()
+        self.summary_text.setReadOnly(True)
+        summary_layout.addWidget(self.summary_text)
+        
+        tabs.addTab(summary_tab, "Résumé")
+        
+        # Onglet 3 : Historique des modifications
+        history_tab = QWidget()
+        history_layout = QVBoxLayout(history_tab)
+        
+        history_label = QLabel(" Historique")
+        history_label.setFont(QFont("Arial", 12, QFont.Bold))
+        history_layout.addWidget(history_label)
+        
+        self.history_table = QTableWidget()
+        self.history_table.setColumnCount(3)
+        self.history_table.setHorizontalHeaderLabels(["Date", "Action", "Description"])
+        self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        history_layout.addWidget(self.history_table)
+        
+        tabs.addTab(history_tab, "Historique")
+        
+        layout.addWidget(tabs, 1)
         
         # === Boutons d'action ===
         actions = QHBoxLayout()
+        
+        self.reactivate_btn = QPushButton(" Réactiver l'opérateur")
+        self.reactivate_btn.setStyleSheet("""
+            QPushButton {
+                background: #10b981;
+                color: white;
+                font-weight: bold;
+                padding: 10px 20px;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background: #059669;
+            }
+        """)
+        self.reactivate_btn.clicked.connect(self.reactivate_operateur)
+        actions.addWidget(self.reactivate_btn)
+        
         actions.addStretch()
         
-        self.export_btn = QPushButton("Exporter en Excel")
-        self.export_btn.clicked.connect(self.export_data)
+        self.export_btn = QPushButton(" Exporter le profil")
+        self.export_btn.clicked.connect(self.export_profile)
         actions.addWidget(self.export_btn)
         
         self.close_btn = QPushButton("Fermer")
@@ -157,182 +159,46 @@ class OperateursInactifsDialog(QDialog):
         
         layout.addLayout(actions)
         
-        # Chargement initial
-        self.load_postes_filter()
+        # Charger les données
         self.load_data()
     
-    def _create_stat_card(self, label, value, color):
-        """Crée une carte statistique colorée."""
-        card = QWidget()
-        card.setStyleSheet(f"""
+    def _create_mini_stat(self, label, value, color):
+        """Crée une mini-carte de statistique."""
+        widget = QWidget()
+        widget.setStyleSheet(f"""
             QWidget {{
                 background: {color};
-                border-radius: 8px;
-                padding: 10px;
+                border-radius: 6px;
+                padding: 8px;
             }}
         """)
         
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(8, 8, 8, 8)
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.setSpacing(2)
         
-        value_label = QLabel(value)
-        value_label.setFont(QFont("Arial", 20, QFont.Bold))
-        value_label.setStyleSheet("color: white;")
-        value_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(value_label)
+        val_label = QLabel(value)
+        val_label.setFont(QFont("Arial", 16, QFont.Bold))
+        val_label.setStyleSheet("color: white;")
+        val_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(val_label)
         
         text_label = QLabel(label)
-        text_label.setStyleSheet("color: white; font-size: 11px;")
+        text_label.setStyleSheet("color: white; font-size: 10px;")
         text_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(text_label)
         
-        # Stocker le label de valeur pour mise à jour
-        card.value_label = value_label
-        
-        return card
-    
-    def load_postes_filter(self):
-        """Charge les postes dans le filtre."""
-        try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            
-            cursor.execute(
-                "SELECT DISTINCT poste_code FROM postes "
-                "WHERE COALESCE(visible, 1) = 1 "
-                "ORDER BY poste_code"
-            )
-            rows = _rows(cursor, dict_mode)
-            
-            self.poste_filter.blockSignals(True)
-            self.poste_filter.clear()
-            self.poste_filter.addItem("(Tous)", None)
-            
-            for r in rows:
-                poste_code = r.get("poste_code", "")
-                self.poste_filter.addItem(poste_code, poste_code)
-            
-            self.poste_filter.blockSignals(False)
-            
-            cursor.close()
-            connection.close()
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les postes :\n{e}")
+        widget.value_label = val_label
+        return widget
     
     def load_data(self):
-        """Charge tous les opérateurs inactifs avec leurs statistiques."""
-        try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            
-            # Requête pour récupérer les opérateurs inactifs avec nombre de postes
-            query = """
-                SELECT 
-                    o.id,
-                    o.nom,
-                    o.prenom,
-                    COUNT(p.id) as nb_postes
-                FROM operateurs o
-                LEFT JOIN polyvalence p ON o.id = p.operateur_id
-                WHERE UPPER(o.statut) = 'INACTIF'
-                GROUP BY o.id, o.nom, o.prenom
-                ORDER BY o.nom, o.prenom
-            """
-            
-            cursor.execute(query)
-            rows = _rows(cursor, dict_mode)
-            
-            self.operateurs_inactifs = rows
-            
-            cursor.close()
-            connection.close()
-            
-            # Afficher dans la table
-            self.filter_operateurs()
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les données :\n{e}")
+        """Charge toutes les données de l'opérateur."""
+        self.load_polyvalences()
+        self.load_summary()
+        self.load_history()
     
-    def filter_operateurs(self):
-        """Filtre les opérateurs selon les critères."""
-        search_text = self.search_input.text().lower()
-        poste_filter = self.poste_filter.currentData()
-        
-        self.operateurs_table.setRowCount(0)
-        
-        filtered_count = 0
-        
-        for op in self.operateurs_inactifs:
-            nom = op.get("nom", "").lower()
-            prenom = op.get("prenom", "").lower()
-            
-            # Filtre recherche
-            if search_text and search_text not in nom and search_text not in prenom:
-                continue
-            
-            # Filtre poste (vérifier si l'opérateur a occupé ce poste)
-            if poste_filter:
-                if not self._operateur_has_poste(op.get("id"), poste_filter):
-                    continue
-            
-            # Ajouter à la table
-            row = self.operateurs_table.rowCount()
-            self.operateurs_table.insertRow(row)
-            
-            item_nom = QTableWidgetItem(op.get("nom", ""))
-            item_nom.setData(Qt.UserRole, op.get("id"))  # Stocker l'ID
-            self.operateurs_table.setItem(row, 0, item_nom)
-            
-            self.operateurs_table.setItem(row, 1, QTableWidgetItem(op.get("prenom", "")))
-            self.operateurs_table.setItem(row, 2, QTableWidgetItem(str(op.get("nb_postes", 0))))
-            
-            filtered_count += 1
-        
-        self.stats_label.setText(f"Total : {filtered_count} opérateur(s) inactif(s)")
-    
-    def _operateur_has_poste(self, operateur_id, poste_code):
-        """Vérifie si un opérateur a occupé un poste spécifique."""
-        try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            
-            cursor.execute(
-                """SELECT COUNT(*) as cnt FROM polyvalence p
-                   JOIN postes ps ON p.poste_id = ps.id
-                   WHERE p.operateur_id = %s AND ps.poste_code = %s""",
-                (operateur_id, poste_code)
-            )
-            
-            result = cursor.fetchone()
-            count = result["cnt"] if dict_mode else result[0]
-            
-            cursor.close()
-            connection.close()
-            
-            return count > 0
-            
-        except Exception:
-            return False
-    
-    def on_operateur_selected(self):
-        """Charge les polyvalences de l'opérateur sélectionné."""
-        selected = self.operateurs_table.selectedItems()
-        if not selected:
-            return
-        
-        # Récupérer l'ID de l'opérateur
-        operateur_id = selected[0].data(Qt.UserRole)
-        nom = selected[0].text()
-        prenom = selected[1].text()
-        
-        self.current_operateur_id = operateur_id
-        self.detail_header.setText(f"Polyvalences de {nom} {prenom}")
-        
-        self.load_polyvalences(operateur_id)
-    
-    def load_polyvalences(self, operateur_id):
-        """Charge toutes les polyvalences d'un opérateur."""
+    def load_polyvalences(self):
+        """Charge les polyvalences."""
         try:
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
@@ -349,21 +215,19 @@ class OperateursInactifsDialog(QDialog):
                 ORDER BY ps.poste_code
             """
             
-            cursor.execute(query, (operateur_id,))
+            cursor.execute(query, (self.operateur_id,))
             rows = _rows(cursor, dict_mode)
             
             cursor.close()
             connection.close()
             
-            # Réinitialiser la table
-            self.polyvalences_table.setRowCount(0)
+            self.poly_table.setRowCount(0)
             
-            # Compteurs pour stats
             niveaux = {1: 0, 2: 0, 3: 0, 4: 0}
             
             for r in rows:
-                row = self.polyvalences_table.rowCount()
-                self.polyvalences_table.insertRow(row)
+                row = self.poly_table.rowCount()
+                self.poly_table.insertRow(row)
                 
                 poste = r.get("poste_code", "")
                 niveau = r.get("niveau")
@@ -371,9 +235,9 @@ class OperateursInactifsDialog(QDialog):
                 date_next = r.get("prochaine_evaluation")
                 
                 # Poste
-                self.polyvalences_table.setItem(row, 0, QTableWidgetItem(str(poste)))
+                self.poly_table.setItem(row, 0, QTableWidgetItem(str(poste)))
                 
-                # Niveau (avec couleur)
+                # Niveau
                 niveau_item = QTableWidgetItem(str(niveau) if niveau else "N/A")
                 if niveau:
                     niveaux[int(niveau)] += 1
@@ -390,51 +254,286 @@ class OperateursInactifsDialog(QDialog):
                         niveau_item.setBackground(QColor("#eff6ff"))
                         niveau_item.setForeground(QColor("#2563eb"))
                 niveau_item.setTextAlignment(Qt.AlignCenter)
-                self.polyvalences_table.setItem(row, 1, niveau_item)
+                self.poly_table.setItem(row, 1, niveau_item)
                 
-                # Date évaluation
-                date_eval_str = self._format_date(date_eval)
-                self.polyvalences_table.setItem(row, 2, QTableWidgetItem(date_eval_str))
+                # Dates
+                self.poly_table.setItem(row, 2, QTableWidgetItem(self._format_date(date_eval)))
+                self.poly_table.setItem(row, 3, QTableWidgetItem(self._format_date(date_next)))
                 
-                # Prochaine évaluation
-                date_next_str = self._format_date(date_next)
-                self.polyvalences_table.setItem(row, 3, QTableWidgetItem(date_next_str))
-                
-                # Ancienneté (calcul depuis date_evaluation)
+                # Ancienneté
                 anciennete = self._calculate_anciennete(date_eval)
-                self.polyvalences_table.setItem(row, 4, QTableWidgetItem(anciennete))
+                self.poly_table.setItem(row, 4, QTableWidgetItem(anciennete))
+                
+                # Statut (À jour / En retard)
+                statut_item = QTableWidgetItem()
+                if date_next:
+                    today = dt.date.today()
+                    if isinstance(date_next, str):
+                        next_date = dt.datetime.strptime(date_next, "%Y-%m-%d").date()
+                    elif hasattr(date_next, "date"):
+                        next_date = date_next.date()
+                    else:
+                        next_date = date_next
+                    
+                    if next_date < today:
+                        statut_item.setText("️ En retard")
+                        statut_item.setForeground(QColor("#dc2626"))
+                    else:
+                        statut_item.setText(" À jour")
+                        statut_item.setForeground(QColor("#059669"))
+                else:
+                    statut_item.setText("N/A")
+                
+                statut_item.setTextAlignment(Qt.AlignCenter)
+                self.poly_table.setItem(row, 5, statut_item)
             
-            # Mettre à jour les statistiques
+            # Mise à jour des stats
             self.stat_n1.value_label.setText(str(niveaux[1]))
             self.stat_n2.value_label.setText(str(niveaux[2]))
             self.stat_n3.value_label.setText(str(niveaux[3]))
             self.stat_n4.value_label.setText(str(niveaux[4]))
+            self.stat_total.value_label.setText(str(sum(niveaux.values())))
             
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible de charger les polyvalences :\n{e}")
     
+    def load_summary(self):
+        """Génère un résumé textuel du parcours."""
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+            
+            # Récupérer les infos
+            cursor.execute(
+                "SELECT nom, prenom, statut FROM operateurs WHERE id = %s",
+                (self.operateur_id,)
+            )
+            op = cursor.fetchone()
+            
+            if not op:
+                return
+            
+            nom = op["nom"] if dict_mode else op[0]
+            prenom = op["prenom"] if dict_mode else op[1]
+            
+            # Statistiques
+            cursor.execute(
+                """SELECT COUNT(*) as total, 
+                   SUM(CASE WHEN niveau = 1 THEN 1 ELSE 0 END) as n1,
+                   SUM(CASE WHEN niveau = 2 THEN 1 ELSE 0 END) as n2,
+                   SUM(CASE WHEN niveau = 3 THEN 1 ELSE 0 END) as n3,
+                   SUM(CASE WHEN niveau = 4 THEN 1 ELSE 0 END) as n4,
+                   MIN(date_evaluation) as premiere_eval,
+                   MAX(date_evaluation) as derniere_eval
+                   FROM polyvalence WHERE operateur_id = %s""",
+                (self.operateur_id,)
+            )
+            stats = cursor.fetchone()
+            
+            if dict_mode:
+                total = stats["total"]
+                n1, n2, n3, n4 = stats["n1"], stats["n2"], stats["n3"], stats["n4"]
+                premiere = stats["premiere_eval"]
+                derniere = stats["derniere_eval"]
+            else:
+                total = stats[0]
+                n1, n2, n3, n4 = stats[1], stats[2], stats[3], stats[4]
+                premiere = stats[5]
+                derniere = stats[6]
+            
+            cursor.close()
+            connection.close()
+            
+            # Générer le résumé
+            summary = f"""
+═══════════════════════════════════════════════
+  PROFIL : {nom} {prenom}
+═══════════════════════════════════════════════
+
+ STATISTIQUES GÉNÉRALES
+─────────────────────────────────────────────
+• Nombre total de postes occupés : {total}
+• Répartition des niveaux :
+  - Niveau 1 : Opérateur nouveau à encadrer par titulaire N3/4 ou absent du poste depuis plus de 12 mois. (< 80%)     : {n1} poste(s)
+  - Niveau 2 : Opérateur formé et apte à conduire le poste seul. Certaines notions sont en cours d'acquisition. (> 80%)     : {n2} poste(s)
+  - Niveau 3 : Opérateur titulaire, formé, apte à conduire le poste et apte à former. (> 90%)       : {n3} poste(s)
+  - Niveau 4 : N3 + Leader ou Polyvalent (maîtrise 3 postes d'une ligne : mél. interne, cylindres, conditionnement) (> 90%)     : {n4} poste(s)
+
+ PÉRIODE D'ACTIVITÉ
+─────────────────────────────────────────────
+• Première évaluation : {self._format_date(premiere)}
+• Dernière évaluation : {self._format_date(derniere)}
+
+ POINTS FORTS
+─────────────────────────────────────────────
+"""
+            
+            if n4 > 0:
+                summary += f"• {n4} poste(s) maîtrisé(s) au niveau Référent (N4)\n"
+            if n3 > 0:
+                summary += f"• {n3} poste(s) maîtrisé(s) au niveau Expert (N3)\n"
+            
+            if n3 + n4 >= 3:
+                summary += "• Opérateur polyvalent (3+ postes de niveau 3/4)\n"
+            
+            summary += """
+ REMARQUES
+─────────────────────────────────────────────
+L'opérateur est actuellement INACTIF.
+Toutes ses compétences et évaluations sont conservées
+dans le système pour référence future.
+
+Vous pouvez réactiver cet opérateur à tout moment
+en cliquant sur le bouton "Réactiver l'opérateur".
+"""
+            
+            self.summary_text.setPlainText(summary)
+            
+        except Exception as e:
+            self.summary_text.setPlainText(f"Erreur lors du chargement du résumé :\n{e}")
+    
+    def load_history(self):
+        """Charge l'historique des modifications."""
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+            
+            cursor.execute(
+                """SELECT date_time, action, description 
+                   FROM historique 
+                   WHERE operateur_id = %s 
+                   ORDER BY date_time DESC 
+                   LIMIT 50""",
+                (self.operateur_id,)
+            )
+            rows = _rows(cursor, dict_mode)
+            
+            cursor.close()
+            connection.close()
+            
+            self.history_table.setRowCount(0)
+            
+            for r in rows:
+                row = self.history_table.rowCount()
+                self.history_table.insertRow(row)
+                
+                date_str = self._format_datetime(r.get("date_time"))
+                action = r.get("action", "")
+                desc = r.get("description", "")
+                
+                self.history_table.setItem(row, 0, QTableWidgetItem(date_str))
+                self.history_table.setItem(row, 1, QTableWidgetItem(action))
+                self.history_table.setItem(row, 2, QTableWidgetItem(desc))
+            
+        except Exception as e:
+            QMessageBox.warning(self, "Historique", f"Impossible de charger l'historique :\n{e}")
+    
+    def reactivate_operateur(self):
+        """Réactive l'opérateur (passe le statut à ACTIF)."""
+        reply = QMessageBox.question(
+            self, "Confirmer la réactivation",
+            "Êtes-vous sûr de vouloir réactiver cet opérateur ?\n\n"
+            "Son statut passera à ACTIF et il réapparaîtra dans les listes principales.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply != QMessageBox.Yes:
+            return
+        
+        try:
+            connection = get_db_connection()
+            cursor, _ = _cursor(connection)
+            
+            cursor.execute(
+                "UPDATE operateurs SET statut = 'ACTIF' WHERE id = %s",
+                (self.operateur_id,)
+            )
+            
+            connection.commit()
+            cursor.close()
+            connection.close()
+            
+            QMessageBox.information(
+                self, "Réactivation réussie",
+                " L'opérateur a été réactivé avec succès !\n\n"
+                "Il apparaîtra de nouveau dans les listes d'opérateurs actifs."
+            )
+            
+            self.operateur_reactivated.emit(self.operateur_id)
+            self.accept()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible de réactiver l'opérateur :\n{e}")
+    
+    def export_profile(self):
+        """Exporte le profil complet en texte."""
+        from PyQt5.QtWidgets import QFileDialog
+        
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Exporter le profil",
+            f"profil_operateur_{self.operateur_id}.txt",
+            "Text Files (*.txt)"
+        )
+        
+        if not file_path:
+            return
+        
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(self.summary_text.toPlainText())
+                f.write("\n\n")
+                f.write("═" * 60 + "\n")
+                f.write("DÉTAILS DES POLYVALENCES\n")
+                f.write("═" * 60 + "\n\n")
+                
+                for row in range(self.poly_table.rowCount()):
+                    poste = self.poly_table.item(row, 0).text()
+                    niveau = self.poly_table.item(row, 1).text()
+                    date_eval = self.poly_table.item(row, 2).text()
+                    date_next = self.poly_table.item(row, 3).text()
+                    anciennete = self.poly_table.item(row, 4).text()
+                    
+                    f.write(f"• {poste} - Niveau {niveau}\n")
+                    f.write(f"  Évaluation : {date_eval}\n")
+                    f.write(f"  Prochaine  : {date_next}\n")
+                    f.write(f"  Ancienneté : {anciennete}\n\n")
+            
+            QMessageBox.information(self, "Export réussi", f" Profil exporté :\n{file_path}")
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible d'exporter le profil :\n{e}")
+    
     def _format_date(self, date_val):
-        """Formate une date pour l'affichage."""
+        """Formate une date."""
         if date_val is None:
             return "N/A"
-        
         if isinstance(date_val, str):
             try:
-                date_obj = dt.datetime.strptime(date_val, "%Y-%m-%d")
-                return date_obj.strftime("%d/%m/%Y")
-            except Exception:
+                return dt.datetime.strptime(date_val, "%Y-%m-%d").strftime("%d/%m/%Y")
+            except:
                 return date_val
-        
         if hasattr(date_val, "strftime"):
             return date_val.strftime("%d/%m/%Y")
-        
         return str(date_val)
     
+    def _format_datetime(self, datetime_val):
+        """Formate un datetime."""
+        if datetime_val is None:
+            return "N/A"
+        if isinstance(datetime_val, str):
+            try:
+                return dt.datetime.fromisoformat(datetime_val).strftime("%d/%m/%Y %H:%M")
+            except:
+                return datetime_val
+        if hasattr(datetime_val, "strftime"):
+            return datetime_val.strftime("%d/%m/%Y %H:%M")
+        return str(datetime_val)
+    
     def _calculate_anciennete(self, date_eval):
-        """Calcule l'ancienneté depuis la date d'évaluation."""
+        """Calcule l'ancienneté."""
         if date_eval is None:
             return "N/A"
-        
         try:
             if isinstance(date_eval, str):
                 date_obj = dt.datetime.strptime(date_eval, "%Y-%m-%d").date()
@@ -443,9 +542,7 @@ class OperateursInactifsDialog(QDialog):
             else:
                 date_obj = date_eval
             
-            today = dt.date.today()
-            delta = today - date_obj
-            
+            delta = dt.date.today() - date_obj
             years = delta.days // 365
             months = (delta.days % 365) // 30
             
@@ -455,20 +552,221 @@ class OperateursInactifsDialog(QDialog):
                 return f"{months} mois"
             else:
                 return f"{delta.days} jour(s)"
-                
-        except Exception:
+        except:
             return "N/A"
+
+
+class OperateursInactifsDialog(QDialog):
+    """
+    Fenêtre principale de gestion des opérateurs inactifs.
+    Vue synthétique avec possibilité d'ouvrir les détails complets.
+    """
     
-    def export_data(self):
-        """Exporte les données en Excel."""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Gestion des Opérateurs Inactifs")
+        self.setGeometry(100, 100, 1000, 600)
+        
+        layout = QVBoxLayout(self)
+        
+        # === Header ===
+        header = QLabel(" Opérateurs Inactifs")
+        header.setFont(QFont("Arial", 18, QFont.Bold))
+        header.setAlignment(Qt.AlignCenter)
+        layout.addWidget(header)
+        
+        subtitle = QLabel("Liste complète des opérateurs avec statut INACTIF")
+        subtitle.setStyleSheet("color: #6b7280; font-style: italic;")
+        subtitle.setAlignment(Qt.AlignCenter)
+        layout.addWidget(subtitle)
+        
+        # === Filtres ===
+        filters = QHBoxLayout()
+        
+        filters.addWidget(QLabel(" Recherche :"))
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Nom ou prénom...")
+        self.search_input.textChanged.connect(self.filter_table)
+        filters.addWidget(self.search_input, 1)
+        
+        self.show_stats_check = QCheckBox("Afficher les statistiques")
+        self.show_stats_check.setChecked(True)
+        self.show_stats_check.toggled.connect(self.toggle_stats_columns)
+        filters.addWidget(self.show_stats_check)
+        
+        self.refresh_btn = QPushButton(" Actualiser")
+        self.refresh_btn.clicked.connect(self.load_data)
+        filters.addWidget(self.refresh_btn)
+        
+        layout.addLayout(filters)
+        
+        # === Table principale ===
+        self.table = QTableWidget()
+        self.table.setColumnCount(7)
+        self.table.setHorizontalHeaderLabels([
+            "Nom", "Prénom", "Nb Postes", "Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"
+        ])
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.doubleClicked.connect(self.open_detail_dialog)
+        layout.addWidget(self.table, 1)
+        
+        # === Stats globales ===
+        stats_label = QLabel("Double-cliquez sur une ligne pour voir les détails complets")
+        stats_label.setStyleSheet("color: #6b7280; font-style: italic; padding: 8px;")
+        stats_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(stats_label)
+        
+        self.total_label = QLabel("Total : 0 opérateur(s)")
+        self.total_label.setFont(QFont("Arial", 11, QFont.Bold))
+        self.total_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.total_label)
+        
+        # === Actions ===
+        actions = QHBoxLayout()
+        actions.addStretch()
+        
+        self.export_btn = QPushButton(" Exporter la liste")
+        self.export_btn.clicked.connect(self.export_list)
+        actions.addWidget(self.export_btn)
+        
+        self.close_btn = QPushButton("Fermer")
+        self.close_btn.clicked.connect(self.close)
+        actions.addWidget(self.close_btn)
+        
+        layout.addLayout(actions)
+        
+        # Charger les données
+        self.all_data = []
+        self.load_data()
+    
+    def load_data(self):
+        """Charge tous les opérateurs inactifs avec leurs stats."""
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+            
+            query = """
+                SELECT 
+                    o.id,
+                    o.nom,
+                    o.prenom,
+                    COUNT(p.id) as nb_postes,
+                    SUM(CASE WHEN p.niveau = 1 THEN 1 ELSE 0 END) as n1,
+                    SUM(CASE WHEN p.niveau = 2 THEN 1 ELSE 0 END) as n2,
+                    SUM(CASE WHEN p.niveau = 3 THEN 1 ELSE 0 END) as n3,
+                    SUM(CASE WHEN p.niveau = 4 THEN 1 ELSE 0 END) as n4
+                FROM operateurs o
+                LEFT JOIN polyvalence p ON o.id = p.operateur_id
+                WHERE UPPER(o.statut) = 'INACTIF'
+                GROUP BY o.id, o.nom, o.prenom
+                ORDER BY o.nom, o.prenom
+            """
+            
+            cursor.execute(query)
+            self.all_data = _rows(cursor, dict_mode)
+            
+            cursor.close()
+            connection.close()
+            
+            self.filter_table()
+            
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible de charger les données :\n{e}")
+    
+    def filter_table(self):
+        """Filtre et affiche les données dans la table."""
+        search_text = self.search_input.text().lower()
+        
+        self.table.setRowCount(0)
+        
+        count = 0
+        for data in self.all_data:
+            nom = data.get("nom", "").lower()
+            prenom = data.get("prenom", "").lower()
+            
+            if search_text and search_text not in nom and search_text not in prenom:
+                continue
+            
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            
+            # Stocker l'ID en UserRole
+            nom_item = QTableWidgetItem(data.get("nom", ""))
+            nom_item.setData(Qt.UserRole, data.get("id"))
+            self.table.setItem(row, 0, nom_item)
+            
+            self.table.setItem(row, 1, QTableWidgetItem(data.get("prenom", "")))
+            self.table.setItem(row, 2, QTableWidgetItem(str(data.get("nb_postes", 0))))
+            
+            # Colonnes stats avec couleurs
+            n1_item = QTableWidgetItem(str(data.get("n1", 0)))
+            n1_item.setBackground(QColor("#fef2f2"))
+            n1_item.setForeground(QColor("#dc2626"))
+            n1_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 3, n1_item)
+            
+            n2_item = QTableWidgetItem(str(data.get("n2", 0)))
+            n2_item.setBackground(QColor("#fffbeb"))
+            n2_item.setForeground(QColor("#d97706"))
+            n2_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 4, n2_item)
+            
+            n3_item = QTableWidgetItem(str(data.get("n3", 0)))
+            n3_item.setBackground(QColor("#f0fdf4"))
+            n3_item.setForeground(QColor("#059669"))
+            n3_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 5, n3_item)
+            
+            n4_item = QTableWidgetItem(str(data.get("n4", 0)))
+            n4_item.setBackground(QColor("#eff6ff"))
+            n4_item.setForeground(QColor("#2563eb"))
+            n4_item.setTextAlignment(Qt.AlignCenter)
+            self.table.setItem(row, 6, n4_item)
+            
+            count += 1
+        
+        self.total_label.setText(f"Total : {count} opérateur(s) inactif(s)")
+    
+    def toggle_stats_columns(self, checked):
+        """Affiche/masque les colonnes de statistiques."""
+        for col in range(3, 7):  # Colonnes N1, N2, N3, N4
+            self.table.setColumnHidden(col, not checked)
+    
+    def open_detail_dialog(self):
+        """Ouvre la fenêtre de détails pour l'opérateur sélectionné."""
+        selected = self.table.selectedItems()
+        if not selected:
+            return
+        
+        operateur_id = selected[0].data(Qt.UserRole)
+        nom = selected[0].text()
+        prenom = selected[1].text()
+        
+        detail_dialog = DetailOperateurDialog(operateur_id, nom, prenom, self)
+        detail_dialog.operateur_reactivated.connect(self.on_operateur_reactivated)
+        detail_dialog.exec_()
+    
+    def on_operateur_reactivated(self, operateur_id):
+        """Callback quand un opérateur est réactivé."""
+        QMessageBox.information(
+            self, "Opérateur réactivé",
+            "L'opérateur a été réactivé avec succès.\n"
+            "La liste va être actualisée."
+        )
+        self.load_data()
+    
+    def export_list(self):
+        """Exporte la liste en Excel."""
         try:
             from openpyxl import Workbook
             from openpyxl.styles import Font, PatternFill, Alignment
             from PyQt5.QtWidgets import QFileDialog
             
-            # Demander le fichier de destination
             file_path, _ = QFileDialog.getSaveFileName(
-                self, "Exporter les données", 
+                self, "Exporter la liste",
                 f"operateurs_inactifs_{dt.date.today().strftime('%Y%m%d')}.xlsx",
                 "Excel Files (*.xlsx)"
             )
@@ -477,98 +775,52 @@ class OperateursInactifsDialog(QDialog):
                 return
             
             wb = Workbook()
-            
-            # Feuille 1 : Liste des opérateurs
-            ws1 = wb.active
-            ws1.title = "Opérateurs Inactifs"
+            ws = wb.active
+            ws.title = "Opérateurs Inactifs"
             
             # En-têtes
-            headers1 = ["Nom", "Prénom", "Nombre de Postes"]
-            ws1.append(headers1)
+            headers = ["Nom", "Prénom", "Nb Postes", "Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"]
+            ws.append(headers)
             
             # Style en-têtes
             header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
             header_font = Font(bold=True, color="FFFFFF")
             
-            for cell in ws1[1]:
+            for cell in ws[1]:
                 cell.fill = header_fill
                 cell.font = header_font
                 cell.alignment = Alignment(horizontal="center")
             
             # Données
-            for op in self.operateurs_inactifs:
-                ws1.append([
-                    op.get("nom", ""),
-                    op.get("prenom", ""),
-                    op.get("nb_postes", 0)
+            for data in self.all_data:
+                ws.append([
+                    data.get("nom", ""),
+                    data.get("prenom", ""),
+                    data.get("nb_postes", 0),
+                    data.get("n1", 0),
+                    data.get("n2", 0),
+                    data.get("n3", 0),
+                    data.get("n4", 0)
                 ])
-            
-            # Feuille 2 : Détails des polyvalences
-            ws2 = wb.create_sheet("Détails Polyvalences")
-            
-            headers2 = ["Nom", "Prénom", "Poste", "Niveau", "Date Évaluation", "Prochaine Évaluation"]
-            ws2.append(headers2)
-            
-            for cell in ws2[1]:
-                cell.fill = header_fill
-                cell.font = header_font
-                cell.alignment = Alignment(horizontal="center")
-            
-            # Récupérer toutes les polyvalences
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            
-            query = """
-                SELECT 
-                    o.nom,
-                    o.prenom,
-                    ps.poste_code,
-                    p.niveau,
-                    p.date_evaluation,
-                    p.prochaine_evaluation
-                FROM operateurs o
-                JOIN polyvalence p ON o.id = p.operateur_id
-                JOIN postes ps ON p.poste_id = ps.id
-                WHERE UPPER(o.statut) = 'INACTIF'
-                ORDER BY o.nom, o.prenom, ps.poste_code
-            """
-            
-            cursor.execute(query)
-            rows = _rows(cursor, dict_mode)
-            
-            for r in rows:
-                ws2.append([
-                    r.get("nom", ""),
-                    r.get("prenom", ""),
-                    r.get("poste_code", ""),
-                    r.get("niveau", ""),
-                    self._format_date(r.get("date_evaluation")),
-                    self._format_date(r.get("prochaine_evaluation"))
-                ])
-            
-            cursor.close()
-            connection.close()
             
             # Ajuster les largeurs
-            for ws in [ws1, ws2]:
-                for column in ws.columns:
-                    max_length = 0
-                    column_letter = column[0].column_letter
-                    for cell in column:
-                        try:
-                            if len(str(cell.value)) > max_length:
-                                max_length = len(cell.value)
-                        except:
-                            pass
-                    adjusted_width = min(max_length + 2, 50)
-                    ws.column_dimensions[column_letter].width = adjusted_width
+            for column in ws.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(cell.value)
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 30)
+                ws.column_dimensions[column_letter].width = adjusted_width
             
-            # Sauvegarder
             wb.save(file_path)
             
             QMessageBox.information(
                 self, "Export réussi",
-                f"✅ Les données ont été exportées avec succès !\n\n{file_path}"
+                f" Liste exportée avec succès !\n\n{file_path}"
             )
             
         except ImportError:
@@ -578,7 +830,7 @@ class OperateursInactifsDialog(QDialog):
                 "Installez-le avec : pip install openpyxl"
             )
         except Exception as e:
-            QMessageBox.critical(self, "Erreur d'export", f"Impossible d'exporter les données :\n{e}")
+            QMessageBox.critical(self, "Erreur", f"Impossible d'exporter :\n{e}")
 
 
 # Test autonome

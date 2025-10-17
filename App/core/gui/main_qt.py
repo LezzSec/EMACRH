@@ -32,7 +32,6 @@ except ImportError:
 
 
 class MainWindow(QMainWindow):
-    # Largeur du menu latéral
     DRAWER_WIDTH = 280
 
     def __init__(self):
@@ -110,6 +109,7 @@ class MainWindow(QMainWindow):
         
         right.addWidget(header_widget)
 
+        
         # Actions rapides
         # apply_shadow=False est maintenant par défaut dans EmacCard
         self.actions_wrap = EmacCard() 
@@ -121,13 +121,13 @@ class MainWindow(QMainWindow):
         r1 = QHBoxLayout(); b1 = EmacButton("Liste du Personnel", 'primary'); b1.clicked.connect(self.show_liste_personnel); r1.addWidget(b1)
         r2 = QHBoxLayout(); b2 = EmacButton("Liste et Grilles", 'ghost'); b2.clicked.connect(self.show_listes_grilles_dialog); r2.addWidget(b2)
         r3 = QHBoxLayout(); b3 = EmacButton("Gestion des Évaluations", 'ghost'); b3.clicked.connect(self.show_gestion_evaluations); r3.addWidget(b3)
-        r4 = QHBoxLayout(); b4 = EmacButton("Historique", 'ghost'); b4.clicked.connect(self.show_historique); r4.addWidget(b4)
-        r5 = QHBoxLayout(); b5 = EmacButton("Calendrier", 'ghost'); b5.clicked.connect(self.show_calendrier_evaluations); r5.addWidget(b5)
-        r6 = QHBoxLayout(); b6 = EmacButton("Quitter", 'ghost'); b6.clicked.connect(self.close); r6.addWidget(b6)
-        for r in (r1, r2, r3, r4, r5, r6):
+        r4 = QHBoxLayout(); b4 = EmacButton("Régularisation Opérateur", 'ghost'); b4.clicked.connect(self.show_regularisation); r4.addWidget(b4)
+        r5 = QHBoxLayout(); b5 = EmacButton("Quitter", 'ghost'); b5.clicked.connect(self.close); r5.addWidget(b5)
+        for r in (r1, r2, r3, r4, r5):
             rows.addLayout(r)
         self.actions_wrap.body.addLayout(rows)
         right.addWidget(self.actions_wrap)
+
 
         root.addLayout(right, 0, 1)
         
@@ -216,18 +216,21 @@ class MainWindow(QMainWindow):
         drawer_layout.addWidget(title)
         drawer_layout.addSpacing(15)
 
+        
         # Ajout des boutons dans le Drawer
         self.add_drawer_button(drawer_layout, "Changer de Thème (Light/Dark)", self.toggle_theme, 'primary')
         drawer_layout.addSpacing(15)
         self.add_drawer_button(drawer_layout, "Ajouter un opérateur", self.show_manage_operator, 'ghost')
         self.add_drawer_button(drawer_layout, "Création/Suppression de poste", self.show_poste_form, 'ghost')
-        self.add_drawer_button(drawer_layout, "Régularisation Opérateur", self.show_regularisation, 'ghost')
+        self.add_drawer_button(drawer_layout, "Historique", self.show_historique, 'ghost')
+        self.add_drawer_button(drawer_layout, "Calendrier", self.show_calendrier_evaluations, 'ghost')
         self.add_drawer_button(drawer_layout, "Opérateurs Inactifs", self.show_operateurs_inactifs, 'ghost')
         
         if export_day:
             self.add_drawer_button(drawer_layout, "Exporter les logs du jour", self.export_logs_today, 'ghost')
 
         drawer_layout.addStretch(1)
+
 
 
     def add_drawer_button(self, layout: QVBoxLayout, text: str, action: callable, variant: str = None):
