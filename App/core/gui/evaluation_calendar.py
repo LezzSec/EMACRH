@@ -102,10 +102,10 @@ class EvaluationCalendarDialog(QDialog):
     def _cursor(self):
         self._ensure_conn()
         try:
-            cur = self.conn.cursor(dictionary=True)  # mysql-connector
+            cur = self.conn.cursor(dictionary=True) 
             return cur, True
         except TypeError:
-            cur = self.conn.cursor()                  # PyMySQL / MySQLdb / psycopg
+            cur = self.conn.cursor() 
             return cur, False
 
     def closeEvent(self, event):
@@ -159,7 +159,6 @@ class EvaluationCalendarDialog(QDialog):
         try:
             where = ""
             if self.only_visible.isChecked():
-                # seulement si la colonne existe
                 try:
                     cur.execute("SHOW COLUMNS FROM postes LIKE 'visible';")
                     if cur.fetchone():
@@ -207,7 +206,6 @@ class EvaluationCalendarDialog(QDialog):
                 try: cur.close()
                 except: pass
 
-        # filtre texte sur opérateur
         txt = self.search.text().strip()
         if txt:
             like = f"%{txt}%"
@@ -267,7 +265,6 @@ class EvaluationCalendarDialog(QDialog):
             try: cur.close()
             except: pass
 
-        # Appliquer un marquage sur chaque jour avec au moins 1 éval
         for r in rows:
             d_str = r["d"] if dict_mode else r[0]
             n = r["n"] if dict_mode else r[1]
@@ -292,7 +289,6 @@ class EvaluationCalendarDialog(QDialog):
 
         cur, dict_mode = self._cursor()
         try:
-            # on récupère aussi les IDs pour le double-clic
             sql = (
                 f"SELECT o.id AS operateur_id, ps.id AS poste_id, "
                 f"o.`{self.op_nom_col}` AS nom, o.`{self.op_prenom_col}` AS prenom, "
@@ -345,10 +341,8 @@ class EvaluationCalendarDialog(QDialog):
 
         try:
             dlg = HistoriqueDialog(self)
-            # période large par défaut (12 mois passés -> +1 semaine)
             dlg.from_date.setDate(QDate.currentDate().addYears(-1))
             dlg.to_date.setDate(QDate.currentDate().addDays(7))
-            # rechercher par operateur_id (ça matche la colonne record_id si elle est remplie)
             dlg.search.setText(str(op_id))
             dlg.reload()
             # si la colonne table_name existe, on force "polyvalence" si présent

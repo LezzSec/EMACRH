@@ -1,5 +1,3 @@
-# operateurs_inactifs.py – Gestion complète des opérateurs inactifs
-# Vue détaillée avec possibilité de réactivation et historique complet
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,

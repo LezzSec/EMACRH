@@ -13,6 +13,7 @@ from PyQt5.QtCore import QDate, Qt
 from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib import colors
+from core.gui.historique import HistoriqueDialog
 from reportlab.lib.styles import getSampleStyleSheet
 
 # 🔁 alias pour ne rien casser dans le code existant

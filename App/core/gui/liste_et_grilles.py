@@ -8,12 +8,10 @@ from PyQt5.QtGui import QColor
 import sys
 import pandas as pd
 from datetime import datetime, timedelta
-
+from core.gui.historique import HistoriqueDialog
 from core.db.configbd import get_connection as get_db_connection
 from .besoin_poste_dialog import BesoinPosteDialog
 from core.services.logger import log_hist
-
-# 💥 IMPORT DU THÈME pour adaptation dynamique
 try:
     from core.gui.ui_theme import get_current_theme
     THEME_AVAILABLE = True

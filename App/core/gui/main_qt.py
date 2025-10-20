@@ -5,10 +5,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent 
 from PyQt5.QtGui import QDesktopServices, QIcon
-
-# Importe EmacDarkTheme et les composants (apply_soft_shadow retiré)
 from core.gui.ui_theme import EmacTheme, EmacDarkTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard 
-
 from .liste_et_grilles import GrillesDialog
 from core.gui.creation_modification_poste import CreationModificationPosteDialog
 from core.gui.liste_personnel import ListePersonnelDialog
@@ -59,8 +56,6 @@ class MainWindow(QMainWindow):
         # =====================
         left = QVBoxLayout(); left.setSpacing(18)
 
-        # Retards (puce rouge, carte neutre)
-        # apply_shadow=False est maintenant par défaut dans EmacCard
         self.retard_card = EmacStatusCard("Retard Évaluations", variant='danger')
         self.retard_filter = QComboBox(); self.retard_filter.addItem("Tous les postes", "")
         self.retard_filter.currentIndexChanged.connect(self.load_evaluations)
@@ -69,8 +64,6 @@ class MainWindow(QMainWindow):
         self.retard_card.body.addWidget(self.retard_scroll)
         left.addWidget(self.retard_card)
 
-        # Prochaines (puce verte, carte neutre)
-        # apply_shadow=False est maintenant par défaut dans EmacCard
         self.next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="10 prochaines")
         self.next_eval_filter = QComboBox(); self.next_eval_filter.addItem("Tous les postes", "")
         self.next_eval_filter.currentIndexChanged.connect(self.load_evaluations)
@@ -111,7 +104,6 @@ class MainWindow(QMainWindow):
 
         
         # Actions rapides
-        # apply_shadow=False est maintenant par défaut dans EmacCard
         self.actions_wrap = EmacCard() 
         title = QLabel("Actions rapides"); title.setProperty('class','h2')
         self.actions_wrap.body.addWidget(title)
@@ -132,7 +124,7 @@ class MainWindow(QMainWindow):
         root.addLayout(right, 0, 1)
         
         # =====================
-        # Menu Latéral (Drawer) - Rétabli
+        # Menu Latéral (Drawer) 
         # =====================
         self.create_drawer()
 
@@ -227,7 +219,7 @@ class MainWindow(QMainWindow):
         self.add_drawer_button(drawer_layout, "Opérateurs Inactifs", self.show_operateurs_inactifs, 'ghost')
         
         if export_day:
-            self.add_drawer_button(drawer_layout, "Exporter les logs du jour", self.export_logs_today, 'ghost')
+            self.add_drawer_button(drawer_layout, "Exporter les logs", self.export_logs_today, 'ghost')
 
         drawer_layout.addStretch(1)
 
@@ -314,7 +306,6 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'drawer'):
             self.drawer.setFixedHeight(self.height())
             
-            # S'assurer que la position est mise à jour pour le nouvel état 
             current_x = self.width() - self.DRAWER_WIDTH if self.is_drawer_open else self.width()
             self.drawer.move(current_x, 0)
     
@@ -323,28 +314,21 @@ class MainWindow(QMainWindow):
         """Anime l'ouverture et la fermeture du menu latéral."""
         self.is_drawer_open = not self.is_drawer_open
         
-        # DÉFINITION DE LA POSITION DE FIN
         end_x = self.width() - self.DRAWER_WIDTH if self.is_drawer_open else self.width()
         
-        # Crée l'animation
         self.animation = QPropertyAnimation(self.drawer, b"pos")
         self.animation.setDuration(250) 
         self.animation.setEasingCurve(QEasingCurve.OutCubic)
         
-        # DÉFINITION DE LA POSITION DE DÉPART (part de la position actuelle)
         self.animation.setStartValue(self.drawer.pos())
         self.animation.setEndValue(QPoint(end_x, 0))
         
-        # Gère la visibilité du Drawer
         if self.is_drawer_open:
-            # Si on ouvre, on affiche et on s'assure qu'il est au premier plan
             self.drawer.show() 
             self.drawer.raise_()
-            # Déconnecter l'ancien signal de fermeture s'il existe
             try: self.animation.finished.disconnect()
             except: pass
         else:
-            # Si on ferme, on le cache uniquement quand l'animation est terminée
             try: self.animation.finished.disconnect()
             except: pass
             self.animation.finished.connect(self.drawer.hide)

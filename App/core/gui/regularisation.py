@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont
-
+from core.gui.historique import HistoriqueDialog
 from core.db.configbd import get_connection as get_db_connection
 from core.services.logger import log_hist
 

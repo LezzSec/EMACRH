@@ -151,7 +151,6 @@ class EmacTheme:
     def apply(cls, app):
         # Police par défaut
         app.setFont(QFont('Segoe UI', 10))
-        # Palette Qt (widgets natifs)
         pal = app.palette()
         pal.setColor(QPalette.Window, QColor(cls.BG))
         pal.setColor(QPalette.WindowText, QColor(cls.TXT))
@@ -173,8 +172,6 @@ class EmacTheme:
 # === THÈME SOMBRE ===
 class EmacDarkTheme(EmacTheme):
     """Palette + QSS centralisés (version sombre) avec FIX généralisé."""
-    # Palette sombre (neutres + accents)
-    # 💥 RESTAURÉ : Couleurs sombres originales (gris profonds)
     BG = "#121212"          # fond application
     BG_CARD = "#1e1e1e"     # cartes
     BG_ELEV = "#1e1e1e"     # surfaces élevées
@@ -300,7 +297,6 @@ class EmacDarkTheme(EmacTheme):
         QScrollBar::handle:vertical:hover {{ background: {cls.BDR}; }}
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
 
-        /* 💥 FIX CALENDRIER pour Thème Sombre 💥 */
         
         /* Barre de navigation du calendrier (mois/année) */
         QCalendarWidget QWidget#qt_calendar_navigationbar {{
@@ -367,7 +363,6 @@ class EmacDarkTheme(EmacTheme):
         pal.setColor(QPalette.Highlight, QColor(cls.PRI)) # pour la sélection
         pal.setColor(QPalette.HighlightedText, QColor("#ffffff"))
         
-        # 💥 FIX CALENDRIER: Couleurs pour les jours
         pal.setColor(QPalette.Light, QColor(cls.BG_TABLE)) # Fond des cellules du calendrier
         pal.setColor(QPalette.Midlight, QColor(cls.TXT_DIM)) # Jours d'autres mois
         pal.setColor(QPalette.Dark, QColor(cls.TXT)) # Texte des jours du mois courant
@@ -391,8 +386,6 @@ def get_current_theme():
         # Retourne le thème par défaut si l'application n'est pas encore démarrée
         return EmacTheme
 
-    # Tente de détecter le thème sombre en cherchant une couleur sombre 
-    # spécifique au DarkTheme dans le QSS actuel.
     if app.styleSheet().find(EmacDarkTheme.BG) != -1:
         return EmacDarkTheme
     return EmacTheme
@@ -408,7 +401,6 @@ class EmacCard(QFrame):
     def __init__(self, title: str = None, subtitle: str = None, parent=None):
         super().__init__(parent)
         self.setObjectName("card")
-        # 💥 SUPPRESSION DE L'OMBRE (apply_soft_shadow)
         lay = QVBoxLayout(self)
         lay.setContentsMargins(16, 16, 16, 16)
         lay.setSpacing(10)
@@ -576,7 +568,6 @@ class HamburgerButton(QToolButton):
         self._hover = False
         self.setAttribute(QtCore.Qt.WA_Hover, True)
         
-        # 💥 SUPPRESSION DE L'OMBRE
 
     def enterEvent(self, e):
         self._hover = True; self.update(); return super().enterEvent(e)
@@ -600,9 +591,6 @@ class HamburgerButton(QToolButton):
         
         # Dessine les 3 barres horizontales (maintenant avec des arguments INT pour QRectF)
         for dy in (-h - g, 0, h + g):
-            # Nous utilisons QRectF pour permettre des arguments float (bar_width, bar_height)
-            # mais nous assurons que les positions sont centrées correctement.
-            # On utilise QPainterPath pour garantir le bon rendu des bords arrondis (h/2)
             rect = QRectF(cx - w / 2, cy - h / 2 + dy, w, h)
             path = QPainterPath()
             path.addRoundedRect(rect, h / 2, h / 2) # h/2 pour un bord complètement arrondi

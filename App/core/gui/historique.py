@@ -1,5 +1,3 @@
-# historique.py – viewer des logs (version améliorée pour non-techniciens)
-# Colonnes DB utilisées: id, date_time, action, operateur_id, poste_id, description
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,

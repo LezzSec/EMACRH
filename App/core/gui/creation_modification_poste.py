@@ -1,6 +1,3 @@
-# creation_modification_poste.py — Création / Suppression de postes
-# Adapté à la nouvelle arbo : imports absolus + curseur robuste
-
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton,
     QMessageBox, QComboBox
@@ -9,17 +6,17 @@ from PyQt5.QtWidgets import (
 from core.db.configbd import get_connection as get_db_connection
 from .besoin_poste_dialog import BesoinPosteDialog
 from core.services.logger import log_hist
-
+from core.gui.historique import HistoriqueDialog
 
 
 
 def _cursor(conn):
     """Retourne (cursor, dict_mode). Gère mysql-connector (dict=True) / psycopg (dict=False)."""
     try:
-        cur = conn.cursor(dictionary=True)  # mysql-connector like
+        cur = conn.cursor(dictionary=True) 
         return cur, True
     except TypeError:
-        cur = conn.cursor()  # psycopg / pymysql
+        cur = conn.cursor()  
         return cur, False
 
 
@@ -37,7 +34,7 @@ class CreationModificationPosteDialog(QDialog):
         layout.addWidget(self.add_label)
 
         self.add_input = QLineEdit(self)
-        self.add_input.setMaxLength(20)  # Limite à 20 caractères
+        self.add_input.setMaxLength(20)  
         self.add_input.setPlaceholderText("Nom du poste (ex: 0123, A001, ...) ")
         layout.addWidget(self.add_input)
 
@@ -108,27 +105,23 @@ class CreationModificationPosteDialog(QDialog):
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
 
-            # Existence ?
             cursor.execute("SELECT id FROM postes WHERE poste_code = %s", (post_name,))
             exists = cursor.fetchone()
             if exists:
                 QMessageBox.warning(self, "Attention", f"Le poste '{post_name}' existe déjà.")
                 return
 
-            # 1) INSERT du poste (visible=1 par défaut si tu veux)
             cursor.execute("INSERT INTO postes (poste_code, visible) VALUES (%s, 1)", (post_name,))
 
-            # 2) Pop-up besoin (obligatoire)
             dlg = BesoinPosteDialog(parent=self, titre_poste=post_name)
             if dlg.exec_() != dlg.Accepted:
-                # Annulation -> rollback, rien n'est créé
                 connection.rollback()
                 QMessageBox.information(self, "Création annulée", "Le poste n'a pas été créé.")
                 return
 
             besoin_val = dlg.get_besoin_int_or_none()
 
-            # 3) MAJ besoin + commit
+
             cursor.execute(
                 "UPDATE postes SET besoins_postes = %s WHERE poste_code = %s",
                 (besoin_val, post_name)
@@ -166,7 +159,6 @@ class CreationModificationPosteDialog(QDialog):
             QMessageBox.warning(self, "Attention", "Veuillez sélectionner un poste à supprimer.")
             return
 
-        # Confirmation
         confirm = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Supprimer définitivement le poste '{post_name}' ?",

@@ -1,15 +1,10 @@
 # liste_personnel.py — Liste du personnel + changement de statut
-# Adapté à la nouvelle arbo :
-# - from core.db.configbd import get_connection
-# - helpers _cursor/_rows pour compat mysql-connector / psycopg
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem, QPushButton,
     QLineEdit, QListWidget
 )
 from PyQt5.QtCore import Qt
-
-# ✅ nouvel import absolu
 from core.db.configbd import get_connection as get_db_connection
 
 
@@ -17,10 +12,10 @@ from core.db.configbd import get_connection as get_db_connection
 def _cursor(conn):
     """Retourne (cursor, dict_mode). dict_mode=True si le driver supporte dictionary=True."""
     try:
-        cur = conn.cursor(dictionary=True)  # mysql-connector like
+        cur = conn.cursor(dictionary=True)  
         return cur, True
     except TypeError:
-        cur = conn.cursor()                 # psycopg / pymysql
+        cur = conn.cursor()                
         return cur, False
 
 def _rows(cur, dict_mode):
