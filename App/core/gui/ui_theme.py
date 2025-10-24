@@ -377,19 +377,7 @@ class EmacDarkTheme(EmacTheme):
 # -------------------------------------------------------------------
 
 def get_current_theme():
-    """
-    Retourne la classe de thème (EmacTheme ou EmacDarkTheme) appliquée 
-    à l'application principale via la QSS.
-    """
-    app = QApplication.instance()
-    if not app:
-        # Retourne le thème par défaut si l'application n'est pas encore démarrée
-        return EmacTheme
-
-    if app.styleSheet().find(EmacDarkTheme.BG) != -1:
-        return EmacDarkTheme
     return EmacTheme
-
 
 # -------------------------------------------------------------------
 # === Classes de Composants ===

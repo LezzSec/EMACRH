@@ -5,21 +5,16 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent 
 from PyQt5.QtGui import QDesktopServices, QIcon
-from core.gui.ui_theme import EmacTheme, EmacDarkTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard 
-from .liste_et_grilles import GrillesDialog
+from core.gui.ui_theme import EmacTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard, HamburgerButton
+from core.gui.liste_et_grilles import GrillesDialog
 from core.gui.creation_modification_poste import CreationModificationPosteDialog
-from core.gui.liste_personnel import ListePersonnelDialog
+from core.gui.gestion_evaluation import GestionEvaluationDialog
 from core.gui.manage_operateur import ManageOperatorsDialog
 from core.gui.historique import HistoriqueDialog
-from core.gui.gestion_evaluation import GestionEvaluationDialog
+from core.gui.gestion_personnel import GestionPersonnelDialog
 from core.gui.evaluation_calendar import EvaluationCalendarDialog
-from core.gui.operateurs_inactifs import OperateursInactifsDialog
 from core.gui.regularisation import RegularisationDialog
 from core.db.configbd import get_connection as get_db_connection
-from core.gui.ui_theme import (
-    EmacTheme, EmacDarkTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard, 
-    HamburgerButton, get_current_theme 
-) 
 
 
 try:
@@ -35,9 +30,6 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.setWindowTitle("Gestion du Personnel")
         self.setGeometry(80, 80, 1180, 720)
-        
-        # État initial du thème
-        self.current_theme = EmacTheme
 
         # État initial du Drawer et Event Filter 
         self.is_drawer_open = False
@@ -164,7 +156,7 @@ class MainWindow(QMainWindow):
         self.drawer.setFixedSize(self.DRAWER_WIDTH, self.height())
         
         # Style pour le drawer. Utilise self.current_theme.
-        ThemeCls = self.current_theme
+        ThemeCls = EmacTheme
         border_color = ThemeCls.BDR
         bg_card = ThemeCls.BG_CARD
         
@@ -210,13 +202,10 @@ class MainWindow(QMainWindow):
 
         
         # Ajout des boutons dans le Drawer
-        self.add_drawer_button(drawer_layout, "Changer de Thème (Light/Dark)", self.toggle_theme, 'primary')
-        drawer_layout.addSpacing(15)
         self.add_drawer_button(drawer_layout, "Ajouter un opérateur", self.show_manage_operator, 'ghost')
         self.add_drawer_button(drawer_layout, "Création/Suppression de poste", self.show_poste_form, 'ghost')
         self.add_drawer_button(drawer_layout, "Historique", self.show_historique, 'ghost')
         self.add_drawer_button(drawer_layout, "Calendrier", self.show_calendrier_evaluations, 'ghost')
-        self.add_drawer_button(drawer_layout, "Opérateurs Inactifs", self.show_operateurs_inactifs, 'ghost')
         
         if export_day:
             self.add_drawer_button(drawer_layout, "Exporter les logs", self.export_logs_today, 'ghost')
@@ -231,73 +220,9 @@ class MainWindow(QMainWindow):
         btn.setFixedHeight(44)
         btn.clicked.connect(action)
         # Ferme le drawer après l'action 
-        if action not in (self.close, self.export_logs_today, self.toggle_theme):
+        if action not in (self.close, self.export_logs_today):
             btn.clicked.connect(self.toggle_drawer)
         layout.addWidget(btn)
-
-    def _recreate_drawer_safe(self):
-        """
-        Méthode intermédiaire pour recréer le drawer et forcer 
-        le rafraîchissement visuel après un changement de thème.
-        """
-        self.create_drawer()
-        
-        # On force la mise à jour des layouts et le rafraîchissement
-        self.centralWidget().update()
-        self.update()
-        
-    def toggle_theme(self):
-        """Bascule entre le thème clair et le thème sombre."""
-        # 1. Détermine le nouveau thème
-        new_theme = EmacDarkTheme if self.current_theme == EmacTheme else EmacTheme
-        self.current_theme = new_theme
-        
-        # 2. Applique le nouveau thème
-        new_theme.apply(QApplication.instance())
-        
-        # 3. Recrée les widgets qui dépendent des couleurs (StatusCard/Drawer)
-        self.rebuild_status_cards()
-        
-        # 4. Utilise QTimer.singleShot pour appeler la fonction de recréation sécurisée. 
-        # C'est la solution stable aux conflits de géométrie.
-        QTimer.singleShot(50, self._recreate_drawer_safe) 
-
-    def rebuild_status_cards(self):
-        """
-        Recrée les EmacStatusCard pour appliquer les couleurs pastel du nouveau thème.
-        """
-        
-        main_layout = self.centralWidget().layout().itemAtPosition(0, 0).layout()
-        
-        # --- GESTION DES RETARDS ---
-        # NOTE: On utilise takeAt(0).widget() pour retirer les widgets enfants sans les détruire
-        # Le 0 est le filtre, le 1 est le QScrollArea (liste)
-        retard_filter_widget = self.retard_card.body.takeAt(0).widget() 
-        retard_scroll_widget = self.retard_card.body.takeAt(0).widget() 
-
-        main_layout.removeWidget(self.retard_card)
-        self.retard_card.deleteLater()
-
-        # RECREATION de la carte SANS ombre ni bordure colorée (maintenant géré par EmacStatusCard)
-        self.retard_card = EmacStatusCard("Retard Évaluations", variant='danger') 
-        main_layout.insertWidget(0, self.retard_card)
-        self.retard_card.body.addWidget(retard_filter_widget)
-        self.retard_card.body.addWidget(retard_scroll_widget)
-        
-        # --- GESTION DES PROCHAINES ÉVALUATIONS ---
-        next_filter_widget = self.next_card.body.takeAt(0).widget() 
-        next_scroll_widget = self.next_card.body.takeAt(0).widget() 
-
-        main_layout.removeWidget(self.next_card)
-        self.next_card.deleteLater()
-
-        # RECREATION de la carte SANS ombre ni bordure colorée
-        self.next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="10 prochaines")
-        main_layout.insertWidget(1, self.next_card)
-        self.next_card.body.addWidget(next_filter_widget)
-        self.next_card.body.addWidget(next_scroll_widget)
-        
-        self.load_evaluations()
 
     
     def resizeEvent(self, event):
@@ -343,7 +268,7 @@ class MainWindow(QMainWindow):
 
     # ================= Fenêtres secondaires =================
     def show_liste_personnel(self):
-        ListePersonnelDialog(self).exec_()
+        GestionPersonnelDialog(self).exec_()
     def show_manage_operator(self):
         ManageOperatorsDialog().exec_()
     def show_gestion_evaluations(self):
@@ -358,8 +283,6 @@ class MainWindow(QMainWindow):
         EvaluationCalendarDialog(self).exec_()
     def show_regularisation(self):
         RegularisationDialog(self).exec_()
-    def show_operateurs_inactifs(self):
-        OperateursInactifsDialog(self).exec_()
 
     # ================= Données / DB (Fonctions inchangées) =================
     def populate_filters(self):
