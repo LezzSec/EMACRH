@@ -31,11 +31,12 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Gestion du Personnel")
         self.setGeometry(80, 80, 1180, 720)
 
-        # État initial du Drawer et Event Filter 
+        # ✅ IMPORTANT: Initialiser drawer à None AVANT tout
+        self.drawer = None
         self.is_drawer_open = False
-        self.installEventFilter(self) 
+        self.installEventFilter(self)
 
-        # ---------- Widget central + layout principal ----------
+        # ... reste du code __init__ identique ...
         rootw = QWidget(); self.setCentralWidget(rootw)
         root = QGridLayout(rootw)
         root.setContentsMargins(18, 18, 18, 18)
@@ -43,9 +44,6 @@ class MainWindow(QMainWindow):
         root.setVerticalSpacing(18)
         rootw.setLayout(root)
 
-        # =====================
-        # Colonne gauche – cartes neutres (Rendues self. pour rebuild_status_cards)
-        # =====================
         left = QVBoxLayout(); left.setSpacing(18)
 
         self.retard_card = EmacStatusCard("Retard Évaluations", variant='danger')
@@ -66,18 +64,13 @@ class MainWindow(QMainWindow):
 
         root.addLayout(left, 0, 0, 2, 1)
 
-        # =====================
-        # Colonne droite – header + actions
-        # =====================
         right = QVBoxLayout(); right.setSpacing(18)
 
-        # Header avec menu burger discret
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 8)
         header_layout.setSpacing(12)
         
-        # Titre
         title_layout = QVBoxLayout()
         title_layout.setSpacing(2)
         h1 = QLabel("Gestion du Personnel")
@@ -85,22 +78,17 @@ class MainWindow(QMainWindow):
         title_layout.addWidget(h1)
         header_layout.addLayout(title_layout, 1)
         
-        # Menu burger à droite (Connecté au Drawer)
-        # MODIFICATION: HamburgerButton n'a plus la couleur bleue (voir ui_theme.py)
-        self.menu_btn = HamburgerButton(self, variant="default") # 'default' pour un style non primaire
+        self.menu_btn = HamburgerButton(self, variant="default")
         self.menu_btn.setToolTip("Menu")
-        self.menu_btn.clicked.connect(self.toggle_drawer) 
+        self.menu_btn.clicked.connect(self.toggle_drawer)
         header_layout.addWidget(self.menu_btn, 0, Qt.AlignRight | Qt.AlignVCenter)
         
         right.addWidget(header_widget)
 
-        
-        # Actions rapides
-        self.actions_wrap = EmacCard() 
+        self.actions_wrap = EmacCard()
         title = QLabel("Actions rapides"); title.setProperty('class','h2')
         self.actions_wrap.body.addWidget(title)
 
-        # AMÉLIORATION VISUELLE: Boutons secondaires en 'ghost'
         rows = QVBoxLayout(); rows.setSpacing(8)
         r1 = QHBoxLayout(); b1 = EmacButton("Liste du Personnel", 'primary'); b1.clicked.connect(self.show_liste_personnel); r1.addWidget(b1)
         r2 = QHBoxLayout(); b2 = EmacButton("Liste et Grilles", 'ghost'); b2.clicked.connect(self.show_listes_grilles_dialog); r2.addWidget(b2)
@@ -112,62 +100,45 @@ class MainWindow(QMainWindow):
         self.actions_wrap.body.addLayout(rows)
         right.addWidget(self.actions_wrap)
 
-
         root.addLayout(right, 0, 1)
-        
-        # =====================
-        # Menu Latéral (Drawer) 
-        # =====================
-        self.create_drawer()
 
-        # --- Data init ---
-        self.populate_filters()
-        self.load_evaluations()
+        QTimer.singleShot(0, self.populate_filters)
+        QTimer.singleShot(100, self.load_evaluations)
 
     # ================= Filtre d'événements pour clic extérieur =================
     def eventFilter(self, source, event):
-        """
-        Filtre les événements de clic de souris pour fermer le menu latéral 
-        s'il est ouvert et que l'événement ne provient pas du menu ou du bouton menu.
-        """
-        if self.is_drawer_open and event.type() == QEvent.MouseButtonPress:
-            # Vérifie si le clic est en dehors du drawer
+        """Filtre les événements de clic pour fermer le drawer."""
+        # ✅ AJOUT: Vérifier que drawer existe et est ouvert
+        if self.drawer is not None and self.is_drawer_open and event.type() == QEvent.MouseButtonPress:
             if not self.drawer.geometry().contains(self.mapFromGlobal(event.globalPos())):
-                # Assurez-vous que le clic ne vient pas du bouton menu lui-même
                 if source is not self.menu_btn:
                     self.toggle_drawer()
-                    return True  # L'événement est consommé, empêchant la propagation
+                    return True
         return super().eventFilter(source, event)
 
 
     # ================= Menu Latéral (Drawer) =================
     def create_drawer(self):
         """Crée et initialise le menu latéral coulissant."""
-        if hasattr(self, 'drawer'):
-            self.drawer.deleteLater() 
-            del self.drawer
+        # Si déjà créé, ne rien faire
+        if self.drawer is not None:
+            return
             
         self.drawer = QFrame(self)
         self.drawer.setObjectName("card")
-        
-        # MODIFICATION: L'ombre du drawer est supprimée ici aussi.
-        # apply_soft_shadow(self.drawer, radius=22, alpha=36)
-        
         self.drawer.setFixedSize(self.DRAWER_WIDTH, self.height())
         
-        # Style pour le drawer. Utilise self.current_theme.
         ThemeCls = EmacTheme
         border_color = ThemeCls.BDR
         bg_card = ThemeCls.BG_CARD
         
-        # Le style du drawer est hérité de QFrame#card, mais on force border-left et border-radius
         self.drawer.setStyleSheet(f"""
             QFrame#card {{
                 background: {bg_card};
                 border-left: 1px solid {border_color};
                 border-top: 1px solid {border_color};
                 border-bottom: 1px solid {border_color};
-                border-right: 0px; /* S'assure qu'il n'y a pas de bordure à droite */
+                border-right: 0px;
                 border-top-left-radius: 0px; 
                 border-bottom-left-radius: 0px;
                 border-top-right-radius: 14px; 
@@ -175,33 +146,19 @@ class MainWindow(QMainWindow):
             }}
         """)
         
-        # Initialise la position et l'état
-        self.is_drawer_open = getattr(self, 'is_drawer_open', False)
+        # Position initiale hors écran (à droite)
+        self.drawer.move(self.width(), 0)
+        self.drawer.hide()
         
-        # Calcule la position idéale (ouverte ou fermée) en fonction de la taille actuelle de la fenêtre
-        current_x = self.width() - self.DRAWER_WIDTH if self.is_drawer_open else self.width()
-        
-        # Force le déplacement du nouveau Drawer à la bonne position (essentiel après recréation)
-        self.drawer.move(current_x, 0)
-        self.drawer.updateGeometry() 
-        
-        # Cache par défaut si fermé
-        if not self.is_drawer_open:
-             self.drawer.hide()
-        
-        # Layout du Drawer
         drawer_layout = QVBoxLayout(self.drawer)
         drawer_layout.setContentsMargins(16, 16, 16, 16)
         drawer_layout.setAlignment(Qt.AlignTop)
         
-        # Titre dans le Drawer
         title = QLabel("Menu")
         title.setProperty('class', 'h2')
         drawer_layout.addWidget(title)
         drawer_layout.addSpacing(15)
 
-        
-        # Ajout des boutons dans le Drawer
         self.add_drawer_button(drawer_layout, "Ajouter un opérateur", self.show_manage_operator, 'ghost')
         self.add_drawer_button(drawer_layout, "Création/Suppression de poste", self.show_poste_form, 'ghost')
         self.add_drawer_button(drawer_layout, "Historique", self.show_historique, 'ghost')
@@ -214,12 +171,12 @@ class MainWindow(QMainWindow):
 
 
 
+
     def add_drawer_button(self, layout: QVBoxLayout, text: str, action: callable, variant: str = None):
         """Ajoute un bouton de menu au layout du Drawer."""
         btn = EmacButton(text, variant=variant)
         btn.setFixedHeight(44)
         btn.clicked.connect(action)
-        # Ferme le drawer après l'action 
         if action not in (self.close, self.export_logs_today):
             btn.clicked.connect(self.toggle_drawer)
         layout.addWidget(btn)
@@ -228,34 +185,47 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         """Met à jour la taille et la position du Drawer au redimensionnement."""
         super().resizeEvent(event)
-        if hasattr(self, 'drawer'):
+        # ✅ IMPORTANT: Vérifier que drawer existe
+        if self.drawer is not None:
             self.drawer.setFixedHeight(self.height())
-            
             current_x = self.width() - self.DRAWER_WIDTH if self.is_drawer_open else self.width()
             self.drawer.move(current_x, 0)
     
     
     def toggle_drawer(self):
         """Anime l'ouverture et la fermeture du menu latéral."""
+        # Créer le drawer à la première utilisation
+        if self.drawer is None:
+            self.create_drawer()
+        
+        # ✅ SÉCURITÉ: Double vérification après création
+        if self.drawer is None:
+            print("❌ ERREUR: Impossible de créer le drawer")
+            return
+        
         self.is_drawer_open = not self.is_drawer_open
         
         end_x = self.width() - self.DRAWER_WIDTH if self.is_drawer_open else self.width()
         
+        # ✅ IMPORTANT: Nettoyer l'animation précédente si elle existe
+        if hasattr(self, 'animation') and self.animation is not None:
+            self.animation.stop()
+            try:
+                self.animation.finished.disconnect()
+            except:
+                pass
+        
         self.animation = QPropertyAnimation(self.drawer, b"pos")
-        self.animation.setDuration(250) 
+        self.animation.setDuration(250)
         self.animation.setEasingCurve(QEasingCurve.OutCubic)
         
         self.animation.setStartValue(self.drawer.pos())
         self.animation.setEndValue(QPoint(end_x, 0))
         
         if self.is_drawer_open:
-            self.drawer.show() 
+            self.drawer.show()
             self.drawer.raise_()
-            try: self.animation.finished.disconnect()
-            except: pass
         else:
-            try: self.animation.finished.disconnect()
-            except: pass
             self.animation.finished.connect(self.drawer.hide)
 
         self.animation.start()
@@ -302,10 +272,8 @@ class MainWindow(QMainWindow):
         try:
             poste_retard = self.retard_filter.currentData()
             poste_next = self.next_eval_filter.currentData()
-    
-            # --------------------
-            # Retards (opérateurs Actifs uniquement)
-            # --------------------
+
+            # ✅ CHANGEMENT: Ajout de LIMIT 20 sur les retards
             q1 = """
                 SELECT o.nom, o.prenom, p.poste_code, poly.prochaine_evaluation
                 FROM polyvalence poly
@@ -318,13 +286,11 @@ class MainWindow(QMainWindow):
             if poste_retard:
                 q1 += " AND p.poste_code = %s"
                 pr.append(poste_retard)
-            q1 += " ORDER BY poly.prochaine_evaluation ASC"
+            q1 += " ORDER BY poly.prochaine_evaluation ASC LIMIT 10"  # ✅ AJOUT
             cur.execute(q1, tuple(pr))
             retard = cur.fetchall()
-    
-            # --------------------
-            # Prochaines (opérateurs Actifs uniquement, limité à 10)
-            # --------------------
+
+            # Prochaines (déjà limité à 10)
             q2 = """
                 SELECT o.nom, o.prenom, p.poste_code, poly.prochaine_evaluation
                 FROM polyvalence poly
@@ -340,15 +306,13 @@ class MainWindow(QMainWindow):
             q2 += " ORDER BY poly.prochaine_evaluation ASC LIMIT 10"
             cur.execute(q2, tuple(pn))
             prochaines = cur.fetchall()
-    
-            # --------------------
+
             # Rendu UI
-            # --------------------
             self.retard_list.clear()
             for nom, prenom, poste, date_ev in retard:
                 date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
                 self.retard_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
-    
+
             self.next_eval_list.clear()
             for nom, prenom, poste, date_ev in prochaines:
                 date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
