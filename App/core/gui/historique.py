@@ -73,8 +73,7 @@ def parse_description(desc: str, action: str) -> str:
                 "prenom": "Prénom",
                 "statut": "Statut",
                 "poste_code": "Code poste",
-                "visible": "Visibilité",
-                "atelier_id": "Atelier"
+                "visible": "Visibilité"
             }
             
             niveau_labels = {

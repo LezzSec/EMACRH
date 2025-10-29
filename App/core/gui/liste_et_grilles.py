@@ -412,8 +412,6 @@ class GrillesDialog(QDialog):
                         self.main_table.setItem(r, col, it)
                     it.setText("" if (val is None or val == 0) else str(val))
                     it.setTextAlignment(Qt.AlignCenter)
-                    # 💥 Application des couleurs selon le thème
-                    it.setForeground(self.color_synthesis_text)
 
                 # Option styling initial (col 0 pour coupure visuelle – conservé)
                 if col == 0:
@@ -544,8 +542,6 @@ class GrillesDialog(QDialog):
                     val = besoins_by_id.get(poste_id, "")
                     it = self.main_table.item(besoins_row, col_idx)
                     it.setText("" if val in (None, "") else str(val))
-                    # 💥 Réapplication des couleurs après setText
-                    it.setForeground(self.color_besoins_text)
             except Exception as _e:
                 # On n'empêche pas l'écran de se charger si les besoins ne sont pas dispos
                 pass
