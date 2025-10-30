@@ -286,7 +286,7 @@ class MainWindow(QMainWindow):
             if poste_retard:
                 q1 += " AND p.poste_code = %s"
                 pr.append(poste_retard)
-            q1 += " ORDER BY poly.prochaine_evaluation ASC LIMIT 10"  # ✅ AJOUT
+            q1 += " ORDER BY poly.prochaine_evaluation ASC LIMIT 10"  
             cur.execute(q1, tuple(pr))
             retard = cur.fetchall()
 
