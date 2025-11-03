@@ -127,6 +127,24 @@ class DetailOperateurDialog(QDialog):
         self.infos_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.infos_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         infos_layout.addWidget(self.infos_table)
+
+        self.infos_table.setShowGrid(False)
+        self.infos_table.verticalHeader().setVisible(False)
+        self.infos_table.setAlternatingRowColors(True)
+        self.infos_table.setStyleSheet("""
+        QHeaderView::section{
+            background:#f1f5f9; color:#374151; font-weight:600; border:0; padding:6px 8px;
+        }
+        QTableWidget{
+            background:#ffffff; alternate-background-color:#f9fafb;
+        }
+        QTableWidget::item{
+            padding:8px;
+        }
+        QTableWidget::item:selected{
+            background:#e0f2fe; color:#111827;
+        }
+        """)
         
         tabs.addTab(infos_tab, "Infos Complémentaires")
         
@@ -240,83 +258,153 @@ class DetailOperateurDialog(QDialog):
         self.load_history()
     
     def load_additional_infos(self):
-        """Charge les informations détaillées depuis operateur_infos et les affiche."""
-        
-        def format_column_name(col):
-            # Formate les noms de colonnes SQL ('date_entree') en noms lisibles ('Date Entree')
-            return col.replace('_', ' ').title()
-
         try:
+            self.infos_table.setRowCount(0)
+
+            # -------- Section: Informations personnelles --------
+            self._insert_section("Informations personnelles")
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
-            
-            # Sélectionne toutes les colonnes détaillées pertinentes (excluant operateur_id et NIR)
-            query = """
-                SELECT 
-                    sexe, date_entree, nationalite, cp_naissance, 
-                    ville_naissance, pays_naissance, date_naissance, 
-                    adresse1, adresse2, cp_adresse, ville_adresse, 
-                    pays_adresse, telephone, email, commentaire
-                FROM operateur_infos
-                WHERE operateur_id = %s
-            """
-            
-            cursor.execute(query, (self.operateur_id,))
+            cursor.execute("SELECT * FROM operateur_infos WHERE operateur_id = %s", (self.operateur_id,))
             row_data = _rows(cursor, dict_mode)
-            
-            cursor.close()
-            connection.close()
-            
-            self.infos_table.setRowCount(0)
-            
-            if not row_data:
-                # Si aucune donnée n'est trouvée pour cet opérateur
-                self.infos_table.setRowCount(1)
-                item_na = QTableWidgetItem("Aucune information complémentaire disponible.")
-                item_na.setTextAlignment(Qt.AlignCenter)
-                self.infos_table.setItem(0, 0, item_na)
-                # Fusionne les deux colonnes pour le message N/A
-                self.infos_table.setSpan(0, 0, 1, 2)
-                return
-            
-            data = row_data[0] 
-            current_row = 0
-            
-            # Parcours les colonnes et leurs valeurs
-            for key, val in data.items():
-                # Ignore les valeurs NULL, VIDES, ou la clé operateur_id
-                if val is None or val == '' or key == 'operateur_id':
-                    continue
-                
-                categorie = format_column_name(key)
-                
-                # Formatage des dates pour l'affichage
-                if isinstance(val, dt.date):
-                    valeur = val.strftime("%d/%m/%Y")
-                else:
-                    valeur = str(val)
+            cursor.close(); connection.close()
 
-                # Insertion de la ligne dans la table QTableWidget
-                self.infos_table.insertRow(current_row)
-                
-                # Catégorie (Colonne 1)
-                cat_item = QTableWidgetItem(categorie)
-                cat_item.setFont(QFont("Arial", 10, QFont.Bold))
-                self.infos_table.setItem(current_row, 0, cat_item)
-                
-                # Valeur (Colonne 2)
-                val_item = QTableWidgetItem(valeur)
-                self.infos_table.setItem(current_row, 1, val_item)
-                
-                current_row += 1
-                
-            # Ajuster les largeurs de colonnes
-            header = self.infos_table.horizontalHeader()
-            header.setSectionResizeMode(0, QHeaderView.ResizeToContents) # Catégorie s'adapte au nom
-            header.setSectionResizeMode(1, QHeaderView.Stretch)          # Valeur prend l'espace restant
-            
+            if row_data:
+                data = row_data[0]
+                showed = False
+                for key, val in data.items():
+                    if key == "operateur_id":
+                        continue
+                    label = format_column_name(key)
+                    value = val.strftime("%d/%m/%Y") if isinstance(val, dt.date) else (str(val) if val not in (None, "",) else None)
+                    if value is not None:
+                        self._insert_kv(label, value); showed = True
+                if not showed:
+                    self._insert_kv("—", None)
+            else:
+                self._insert_kv("—", None)
+
+            # -------- Section: Contrat actuel --------
+            self._insert_section("Contrat actuel")
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+            cursor.execute("""
+                SELECT type_contrat, date_debut, date_fin, etp, categorie
+                FROM contrat
+                WHERE operateur_id = %s AND actif = 1
+                ORDER BY date_debut DESC LIMIT 1
+            """, (self.operateur_id,))
+            contr = _rows(cursor, dict_mode)
+            cursor.close(); connection.close()
+
+            if contr:
+                c = contr[0]
+                parts = [c.get("type_contrat", "")]
+                if c.get("etp") is not None:
+                    parts.append(f"ETP {c['etp']}")
+                d1, d2 = c.get("date_debut"), c.get("date_fin")
+                if d1 or d2:
+                    deb = d1.strftime("%d/%m/%Y") if isinstance(d1, dt.date) else str(d1)
+                    fin = d2.strftime("%d/%m/%Y") if isinstance(d2, dt.date) else (str(d2) if d2 else "…")
+                    parts.append(f"{deb} → {fin}")
+                self._insert_kv("Contrat", " — ".join([p for p in parts if p]))
+            else:
+                self._insert_kv("Contrat", None)
+
+            # -------- Section: Solde congés (année) --------
+            self._insert_section("Solde congés (année)")
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+            cursor.execute("""
+                SELECT cp_acquis, cp_pris, cp_restant, rtt_acquis, rtt_pris, rtt_restant
+                FROM compteur_conges
+                WHERE operateur_id = %s AND annee = YEAR(CURDATE())
+            """, (self.operateur_id,))
+            solde = _rows(cursor, dict_mode)
+            cursor.close(); connection.close()
+
+            if solde:
+                s = solde[0]
+                self._insert_kv("CP", f"{s.get('cp_restant',0)} j restants (pris {s.get('cp_pris',0)}/{s.get('cp_acquis',0)} acquis)")
+                self._insert_kv("RTT", f"{s.get('rtt_restant',0)} j restants (pris {s.get('rtt_pris',0)})")
+            else:
+                self._insert_kv("CP", None)
+                self._insert_kv("RTT", None)
+
+            # -------- Section: Absences récentes --------
+            self._insert_section("Absences récentes")
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+            cursor.execute("""
+                SELECT type_absence, date_debut, date_fin, statut
+                FROM absences_conges
+                WHERE operateur_id = %s
+                ORDER BY date_debut DESC LIMIT 6
+            """, (self.operateur_id,))
+            absences = _rows(cursor, dict_mode)
+            cursor.close(); connection.close()
+
+            if absences:
+                for a in absences:
+                    d1 = self._format_date(a.get("date_debut"))
+                    d2 = self._format_date(a.get("date_fin"))
+                    self._insert_kv(a.get("type_absence","(type)"), f"{d1} → {d2} — {a.get('statut','')}")
+            else:
+                self._insert_kv("—", None)
+
+            # -------- Section: Formations --------
+            self._insert_section("Formations")
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+            cursor.execute("""
+                SELECT intitule, organisme, date_debut, date_fin, statut, certificat_obtenu
+                FROM formation
+                WHERE operateur_id = %s
+                ORDER BY date_debut DESC LIMIT 5
+            """, (self.operateur_id,))
+            formations = _rows(cursor, dict_mode)
+            cursor.close(); connection.close()
+
+            if formations:
+                for f in formations:
+                    d1 = self._format_date(f.get("date_debut"))
+                    d2 = self._format_date(f.get("date_fin"))
+                    cert = "✅" if f.get("certificat_obtenu") else "—"
+                    self._insert_kv(f.get("intitule","(formation)"), f"{d1} → {d2} — {f.get('statut','')} {cert}")
+            else:
+                self._insert_kv("—", None)
+
+            # -------- Section: Validités --------
+            self._insert_section("Validités")
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+            cursor.execute("""
+                SELECT type_validite, date_debut, date_fin, periodicite, taux_incapacite
+                FROM validite
+                WHERE operateur_id = %s
+                ORDER BY date_debut DESC
+            """, (self.operateur_id,))
+            validites = _rows(cursor, dict_mode)
+            cursor.close(); connection.close()
+
+            if validites:
+                for v in validites:
+                    d1 = self._format_date(v.get("date_debut"))
+                    d2 = self._format_date(v.get("date_fin")) if v.get("date_fin") else "—"
+                    tc = f" ({v['taux_incapacite']}%)" if v.get("taux_incapacite") is not None else ""
+                    self._insert_kv(v.get("type_validite","(type)"), f"{d1} → {d2} — {v.get('periodicite','')}{tc}")
+            else:
+                self._insert_kv("—", None)
+
+            # largeur colonnes
+            self.infos_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+            self.infos_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+
         except Exception as e:
-            QMessageBox.critical(self, "Erreur de chargement", f"Impossible de charger les infos détaillées :\n{e}")
+            QMessageBox.critical(self, "Erreur de chargement",
+                                 f"Impossible de charger les infos détaillées :\n{e}")
+
+
     
     def load_polyvalences(self):
         """Charge les polyvalences."""
@@ -1154,6 +1242,51 @@ pour les affectations de poste.
         if hasattr(datetime_val, "strftime"):
             return datetime_val.strftime("%d/%m/%Y %H:%M")
         return str(datetime_val)
+    
+    def _insert_info_row(self, row_index: int, label: str, value: str):
+        """Insère une ligne (Catégorie, Valeur) dans infos_table."""
+        # Sécurité: s'assurer que la table existe
+        if not hasattr(self, "infos_table"):
+            return
+        self.infos_table.insertRow(row_index)
+
+        # Colonne 0 : libellé
+        cat_item = QTableWidgetItem(label)
+        cat_item.setFont(QFont("Arial", 10, QFont.Bold))
+        self.infos_table.setItem(row_index, 0, cat_item)
+
+        # Colonne 1 : valeur
+        val_item = QTableWidgetItem(value if value is not None else "—")
+        val_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        val_item.setFlags(val_item.flags() & ~Qt.ItemIsEditable)
+        self.infos_table.setItem(row_index, 1, val_item)
+
+    def _insert_section(self, title: str):
+        """Insère un séparateur de section (ligne pleine largeur)."""
+        row = self.infos_table.rowCount()
+        self.infos_table.insertRow(row)
+        item = QTableWidgetItem(title.upper())
+        item.setFont(QFont("Arial", 10, QFont.Bold))
+        item.setForeground(QColor("#111827"))
+        item.setBackground(QColor("#f1f5f9"))
+        item.setFlags(item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEditable)
+        self.infos_table.setItem(row, 0, item)
+        self.infos_table.setSpan(row, 0, 1, 2)
+
+    def _insert_kv(self, label: str, value: str | None):
+        """Insère une ligne Catégorie/ Valeur (— grisé si vide)."""
+        row = self.infos_table.rowCount()
+        self.infos_table.insertRow(row)
+
+        cat = QTableWidgetItem(label)
+        cat.setFont(QFont("Arial", 10, QFont.Bold))
+        self.infos_table.setItem(row, 0, cat)
+
+        val = QTableWidgetItem(value if value not in (None, "",) else "—")
+        if value in (None, "",):
+            val.setForeground(QColor("#9ca3af"))
+        val.setFlags(val.flags() & ~Qt.ItemIsEditable)
+        self.infos_table.setItem(row, 1, val)
     
     def _calculate_anciennete(self, date_eval):
         """Calcule l'ancienneté."""
