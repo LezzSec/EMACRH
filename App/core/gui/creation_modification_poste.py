@@ -111,7 +111,7 @@ class CreationModificationPosteDialog(QDialog):
                 QMessageBox.warning(self, "Attention", f"Le poste '{post_name}' existe déjà.")
                 return
 
-            cursor.execute("INSERT INTO postes (poste_code, visible) VALUES (%s, 1)", (post_name,))
+            cursor.execute("INSERT INTO postes (poste_code, visible, besoins_postes) VALUES (%s, 1, 0)", (post_name,))
 
             dlg = BesoinPosteDialog(parent=self, titre_poste=post_name)
             if dlg.exec_() != dlg.Accepted:

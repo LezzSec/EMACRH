@@ -256,6 +256,8 @@ class DetailOperateurDialog(QDialog):
         self.load_summary()
         self.load_additional_infos() # <--- AJOUT : Chargement des nouvelles infos
         self.load_history()
+
+    
     
     def load_additional_infos(self):
         try:
@@ -265,7 +267,7 @@ class DetailOperateurDialog(QDialog):
             self._insert_section("Informations personnelles")
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
-            cursor.execute("SELECT * FROM operateur_infos WHERE operateur_id = %s", (self.operateur_id,))
+            cursor.execute("SELECT * FROM personnel_infos WHERE operateur_id = %s", (self.operateur_id,))
             row_data = _rows(cursor, dict_mode)
             cursor.close(); connection.close()
 
@@ -404,6 +406,34 @@ class DetailOperateurDialog(QDialog):
             QMessageBox.critical(self, "Erreur de chargement",
                                  f"Impossible de charger les infos détaillées :\n{e}")
 
+    def format_column_name(col_name: str) -> str:
+        """
+        Formate un nom de colonne SQL en texte lisible.
+        Exemple: 'date_naissance' → 'Date de naissance'
+        """
+        if not col_name:
+            return ""
+
+        # Remplacer underscores par espaces
+        formatted = col_name.replace('_', ' ')
+
+        # Capitaliser chaque mot
+        formatted = ' '.join(word.capitalize() for word in formatted.split())
+
+        # Corrections spécifiques
+        replacements = {
+            'Cp': 'CP',
+            'Rtt': 'RTT',
+            'Id': 'ID',
+            'Nir': 'NIR',
+            'Etp': 'ETP',
+            'Operateur': 'Opérateur'
+        }
+
+        for old, new in replacements.items():
+            formatted = formatted.replace(old, new)
+
+        return formatted
 
     
     def load_polyvalences(self):
@@ -514,7 +544,7 @@ class DetailOperateurDialog(QDialog):
             
             # Récupérer les infos
             cursor.execute(
-                "SELECT nom, prenom, statut FROM operateurs WHERE id = %s",
+                "SELECT nom, prenom, statut FROM personnel WHERE id = %s",
                 (self.operateur_id,)
             )
             op = cursor.fetchone()
@@ -668,7 +698,7 @@ pour les affectations de poste.
             cursor, _ = _cursor(connection)
             
             cursor.execute(
-                "UPDATE operateurs SET statut = %s WHERE id = %s",
+                "UPDATE personnel SET statut = %s WHERE id = %s",
                 (new_statut, self.operateur_id)
             )
             
@@ -788,7 +818,7 @@ pour les affectations de poste.
                 cur = conn.cursor()
                 cur.execute("""
                     SELECT nom, prenom, COALESCE(matricule,'-'), UPPER(statut)
-                    FROM operateurs WHERE id=%s
+                    FROM personnel WHERE id=%s
                 """, (self.operateur_id,))
                 row = cur.fetchone()
                 if row:
@@ -1091,7 +1121,7 @@ pour les affectations de poste.
             nom = prenom = matricule = statut = "-"
             try:
                 conn = get_db_connection(); cur = conn.cursor()
-                cur.execute("SELECT nom, prenom, COALESCE(matricule,'-'), UPPER(statut) FROM operateurs WHERE id=%s", (self.operateur_id,))
+                cur.execute("SELECT nom, prenom, COALESCE(matricule,'-'), UPPER(statut) FROM personnel WHERE id=%s", (self.operateur_id,))
                 row = cur.fetchone()
                 if row:
                     nom, prenom, matricule, statut = row
@@ -1434,19 +1464,19 @@ class GestionPersonnelDialog(QDialog):
             
             query = """
                 SELECT 
-                    o.id,
-                    o.nom,
-                    o.prenom,
-                    UPPER(o.statut) as statut,
-                    COUNT(p.id) as nb_postes,
-                    SUM(CASE WHEN p.niveau = 1 THEN 1 ELSE 0 END) as n1,
-                    SUM(CASE WHEN p.niveau = 2 THEN 1 ELSE 0 END) as n2,
-                    SUM(CASE WHEN p.niveau = 3 THEN 1 ELSE 0 END) as n3,
-                    SUM(CASE WHEN p.niveau = 4 THEN 1 ELSE 0 END) as n4
-                FROM operateurs o
-                LEFT JOIN polyvalence p ON o.id = p.operateur_id
-                GROUP BY o.id, o.nom, o.prenom, o.statut
-                ORDER BY o.nom, o.prenom
+                o.id,
+                o.nom,
+                o.prenom,
+                UPPER(o.statut) AS statut,
+                COUNT(p.id) AS nb_postes,
+                SUM(CASE WHEN p.niveau = 1 THEN 1 ELSE 0 END) AS n1,
+                SUM(CASE WHEN p.niveau = 2 THEN 1 ELSE 0 END) AS n2,
+                SUM(CASE WHEN p.niveau = 3 THEN 1 ELSE 0 END) AS n3,
+                SUM(CASE WHEN p.niveau = 4 THEN 1 ELSE 0 END) AS n4
+            FROM personnel o
+            LEFT JOIN polyvalence p ON o.id = p.operateur_id
+            GROUP BY o.id, o.nom, o.prenom, o.statut
+            ORDER BY o.nom, o.prenom;
             """
             
             cursor.execute(query)

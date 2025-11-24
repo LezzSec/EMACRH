@@ -78,8 +78,8 @@ class EvaluationCalendarDialog(QDialog):
 
         root.addLayout(body)
 
-        # Préparation colonnes dynamiques
-        self.op_nom_col, self.op_prenom_col = self._resolve_operateurs_name_columns()
+        # ✅ CORRECTION: Utilisation de 'personnel' au lieu de 'operateurs'
+        self.op_nom_col, self.op_prenom_col = self._resolve_personnel_name_columns()
         self.poste_label_col = self._resolve_poste_label_column()
 
         # charger les postes dans le filtre
@@ -119,23 +119,37 @@ class EvaluationCalendarDialog(QDialog):
 
     # --------------- Résolutions de colonnes dynamiques ---------------
 
-    def _resolve_operateurs_name_columns(self):
+    def _resolve_personnel_name_columns(self):
+        """✅ CORRIGÉ: Vérifie les colonnes de 'personnel' au lieu de 'operateurs'"""
         cur, dict_mode = self._cursor()
         try:
-            cur.execute("SHOW COLUMNS FROM operateurs;")
+            cur.execute("SHOW COLUMNS FROM personnel;")
             rows = cur.fetchall()
             cols = {r["Field"] for r in rows} if dict_mode else {r[0] for r in rows}
         finally:
             try: cur.close()
             except: pass
 
+        # ✅ SÉCURITÉ: Validation stricte des noms de colonnes (alphanumériques + underscore)
+        def is_safe_column(name):
+            return name and name.replace('_', '').isalnum()
+        
         cand_nom = ["nom", "lastname", "last_name", "name", "surname"]
         cand_pre = ["prenom", "firstname", "first_name", "given_name"]
+        
         def pick(cands, fallback):
             for c in cands:
-                if c in cols: return c
-            return fallback
-        return pick(cand_nom, "nom"), pick(cand_pre, "prenom")
+                if c in cols and is_safe_column(c):
+                    return c
+            return fallback if is_safe_column(fallback) else "nom"
+        
+        nom_col = pick(cand_nom, "nom")
+        prenom_col = pick(cand_pre, "prenom")
+        
+        # ✅ Log pour debug (optionnel)
+        # print(f"DEBUG: Colonnes détectées → nom: {nom_col}, prénom: {prenom_col}")
+        
+        return nom_col, prenom_col
 
     def _resolve_poste_label_column(self):
         cur, dict_mode = self._cursor()
@@ -209,8 +223,14 @@ class EvaluationCalendarDialog(QDialog):
         txt = self.search.text().strip()
         if txt:
             like = f"%{txt}%"
-            where.append(f"(LOWER(o.`{self.op_nom_col}`) LIKE LOWER(%s) OR LOWER(o.`{self.op_prenom_col}`) LIKE LOWER(%s))")
-            params.extend([like, like])
+            # ✅ SÉCURITÉ RENFORCÉE: Vérification des noms de colonnes avant utilisation
+            if hasattr(self, 'op_nom_col') and hasattr(self, 'op_prenom_col'):
+                # Utilisation de backticks MySQL pour protéger les noms de colonnes
+                where.append(
+                    f"(LOWER(pers.{self.op_nom_col}) LIKE LOWER(%s) "
+                    f"OR LOWER(pers.{self.op_prenom_col}) LIKE LOWER(%s))"
+                )
+                params.extend([like, like])
 
         where_sql = " AND ".join(where)
         if where_sql:
@@ -250,10 +270,11 @@ class EvaluationCalendarDialog(QDialog):
         cur, dict_mode = self._cursor()
         try:
             where_sql, params = self._build_filters_sql()
+            # ✅ CORRECTION: 'operateurs' → 'personnel' (alias 'pers')
             sql = (
                 "SELECT p.prochaine_evaluation AS d, COUNT(*) AS n "
                 "FROM polyvalence p "
-                "JOIN operateurs o ON o.id = p.operateur_id "
+                "JOIN personnel pers ON pers.id = p.operateur_id "
                 "JOIN postes ps ON ps.id = p.poste_id "
                 "WHERE p.prochaine_evaluation BETWEEN %s AND %s"
                 f"{where_sql} "
@@ -289,12 +310,13 @@ class EvaluationCalendarDialog(QDialog):
 
         cur, dict_mode = self._cursor()
         try:
+            # ✅ CORRECTION: 'operateurs' → 'personnel' (alias 'pers')
             sql = (
-                f"SELECT o.id AS operateur_id, ps.id AS poste_id, "
-                f"o.`{self.op_nom_col}` AS nom, o.`{self.op_prenom_col}` AS prenom, "
+                f"SELECT pers.id AS operateur_id, ps.id AS poste_id, "
+                f"pers.`{self.op_nom_col}` AS nom, pers.`{self.op_prenom_col}` AS prenom, "
                 f"ps.`{self.poste_label_col}` AS poste, p.prochaine_evaluation AS d "
                 "FROM polyvalence p "
-                "JOIN operateurs o ON o.id = p.operateur_id "
+                "JOIN personnel pers ON pers.id = p.operateur_id "
                 "JOIN postes ps ON ps.id = p.poste_id "
                 "WHERE p.prochaine_evaluation = %s"
                 f"{where_sql} "

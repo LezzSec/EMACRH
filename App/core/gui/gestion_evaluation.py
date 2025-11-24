@@ -16,7 +16,7 @@ from reportlab.lib import colors
 from core.gui.historique import HistoriqueDialog
 from reportlab.lib.styles import getSampleStyleSheet
 
-# 🔁 alias pour ne rien casser dans le code existant
+# 🔧 alias pour ne rien casser dans le code existant
 from core.db.configbd import get_connection as get_db_connection
 
 
@@ -83,7 +83,7 @@ class GestionEvaluationDialog(QDialog):
         self.refresh_button.clicked.connect(lambda: self.load_data())
         layout.addWidget(self.refresh_button)
 
-        # Bouton pour activer l’édition des dates
+        # Bouton pour activer l'édition des dates
         self.edit_dates_btn = QPushButton("Modifier les dates")
         self.edit_dates_btn.setCheckable(True)
         self.edit_dates_btn.toggled.connect(self._toggle_edit_dates)
@@ -114,16 +114,16 @@ class GestionEvaluationDialog(QDialog):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Opérateur (ACTIF)
+        # ✅ CORRECTION 1: 'operateurs' → 'personnel'
         self.operator_combo = QComboBox()
         self.operator_combo.addItem("Tous les opérateurs", "")
-        cursor.execute("SELECT nom, prenom, id FROM operateurs WHERE statut = 'ACTIF' ORDER BY nom;")
+        cursor.execute("SELECT nom, prenom, id FROM personnel WHERE statut = 'ACTIF' ORDER BY nom;")
         for nom, prenom, op_id in cursor.fetchall():
             self.operator_combo.addItem(f"{nom} {prenom}", op_id)
         layout.addWidget(QLabel("Sélectionner un opérateur :"))
         layout.addWidget(self.operator_combo)
 
-        # Poste
+        # Poste (✅ déjà correct)
         self.poste_combo = QComboBox()
         self.poste_combo.addItem("Tous les postes", "")
         cursor.execute("SELECT poste_code, id FROM postes ORDER BY poste_code;")
@@ -159,30 +159,33 @@ class GestionEvaluationDialog(QDialog):
         conn = get_db_connection()
         cursor = conn.cursor()
 
+        # ✅ CORRECTION 2: 'operateurs' → 'personnel' (alias 'pers')
         query = """
         SELECT 
             poly.id,                                -- 0: ID technique (caché)
-            o.nom, o.prenom, p.poste_code, 
+            pers.nom, pers.prenom, p.poste_code, 
             COALESCE(poly.niveau, 'N/A') AS niveau, 
             COALESCE(poly.date_evaluation, 'Non défini') AS date_evaluation, 
             COALESCE(poly.prochaine_evaluation, 'Non défini') AS prochaine_evaluation
         FROM polyvalence poly
-        JOIN operateurs o ON poly.operateur_id = o.id
+        JOIN personnel pers ON poly.operateur_id = pers.id
         JOIN postes p ON poly.poste_id = p.id
         """
 
         params = []
         where_added = False
+        
+        # ✅ AMÉLIORATION: Utilisation des alias pour plus de cohérence
         if operator_id:
-            query += " WHERE poly.operateur_id = %s"
+            query += " WHERE pers.id = %s"
             params.append(operator_id)
             where_added = True
 
         if poste_id:
-            query += " AND poly.poste_id = %s" if where_added else " WHERE poly.poste_id = %s"
+            query += " AND p.id = %s" if where_added else " WHERE p.id = %s"
             params.append(poste_id)
 
-        query += " ORDER BY o.nom, o.prenom, p.poste_code;"
+        query += " ORDER BY pers.nom, pers.prenom, p.poste_code;"
 
         cursor.execute(query, tuple(params))
         rows = cursor.fetchall()
@@ -246,12 +249,13 @@ class GestionEvaluationDialog(QDialog):
         try:
             conn = get_db_connection()
             cur = conn.cursor()
+            # ✅ SÉCURITÉ: Utilisation de paramètres préparés (déjà correct)
             cur.execute(f"UPDATE polyvalence SET {field} = %s WHERE id = %s", (date_iso, poly_id))
             conn.commit()
             cur.close()
             conn.close()
         except Exception as e:
-            # Rétablit visuellement l’ancienne valeur et informe
+            # Rétablit visuellement l'ancienne valeur et informe
             old_text = self.table.item(row, col).text()
             self.table.item(row, col).setText(old_text)
             QMessageBox.warning(self, "Erreur de mise à jour", f"Impossible d'enregistrer la date : {e}")
@@ -290,7 +294,7 @@ class GestionEvaluationDialog(QDialog):
         headers = ["Nom", "Prénom", "Poste", "Niveau", "Date Évaluation", "Prochaine Évaluation"]
         table_data.append(headers)
 
-        # 🔎 on ignore la colonne 0 (_poly_id) pour coller aux en-têtes
+        # 🔍 on ignore la colonne 0 (_poly_id) pour coller aux en-têtes
         for row in range(self.table.rowCount()):
             row_data = []
             for col in range(1, self.table.columnCount()):
@@ -310,3 +314,5 @@ class GestionEvaluationDialog(QDialog):
 
         elements.append(table)
         pdf.build(elements)
+        
+        QMessageBox.information(self, "Export réussi", f"Le fichier PDF a été créé :\n{file_path}")

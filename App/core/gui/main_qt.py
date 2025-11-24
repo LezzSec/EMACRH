@@ -273,35 +273,35 @@ class MainWindow(QMainWindow):
             poste_retard = self.retard_filter.currentData()
             poste_next = self.next_eval_filter.currentData()
 
-            # ✅ CHANGEMENT: Ajout de LIMIT 20 sur les retards
+            # ✅ CORRIGÉ: Utilisation de la table 'personnel' au lieu de 'operateurs'
             q1 = """
-                SELECT o.nom, o.prenom, p.poste_code, poly.prochaine_evaluation
+                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
                 FROM polyvalence poly
-                JOIN operateurs o ON o.id = poly.operateur_id
-                LEFT JOIN postes p ON p.id = poly.poste_id
+                JOIN personnel p ON p.id = poly.operateur_id
+                LEFT JOIN postes pos ON pos.id = poly.poste_id
                 WHERE poly.prochaine_evaluation < CURDATE()
-                  AND o.statut = 'Actif'
+                  AND p.statut = 'ACTIF'
             """
             pr = []
             if poste_retard:
-                q1 += " AND p.poste_code = %s"
+                q1 += " AND pos.poste_code = %s"
                 pr.append(poste_retard)
             q1 += " ORDER BY poly.prochaine_evaluation ASC LIMIT 10"  
             cur.execute(q1, tuple(pr))
             retard = cur.fetchall()
 
-            # Prochaines (déjà limité à 10)
+            # Prochaines évaluations
             q2 = """
-                SELECT o.nom, o.prenom, p.poste_code, poly.prochaine_evaluation
+                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
                 FROM polyvalence poly
-                JOIN operateurs o ON o.id = poly.operateur_id
-                LEFT JOIN postes p ON p.id = poly.poste_id
+                JOIN personnel p ON p.id = poly.operateur_id
+                LEFT JOIN postes pos ON pos.id = poly.poste_id
                 WHERE poly.prochaine_evaluation >= CURDATE()
-                  AND o.statut = 'Actif'
+                  AND p.statut = 'ACTIF'
             """
             pn = []
             if poste_next:
-                q2 += " AND p.poste_code = %s"
+                q2 += " AND pos.poste_code = %s"
                 pn.append(poste_next)
             q2 += " ORDER BY poly.prochaine_evaluation ASC LIMIT 10"
             cur.execute(q2, tuple(pn))
