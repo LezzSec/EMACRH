@@ -102,13 +102,63 @@ class DetailOperateurDialog(QDialog):
         # Onglet 2 : Résumé / Notes
         summary_tab = QWidget()
         summary_layout = QVBoxLayout(summary_tab)
+        summary_layout.setSpacing(15)
+        summary_layout.setContentsMargins(20, 20, 20, 20)
         
-        summary_label = QLabel("Résumé du Parcours")
-        summary_label.setFont(QFont("Arial", 12, QFont.Bold))
-        summary_layout.addWidget(summary_label)
+        # En-tête avec design moderne
+        header_summary = QWidget()
+        header_summary.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #1e40af, stop:1 #3b82f6);
+                border-radius: 10px;
+                padding: 15px;
+            }
+        """)
+        header_layout = QVBoxLayout(header_summary)
         
+        summary_label = QLabel("📋 Résumé du Parcours")
+        summary_label.setFont(QFont("Arial", 16, QFont.Bold))
+        summary_label.setStyleSheet("color: white; background: transparent;")
+        header_layout.addWidget(summary_label)
+        
+        summary_subtitle = QLabel("Vue d'ensemble de la carrière et des compétences")
+        summary_subtitle.setStyleSheet("color: #e0f2fe; font-size: 11px; background: transparent;")
+        header_layout.addWidget(summary_subtitle)
+        
+        summary_layout.addWidget(header_summary)
+        
+        # Zone de texte stylisée avec bordure élégante
         self.summary_text = QTextEdit()
         self.summary_text.setReadOnly(True)
+        self.summary_text.setStyleSheet("""
+            QTextEdit {
+                background-color: #ffffff;
+                border: 2px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 20px;
+                font-family: 'Segoe UI', Arial, sans-serif;
+                font-size: 11px;
+                color: #1e293b;
+                line-height: 1.8;
+            }
+            QTextEdit:focus {
+                border: 2px solid #3b82f6;
+            }
+            QScrollBar:vertical {
+                background: #f1f5f9;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #cbd5e1;
+                border-radius: 6px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #94a3b8;
+            }
+        """)
         summary_layout.addWidget(self.summary_text)
         
         tabs.addTab(summary_tab, "Résumé")
@@ -116,10 +166,31 @@ class DetailOperateurDialog(QDialog):
         # Onglet 3 : Infos Complémentaires (NOUVELLE CATÉGORIE)
         infos_tab = QWidget()
         infos_layout = QVBoxLayout(infos_tab)
+        infos_layout.setSpacing(15)
+        infos_layout.setContentsMargins(20, 20, 20, 20)
         
-        infos_label = QLabel("Informations Complémentaires")
-        infos_label.setFont(QFont("Arial", 12, QFont.Bold))
-        infos_layout.addWidget(infos_label)
+        # En-tête avec design moderne
+        header_infos = QWidget()
+        header_infos.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #059669, stop:1 #10b981);
+                border-radius: 10px;
+                padding: 15px;
+            }
+        """)
+        header_layout = QVBoxLayout(header_infos)
+        
+        infos_label = QLabel("ℹ️ Informations Complémentaires")
+        infos_label.setFont(QFont("Arial", 16, QFont.Bold))
+        infos_label.setStyleSheet("color: white; background: transparent;")
+        header_layout.addWidget(infos_label)
+        
+        infos_subtitle = QLabel("Contrat, formations, validités et autres données")
+        infos_subtitle.setStyleSheet("color: #d1fae5; font-size: 11px; background: transparent;")
+        header_layout.addWidget(infos_subtitle)
+        
+        infos_layout.addWidget(header_infos)
         
         self.infos_table = QTableWidget()
         self.infos_table.setColumnCount(2)
@@ -128,22 +199,49 @@ class DetailOperateurDialog(QDialog):
         self.infos_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         infos_layout.addWidget(self.infos_table)
 
-        self.infos_table.setShowGrid(False)
+        self.infos_table.setShowGrid(True)
         self.infos_table.verticalHeader().setVisible(False)
         self.infos_table.setAlternatingRowColors(True)
         self.infos_table.setStyleSheet("""
-        QHeaderView::section{
-            background:#f1f5f9; color:#374151; font-weight:600; border:0; padding:6px 8px;
-        }
-        QTableWidget{
-            background:#ffffff; alternate-background-color:#f9fafb;
-        }
-        QTableWidget::item{
-            padding:8px;
-        }
-        QTableWidget::item:selected{
-            background:#e0f2fe; color:#111827;
-        }
+            QTableWidget {
+                background-color: white;
+                alternate-background-color: #f0fdf4;
+                gridline-color: #d1fae5;
+                border: 2px solid #e2e8f0;
+                border-radius: 10px;
+                font-size: 11px;
+            }
+            QHeaderView::section {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f1f5f9, stop:1 #e2e8f0);
+                color: #1e293b;
+                font-weight: bold;
+                font-size: 12px;
+                border: none;
+                padding: 12px 15px;
+                border-bottom: 3px solid #10b981;
+            }
+            QTableWidget::item {
+                padding: 12px 15px;
+                border-bottom: 1px solid #f1f5f9;
+            }
+            QTableWidget::item:selected {
+                background-color: #d1fae5;
+                color: #065f46;
+            }
+            QScrollBar:vertical {
+                background: #f1f5f9;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #cbd5e1;
+                border-radius: 6px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #10b981;
+            }
         """)
         
         tabs.addTab(infos_tab, "Infos Complémentaires")
@@ -151,21 +249,84 @@ class DetailOperateurDialog(QDialog):
         # Onglet 4 : Historique des modifications
         history_tab = QWidget()
         history_layout = QVBoxLayout(history_tab)
+        history_layout.setSpacing(15)
+        history_layout.setContentsMargins(20, 20, 20, 20)
         
-        history_label = QLabel("Historique")
-        history_label.setFont(QFont("Arial", 12, QFont.Bold))
-        history_layout.addWidget(history_label)
+        # En-tête avec design moderne
+        header_history = QWidget()
+        header_history.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #7c3aed, stop:1 #a78bfa);
+                border-radius: 10px;
+                padding: 15px;
+            }
+        """)
+        header_layout = QVBoxLayout(header_history)
+        
+        history_label = QLabel("📜 Historique des Modifications")
+        history_label.setFont(QFont("Arial", 16, QFont.Bold))
+        history_label.setStyleSheet("color: white; background: transparent;")
+        header_layout.addWidget(history_label)
+        
+        history_subtitle = QLabel("Journal de toutes les actions effectuées")
+        history_subtitle.setStyleSheet("color: #e9d5ff; font-size: 11px; background: transparent;")
+        header_layout.addWidget(history_subtitle)
+        
+        history_layout.addWidget(header_history)
         
         self.history_table = QTableWidget()
         self.history_table.setColumnCount(3)
         self.history_table.setHorizontalHeaderLabels(["Date", "Action", "Description"])
         self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.history_table.setAlternatingRowColors(True)
+        self.history_table.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                alternate-background-color: #faf5ff;
+                gridline-color: #e9d5ff;
+                border: 2px solid #e2e8f0;
+                border-radius: 10px;
+                font-size: 11px;
+            }
+            QHeaderView::section {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #f1f5f9, stop:1 #e2e8f0);
+                color: #1e293b;
+                font-weight: bold;
+                font-size: 12px;
+                padding: 12px 15px;
+                border: none;
+                border-bottom: 3px solid #7c3aed;
+            }
+            QTableWidget::item {
+                padding: 12px 15px;
+                border-bottom: 1px solid #f1f5f9;
+            }
+            QTableWidget::item:selected {
+                background-color: #e9d5ff;
+                color: #5b21b6;
+            }
+            QScrollBar:vertical {
+                background: #f1f5f9;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background: #cbd5e1;
+                border-radius: 6px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #7c3aed;
+            }
+        """)
         history_layout.addWidget(self.history_table)
         
         tabs.addTab(history_tab, "Historique")
-        
-        layout.addWidget(tabs, 1)
+
+        layout.addWidget(tabs)
         
         # === Boutons d'action ===
         actions = QHBoxLayout()
@@ -260,11 +421,11 @@ class DetailOperateurDialog(QDialog):
     
     
     def load_additional_infos(self):
+        """Charge les infos complémentaires de manière plus lisible (sans sections vides)."""
         try:
             self.infos_table.setRowCount(0)
 
-            # -------- Section: Informations personnelles --------
-            self._insert_section("Informations personnelles")
+            # -------- Informations personnelles --------
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
             cursor.execute("SELECT * FROM personnel_infos WHERE operateur_id = %s", (self.operateur_id,))
@@ -272,22 +433,21 @@ class DetailOperateurDialog(QDialog):
             cursor.close(); connection.close()
 
             if row_data:
+                self._insert_section("👤 Informations personnelles")
                 data = row_data[0]
-                showed = False
                 for key, val in data.items():
                     if key == "operateur_id":
                         continue
                     label = format_column_name(key)
-                    value = val.strftime("%d/%m/%Y") if isinstance(val, dt.date) else (str(val) if val not in (None, "",) else None)
+                    value = (
+                        val.strftime("%d/%m/%Y") if isinstance(val, dt.date)
+                        else (str(val) if val not in (None, "",) else None)
+                    )
                     if value is not None:
-                        self._insert_kv(label, value); showed = True
-                if not showed:
-                    self._insert_kv("—", None)
-            else:
-                self._insert_kv("—", None)
+                        self._insert_kv(label, value)
 
-            # -------- Section: Contrat actuel --------
-            self._insert_section("Contrat actuel")
+            # -------- Contrat actuel --------
+            self._insert_section("📄 Contrat actuel")
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
             cursor.execute("""
@@ -307,55 +467,24 @@ class DetailOperateurDialog(QDialog):
                 d1, d2 = c.get("date_debut"), c.get("date_fin")
                 if d1 or d2:
                     deb = d1.strftime("%d/%m/%Y") if isinstance(d1, dt.date) else str(d1)
-                    fin = d2.strftime("%d/%m/%Y") if isinstance(d2, dt.date) else (str(d2) if d2 else "…")
+                    fin = (
+                        d2.strftime("%d/%m/%Y") if isinstance(d2, dt.date)
+                        else (str(d2) if d2 else "…")
+                    )
                     parts.append(f"{deb} → {fin}")
-                self._insert_kv("Contrat", " — ".join([p for p in parts if p]))
+                self._insert_kv("Contrat actif", " — ".join([p for p in parts if p]))
             else:
-                self._insert_kv("Contrat", None)
+                self._insert_kv("Contrat actif", "Aucun contrat actif pour cet opérateur.")
 
-            # -------- Section: Solde congés (année) --------
-            self._insert_section("Solde congés (année)")
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            cursor.execute("""
-                SELECT cp_acquis, cp_pris, cp_restant, rtt_acquis, rtt_pris, rtt_restant
-                FROM compteur_conges
-                WHERE operateur_id = %s AND annee = YEAR(CURDATE())
-            """, (self.operateur_id,))
-            solde = _rows(cursor, dict_mode)
-            cursor.close(); connection.close()
+            # -------- Congés / Absences --------
+            # Les tables compteur_conges et absences_conges ne sont plus utilisées.
+            self._insert_section("⛱ Congés / absences")
+            self._insert_kv(
+                "Information",
+                "Module congés/absences non utilisé dans cette application."
+            )
 
-            if solde:
-                s = solde[0]
-                self._insert_kv("CP", f"{s.get('cp_restant',0)} j restants (pris {s.get('cp_pris',0)}/{s.get('cp_acquis',0)} acquis)")
-                self._insert_kv("RTT", f"{s.get('rtt_restant',0)} j restants (pris {s.get('rtt_pris',0)})")
-            else:
-                self._insert_kv("CP", None)
-                self._insert_kv("RTT", None)
-
-            # -------- Section: Absences récentes --------
-            self._insert_section("Absences récentes")
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            cursor.execute("""
-                SELECT type_absence, date_debut, date_fin, statut
-                FROM absences_conges
-                WHERE operateur_id = %s
-                ORDER BY date_debut DESC LIMIT 6
-            """, (self.operateur_id,))
-            absences = _rows(cursor, dict_mode)
-            cursor.close(); connection.close()
-
-            if absences:
-                for a in absences:
-                    d1 = self._format_date(a.get("date_debut"))
-                    d2 = self._format_date(a.get("date_fin"))
-                    self._insert_kv(a.get("type_absence","(type)"), f"{d1} → {d2} — {a.get('statut','')}")
-            else:
-                self._insert_kv("—", None)
-
-            # -------- Section: Formations --------
-            self._insert_section("Formations")
+            # -------- Formations --------
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
             cursor.execute("""
@@ -367,17 +496,18 @@ class DetailOperateurDialog(QDialog):
             formations = _rows(cursor, dict_mode)
             cursor.close(); connection.close()
 
+            self._insert_section("📚 Formations")
             if formations:
                 for f in formations:
                     d1 = self._format_date(f.get("date_debut"))
                     d2 = self._format_date(f.get("date_fin"))
                     cert = "✅" if f.get("certificat_obtenu") else "—"
-                    self._insert_kv(f.get("intitule","(formation)"), f"{d1} → {d2} — {f.get('statut','')} {cert}")
+                    texte = f"{d1} → {d2} — {f.get('statut','')} {cert}"
+                    self._insert_kv(f.get("intitule", "(formation)"), texte)
             else:
-                self._insert_kv("—", None)
+                self._insert_kv("Formations", "Aucune formation renseignée pour le moment.")
 
-            # -------- Section: Validités --------
-            self._insert_section("Validités")
+            # -------- Validités --------
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
             cursor.execute("""
@@ -389,22 +519,54 @@ class DetailOperateurDialog(QDialog):
             validites = _rows(cursor, dict_mode)
             cursor.close(); connection.close()
 
+            self._insert_section("✅ Validités")
             if validites:
                 for v in validites:
                     d1 = self._format_date(v.get("date_debut"))
                     d2 = self._format_date(v.get("date_fin")) if v.get("date_fin") else "—"
-                    tc = f" ({v['taux_incapacite']}%)" if v.get("taux_incapacite") is not None else ""
-                    self._insert_kv(v.get("type_validite","(type)"), f"{d1} → {d2} — {v.get('periodicite','')}{tc}")
+                    tc = (
+                        f" ({v['taux_incapacite']}%)"
+                        if v.get("taux_incapacite") is not None
+                        else ""
+                    )
+                    texte = f"{d1} → {d2} — {v.get('periodicite', '')}{tc}"
+                    self._insert_kv(v.get("type_validite", "(type)"), texte)
             else:
-                self._insert_kv("—", None)
+                self._insert_kv("Validités", "Aucune validité enregistrée.")
 
             # largeur colonnes
             self.infos_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
             self.infos_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur de chargement",
-                                 f"Impossible de charger les infos détaillées :\n{e}")
+            QMessageBox.critical(
+                self,
+                "Erreur de chargement",
+                f"Impossible de charger les infos détaillées :\n{e}"
+            )
+
+    def _insert_kv(self, label: str, value: str | None):
+        """Insère une ligne Catégorie / Valeur (texte gris + italique si vide)."""
+        row = self.infos_table.rowCount()
+        self.infos_table.insertRow(row)
+
+        cat = QTableWidgetItem(label)
+        cat.setFont(QFont("Arial", 10, QFont.Bold))
+        self.infos_table.setItem(row, 0, cat)
+
+        if value in (None, "",):
+            display = "Aucune information"
+            val = QTableWidgetItem(display)
+            val.setForeground(QColor("#9ca3af"))
+            f = val.font()
+            f.setItalic(True)
+            val.setFont(f)
+        else:
+            val = QTableWidgetItem(value)
+
+        val.setFlags(val.flags() & ~Qt.ItemIsEditable)
+        self.infos_table.setItem(row, 1, val)
+
 
     def format_column_name(col_name: str) -> str:
         """
