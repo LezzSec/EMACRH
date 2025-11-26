@@ -163,12 +163,12 @@ class DetailOperateurDialog(QDialog):
         
         tabs.addTab(summary_tab, "Résumé")
         
-        # Onglet 3 : Infos Complémentaires (NOUVELLE CATÉGORIE)
+        # Onglet 3 : Infos Complémentaires
         infos_tab = QWidget()
         infos_layout = QVBoxLayout(infos_tab)
         infos_layout.setSpacing(15)
         infos_layout.setContentsMargins(20, 20, 20, 20)
-        
+
         # En-tête avec design moderne
         header_infos = QWidget()
         header_infos.setStyleSheet("""
@@ -180,71 +180,32 @@ class DetailOperateurDialog(QDialog):
             }
         """)
         header_layout = QVBoxLayout(header_infos)
-        
+
         infos_label = QLabel("ℹ️ Informations Complémentaires")
         infos_label.setFont(QFont("Arial", 16, QFont.Bold))
         infos_label.setStyleSheet("color: white; background: transparent;")
         header_layout.addWidget(infos_label)
-        
+
         infos_subtitle = QLabel("Contrat, formations, validités et autres données")
         infos_subtitle.setStyleSheet("color: #d1fae5; font-size: 11px; background: transparent;")
         header_layout.addWidget(infos_subtitle)
-        
+
         infos_layout.addWidget(header_infos)
-        
+
+        # Tableau Catégorie / Valeur
         self.infos_table = QTableWidget()
         self.infos_table.setColumnCount(2)
         self.infos_table.setHorizontalHeaderLabels(["Catégorie", "Valeur"])
-        self.infos_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.infos_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.infos_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.infos_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.infos_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.infos_table.setSelectionMode(QAbstractItemView.NoSelection)
+
         infos_layout.addWidget(self.infos_table)
 
-        self.infos_table.setShowGrid(True)
-        self.infos_table.verticalHeader().setVisible(False)
-        self.infos_table.setAlternatingRowColors(True)
-        self.infos_table.setStyleSheet("""
-            QTableWidget {
-                background-color: white;
-                alternate-background-color: #f0fdf4;
-                gridline-color: #d1fae5;
-                border: 2px solid #e2e8f0;
-                border-radius: 10px;
-                font-size: 11px;
-            }
-            QHeaderView::section {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #f1f5f9, stop:1 #e2e8f0);
-                color: #1e293b;
-                font-weight: bold;
-                font-size: 12px;
-                border: none;
-                padding: 12px 15px;
-                border-bottom: 3px solid #10b981;
-            }
-            QTableWidget::item {
-                padding: 12px 15px;
-                border-bottom: 1px solid #f1f5f9;
-            }
-            QTableWidget::item:selected {
-                background-color: #d1fae5;
-                color: #065f46;
-            }
-            QScrollBar:vertical {
-                background: #f1f5f9;
-                width: 12px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background: #cbd5e1;
-                border-radius: 6px;
-                min-height: 30px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #10b981;
-            }
-        """)
-        
         tabs.addTab(infos_tab, "Infos Complémentaires")
+
         
         # Onglet 4 : Historique des modifications
         history_tab = QWidget()
@@ -438,7 +399,7 @@ class DetailOperateurDialog(QDialog):
                 for key, val in data.items():
                     if key == "operateur_id":
                         continue
-                    label = format_column_name(key)
+                    label = self._format_column_name(key)
                     value = (
                         val.strftime("%d/%m/%Y") if isinstance(val, dt.date)
                         else (str(val) if val not in (None, "",) else None)
@@ -568,34 +529,30 @@ class DetailOperateurDialog(QDialog):
         self.infos_table.setItem(row, 1, val)
 
 
-    def format_column_name(col_name: str) -> str:
+    def _format_column_name(self, col_name: str) -> str:
         """
         Formate un nom de colonne SQL en texte lisible.
-        Exemple: 'date_naissance' → 'Date de naissance'
+        Exemple: 'date_naissance' → 'Date Naissance'
         """
         if not col_name:
             return ""
 
-        # Remplacer underscores par espaces
-        formatted = col_name.replace('_', ' ')
+        formatted = col_name.replace("_", " ")
+        formatted = " ".join(word.capitalize() for word in formatted.split())
 
-        # Capitaliser chaque mot
-        formatted = ' '.join(word.capitalize() for word in formatted.split())
-
-        # Corrections spécifiques
         replacements = {
-            'Cp': 'CP',
-            'Rtt': 'RTT',
-            'Id': 'ID',
-            'Nir': 'NIR',
-            'Etp': 'ETP',
-            'Operateur': 'Opérateur'
+            "Cp": "CP",
+            "Rtt": "RTT",
+            "Id": "ID",
+            "Nir": "NIR",
+            "Etp": "ETP",
+            "Operateur": "Opérateur",
         }
-
         for old, new in replacements.items():
             formatted = formatted.replace(old, new)
 
         return formatted
+
 
     
     def load_polyvalences(self):

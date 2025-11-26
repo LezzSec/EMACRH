@@ -446,7 +446,7 @@ class GrillesDialog(QDialog):
             p.id as poste_id,
             p.poste_code,
             COALESCE(pv.niveau, '') AS niveau
-        FROM operateurs o
+        FROM personnel o
         CROSS JOIN postes p
         LEFT JOIN polyvalence pv ON o.id = pv.operateur_id 
             AND p.id = pv.poste_id
@@ -640,7 +640,7 @@ class GrillesDialog(QDialog):
                 if name_ok and row_name:
                     prenom, ok = QInputDialog.getText(self, "Prénom", "Entrez le prénom de l'opérateur :")
                     if ok:
-                        cursor.execute("INSERT INTO operateurs (nom, prenom, statut) VALUES (%s, %s, 'ACTIF')", (row_name, prenom))
+                        cursor.execute("INSERT INTO personnel (nom, prenom, statut) VALUES (%s, %s, 'ACTIF')", (row_name, prenom))
                         connection.commit()
                         self.load_data()
             cursor.close()
@@ -666,11 +666,11 @@ class GrillesDialog(QDialog):
             elif choice == "Ligne":
                 row_name, name_ok = QInputDialog.getText(self, "Nom de la Ligne", "Entrez le nom complet de l'opérateur à masquer :")
                 if name_ok and row_name:
-                    cursor.execute("SELECT id FROM operateurs WHERE CONCAT(nom, ' ', prenom) = %s AND statut = 'ACTIF'", (row_name,))
+                    cursor.execute("SELECT id FROM personnel WHERE CONCAT(nom, ' ', prenom) = %s AND statut = 'ACTIF'", (row_name,))
                     operateur = cursor.fetchone()
                     if operateur:
                         operateur_id = operateur["id"] if dict_mode else operateur[0]
-                        cursor.execute("UPDATE operateurs SET statut = 'INACTIF' WHERE id = %s", (operateur_id,))
+                        cursor.execute("UPDATE personnel SET statut = 'INACTIF' WHERE id = %s", (operateur_id,))
                         connection.commit()
                         self.load_data()
                     else:
@@ -723,7 +723,7 @@ class GrillesDialog(QDialog):
             elif choice == "Ligne":
                 row_name, name_ok = QInputDialog.getText(self, "Nom de la Ligne", "Entrez le nom complet de l'opérateur à dupliquer :")
                 if name_ok and row_name:
-                    cursor.execute("SELECT id, nom, prenom FROM operateurs WHERE CONCAT(nom, ' ', prenom) = %s AND statut = 'ACTIF'", (row_name,))
+                    cursor.execute("SELECT id, nom, prenom FROM personnel WHERE CONCAT(nom, ' ', prenom) = %s AND statut = 'ACTIF'", (row_name,))
                     operateur = cursor.fetchone()
                     if operateur:
                         operateur_id = operateur["id"] if dict_mode else operateur[0]
@@ -733,14 +733,14 @@ class GrillesDialog(QDialog):
                         # Créer le nouvel opérateur
                         try:
                             cursor.execute(
-                                "INSERT INTO operateurs (nom, prenom, statut) VALUES (%s, %s, 'ACTIF') RETURNING id",
+                                "INSERT INTO personnel (nom, prenom, statut) VALUES (%s, %s, 'ACTIF') RETURNING id",
                                 (f"{nom}_copy", prenom)
                             )
                             new_operateur_id = cursor.fetchone()[0]
                         except Exception:
                             # Fallback MySQL
                             cursor.execute(
-                                "INSERT INTO operateurs (nom, prenom, statut) VALUES (%s, %s, 'ACTIF')",
+                                "INSERT INTO personnel (nom, prenom, statut) VALUES (%s, %s, 'ACTIF')",
                                 (f"{nom}_copy", prenom)
                             )
                             new_operateur_id = getattr(cursor, "lastrowid", None)
