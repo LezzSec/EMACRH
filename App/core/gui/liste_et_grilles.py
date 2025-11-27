@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
     QLabel, QMessageBox, QInputDialog, QDialogButtonBox, QListWidget, QListWidgetItem,
-    QLineEdit, QFileDialog, QAbstractItemView
+    QLineEdit, QFileDialog, QAbstractItemView, QComboBox
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
@@ -37,6 +37,17 @@ def _rows(cur, dict_mode):
 
 
 class GrillesDialog(QDialog):
+
+    SUMMARY_ROWS = [
+        "Niveau 1",
+        "Niveau 2",
+        "Niveau 3",
+        "Niveau 4",
+        "Nb total d'opérateurs au poste",
+        "Total des niveaux 3 et 4",
+        "Besoins par poste",
+    ]
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Grilles Polyvalence")
@@ -45,6 +56,8 @@ class GrillesDialog(QDialog):
         self.layout = QVBoxLayout()
         self.is_editable = False
         self.modified_cells = set()
+
+        self._is_processing_change = False
 
         self._setup_theme_colors()
 
@@ -77,6 +90,22 @@ class GrillesDialog(QDialog):
         self.operateurs = []
         self.postes = []
         self.load_data()
+
+         # Filtre par service
+        filter_service_layout = QHBoxLayout()
+        filter_service_label = QLabel("Filtrer par service :")
+        self.service_combo = QComboBox()
+        self.service_combo.addItem("Tous les services")
+        filter_service_layout.addWidget(filter_service_label)
+        filter_service_layout.addWidget(self.service_combo)
+        filter_service_layout.addStretch()
+        self.layout.insertLayout(2, filter_service_layout)  # Insérer après les autres filtres
+        
+        # Charger les services depuis la base de données
+        self.load_services()
+        
+        # Connecter le signal de changement
+        self.service_combo.currentTextChanged.connect(self.filter_by_service)
 
     def _setup_theme_colors(self):
         """Définit les couleurs adaptées au thème actuel (clair ou sombre)."""
@@ -254,95 +283,223 @@ class GrillesDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur lors du filtrage : {e}")
 
-    # ----------------- Édition -----------------
-    def on_cell_changed(self, row, column):
-        """
-        Gère les modifications de cellules :
-        - ligne opérateurs -> table polyvalence
-        - ligne "Besoins par poste" -> colonne postes.besoins_postes
-        """
-        if not self.is_editable:
-            return
+    def load_services(self):
+        """Charge la liste des services depuis la base de données."""
+        try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
 
-        item = self.main_table.item(row, column)
-        if not item:
+            cursor.execute("SELECT DISTINCT nom_service FROM services ORDER BY nom_service")
+            services = cursor.fetchall()
+
+            for service in services:
+                self.service_combo.addItem(service[0])
+
+            cursor.close()
+            connection.close()
+        except Exception as e:
+            print(f"Erreur lors du chargement des services : {e}")
+
+    def filter_by_service(self):
+        """Filtre les opérateurs par service sélectionné."""
+        selected_service = self.service_combo.currentText()
+
+        if selected_service == "Tous les services":
+            # Afficher tous les opérateurs (sauf lignes de synthèse)
+            for row in range(self.main_table.rowCount() - len(self.SUMMARY_ROWS)):  # ✅ self.SUMMARY_ROWS
+                self.main_table.setRowHidden(row, False)
             return
 
         try:
+            connection = get_db_connection()
+            cursor = connection.cursor()
+
+            # Récupérer les opérateurs du service sélectionné
+            query = """
+                SELECT DISTINCT p.id, p.nom, p.prenom
+                FROM personnel p
+                LEFT JOIN services s ON p.service_id = s.id
+                WHERE s.nom_service = %s AND p.statut = 'ACTIF'
+            """
+            cursor.execute(query, (selected_service,))
+            operateurs_service = cursor.fetchall()
+
+            # Créer un set des noms complets des opérateurs du service
+            operateurs_set = {f"{row[1]} {row[2]}" for row in operateurs_service}
+
+            # Masquer/afficher les lignes selon le filtre (sauf lignes de synthèse)
+            for row in range(self.main_table.rowCount() - len(self.SUMMARY_ROWS)):  # ✅ self.SUMMARY_ROWS
+                header_item = self.main_table.verticalHeaderItem(row)
+                if header_item:
+                    nom_complet = header_item.text()
+                    self.main_table.setRowHidden(row, nom_complet not in operateurs_set)
+
+            cursor.close()
+            connection.close()
+
+            # Mettre à jour les statistiques après filtrage
+            self.update_statistics()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors du filtrage par service : {e}")
+
+    # ----------------- Édition -----------------
+    def on_cell_changed(self, row, column):
+        """
+        Version finale avec message de confirmation
+        """
+        if not self.is_editable:
+            return
+    
+        item = self.main_table.item(row, column)
+        if not item:
+            return
+    
+        # Déconnecter le signal
+        try:
+            self.main_table.cellChanged.disconnect(self.on_cell_changed)
+        except:
+            pass
+        
+        try:
+            import json
+            from datetime import datetime, timedelta
+            
             n_ops = len(self.operateurs)
-            besoins_row = n_ops + 6  # index de la ligne "Besoins par poste" (7 lignes de synthèse)
-
-            # ---------- CAS : modification sur la ligne "Besoins par poste" ----------
-            if row == besoins_row:
-                new_val_txt = item.text().strip()
-                if new_val_txt == "":
-                    new_db_val = None
-                elif not new_val_txt.isdigit():
-                    QMessageBox.warning(self, "Erreur", "Veuillez entrer un nombre valide.")
-                    self.reload_data()  # remet proprement la valeur affichée depuis DB
-                    return
-                else:
-                    new_db_val = int(new_val_txt)
-
-                poste_id = self.postes[column][0]
-                connection = get_db_connection()
-                cur, _ = _cursor(connection)
-                cur.execute("UPDATE postes SET besoins_postes = %s WHERE id = %s", (new_db_val, poste_id))
-                connection.commit()
-                cur.close()
-                connection.close()
-
-                # Si tu veux recalculer des stats conditionnées au besoin, garde :
-                self.update_statistics()
+            
+            # Ignorer les lignes de synthèse
+            if row >= n_ops:
                 return
-
-            # ---------- CAS : lignes opérateurs (polyvalence) ----------
-            if row < n_ops:
-                operateur_id = self.operateurs[row][0]
-                poste_id = self.postes[column][0]
-                value = item.text().strip()
-
-                if value and not value.isdigit():
-                    QMessageBox.warning(self, "Erreur", "Veuillez entrer un nombre valide")
-                    self.reload_cell(row, column)
-                    return
-
-                conn = get_db_connection()
-                cur, _ = _cursor(conn)
-
+    
+            operateur_id = self.operateurs[row][0]
+            operateur_nom = self.operateurs[row][1]
+            poste_id = self.postes[column][0]
+            poste_code = self.postes[column][1]
+            value = item.text().strip()
+    
+            if value and not value.isdigit():
+                QMessageBox.warning(self, "Erreur", "Veuillez entrer un nombre valide")
+                return
+    
+            # --- CONNEXION 1 : Lire l'ancien niveau ---
+            try:
+                conn1 = get_db_connection()
+                cur1 = conn1.cursor()
+                cur1.execute(
+                    "SELECT niveau FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
+                    (operateur_id, poste_id)
+                )
+                result = cur1.fetchone()
+                old_niveau = result[0] if result else None
+                cur1.close()
+                conn1.close()
+            except Exception as e:
+                print(f"❌ Erreur lecture : {e}")
+                old_niveau = None
+    
+            # --- CONNEXION 2 : Faire la modification ---
+            try:
+                conn2 = get_db_connection()
+                cur2 = conn2.cursor()
+                
                 if value == "":
-                    cur.execute(
+                    cur2.execute(
                         "DELETE FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
                         (operateur_id, poste_id)
                     )
+                    action = 'DELETE'
+                    new_niveau_int = None
                 else:
-                    cur.execute("""
-                        REPLACE INTO polyvalence (operateur_id, poste_id, niveau)
-                        VALUES (%s, %s, %s)
-                    """, (operateur_id, poste_id, value))
-
-                    # Prochaine évaluation +30 jours
+                    new_niveau_int = int(value)
+                    cur2.execute(
+                        "REPLACE INTO polyvalence (operateur_id, poste_id, niveau) VALUES (%s, %s, %s)",
+                        (operateur_id, poste_id, new_niveau_int)
+                    )
+                    
                     nouvelle_date = (datetime.today() + timedelta(days=30)).strftime('%Y-%m-%d')
-                    cur.execute(
-                        """UPDATE polyvalence 
-                           SET prochaine_evaluation = %s 
-                           WHERE operateur_id = %s AND poste_id = %s""",
+                    cur2.execute(
+                        "UPDATE polyvalence SET prochaine_evaluation = %s WHERE operateur_id = %s AND poste_id = %s",
                         (nouvelle_date, operateur_id, poste_id)
                     )
-
-                conn.commit()
-                cur.close()
-                conn.close()
-
-                self.update_statistics()
+                    
+                    action = 'INSERT' if old_niveau is None else 'UPDATE'
+                
+                conn2.commit()
+                cur2.close()
+                conn2.close()
+            except Exception as e:
+                print(f"❌ Erreur modification : {e}")
+                import traceback
+                traceback.print_exc()
+                QMessageBox.critical(self, "Erreur", f"Erreur lors de la sauvegarde : {e}")
                 return
-
-            # autres lignes de synthèse : on ignore
-            return
-
+    
+            # --- CONNEXION 3 : Logger dans l'historique ---
+            try:
+                conn3 = get_db_connection()
+                cur3 = conn3.cursor()
+                
+                if action == 'DELETE':
+                    description = json.dumps({
+                        "operateur": operateur_nom,
+                        "poste": poste_code,
+                        "niveau": old_niveau,
+                        "type": "suppression"
+                    }, ensure_ascii=False)
+                elif action == 'INSERT':
+                    description = json.dumps({
+                        "operateur": operateur_nom,
+                        "poste": poste_code,
+                        "niveau": new_niveau_int,
+                        "type": "ajout"
+                    }, ensure_ascii=False)
+                else:
+                    description = json.dumps({
+                        "operateur": operateur_nom,
+                        "poste": poste_code,
+                        "changes": {"niveau": {"old": old_niveau, "new": new_niveau_int}},
+                        "type": "modification"
+                    }, ensure_ascii=False)
+                
+                cur3.execute(
+                    "INSERT INTO historique (date_time, action, operateur_id, poste_id, description) VALUES (%s, %s, %s, %s, %s)",
+                    (datetime.now(), action, operateur_id, poste_id, description)
+                )
+                
+                conn3.commit()
+                cur3.close()
+                conn3.close()
+                
+                # ✅ MESSAGE DE CONFIRMATION
+                if action == 'DELETE':
+                    message = f"Compétence supprimée\n\n{operateur_nom} - {poste_code}"
+                elif action == 'INSERT':
+                    message = f"Nouvelle compétence ajoutée !\n\n{operateur_nom} - {poste_code}\nNiveau : {new_niveau_int}"
+                else:
+                    message = f"Compétence mise à jour !\n\n{operateur_nom} - {poste_code}\nNiveau : {old_niveau} → {new_niveau_int}"
+                
+                QMessageBox.information(self, "✅ Sauvegardé", message)
+                
+            except Exception as e:
+                print(f"⚠️  Erreur logging : {e}")
+                # Même si le logging échoue, la modification est sauvegardée
+                QMessageBox.warning(self, "⚠️  Attention", 
+                    f"Modification sauvegardée mais erreur dans l'historique :\n{e}")
+    
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de la sauvegarde : {e}")
-            self.reload_data()
+            print(f"❌ ERREUR GÉNÉRALE : {e}")
+            import traceback
+            traceback.print_exc()
+            QMessageBox.critical(self, "Erreur", f"Erreur : {e}")
+        
+        finally:
+            # Reconnecter le signal
+            try:
+                self.main_table.cellChanged.connect(self.on_cell_changed)
+            except:
+                pass
+
+
 
     def reload_cell(self, row, column):
         """Recharge une cellule opérateur spécifique avec sa valeur depuis la base de données."""
@@ -489,13 +646,13 @@ class GrillesDialog(QDialog):
             ]
 
             self.main_table.blockSignals(True)
-            self.main_table.setRowCount(n_ops + len(SUMMARY_ROWS))
+            self.main_table.setRowCount(n_ops + len(self.SUMMARY_ROWS))
             self.main_table.setColumnCount(len(self.postes))
 
             # En-têtes colonnes / lignes
             self.main_table.setHorizontalHeaderLabels([poste[1] for poste in self.postes])
             self.main_table.setVerticalHeaderLabels(
-                sorted(operateurs_dict.keys()) + SUMMARY_ROWS
+                sorted(operateurs_dict.keys()) + self.SUMMARY_ROWS
             )
 
             # Remplissage des cellules opérateurs
@@ -508,7 +665,7 @@ class GrillesDialog(QDialog):
 
             # 💥 Style : 6 premières lignes de synthèse non éditables (avec couleurs thème)
             start_row = n_ops  # première ligne de synthèse
-            for r in range(start_row, start_row + len(SUMMARY_ROWS) - 1):
+            for r in range(start_row, start_row + len(self.SUMMARY_ROWS) - 1):
                 for c in range(self.main_table.columnCount()):
                     it = self.main_table.item(r, c)
                     if not it:
@@ -520,7 +677,7 @@ class GrillesDialog(QDialog):
                     it.setForeground(self.color_synthesis_text)
 
             # 💥 Ligne "Besoins par poste" éditable (avec couleurs thème)
-            besoins_row = start_row + len(SUMMARY_ROWS) - 1
+            besoins_row = start_row + len(self.SUMMARY_ROWS) - 1
             for c in range(self.main_table.columnCount()):
                 it = self.main_table.item(besoins_row, c)
                 if not it:
@@ -559,51 +716,122 @@ class GrillesDialog(QDialog):
 
     # ----------------- Mode édition -----------------
     def toggle_edit_mode(self):
+        """Active/désactive le mode édition avec sauvegarde automatique."""
         self.is_editable = not self.is_editable
+
         if self.is_editable:
+            # Mode édition activé
             self.main_table.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
-            QMessageBox.information(self, "Mode Édition", "Le mode édition est activé. Cliquez à nouveau pour le désactiver.")
+            QMessageBox.information(self, "Mode Édition", 
+                "✅ Mode édition activé\n\n"
+                "💡 Les modifications seront sauvegardées automatiquement\n"
+                "   lorsque vous désactiverez le mode édition.")
         else:
-            self.main_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            QMessageBox.information(self, "Mode Édition", "Le mode édition est désactivé.")
-
-    def track_changes(self, item):
-        if item:
-            self.modified_cells.add((item.row(), item.column()))
-
+            # Mode édition désactivé - SAUVEGARDER AUTOMATIQUEMENT
+            if self.modified_cells:
+                self.save_changes()
+            else:
+                self.main_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+                QMessageBox.information(self, "Mode Édition", 
+                    "Mode édition désactivé.\n\nAucune modification à sauvegarder.")
+                
     def save_changes(self):
-        """Enregistre les modifications (utilisé pour les niveaux opérateurs)."""
+        """Enregistre les modifications ET les log dans l'historique."""
+        import json
+        from datetime import datetime
+
         try:
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
+
+            modifications_count = 0
 
             for row, col in self.modified_cells:
                 if row >= len(self.operateurs) or col >= len(self.postes):
                     continue
 
                 operateur_id = self.operateurs[row][0]
+                operateur_nom = self.operateurs[row][1]  # "Nom Prenom"
                 poste_id = self.postes[col][0]
+                poste_code = self.postes[col][1]  # "0515"
+
                 item = self.main_table.item(row, col)
-                niveau = item.text() if item else None
+                new_niveau = item.text() if item else None
 
-                if niveau is None or niveau.strip() == "":
-                    niveau = None
-                elif not niveau.isdigit():
-                    QMessageBox.critical(self, "Erreur", f"Valeur incorrecte : '{niveau}' dans la cellule ({row + 1}, {col + 1}).")
+                if new_niveau is None or new_niveau.strip() == "":
+                    new_niveau = None
+                elif not new_niveau.isdigit():
+                    QMessageBox.critical(self, "Erreur", 
+                        f"Valeur incorrecte : '{new_niveau}' dans la cellule ({row + 1}, {col + 1}).")
                     continue
+                
+                new_niveau_int = int(new_niveau) if new_niveau else None
 
+                # ✅ NOUVEAU : Vérifier l'ancien niveau
+                cursor.execute("""
+                    SELECT niveau FROM polyvalence 
+                    WHERE operateur_id = %s AND poste_id = %s
+                """, (operateur_id, poste_id))
+                existing = cursor.fetchone()
+
+                if existing:
+                    if dict_mode:
+                        old_niveau = existing.get('niveau')
+                    else:
+                        old_niveau = existing[0]
+                    action = 'UPDATE'
+                else:
+                    old_niveau = None
+                    action = 'INSERT'
+
+                # Enregistrer la modification dans polyvalence
                 cursor.execute(
                     "REPLACE INTO polyvalence (operateur_id, poste_id, niveau) VALUES (%s, %s, %s)",
-                    (operateur_id, poste_id, niveau if niveau is not None else None),
+                    (operateur_id, poste_id, new_niveau_int),
                 )
+
+                # ✅ NOUVEAU : Construire la description JSON pour l'historique
+                if action == 'INSERT':
+                    description = json.dumps({
+                        "operateur": operateur_nom,
+                        "poste": poste_code,
+                        "niveau": new_niveau_int,
+                        "type": "ajout"
+                    }, ensure_ascii=False)
+                else:  # UPDATE
+                    changes = {}
+                    if old_niveau != new_niveau_int:
+                        changes["niveau"] = {"old": old_niveau, "new": new_niveau_int}
+
+                    description = json.dumps({
+                        "operateur": operateur_nom,
+                        "poste": poste_code,
+                        "changes": changes,
+                        "type": "modification"
+                    }, ensure_ascii=False)
+
+                # ✅ NOUVEAU : Enregistrer dans l'historique
+                try:
+                    cursor.execute("""
+                        INSERT INTO historique (date_time, action, operateur_id, poste_id, description)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (datetime.now(), action, operateur_id, poste_id, description))
+                    modifications_count += 1
+                except Exception as e:
+                    print(f"Erreur logging historique : {e}")
+                    # On continue même si le log échoue
 
             connection.commit()
             cursor.close()
             connection.close()
             self.modified_cells.clear()
 
+            QMessageBox.information(self, "Succès", 
+                f"{modifications_count} modification(s) enregistrée(s) dans l'historique !")
+
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'enregistrement des modifications : {e}")
+            QMessageBox.critical(self, "Erreur", 
+                f"Erreur lors de l'enregistrement : {e}")
 
     # ----------------- Ajout / Suppression / Duplication -----------------
     def add_data(self):
@@ -799,6 +1027,8 @@ class GrillesDialog(QDialog):
             self.search_operator_input.clear()
         if hasattr(self, 'search_poste_input'):
             self.search_poste_input.clear()
+        if hasattr(self, 'service_combo'):
+            self.service_combo.setCurrentIndex(0)  # Revenir à "Tous les services"
 
         for row in range(self.main_table.rowCount()):
             self.main_table.setRowHidden(row, False)

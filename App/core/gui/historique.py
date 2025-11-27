@@ -52,7 +52,8 @@ def get_entity_name(conn, entity_type: str, entity_id) -> str:
 
 def parse_description(desc: str, action: str) -> str:
     """
-    Analyse la description JSON et génère un texte compréhensible
+    Parse la description avec NIVEAUX NUMÉRIQUES
+    (utilisé dans la colonne "Détails")
     """
     if not desc:
         return ""
@@ -65,119 +66,106 @@ def parse_description(desc: str, action: str) -> str:
             changes = data["changes"]
             parts = []
             
-            field_translations = {
-                "niveau": "Niveau de compétence",
-                "date_evaluation": "Date d'évaluation",
-                "prochaine_evaluation": "Prochaine évaluation",
-                "nom": "Nom",
-                "prenom": "Prénom",
-                "statut": "Statut",
-                "poste_code": "Code poste",
-                "visible": "Visibilité"    
-            }
+            if "niveau" in changes:
+                old = changes["niveau"].get("old", "?")
+                new = changes["niveau"].get("new", "?")
+                # ✅ Afficher les niveaux numériques
+                parts.append(f"Niveau {old} → {new}")
             
-            niveau_labels = {
-                1: "Débutant",
-                2: "Autonome",
-                3: "Confirmé",
-                4: "Expert"
-            }
-            
-            for field, change in changes.items():
-                field_name = field_translations.get(field, field)
-                old_val = change.get("old", "")
-                new_val = change.get("new", "")
-                
-                # Traduction spéciale pour le niveau
-                if field == "niveau":
-                    old_val = niveau_labels.get(old_val, old_val) if old_val else ""
-                    new_val = niveau_labels.get(new_val, new_val) if new_val else ""
-                
-                # Format des dates
-                if "date" in field.lower() and new_val:
-                    try:
-                        new_val = dt.datetime.fromisoformat(str(new_val)).strftime("%d/%m/%Y")
-                    except:
-                        pass
-                if "date" in field.lower() and old_val:
-                    try:
-                        old_val = dt.datetime.fromisoformat(str(old_val)).strftime("%d/%m/%Y")
-                    except:
-                        pass
-                
-                parts.append(f"{field_name}: {old_val} → {new_val}")
-            
-            return " | ".join(parts)
+            return " | ".join(parts) if parts else "Modifié"
         
         # Pour les ajouts (INSERT)
         elif action.upper() == "INSERT":
-            if "niveau" in data:
-                niveau = data["niveau"]
-                niveau_labels = {1: "Débutant", 2: "Autonome", 3: "Confirmé", 4: "Expert"}
-                return f"Niveau initial: {niveau_labels.get(niveau, niveau)}"
-            return "Nouvelle entrée créée"
+            niveau = data.get("niveau")
+            if niveau:
+                # ✅ Afficher le niveau numérique
+                return f"Niveau {niveau}"
+            return "Ajouté"
         
         # Pour les suppressions (DELETE)
         elif action.upper() == "DELETE":
-            return "Entrée supprimée"
+            niveau = data.get("niveau")
+            if niveau:
+                # ✅ Afficher le niveau numérique
+                return f"Supprimé (Niveau {niveau})"
+            return "Supprimé"
         
     except json.JSONDecodeError:
-        # Si ce n'est pas du JSON, retourner tel quel
         return desc
     except Exception:
         return desc
     
     return desc
 
+
+
 def make_resume(row: dict, conn=None) -> str:
     """
-    Génère un résumé lisible de l'action
-    Exemple: 'Modification de compétence – Jean DUPONT sur poste 0515 – Niveau: Confirmé → Expert'
+    Génère un résumé avec distinction claire entre :
+    - INSERT (nouveau) : Aguerre Stephane ➜ 0515 : ✚ Niveau 3 (nouveau)
+    - UPDATE (modif)   : Aguerre Stephane ➜ 0515 : Niveau 2 → 3
+    - DELETE (supprim) : Aguerre Stephane ➜ 0515 : ✕ Niveau 3 (supprimé)
     """
-    act = fr_action(row.get("action"))
+    action = row.get("action", "")
     op_id = row.get("operateur_id")
     po_id = row.get("poste_id")
     desc = row.get("description") or ""
-    action = row.get("action", "")
     
-    # Récupération des noms lisibles
+    # Par défaut, essayer de récupérer depuis la base
     op_name = get_entity_name(conn, "operateur", op_id) if conn and op_id else None
     po_name = get_entity_name(conn, "poste", po_id) if conn and po_id else None
     
-    # Construction du résumé
+    # Extraire les noms depuis le JSON en priorité
+    try:
+        data = json.loads(desc)
+        
+        # Les noms sont dans le JSON, les utiliser en priorité
+        if "operateur" in data:
+            op_name = data["operateur"]
+        if "poste" in data:
+            po_name = data["poste"]
+        
+        # ✅ Construction du résumé selon l'action
+        if action.upper() == "INSERT":
+            # C'est un AJOUT (pas d'ancien niveau)
+            niveau = data.get("niveau", "?")
+            return f"{op_name} ➜ {po_name} : ✚ Niveau {niveau} (nouveau)"
+        
+        elif action.upper() == "UPDATE":
+            # C'est une MODIFICATION (ancien niveau → nouveau niveau)
+            changes = data.get("changes", {})
+            if "niveau" in changes:
+                old = changes["niveau"].get("old", "?")
+                new = changes["niveau"].get("new", "?")
+                return f"{op_name} ➜ {po_name} : Niveau {old} → {new}"
+            else:
+                return f"{op_name} ➜ {po_name} : Modifié"
+        
+        elif action.upper() == "DELETE":
+            # C'est une SUPPRESSION
+            niveau = data.get("niveau", "?")
+            return f"{op_name} ➜ {po_name} : ✕ Niveau {niveau} (supprimé)"
+        
+    except Exception as e:
+        print(f"Erreur parsing JSON dans make_resume : {e}")
+        pass
+    
+    # Fallback si le JSON ne peut pas être parsé
     parts = []
-    
-    # Type d'action avec contexte
-    if action.upper() == "INSERT":
-        parts.append("Ajout de compétence")
-    elif action.upper() == "UPDATE":
-        parts.append("Modification de compétence")
-    elif action.upper() == "DELETE":
-        parts.append("Suppression de compétence")
-    else:
-        parts.append(act)
-    
-    # Informations sur qui et où
-    sub_parts = []
     if op_name:
-        sub_parts.append(f"Opérateur: {op_name}")
+        parts.append(op_name)
     elif op_id:
-        sub_parts.append(f"Opérateur #{op_id}")
+        parts.append(f"#{op_id}")
     
     if po_name:
-        sub_parts.append(f"Poste: {po_name}")
+        parts.append(po_name)
     elif po_id:
-        sub_parts.append(f"Poste #{po_id}")
+        parts.append(f"Poste #{po_id}")
     
-    if sub_parts:
-        parts.append(" – " + " | ".join(sub_parts))
+    if parts:
+        return " ➜ ".join(parts)
     
-    # Détails de la modification
-    parsed_desc = parse_description(desc, action)
-    if parsed_desc:
-        parts.append(" – " + parsed_desc)
-    
-    return "".join(parts)
+    return f"Action : {action}"
 
 
 class HistoriqueDialog(QDialog):
@@ -351,7 +339,7 @@ class HistoriqueDialog(QDialog):
             return
 
         self.table.setRowCount(len(rows))
-        
+
         for r, row in enumerate(rows):
             resume = make_resume(row, self.conn)
 
@@ -369,12 +357,16 @@ class HistoriqueDialog(QDialog):
             except Exception:
                 pass
 
-            action_txt = fr_action(row.get("action", ""))
-            
+            # ✅ ANCIENNE VERSION (simple)
+            # action_txt = fr_action(row.get("action", ""))
+
+            # ✅ NOUVELLE VERSION (détaillée) - Remplacez la ligne ci-dessus par ceci :
+            action_txt = get_detailed_action_type(row)
+
             # Noms lisibles pour opérateur et poste
             op_display = get_entity_name(self.conn, "operateur", row.get("operateur_id")) or ""
             po_display = get_entity_name(self.conn, "poste", row.get("poste_id")) or ""
-            
+
             # Description parsée
             desc_display = parse_description(row.get("description", ""), row.get("action", ""))
 
@@ -386,41 +378,50 @@ class HistoriqueDialog(QDialog):
                 po_display,
                 desc_display,
             ]
-            
+
             for c, v in enumerate(vals):
                 item = QTableWidgetItem(v)
                 if c in (0, 5):  # tooltips utiles
                     item.setToolTip(v)
                 self.table.setItem(r, c, item)
 
-            # Couleurs selon action avec icônes
-            if action_txt == "Erreur":
-                bg = QtGui.QColor(255, 235, 238)  # Rouge pâle
-            elif action_txt == "Suppression":
-                bg = QtGui.QColor(255, 243, 224)  # Orange pâle
-            elif action_txt == "Ajout":
-                bg = QtGui.QColor(232, 245, 233)  # Vert pâle
-            elif action_txt == "Modification":
-                bg = QtGui.QColor(227, 242, 253)  # Bleu pâle
-            else:
-                bg = None
-            
-            if bg:
-                for c in range(self.table.columnCount()):
-                    it = self.table.item(r, c)
-                    if it: it.setBackground(bg)
+            # ... reste du code (couleurs, etc.) ...
 
-        # Mode simple : masque colonnes ID pour focus sur le contenu
-        simple = (self.simple_mode.currentIndex() == 1)
-        cols_to_hide = [3, 4] if simple else []
-        for c in range(self.table.columnCount()):
-            self.table.setColumnHidden(c, c in cols_to_hide)
+    def get_detailed_action_type(row: dict) -> str:
+        """
+        Retourne un type d'action DÉTAILLÉ au lieu de juste "Ajout"/"Modification"
+        """
+        action = row.get("action", "")
+        desc = row.get("description") or ""
         
-        # Mise à jour du compteur
-        self.count_label.setText(f"{len(rows)} modification(s) trouvée(s)")
+        try:
+            data = json.loads(desc)
+            
+            if action.upper() == "INSERT":
+                # Ajout avec niveau
+                niveau = data.get("niveau", "?")
+                return f"Ajout (N{niveau})"
+            
+            elif action.upper() == "UPDATE":
+                # Modification avec changement de niveau
+                changes = data.get("changes", {})
+                if "niveau" in changes:
+                    old = changes["niveau"].get("old", "?")
+                    new = changes["niveau"].get("new", "?")
+                    return f"Modification (N{old}→N{new})"
+                else:
+                    return "Modification"
+            
+            elif action.upper() == "DELETE":
+                # Suppression avec ancien niveau
+                niveau = data.get("niveau", "?")
+                return f"Suppression (N{niveau})"
+            
+        except:
+            pass
         
-        # Ajustement automatique des colonnes
-        self.table.resizeColumnsToContents()
+        # Fallback : traduction simple
+        return fr_action(action)
 
     # ---------- Clear + export ----------
     def _export_range(self, d_from: QDate, d_to: QDate):
