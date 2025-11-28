@@ -1,4 +1,3 @@
-# manage_operateur.py — Gestion des opérateurs (ajout + planification évaluation)
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox,
     QHBoxLayout, QFormLayout, QDateEdit, QComboBox, QApplication
@@ -8,28 +7,25 @@ from PyQt5.QtCore import Qt, QDate, pyqtSignal
 
 from core.gui.historique import HistoriqueDialog
 from core.db.configbd import get_connection as get_db_connection
-from core.services.logger import log_hist
-try:
-    from core.services.audit_logger import log_insert, log_action  # si dispo dans ton projet
-except Exception:
-    # Fallback minimal : écrit dans la table 'historique' si elle existe
-    def log_action(action, table_name="", description="", details=None, connection=None, cursor=None):
-        try:
-            if cursor is None and connection is not None:
-                cursor = connection.cursor()
-            if cursor is None:
-                return
-            cursor.execute(
-                "INSERT INTO historique (action, table_name, description, details, source) "
-                "VALUES (%s, %s, %s, %s, %s)",
-                (action, table_name or "", description or "", str(details or {}), "manage_operateur"),
-            )
-        except Exception:
-            pass
+import json
+import datetime
 
-    def log_insert(table_name, description="", record_id=None, details=None, connection=None, cursor=None):
-        log_action("INSERT", table_name, description, {**(details or {}), "record_id": record_id},
-                   connection=connection, cursor=cursor)
+# -------- Logger compatible avec votre historique --------
+def log_to_historique(connection, cursor, action: str, operateur_id=None, poste_id=None, description_data: dict = None):
+    """
+    Enregistre une action dans la table historique avec le bon format
+    """
+    try:
+        desc_json = json.dumps(description_data or {}, ensure_ascii=False)
+        
+        sql = """
+            INSERT INTO historique (date_time, action, operateur_id, poste_id, description)
+            VALUES (NOW(), %s, %s, %s, %s)
+        """
+        cursor.execute(sql, (action, operateur_id, poste_id, desc_json))
+    except Exception as e:
+        print(f"Erreur log historique: {e}")
+        pass
 
 # -------- Helpers DB (compat mysql-connector / psycopg) --------
 def _cursor(conn):
@@ -175,7 +171,7 @@ class ManageOperatorsDialog(QDialog):
         Détecte automatiquement les colonnes 'nom'/'prenom' (ou 'firstname'/'lastname'...).
         Retourne: (col_nom, col_prenom, col_statut_ou_None)
         """
-        cursor.execute("SHOW COLUMNS FROM operateurs;")
+        cursor.execute("SHOW COLUMNS FROM personnel;")
         rows = cursor.fetchall()
         cols = {r["Field"] for r in rows} if rows and isinstance(rows[0], dict) else {r[0] for r in rows}
 
@@ -202,7 +198,7 @@ class ManageOperatorsDialog(QDialog):
         if not op_id:
             col_nom, col_prenom, _ = self._resolve_operateurs_columns(cursor)
             cursor.execute(
-                f"SELECT id FROM operateurs "
+                f"SELECT id FROM personnel "
                 f"WHERE `{col_nom}`=%s AND `{col_prenom}`=%s "
                 f"ORDER BY id DESC LIMIT 1",
                 (nom, prenom),
@@ -256,8 +252,8 @@ class ManageOperatorsDialog(QDialog):
 
             # Vérifier doublon exact nom+prenom
             cursor.execute(
-            f"SELECT id FROM operateurs WHERE `{col_nom}`=%s AND `{col_prenom}`=%s",
-            (nom, prenom)
+                f"SELECT id FROM personnel WHERE `{col_nom}`=%s AND `{col_prenom}`=%s",
+                (nom, prenom)
             )
             existing = cursor.fetchone()
             
@@ -265,7 +261,6 @@ class ManageOperatorsDialog(QDialog):
                 existing_id = None
             else:
                 existing_id = existing["id"] if dict_mode else existing[0]
-
 
             # Demande date + poste (si annulé -> rien)
             dlg = EvaluationDateDialog(connection, cursor, self)
@@ -280,6 +275,12 @@ class ManageOperatorsDialog(QDialog):
 
             poste_id = dlg.poste_combo.currentData()
             qdate = dlg.date_edit.date()
+            date_iso = qdate.toString("yyyy-MM-dd")
+            
+            # Récupérer le nom du poste pour le log
+            cursor.execute("SELECT poste_code FROM postes WHERE id = %s", (poste_id,))
+            poste_row = cursor.fetchone()
+            poste_name = poste_row["poste_code"] if (poste_row and dict_mode) else (poste_row[0] if poste_row else f"Poste #{poste_id}")
 
             # Insertion(s)
             if existing_id:
@@ -287,13 +288,13 @@ class ManageOperatorsDialog(QDialog):
             else:
                 if col_statut:
                     cursor.execute(
-                        f"INSERT INTO operateurs (`{col_nom}`, `{col_prenom}`, `{col_statut}`) "
+                        f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`, `{col_statut}`) "
                         f"VALUES (%s, %s, 'ACTIF')",
                         (nom, prenom)
                     )
                 else:
                     cursor.execute(
-                        f"INSERT INTO operateurs (`{col_nom}`, `{col_prenom}`) "
+                        f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`) "
                         f"VALUES (%s, %s)",
                         (nom, prenom)
                     )
@@ -301,30 +302,35 @@ class ManageOperatorsDialog(QDialog):
                 if not operateur_id:
                     raise RuntimeError("Impossible de récupérer l'id du nouvel opérateur.")
 
-                # LOG création opérateur (dans la même transaction)
-                log_insert(
-                    "operateurs",
-                    description=f"Ajout opérateur {nom} {prenom}",
-                    record_id=operateur_id,
-                    details={"operateur_id": operateur_id, "nom": nom, "prenom": prenom},
-                    connection=connection, cursor=cursor,
+                # ✅ LOG création opérateur dans l'historique
+                log_to_historique(
+                    connection, cursor,
+                    action="INSERT",
+                    operateur_id=operateur_id,
+                    poste_id=None,  # Pas de poste associé à la création d'opérateur
+                    description_data={
+                        "operateur": f"{prenom} {nom}",
+                        "type": "creation_operateur",
+                        "details": f"Création de l'opérateur {prenom} {nom}"
+                    }
                 )
 
             # Évaluation liée
             self._enregistrer_date_polyvalence(connection, cursor, operateur_id, poste_id, qdate)
 
-            # LOG planification évaluation (avec la date dans la description) — garder uniquement celui-ci
-            date_iso = qdate.toString("yyyy-MM-dd")
-            log_insert(
-                "polyvalence",
-                description=f"Planification prochaine évaluation pour le {date_iso}",
-                record_id=operateur_id,
-                details={
-                    "operateur_id": operateur_id,
-                    "poste_id": poste_id,
-                    "prochaine_evaluation": date_iso
-                },
-                connection=connection, cursor=cursor,
+            # ✅ LOG planification évaluation dans l'historique
+            log_to_historique(
+                connection, cursor,
+                action="INSERT",
+                operateur_id=operateur_id,
+                poste_id=poste_id,
+                description_data={
+                    "operateur": f"{prenom} {nom}",
+                    "poste": poste_name,
+                    "type": "planification_evaluation",
+                    "prochaine_evaluation": date_iso,
+                    "details": f"Planification évaluation pour le {date_iso}"
+                }
             )
 
             # Commit unique
@@ -353,14 +359,19 @@ class ManageOperatorsDialog(QDialog):
                     connection.rollback()
             except Exception:
                 pass
-            # log d'erreur hors transaction si besoin
+            # ✅ LOG d'erreur dans l'historique
             try:
-                log_action(
-                    "ERROR", "operateurs",
-                    description="Échec d'enregistrement opérateur/évaluation",
-                    details={"error": str(e)},
-                    connection=connection
+                log_to_historique(
+                    connection, cursor,
+                    action="ERROR",
+                    operateur_id=None,
+                    poste_id=None,
+                    description_data={
+                        "error": str(e),
+                        "details": "Échec d'enregistrement opérateur/évaluation"
+                    }
                 )
+                connection.commit()
             except Exception:
                 pass
             QMessageBox.critical(self, "Échec de l'enregistrement", f"{e}")

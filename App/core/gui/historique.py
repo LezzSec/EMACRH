@@ -1,10 +1,10 @@
-
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-    QTableWidget, QTableWidgetItem, QDateEdit, QMessageBox, QComboBox
+    QScrollArea, QWidget, QFrame, QDateEdit, QMessageBox, QComboBox, QSizePolicy,
+    QTextEdit
 )
-from PyQt5.QtCore import QDate
-from PyQt5 import QtGui
+from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtGui import QFont, QColor, QPalette, QCursor
 
 from core.db.configbd import get_connection as get_db_connection
 from core.services.log_exporter import export_day
@@ -13,7 +13,7 @@ import json
 import datetime as dt
 import os
 
-# --- Traductions & rendu lisible ---
+# --- Fonctions utilitaires (garder vos fonctions existantes) ---
 ACTION_LABEL = {
     "INSERT": "Ajout",
     "UPDATE": "Modification",
@@ -22,13 +22,9 @@ ACTION_LABEL = {
 }
 
 def fr_action(a: str) -> str:
-    """Traduit l'action technique en français courant"""
     return ACTION_LABEL.get((a or "").upper(), a or "")
 
 def get_entity_name(conn, entity_type: str, entity_id) -> str:
-    """
-    Récupère le nom lisible d'une entité (opérateur ou poste)
-    """
     if entity_id is None or entity_id == "":
         return ""
     
@@ -50,89 +46,57 @@ def get_entity_name(conn, entity_type: str, entity_id) -> str:
     
     return f"#{entity_id}"
 
-def parse_description(desc: str, action: str) -> str:
-    """
-    Parse la description avec NIVEAUX NUMÉRIQUES
-    (utilisé dans la colonne "Détails")
-    """
-    if not desc:
-        return ""
+def get_detailed_action_type(row: dict) -> str:
+    action = row.get("action", "")
+    desc = row.get("description") or ""
     
     try:
         data = json.loads(desc)
         
-        # Pour les modifications (UPDATE)
-        if action.upper() == "UPDATE" and "changes" in data:
-            changes = data["changes"]
-            parts = []
-            
+        if action.upper() == "INSERT":
+            niveau = data.get("niveau", "?")
+            return f"Ajout (N{niveau})"
+        
+        elif action.upper() == "UPDATE":
+            changes = data.get("changes", {})
             if "niveau" in changes:
                 old = changes["niveau"].get("old", "?")
                 new = changes["niveau"].get("new", "?")
-                # ✅ Afficher les niveaux numériques
-                parts.append(f"Niveau {old} → {new}")
-            
-            return " | ".join(parts) if parts else "Modifié"
+                return f"Modification (N{old}→N{new})"
+            else:
+                return "Modification"
         
-        # Pour les ajouts (INSERT)
-        elif action.upper() == "INSERT":
-            niveau = data.get("niveau")
-            if niveau:
-                # ✅ Afficher le niveau numérique
-                return f"Niveau {niveau}"
-            return "Ajouté"
-        
-        # Pour les suppressions (DELETE)
         elif action.upper() == "DELETE":
-            niveau = data.get("niveau")
-            if niveau:
-                # ✅ Afficher le niveau numérique
-                return f"Supprimé (Niveau {niveau})"
-            return "Supprimé"
+            niveau = data.get("niveau", "?")
+            return f"Suppression (N{niveau})"
         
-    except json.JSONDecodeError:
-        return desc
-    except Exception:
-        return desc
+    except:
+        pass
     
-    return desc
-
-
+    return fr_action(action)
 
 def make_resume(row: dict, conn=None) -> str:
-    """
-    Génère un résumé avec distinction claire entre :
-    - INSERT (nouveau) : Aguerre Stephane ➜ 0515 : ✚ Niveau 3 (nouveau)
-    - UPDATE (modif)   : Aguerre Stephane ➜ 0515 : Niveau 2 → 3
-    - DELETE (supprim) : Aguerre Stephane ➜ 0515 : ✕ Niveau 3 (supprimé)
-    """
     action = row.get("action", "")
     op_id = row.get("operateur_id")
     po_id = row.get("poste_id")
     desc = row.get("description") or ""
     
-    # Par défaut, essayer de récupérer depuis la base
     op_name = get_entity_name(conn, "operateur", op_id) if conn and op_id else None
     po_name = get_entity_name(conn, "poste", po_id) if conn and po_id else None
     
-    # Extraire les noms depuis le JSON en priorité
     try:
         data = json.loads(desc)
         
-        # Les noms sont dans le JSON, les utiliser en priorité
         if "operateur" in data:
             op_name = data["operateur"]
         if "poste" in data:
             po_name = data["poste"]
         
-        # ✅ Construction du résumé selon l'action
         if action.upper() == "INSERT":
-            # C'est un AJOUT (pas d'ancien niveau)
             niveau = data.get("niveau", "?")
             return f"{op_name} ➜ {po_name} : ✚ Niveau {niveau} (nouveau)"
         
         elif action.upper() == "UPDATE":
-            # C'est une MODIFICATION (ancien niveau → nouveau niveau)
             changes = data.get("changes", {})
             if "niveau" in changes:
                 old = changes["niveau"].get("old", "?")
@@ -142,15 +106,12 @@ def make_resume(row: dict, conn=None) -> str:
                 return f"{op_name} ➜ {po_name} : Modifié"
         
         elif action.upper() == "DELETE":
-            # C'est une SUPPRESSION
             niveau = data.get("niveau", "?")
             return f"{op_name} ➜ {po_name} : ✕ Niveau {niveau} (supprimé)"
         
     except Exception as e:
-        print(f"Erreur parsing JSON dans make_resume : {e}")
         pass
     
-    # Fallback si le JSON ne peut pas être parsé
     parts = []
     if op_name:
         parts.append(op_name)
@@ -168,31 +129,372 @@ def make_resume(row: dict, conn=None) -> str:
     return f"Action : {action}"
 
 
+class DetailDialog(QDialog):
+    """
+    Dialogue affichant les détails complets d'une action
+    """
+    def __init__(self, row: dict, conn=None, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Détails de l'action")
+        self.resize(600, 500)
+        
+        layout = QVBoxLayout(self)
+        layout.setSpacing(16)
+        
+        # En-tête avec type d'action
+        action = row.get("action", "").upper()
+        if action == "INSERT":
+            icon = "✚"
+            action_text = "Ajout de compétence"
+            color = "#4caf50"
+        elif action == "UPDATE":
+            icon = "✎"
+            action_text = "Modification de compétence"
+            color = "#ffc107"
+        elif action == "DELETE":
+            icon = "✕"
+            action_text = "Suppression de compétence"
+            color = "#f44336"
+        else:
+            icon = "⚠"
+            action_text = "Action"
+            color = "#9e9e9e"
+        
+        header = QLabel(f"{icon} {action_text}")
+        header_font = QFont("Segoe UI", 16, QFont.Bold)
+        header.setFont(header_font)
+        header.setStyleSheet(f"color: {color}; padding: 12px; background-color: {color}22; border-radius: 6px;")
+        layout.addWidget(header)
+        
+        # Date et heure
+        dt_txt = str(row.get("date_time", ""))
+        try:
+            from datetime import datetime
+            if not isinstance(dt_txt, str) and hasattr(dt_txt, "strftime"):
+                dt_txt = row["date_time"].strftime("%d/%m/%Y à %H:%M:%S")
+            else:
+                try:
+                    dt_txt = datetime.fromisoformat(dt_txt).strftime("%d/%m/%Y à %H:%M:%S")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        
+        date_label = QLabel(f"📅 Date : {dt_txt}")
+        date_label.setStyleSheet("font-size: 12px; color: #616161; padding: 4px;")
+        layout.addWidget(date_label)
+        
+        # Séparateur
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("background-color: #e0e0e0;")
+        layout.addWidget(sep)
+        
+        # Informations détaillées
+        info_widget = QWidget()
+        info_layout = QVBoxLayout(info_widget)
+        info_layout.setSpacing(12)
+        
+        # Opérateur
+        op_name = get_entity_name(conn, "operateur", row.get("operateur_id"))
+        if not op_name:
+            try:
+                data = json.loads(row.get("description", "{}"))
+                op_name = data.get("operateur", f"#{row.get('operateur_id')}")
+            except:
+                op_name = f"#{row.get('operateur_id')}"
+        
+        op_label = self._create_info_row("👤 Opérateur :", op_name)
+        info_layout.addWidget(op_label)
+        
+        # Poste
+        po_name = get_entity_name(conn, "poste", row.get("poste_id"))
+        if not po_name:
+            try:
+                data = json.loads(row.get("description", "{}"))
+                po_name = data.get("poste", f"#{row.get('poste_id')}")
+            except:
+                po_name = f"#{row.get('poste_id')}"
+        
+        po_label = self._create_info_row("📍 Poste :", po_name)
+        info_layout.addWidget(po_label)
+        
+        # Détails selon le type d'action
+        try:
+            data = json.loads(row.get("description", "{}"))
+            
+            if action == "INSERT":
+                niveau = data.get("niveau", "?")
+                niveau_label = self._create_info_row("⭐ Niveau attribué :", f"Niveau {niveau}")
+                info_layout.addWidget(niveau_label)
+                
+                info_text = QLabel("Un nouveau niveau de compétence a été attribué à cet opérateur pour ce poste.")
+                info_text.setWordWrap(True)
+                info_text.setStyleSheet("color: #757575; font-style: italic; padding: 8px; background-color: #f5f5f5; border-radius: 4px;")
+                info_layout.addWidget(info_text)
+            
+            elif action == "UPDATE":
+                changes = data.get("changes", {})
+                if "niveau" in changes:
+                    old = changes["niveau"].get("old", "?")
+                    new = changes["niveau"].get("new", "?")
+                    
+                    change_widget = QWidget()
+                    change_layout = QHBoxLayout(change_widget)
+                    change_layout.setContentsMargins(0, 0, 0, 0)
+                    
+                    old_label = QLabel(f"Niveau {old}")
+                    old_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #f44336; padding: 8px; background-color: #ffebee; border-radius: 4px;")
+                    change_layout.addWidget(old_label)
+                    
+                    arrow = QLabel("→")
+                    arrow.setStyleSheet("font-size: 24px; color: #757575;")
+                    change_layout.addWidget(arrow)
+                    
+                    new_label = QLabel(f"Niveau {new}")
+                    new_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #4caf50; padding: 8px; background-color: #e8f5e9; border-radius: 4px;")
+                    change_layout.addWidget(new_label)
+                    
+                    change_layout.addStretch()
+                    info_layout.addWidget(change_widget)
+                    
+                    direction = "augmenté" if new > old else "diminué"
+                    info_text = QLabel(f"Le niveau de compétence a été {direction}.")
+                    info_text.setWordWrap(True)
+                    info_text.setStyleSheet("color: #757575; font-style: italic; padding: 8px; background-color: #f5f5f5; border-radius: 4px;")
+                    info_layout.addWidget(info_text)
+            
+            elif action == "DELETE":
+                niveau = data.get("niveau", "?")
+                niveau_label = self._create_info_row("⭐ Niveau supprimé :", f"Niveau {niveau}")
+                info_layout.addWidget(niveau_label)
+                
+                info_text = QLabel("Cette compétence a été retirée de l'opérateur pour ce poste.")
+                info_text.setWordWrap(True)
+                info_text.setStyleSheet("color: #757575; font-style: italic; padding: 8px; background-color: #f5f5f5; border-radius: 4px;")
+                info_layout.addWidget(info_text)
+        
+        except Exception as e:
+            error_label = QLabel(f"Impossible de charger les détails : {str(e)}")
+            error_label.setStyleSheet("color: #d32f2f; padding: 8px;")
+            info_layout.addWidget(error_label)
+        
+        info_layout.addStretch()
+        layout.addWidget(info_widget, stretch=1)
+        
+        # Bouton fermer
+        close_btn = QPushButton("Fermer")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1976d2;
+                color: white;
+                border: none;
+                padding: 10px 24px;
+                border-radius: 4px;
+                font-weight: bold;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #1565c0;
+            }
+        """)
+        layout.addWidget(close_btn, alignment=Qt.AlignRight)
+    
+    def _create_info_row(self, label: str, value: str) -> QWidget:
+        """Crée une ligne d'information formatée"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        label_widget = QLabel(label)
+        label_widget.setStyleSheet("font-weight: bold; color: #424242; min-width: 140px;")
+        layout.addWidget(label_widget)
+        
+        value_widget = QLabel(value)
+        value_widget.setStyleSheet("color: #212121; font-size: 12px;")
+        layout.addWidget(value_widget, stretch=1)
+        
+        return widget
+
+
+class ActionCard(QFrame):
+    """
+    Widget représentant une action sous forme de card moderne
+    """
+    def __init__(self, row: dict, conn=None, parent=None):
+        super().__init__(parent)
+        self.row = row
+        self.conn = conn
+        
+        self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
+        self.setLineWidth(0)
+        
+        # Styles selon le type d'action
+        action = row.get("action", "").upper()
+        if action == "INSERT":
+            bg_color = "#e8f5e9"  # Vert très clair
+            border_color = "#4caf50"  # Vert
+            icon = "✚"
+            icon_color = "#2e7d32"
+        elif action == "UPDATE":
+            bg_color = "#fff8e1"  # Jaune très clair
+            border_color = "#ffc107"  # Jaune/orange
+            icon = "✎"
+            icon_color = "#f57f17"
+        elif action == "DELETE":
+            bg_color = "#ffebee"  # Rouge très clair
+            border_color = "#f44336"  # Rouge
+            icon = "✕"
+            icon_color = "#c62828"
+        else:
+            bg_color = "#f5f5f5"
+            border_color = "#9e9e9e"
+            icon = "⚠"
+            icon_color = "#424242"
+        
+        self.setStyleSheet(f"""
+            ActionCard {{
+                background-color: {bg_color};
+                border-left: 4px solid {border_color};
+                border-radius: 6px;
+                padding: 12px;
+                margin: 4px 0px;
+            }}
+            ActionCard:hover {{
+                background-color: {self._lighten_color(bg_color)};
+                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+                cursor: pointer;
+            }}
+        """)
+        
+        # Rendre la card cliquable
+        self.setCursor(QCursor(Qt.PointingHandCursor))
+        self.setToolTip("Cliquez pour voir les détails")
+        
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(16)
+        
+        # --- Icône ---
+        icon_label = QLabel(icon)
+        icon_font = QFont("Segoe UI", 24, QFont.Bold)
+        icon_label.setFont(icon_font)
+        icon_label.setStyleSheet(f"color: {icon_color}; background: transparent;")
+        icon_label.setFixedWidth(40)
+        icon_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(icon_label)
+        
+        # --- Contenu principal ---
+        content_layout = QVBoxLayout()
+        content_layout.setSpacing(6)
+        
+        # Titre : résumé de l'action
+        resume = make_resume(row, conn)
+        title_label = QLabel(resume)
+        title_font = QFont("Segoe UI", 11, QFont.Bold)
+        title_label.setFont(title_font)
+        title_label.setStyleSheet("color: #212121; background: transparent;")
+        title_label.setWordWrap(True)
+        content_layout.addWidget(title_label)
+        
+        # Détails secondaires
+        details_layout = QHBoxLayout()
+        details_layout.setSpacing(20)
+        
+        # Date/Heure
+        dt_txt = str(row.get("date_time", ""))
+        try:
+            from datetime import datetime
+            if not isinstance(dt_txt, str) and hasattr(dt_txt, "strftime"):
+                dt_txt = row["date_time"].strftime("%d/%m/%Y à %H:%M")
+            else:
+                try:
+                    dt_txt = datetime.fromisoformat(dt_txt).strftime("%d/%m/%Y à %H:%M")
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        
+        time_label = QLabel(f"🕐 {dt_txt}")
+        time_label.setStyleSheet("color: #757575; font-size: 10px; background: transparent;")
+        details_layout.addWidget(time_label)
+        
+        # Type d'action détaillé
+        action_type = get_detailed_action_type(row)
+        type_label = QLabel(f"• {action_type}")
+        type_label.setStyleSheet("color: #757575; font-size: 10px; background: transparent;")
+        details_layout.addWidget(type_label)
+        
+        details_layout.addStretch()
+        content_layout.addLayout(details_layout)
+        
+        layout.addLayout(content_layout, stretch=1)
+        
+        # Ajuster la hauteur
+        self.setMinimumHeight(80)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+    
+    def mousePressEvent(self, event):
+        """Ouvre le dialogue détaillé au clic"""
+        if event.button() == Qt.LeftButton:
+            dialog = DetailDialog(self.row, self.conn, self)
+            dialog.exec_()
+        super().mousePressEvent(event)
+    
+    def _lighten_color(self, hex_color):
+        """Éclaircit légèrement une couleur pour l'effet hover"""
+        color = QColor(hex_color)
+        h, s, l, a = color.getHsl()
+        return QColor.fromHsl(h, max(0, s - 10), min(255, l + 10), a).name()
+
+
 class HistoriqueDialog(QDialog):
     """
-    Visionneuse de l'historique des modifications
-    - Filtres: période, type d'action, recherche
-    - Tri chronologique décroissant (plus récent en premier)
-    - Export et suppression des logs avec confirmation
+    Visionneuse moderne de l'historique avec vue en cards/timeline
     """
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Historique des modifications")
-        self.resize(1200, 700)
+        self.resize(1000, 700)
 
-        # Connexion DB persistante pour la durée de la fenêtre
         self.conn = None
         self._ensure_conn()
 
         root = QVBoxLayout(self)
+        root.setSpacing(12)
 
-        # --- En-tête informatif ---
-        info_label = QLabel("Consultez l'historique complet des modifications effectuées sur les compétences")
-        info_label.setStyleSheet("padding: 8px; background-color: #e3f2fd; border-radius: 4px; color: #1976d2;")
-        root.addWidget(info_label)
+        # --- En-tête simplifié ---
+        header_layout = QHBoxLayout()
+        header_layout.setContentsMargins(8, 8, 8, 8)
+        
+        title = QLabel("Historique des modifications")
+        title_font = QFont("Segoe UI", 13, QFont.Bold)
+        title.setFont(title_font)
+        title.setStyleSheet("color: #212121; padding: 4px;")
+        header_layout.addWidget(title)
+        
+        subtitle = QLabel("• Chronologie complète des actions")
+        subtitle.setStyleSheet("color: #757575; font-size: 10px; padding: 4px;")
+        header_layout.addWidget(subtitle)
+        
+        header_layout.addStretch()
+        
+        root.addLayout(header_layout)
 
-        # --- Filtres ---
-        filters = QHBoxLayout()
+        # --- Barre de filtres ---
+        filters_frame = QFrame()
+        filters_frame.setStyleSheet("""
+            QFrame {
+                background-color: #fafafa;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                padding: 12px;
+            }
+        """)
+        filters = QHBoxLayout(filters_frame)
+        filters.setSpacing(8)
+        
         filters.addWidget(QLabel("Du"))
         self.from_date = QDateEdit(calendarPopup=True)
         self.from_date.setDate(QDate.currentDate().addDays(-30))
@@ -217,40 +519,83 @@ class HistoriqueDialog(QDialog):
         self.action_filter.currentIndexChanged.connect(self.reload)
         filters.addWidget(self.action_filter)
 
-        self.search = QLineEdit(placeholderText="Rechercher un opérateur, un poste...")
+        self.search = QLineEdit(placeholderText="🔍 Rechercher...")
         self.search.returnPressed.connect(self.reload)
+        self.search.setStyleSheet("""
+            QLineEdit {
+                padding: 6px 12px;
+                border: 1px solid #bdbdbd;
+                border-radius: 4px;
+                background: white;
+            }
+            QLineEdit:focus {
+                border: 2px solid #1976d2;
+            }
+        """)
         filters.addWidget(self.search, stretch=1)
 
-        self.simple_mode = QComboBox()
-        self.simple_mode.addItems(["Affichage détaillé", "Mode simplifié"])
-        self.simple_mode.currentIndexChanged.connect(self.reload)
-        filters.addWidget(self.simple_mode)
-
-        self.btn_refresh = QPushButton("Actualiser")
+        self.btn_refresh = QPushButton("🔄 Actualiser")
         self.btn_refresh.clicked.connect(self.reload)
+        self.btn_refresh.setStyleSheet("""
+            QPushButton {
+                background-color: #1976d2;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1565c0;
+            }
+        """)
         filters.addWidget(self.btn_refresh)
 
-        self.btn_clear = QPushButton("Archiver la période...")
+        self.btn_clear = QPushButton("📦 Archiver...")
         self.btn_clear.clicked.connect(self._clear_range_with_optional_export)
-        self.btn_clear.setStyleSheet("background-color: #fff3e0; color: #e65100;")
+        self.btn_clear.setStyleSheet("""
+            QPushButton {
+                background-color: #ff9800;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #f57c00;
+            }
+        """)
         filters.addWidget(self.btn_clear)
 
-        root.addLayout(filters)
+        root.addWidget(filters_frame)
 
-        # --- Table ---
-        self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels([
-            "Résumé de l'action", "Date et Heure", "Type", 
-            "Opérateur", "Poste", "Détails"
-        ])
-        self.table.setSortingEnabled(True)
-        self.table.setAlternatingRowColors(True)
-        root.addWidget(self.table)
+        # --- Zone de scroll pour les cards ---
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("QScrollArea { background-color: #ffffff; border: none; }")
+        
+        self.cards_container = QWidget()
+        self.cards_layout = QVBoxLayout(self.cards_container)
+        self.cards_layout.setSpacing(8)
+        self.cards_layout.setContentsMargins(4, 4, 4, 4)
+        self.cards_layout.addStretch()
+        
+        scroll.setWidget(self.cards_container)
+        root.addWidget(scroll, stretch=1)
 
         # --- Compteur ---
         self.count_label = QLabel()
-        self.count_label.setStyleSheet("padding: 5px; color: #666;")
+        self.count_label.setStyleSheet("""
+            QLabel {
+                padding: 8px;
+                color: #616161;
+                font-size: 11px;
+                background-color: #fafafa;
+                border-radius: 4px;
+            }
+        """)
         root.addWidget(self.count_label)
 
         self.reload()
@@ -261,7 +606,6 @@ class HistoriqueDialog(QDialog):
             if self.conn is None:
                 self.conn = get_db_connection()
             else:
-                # ping simple
                 _ = self.conn.cursor(); _.close()
         except Exception:
             QMessageBox.critical(self, "Historique", "Impossible de se connecter à la base de données.")
@@ -286,7 +630,6 @@ class HistoriqueDialog(QDialog):
                 dt.datetime(d_to.year(),   d_to.month(),   d_to.day(),   23, 59, 59)
             ]
 
-            # Conversion du filtre français vers SQL
             action_map = {
                 "Ajout": "INSERT",
                 "Modification": "UPDATE",
@@ -325,6 +668,12 @@ class HistoriqueDialog(QDialog):
 
     # ---------- UI Reload ----------
     def reload(self):
+        # Supprimer toutes les cards existantes
+        while self.cards_layout.count() > 1:  # Garder le stretch
+            item = self.cards_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        
         try:
             rows = self._fetch_logs(
                 self.from_date.date(),
@@ -338,90 +687,19 @@ class HistoriqueDialog(QDialog):
             QMessageBox.critical(self, "Erreur", f"Impossible de charger l'historique :\n{msg or code}")
             return
 
-        self.table.setRowCount(len(rows))
-
-        for r, row in enumerate(rows):
-            resume = make_resume(row, self.conn)
-
-            # Date formatée FR
-            dt_txt = str(row.get("date_time", ""))
-            try:
-                from datetime import datetime
-                if not isinstance(dt_txt, str) and hasattr(dt_txt, "strftime"):
-                    dt_txt = row["date_time"].strftime("%d/%m/%Y %H:%M:%S")
-                else:
-                    try:
-                        dt_txt = datetime.fromisoformat(dt_txt).strftime("%d/%m/%Y %H:%M:%S")
-                    except Exception:
-                        pass
-            except Exception:
-                pass
-
-            # ✅ ANCIENNE VERSION (simple)
-            # action_txt = fr_action(row.get("action", ""))
-
-            # ✅ NOUVELLE VERSION (détaillée) - Remplacez la ligne ci-dessus par ceci :
-            action_txt = get_detailed_action_type(row)
-
-            # Noms lisibles pour opérateur et poste
-            op_display = get_entity_name(self.conn, "operateur", row.get("operateur_id")) or ""
-            po_display = get_entity_name(self.conn, "poste", row.get("poste_id")) or ""
-
-            # Description parsée
-            desc_display = parse_description(row.get("description", ""), row.get("action", ""))
-
-            vals = [
-                resume,
-                dt_txt,
-                action_txt,
-                op_display,
-                po_display,
-                desc_display,
-            ]
-
-            for c, v in enumerate(vals):
-                item = QTableWidgetItem(v)
-                if c in (0, 5):  # tooltips utiles
-                    item.setToolTip(v)
-                self.table.setItem(r, c, item)
-
-            # ... reste du code (couleurs, etc.) ...
-
-    def get_detailed_action_type(row: dict) -> str:
-        """
-        Retourne un type d'action DÉTAILLÉ au lieu de juste "Ajout"/"Modification"
-        """
-        action = row.get("action", "")
-        desc = row.get("description") or ""
+        # Créer une card pour chaque action
+        for row in rows:
+            card = ActionCard(row, self.conn)
+            self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)
         
-        try:
-            data = json.loads(desc)
-            
-            if action.upper() == "INSERT":
-                # Ajout avec niveau
-                niveau = data.get("niveau", "?")
-                return f"Ajout (N{niveau})"
-            
-            elif action.upper() == "UPDATE":
-                # Modification avec changement de niveau
-                changes = data.get("changes", {})
-                if "niveau" in changes:
-                    old = changes["niveau"].get("old", "?")
-                    new = changes["niveau"].get("new", "?")
-                    return f"Modification (N{old}→N{new})"
-                else:
-                    return "Modification"
-            
-            elif action.upper() == "DELETE":
-                # Suppression avec ancien niveau
-                niveau = data.get("niveau", "?")
-                return f"Suppression (N{niveau})"
-            
-        except:
-            pass
+        # Message si aucun résultat
+        if len(rows) == 0:
+            no_result = QLabel("Aucune action trouvée pour cette période")
+            no_result.setAlignment(Qt.AlignCenter)
+            no_result.setStyleSheet("color: #9e9e9e; font-size: 12px; padding: 40px;")
+            self.cards_layout.insertWidget(0, no_result)
         
-        # Fallback : traduction simple
-        return fr_action(action)
+        self.count_label.setText(f"📊 {len(rows)} action(s) trouvée(s)")
 
     # ---------- Clear + export ----------
     def _export_range(self, d_from: QDate, d_to: QDate):
@@ -463,7 +741,6 @@ class HistoriqueDialog(QDialog):
                 QMessageBox.warning(self, "Erreur d'export", f"Échec de l'export :\n{e}")
                 return
 
-        # Confirmation finale
         confirm = QMessageBox.warning(
             self, "Confirmation de suppression",
             "Cette action va supprimer définitivement les logs de la période sélectionnée.\n\n"
@@ -475,7 +752,6 @@ class HistoriqueDialog(QDialog):
         if confirm != QMessageBox.Yes:
             return
 
-        # Suppression
         cur = None
         try:
             cur = self._cursor()
