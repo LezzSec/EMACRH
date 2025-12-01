@@ -14,7 +14,9 @@ from core.gui.historique import HistoriqueDialog
 from core.gui.gestion_personnel import GestionPersonnelDialog
 from core.gui.evaluation_calendar import EvaluationCalendarDialog
 from core.gui.regularisation import RegularisationDialog
+from core.gui.contract_management import ContractManagementDialog
 from core.db.configbd import get_connection as get_db_connection
+from core.services.contrat_service import get_expiring_contracts
 
 
 try:
@@ -62,6 +64,13 @@ class MainWindow(QMainWindow):
         self.next_card.body.addWidget(self.next_eval_scroll)
         left.addWidget(self.next_card)
 
+        # Carte contrats à renouveler
+        self.contract_card = EmacStatusCard("Contrats à Renouveler", variant='warning', subtitle="30 prochains jours")
+        self.contract_scroll, self.contract_list = self.create_scrollable_list()
+        self.contract_card.body.addWidget(self.contract_scroll)
+        self.contract_list.itemDoubleClicked.connect(self.show_contract_management)
+        left.addWidget(self.contract_card)
+
         root.addLayout(left, 0, 0, 2, 1)
 
         right = QVBoxLayout(); right.setSpacing(18)
@@ -93,9 +102,8 @@ class MainWindow(QMainWindow):
         r1 = QHBoxLayout(); b1 = EmacButton("Liste du Personnel", 'primary'); b1.clicked.connect(self.show_liste_personnel); r1.addWidget(b1)
         r2 = QHBoxLayout(); b2 = EmacButton("Liste et Grilles", 'ghost'); b2.clicked.connect(self.show_listes_grilles_dialog); r2.addWidget(b2)
         r3 = QHBoxLayout(); b3 = EmacButton("Gestion des Évaluations", 'ghost'); b3.clicked.connect(self.show_gestion_evaluations); r3.addWidget(b3)
-        r4 = QHBoxLayout(); b4 = EmacButton("Régularisation Opérateur", 'ghost'); b4.clicked.connect(self.show_regularisation); r4.addWidget(b4)
-        r5 = QHBoxLayout(); b5 = EmacButton("Quitter", 'ghost'); b5.clicked.connect(self.close); r5.addWidget(b5)
-        for r in (r1, r2, r3, r4, r5):
+        r4 = QHBoxLayout(); b4 = EmacButton("Quitter", 'ghost'); b4.clicked.connect(self.close); r4.addWidget(b4)
+        for r in (r1, r2, r3, r4):
             rows.addLayout(r)
         self.actions_wrap.body.addLayout(rows)
         right.addWidget(self.actions_wrap)
@@ -104,6 +112,7 @@ class MainWindow(QMainWindow):
 
         QTimer.singleShot(0, self.populate_filters)
         QTimer.singleShot(100, self.load_evaluations)
+        QTimer.singleShot(150, self.load_contracts)
 
     # ================= Filtre d'événements pour clic extérieur =================
     def eventFilter(self, source, event):
@@ -159,11 +168,13 @@ class MainWindow(QMainWindow):
         drawer_layout.addWidget(title)
         drawer_layout.addSpacing(15)
 
-        self.add_drawer_button(drawer_layout, "Ajouter un opérateur", self.show_manage_operator, 'ghost')
+        self.add_drawer_button(drawer_layout, "Ajouter du personnel", self.show_manage_operator, 'ghost')
         self.add_drawer_button(drawer_layout, "Création/Suppression de poste", self.show_poste_form, 'ghost')
+        self.add_drawer_button(drawer_layout, "Gestion des Contrats", self.show_contract_management, 'ghost')
+        self.add_drawer_button(drawer_layout, "Planning & Absences", self.show_regularisation, 'ghost')
         self.add_drawer_button(drawer_layout, "Historique", self.show_historique, 'ghost')
         self.add_drawer_button(drawer_layout, "Calendrier", self.show_calendrier_evaluations, 'ghost')
-        
+
         if export_day:
             self.add_drawer_button(drawer_layout, "Exporter les logs", self.export_logs_today, 'ghost')
 
@@ -253,6 +264,10 @@ class MainWindow(QMainWindow):
         EvaluationCalendarDialog(self).exec_()
     def show_regularisation(self):
         RegularisationDialog(self).exec_()
+    def show_contract_management(self):
+        ContractManagementDialog(self).exec_()
+        # Recharger les contrats après fermeture
+        self.load_contracts()
 
     # ================= Données / DB (Fonctions inchangées) =================
     def populate_filters(self):
@@ -321,6 +336,43 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Erreur", f"Échec du chargement des évaluations : {e}")
         finally:
             cur.close(); conn.close()
+
+    def load_contracts(self):
+        """Charge les contrats à renouveler dans les 30 prochains jours."""
+        try:
+            contracts = get_expiring_contracts(30)
+
+            self.contract_list.clear()
+            for contract in contracts:
+                nom = contract.get('nom', '')
+                prenom = contract.get('prenom', '')
+                type_contrat = contract.get('type_contrat', '')
+                date_fin = contract.get('date_fin')
+                jours_restants = contract.get('jours_restants', 0)
+
+                date_fin_str = date_fin.strftime('%d/%m/%Y') if date_fin else '?'
+
+                # Texte avec couleur selon urgence
+                if jours_restants < 0:
+                    urgence = "⚠️ EXPIRÉ"
+                elif jours_restants <= 7:
+                    urgence = f"⚠️ {jours_restants}j"
+                else:
+                    urgence = f"{jours_restants}j"
+
+                self.contract_list.addItem(
+                    f"{nom} {prenom} · {type_contrat}  —  Fin: {date_fin_str} ({urgence})"
+                )
+
+            # Mettre à jour le sous-titre de la carte
+            count = len(contracts)
+            if count == 0:
+                self.contract_card.subtitle_label.setText("Aucun contrat à renouveler")
+            else:
+                self.contract_card.subtitle_label.setText(f"{count} contrat(s) à traiter")
+
+        except Exception as e:
+            print(f"Erreur lors du chargement des contrats : {e}")
 
     # ================= Export (Fonction inchangée) =================
     def export_logs_today(self):

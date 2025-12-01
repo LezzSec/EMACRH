@@ -1,14 +1,15 @@
-# regularisation.py – Ajout rapide d'opérateur avec polyvalences existantes
-# Permet d'insérer un opérateur oublié avec toutes ses évaluations déjà définies
+# regularisation.py – Planning & Absences
+# Gestion des absences, congés et planning du personnel
 
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QMessageBox, QTableWidget, QTableWidgetItem, QDateEdit, QComboBox,
-    QHeaderView, QAbstractItemView, QGroupBox, QFormLayout
+    QHeaderView, QAbstractItemView, QGroupBox, QFormLayout, QTextEdit,
+    QTabWidget, QWidget, QCalendarWidget, QListWidget, QListWidgetItem
 )
 from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QFont
-from core.gui.historique import HistoriqueDialog
+from PyQt5.QtGui import QFont, QColor, QTextCharFormat
+from datetime import date, datetime, timedelta
 from core.db.configbd import get_connection as get_db_connection
 from core.services.logger import log_hist
 
@@ -24,7 +25,7 @@ except ImportError:
             cursor.execute(
                 "INSERT INTO historique (action, table_name, description, details, source) "
                 "VALUES (%s, %s, %s, %s, %s)",
-                (action, table_name or "", description or "", str(details or {}), "regularisation"),
+                (action, table_name or "", description or "", str(details or {}), "planning"),
             )
         except Exception:
             pass
@@ -45,372 +46,812 @@ def _cursor(conn):
         return cur, False
 
 
+def _rows(cur, dict_mode):
+    """Retourne une liste de dicts."""
+    if dict_mode:
+        return cur.fetchall()
+    names = [d[0] for d in cur.description] if cur.description else []
+    return [dict(zip(names, r)) for r in cur.fetchall()]
+
+
 class RegularisationDialog(QDialog):
     """
-    Fenêtre de régularisation pour ajouter rapidement un opérateur
-    avec toutes ses polyvalences (niveaux + dates d'évaluation).
+    Fenêtre de gestion du Planning & Absences.
+    Permet de déclarer les absences/congés et voir qui est absent.
     """
-    
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Régularisation Opérateur")
-        self.setGeometry(150, 150, 900, 650)
-        
-        self.postes_data = []  # Liste des postes disponibles
-        
+        self.setWindowTitle("Planning & Absences")
+        self.setGeometry(150, 150, 1200, 800)
+
         layout = QVBoxLayout(self)
-        
-        # === Section Informations Opérateur ===
-        info_group = QGroupBox("Informations Opérateur")
-        info_layout = QFormLayout()
-        
-        self.nom_input = QLineEdit()
-        self.nom_input.setPlaceholderText("Nom de l'opérateur")
-        info_layout.addRow("Nom :", self.nom_input)
-        
-        self.prenom_input = QLineEdit()
-        self.prenom_input.setPlaceholderText("Prénom de l'opérateur")
-        info_layout.addRow("Prénom :", self.prenom_input)
-        
-        self.statut_combo = QComboBox()
-        self.statut_combo.addItems(["ACTIF", "INACTIF"])
-        info_layout.addRow("Statut :", self.statut_combo)
-        
-        info_group.setLayout(info_layout)
-        layout.addWidget(info_group)
-        
-        # === Section Polyvalences ===
-        poly_group = QGroupBox("Polyvalences à définir")
-        poly_layout = QVBoxLayout()
-        
-        # Boutons d'action rapide
-        btn_row = QHBoxLayout()
-        
-        self.add_row_btn = QPushButton("+ Ajouter une ligne")
-        self.add_row_btn.clicked.connect(self.add_polyvalence_row)
-        btn_row.addWidget(self.add_row_btn)
-        
-        self.remove_row_btn = QPushButton("- Supprimer la ligne")
-        self.remove_row_btn.clicked.connect(self.remove_polyvalence_row)
-        btn_row.addWidget(self.remove_row_btn)
-        
-        btn_row.addStretch()
-        poly_layout.addLayout(btn_row)
-        
-        # Table des polyvalences
-        self.poly_table = QTableWidget()
-        self.poly_table.setColumnCount(4)
-        self.poly_table.setHorizontalHeaderLabels([
-            "Poste", "Niveau (1-4)", "Date Évaluation", "Prochaine Évaluation"
-        ])
-        self.poly_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.poly_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        poly_layout.addWidget(self.poly_table)
-        
-        poly_group.setLayout(poly_layout)
-        layout.addWidget(poly_group, 1)
-        
-        # === Boutons de validation ===
+        layout.setSpacing(16)
+
+        # === En-tête ===
+        header = QLabel("Planning & Absences")
+        header.setFont(QFont("Arial", 16, QFont.Bold))
+        header.setAlignment(Qt.AlignCenter)
+        layout.addWidget(header)
+
+        subtitle = QLabel("Déclarez les absences et consultez le planning du personnel")
+        subtitle.setStyleSheet("color: #6b7280; font-size: 12px;")
+        subtitle.setAlignment(Qt.AlignCenter)
+        layout.addWidget(subtitle)
+
+        # === Onglets ===
+        self.tabs = QTabWidget()
+
+        # Onglet 1: Qui est absent aujourd'hui
+        self.absents_tab = self.create_absents_tab()
+        self.tabs.addTab(self.absents_tab, "📋 Absents Aujourd'hui")
+
+        # Onglet 2: Déclarer une absence
+        self.declare_tab = self.create_declare_tab()
+        self.tabs.addTab(self.declare_tab, "➕ Déclarer une Absence")
+
+        # Onglet 3: Calendrier
+        self.calendar_tab = self.create_calendar_tab()
+        self.tabs.addTab(self.calendar_tab, "📅 Calendrier")
+
+        # Onglet 4: Historique
+        self.history_tab = self.create_history_tab()
+        self.tabs.addTab(self.history_tab, "📊 Historique")
+
+        layout.addWidget(self.tabs)
+
+        # === Boutons d'action ===
         action_row = QHBoxLayout()
         action_row.addStretch()
-        
-        self.cancel_btn = QPushButton("Annuler")
-        self.cancel_btn.clicked.connect(self.reject)
-        action_row.addWidget(self.cancel_btn)
-        
-        self.save_btn = QPushButton("Enregistrer")
-        self.save_btn.setStyleSheet("""
+
+        refresh_btn = QPushButton("🔄 Actualiser")
+        refresh_btn.setStyleSheet("""
             QPushButton {
-                background: #0f172a;
+                background: #10b981;
                 color: white;
-                font-weight: 600;
-                padding: 10px 20px;
-                border-radius: 8px;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
             }
             QPushButton:hover {
-                background: #0b1220;
+                background: #059669;
             }
         """)
-        self.save_btn.clicked.connect(self.save_regularisation)
-        action_row.addWidget(self.save_btn)
-        
+        refresh_btn.clicked.connect(self.refresh_all)
+        action_row.addWidget(refresh_btn)
+
+        close_btn = QPushButton("Fermer")
+        close_btn.clicked.connect(self.accept)
+        action_row.addWidget(close_btn)
+
         layout.addLayout(action_row)
-        
-        # Charger les données
-        self.load_postes()
-        
-        # Ajouter une ligne par défaut
-        self.add_polyvalence_row()
-    
-    def load_postes(self):
-        """Charge la liste des postes visibles."""
+
+        # Charger les données initiales
+        self.refresh_all()
+
+    # ==================== ONGLET 1: ABSENTS AUJOURD'HUI ====================
+
+    def create_absents_tab(self):
+        """Crée l'onglet 'Qui est absent aujourd'hui'."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Info date
+        today_label = QLabel(f"📅 Absences du {date.today().strftime('%d/%m/%Y')}")
+        today_label.setFont(QFont("Arial", 14, QFont.Bold))
+        today_label.setStyleSheet("color: #1f2937; padding: 10px;")
+        layout.addWidget(today_label)
+
+        # Statistiques
+        stats_group = QGroupBox("Résumé")
+        stats_layout = QHBoxLayout()
+
+        self.total_absents_label = QLabel("Total absents : 0")
+        self.total_absents_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #dc2626;")
+        stats_layout.addWidget(self.total_absents_label)
+
+        self.conges_label = QLabel("Congés : 0")
+        self.conges_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #f59e0b;")
+        stats_layout.addWidget(self.conges_label)
+
+        self.maladie_label = QLabel("Maladie : 0")
+        self.maladie_label.setStyleSheet("font-weight: bold; font-size: 14px; color: #8b5cf6;")
+        stats_layout.addWidget(self.maladie_label)
+
+        stats_layout.addStretch()
+        stats_group.setLayout(stats_layout)
+        layout.addWidget(stats_group)
+
+        # Table des absents
+        self.absents_table = QTableWidget()
+        self.absents_table.setColumnCount(6)
+        self.absents_table.setHorizontalHeaderLabels([
+            "Nom", "Prénom", "Type", "Date Début", "Date Fin", "Motif"
+        ])
+        self.absents_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.absents_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.absents_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
+        self.absents_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.absents_table.setAlternatingRowColors(True)
+        self.absents_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        layout.addWidget(self.absents_table, 1)
+
+        return widget
+
+    def load_absents_today(self):
+        """Charge la liste des absents aujourd'hui."""
         try:
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
-            
-            cursor.execute(
-                "SELECT id, poste_code FROM postes "
-                "WHERE COALESCE(visible, 1) = 1 "
-                "ORDER BY poste_code"
-            )
-            
-            rows = cursor.fetchall()
-            self.postes_data = []
-            
-            for r in rows:
-                if dict_mode:
-                    self.postes_data.append((r["id"], r["poste_code"]))
-                else:
-                    self.postes_data.append((r[0], r[1]))
-            
+
+            today = date.today()
+
+            cursor.execute("""
+                SELECT
+                    d.id,
+                    d.operateur_id,
+                    p.nom,
+                    p.prenom,
+                    d.type_declaration,
+                    d.date_debut,
+                    d.date_fin,
+                    d.motif
+                FROM declaration d
+                LEFT JOIN personnel p ON p.id = d.operateur_id
+                WHERE %s BETWEEN d.date_debut AND d.date_fin
+                ORDER BY p.nom, p.prenom
+            """, (today,))
+
+            rows = _rows(cursor, dict_mode)
             cursor.close()
             connection.close()
-            
+
+            self.absents_table.setRowCount(0)
+
+            total_absents = len(rows)
+            conges_count = 0
+            maladie_count = 0
+
+            for r in rows:
+                row_pos = self.absents_table.rowCount()
+                self.absents_table.insertRow(row_pos)
+
+                type_decl = r['type_declaration']
+
+                # Compter les types
+                if type_decl in ['CongePaye', 'RTT']:
+                    conges_count += 1
+                elif type_decl in ['Maladie', 'ArretTravail', 'AccidentTravail', 'AccidentTrajet']:
+                    maladie_count += 1
+
+                # Nom
+                self.absents_table.setItem(row_pos, 0, QTableWidgetItem(r['nom'] or ""))
+
+                # Prénom
+                self.absents_table.setItem(row_pos, 1, QTableWidgetItem(r['prenom'] or ""))
+
+                # Type
+                type_item = QTableWidgetItem(self.format_type_declaration(type_decl))
+                type_item.setBackground(QColor(self.get_type_color(type_decl)))
+                type_item.setForeground(QColor("white"))
+                self.absents_table.setItem(row_pos, 2, type_item)
+
+                # Date début
+                date_debut = r['date_debut']
+                if isinstance(date_debut, str):
+                    date_debut_str = date_debut
+                else:
+                    date_debut_str = date_debut.strftime('%d/%m/%Y')
+                self.absents_table.setItem(row_pos, 3, QTableWidgetItem(date_debut_str))
+
+                # Date fin
+                date_fin = r['date_fin']
+                if isinstance(date_fin, str):
+                    date_fin_str = date_fin
+                else:
+                    date_fin_str = date_fin.strftime('%d/%m/%Y')
+                self.absents_table.setItem(row_pos, 4, QTableWidgetItem(date_fin_str))
+
+                # Motif
+                self.absents_table.setItem(row_pos, 5, QTableWidgetItem(r['motif'] or ""))
+
+            # Mettre à jour les stats
+            self.total_absents_label.setText(f"Total absents : {total_absents}")
+            self.conges_label.setText(f"Congés : {conges_count}")
+            self.maladie_label.setText(f"Maladie : {maladie_count}")
+
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les postes :\n{e}")
-    
-    def add_polyvalence_row(self):
-        """Ajoute une nouvelle ligne dans la table des polyvalences."""
-        row = self.poly_table.rowCount()
-        self.poly_table.insertRow(row)
-        
-        # Colonne 0 : ComboBox des postes
-        poste_combo = QComboBox()
-        for poste_id, poste_code in self.postes_data:
-            poste_combo.addItem(poste_code, poste_id)
-        self.poly_table.setCellWidget(row, 0, poste_combo)
-        
-        # Colonne 1 : ComboBox niveau (1-4)
-        niveau_combo = QComboBox()
-        niveau_combo.addItems(["", "1", "2", "3", "4"])
-        self.poly_table.setCellWidget(row, 1, niveau_combo)
-        
-        # Colonne 2 : DateEdit pour date d'évaluation
-        date_eval = QDateEdit()
-        date_eval.setCalendarPopup(True)
-        date_eval.setDisplayFormat("dd/MM/yyyy")
-        date_eval.setDate(QDate.currentDate())
-        self.poly_table.setCellWidget(row, 2, date_eval)
-        
-        # Colonne 3 : DateEdit pour prochaine évaluation
-        date_next = QDateEdit()
-        date_next.setCalendarPopup(True)
-        date_next.setDisplayFormat("dd/MM/yyyy")
-        date_next.setDate(QDate.currentDate().addDays(30))
-        self.poly_table.setCellWidget(row, 3, date_next)
-    
-    def remove_polyvalence_row(self):
-        """Supprime la ligne sélectionnée."""
-        current_row = self.poly_table.currentRow()
-        if current_row >= 0:
-            self.poly_table.removeRow(current_row)
-        else:
-            QMessageBox.warning(self, "Attention", "Veuillez sélectionner une ligne à supprimer.")
-    
-    def validate_data(self):
-        """Valide les données saisies."""
-        # Vérifier nom et prénom
-        nom = self.nom_input.text().strip()
-        prenom = self.prenom_input.text().strip()
-        
-        if not nom or not prenom:
-            QMessageBox.warning(self, "Attention", "Le nom et le prénom sont obligatoires.")
-            return False
-        
-        # Vérifier qu'il y a au moins une polyvalence
-        if self.poly_table.rowCount() == 0:
-            QMessageBox.warning(self, "Attention", "Veuillez définir au moins une polyvalence.")
-            return False
-        
-        # Vérifier chaque ligne de polyvalence
-        for row in range(self.poly_table.rowCount()):
-            niveau_combo = self.poly_table.cellWidget(row, 1)
-            niveau = niveau_combo.currentText().strip()
-            
-            if not niveau:
-                QMessageBox.warning(
-                    self, "Attention",
-                    f"Le niveau est obligatoire pour la ligne {row + 1}."
-                )
-                return False
-        
-        return True
-    
-    def save_regularisation(self):
-        """Enregistre l'opérateur et toutes ses polyvalences."""
-        if not self.validate_data():
-            return
-        
-        nom = self.nom_input.text().strip()
-        prenom = self.prenom_input.text().strip()
-        statut = self.statut_combo.currentText()
-        
-        connection = None
-        cursor = None
-        
+            QMessageBox.critical(self, "Erreur", f"Impossible de charger les absents :\n{e}")
+
+    # ==================== ONGLET 2: DÉCLARER UNE ABSENCE ====================
+
+    def create_declare_tab(self):
+        """Crée l'onglet de déclaration d'absence."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        info_label = QLabel("Remplissez le formulaire ci-dessous pour déclarer une absence")
+        info_label.setStyleSheet("color: #6b7280; font-size: 12px; padding: 10px;")
+        layout.addWidget(info_label)
+
+        form_group = QGroupBox("Formulaire de déclaration")
+        form_layout = QFormLayout()
+
+        # Sélection du personnel
+        self.personnel_combo = QComboBox()
+        self.personnel_combo.setEditable(True)
+        form_layout.addRow("Personnel :", self.personnel_combo)
+
+        # Type de déclaration
+        self.type_combo = QComboBox()
+        self.type_combo.addItems([
+            "CongePaye",
+            "RTT",
+            "SansSolde",
+            "Maladie",
+            "AccidentTravail",
+            "AccidentTrajet",
+            "ArretTravail",
+            "CongeNaissance",
+            "Formation",
+            "Autorisation",
+            "Autre"
+        ])
+        form_layout.addRow("Type :", self.type_combo)
+
+        # Date début
+        self.date_debut_edit = QDateEdit()
+        self.date_debut_edit.setDate(QDate.currentDate())
+        self.date_debut_edit.setCalendarPopup(True)
+        self.date_debut_edit.setDisplayFormat("dd/MM/yyyy")
+        form_layout.addRow("Date début :", self.date_debut_edit)
+
+        # Date fin
+        self.date_fin_edit = QDateEdit()
+        self.date_fin_edit.setDate(QDate.currentDate())
+        self.date_fin_edit.setCalendarPopup(True)
+        self.date_fin_edit.setDisplayFormat("dd/MM/yyyy")
+        form_layout.addRow("Date fin :", self.date_fin_edit)
+
+        # Motif
+        self.motif_edit = QTextEdit()
+        self.motif_edit.setPlaceholderText("Saisissez un motif optionnel...")
+        self.motif_edit.setMaximumHeight(80)
+        form_layout.addRow("Motif :", self.motif_edit)
+
+        form_group.setLayout(form_layout)
+        layout.addWidget(form_group)
+
+        # Bouton de validation
+        submit_btn = QPushButton("✅ Enregistrer la déclaration")
+        submit_btn.setStyleSheet("""
+            QPushButton {
+                background: #3b82f6;
+                color: white;
+                padding: 12px 24px;
+                border-radius: 6px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background: #2563eb;
+            }
+        """)
+        submit_btn.clicked.connect(self.submit_declaration)
+        layout.addWidget(submit_btn)
+
+        layout.addStretch()
+
+        return widget
+
+    def load_personnel_combo(self):
+        """Charge la liste du personnel dans le combo."""
         try:
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
-            
-            # Désactiver autocommit pour transaction
-            old_autocommit = getattr(connection, "autocommit", True)
+
+            cursor.execute("""
+                SELECT id, nom, prenom, matricule
+                FROM personnel
+                WHERE statut = 'ACTIF'
+                ORDER BY nom, prenom
+            """)
+
+            rows = _rows(cursor, dict_mode)
+            cursor.close()
+            connection.close()
+
+            self.personnel_combo.clear()
+
+            for r in rows:
+                display = f"{r['nom']} {r['prenom']}"
+                if r.get('matricule'):
+                    display += f" ({r['matricule']})"
+                self.personnel_combo.addItem(display, r['id'])
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible de charger le personnel :\n{e}")
+
+    def submit_declaration(self):
+        """Enregistre une nouvelle déclaration d'absence."""
+        # Validation
+        if self.personnel_combo.currentIndex() == -1:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un membre du personnel.")
+            return
+
+        operateur_id = self.personnel_combo.currentData()
+        type_decl = self.type_combo.currentText()
+        date_debut = self.date_debut_edit.date().toPyDate()
+        date_fin = self.date_fin_edit.date().toPyDate()
+        motif = self.motif_edit.toPlainText().strip()
+
+        # Vérifier cohérence des dates
+        if date_fin < date_debut:
+            QMessageBox.warning(self, "Attention", "La date de fin ne peut pas être antérieure à la date de début.")
+            return
+
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+
+            cursor.execute("""
+                INSERT INTO declaration (operateur_id, type_declaration, date_debut, date_fin, motif)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (operateur_id, type_decl, date_debut, date_fin, motif))
+
+            connection.commit()
+
+            # Logger l'action
             try:
-                connection.autocommit = False
-            except Exception:
-                try:
-                    connection.autocommit(False)
-                except Exception:
-                    pass
-            
-            # Vérifier si l'opérateur existe déjà
-            cursor.execute(
-                "SELECT id FROM operateurs WHERE nom = %s AND prenom = %s",
-                (nom, prenom)
-            )
-            existing = cursor.fetchone()
-            
-            if existing:
-                reply = QMessageBox.question(
-                    self, "Opérateur existant",
-                    f"L'opérateur {nom} {prenom} existe déjà.\n"
-                    "Voulez-vous ajouter les polyvalences à cet opérateur existant ?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No
-                )
-                
-                if reply == QMessageBox.No:
-                    connection.rollback()
-                    return
-                
-                operateur_id = existing["id"] if dict_mode else existing[0]
-            else:
-                # Créer le nouvel opérateur
-                cursor.execute(
-                    "INSERT INTO operateurs (nom, prenom, statut) VALUES (%s, %s, %s)",
-                    (nom, prenom, statut)
-                )
-                
-                # Récupérer l'ID
-                operateur_id = getattr(cursor, "lastrowid", None)
-                if not operateur_id:
-                    cursor.execute(
-                        "SELECT id FROM operateurs WHERE nom = %s AND prenom = %s "
-                        "ORDER BY id DESC LIMIT 1",
-                        (nom, prenom)
-                    )
-                    row = cursor.fetchone()
-                    operateur_id = row["id"] if dict_mode else row[0]
-                
-                # Logger la création
                 log_insert(
-                    "operateurs",
-                    description=f"Régularisation opérateur {nom} {prenom}",
-                    record_id=operateur_id,
-                    details={"nom": nom, "prenom": prenom, "statut": statut},
-                    connection=connection, cursor=cursor
-                )
-            
-            # Insérer toutes les polyvalences
-            poly_count = 0
-            for row in range(self.poly_table.rowCount()):
-                poste_combo = self.poly_table.cellWidget(row, 0)
-                niveau_combo = self.poly_table.cellWidget(row, 1)
-                date_eval_widget = self.poly_table.cellWidget(row, 2)
-                date_next_widget = self.poly_table.cellWidget(row, 3)
-                
-                poste_id = poste_combo.currentData()
-                niveau = niveau_combo.currentText().strip()
-                date_eval = date_eval_widget.date().toString("yyyy-MM-dd")
-                date_next = date_next_widget.date().toString("yyyy-MM-dd")
-                
-                if not niveau:
-                    continue
-                
-                # Vérifier si la polyvalence existe déjà
-                cursor.execute(
-                    "SELECT id FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
-                    (operateur_id, poste_id)
-                )
-                existing_poly = cursor.fetchone()
-                
-                if existing_poly:
-                    # Mise à jour
-                    cursor.execute(
-                        """UPDATE polyvalence 
-                           SET niveau = %s, date_evaluation = %s, prochaine_evaluation = %s
-                           WHERE operateur_id = %s AND poste_id = %s""",
-                        (niveau, date_eval, date_next, operateur_id, poste_id)
-                    )
-                else:
-                    # Insertion
-                    cursor.execute(
-                        """INSERT INTO polyvalence 
-                           (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
-                           VALUES (%s, %s, %s, %s, %s)""",
-                        (operateur_id, poste_id, niveau, date_eval, date_next)
-                    )
-                
-                poly_count += 1
-                
-                # Logger chaque polyvalence
-                log_insert(
-                    "polyvalence",
-                    description=f"Régularisation polyvalence niveau {niveau}",
-                    record_id=operateur_id,
+                    "declaration",
+                    description=f"Déclaration d'absence : {type_decl}",
+                    record_id=cursor.lastrowid,
                     details={
                         "operateur_id": operateur_id,
-                        "poste_id": poste_id,
-                        "niveau": niveau,
-                        "date_evaluation": date_eval,
-                        "prochaine_evaluation": date_next
+                        "type": type_decl,
+                        "debut": str(date_debut),
+                        "fin": str(date_fin)
                     },
-                    connection=connection, cursor=cursor
+                    connection=connection,
+                    cursor=cursor
                 )
-            
-            # Commit
-            connection.commit()
-            
+            except Exception:
+                pass
+
+            cursor.close()
+            connection.close()
+
             QMessageBox.information(
                 self, "Succès",
-                f"✅ Régularisation réussie !\n\n"
-                f"Opérateur : {nom} {prenom}\n"
-                f"Polyvalences enregistrées : {poly_count}"
+                f"✅ Déclaration enregistrée avec succès !\n\n"
+                f"Type : {type_decl}\n"
+                f"Du {date_debut.strftime('%d/%m/%Y')} au {date_fin.strftime('%d/%m/%Y')}"
             )
-            
-            self.accept()
-            
+
+            # Réinitialiser le formulaire
+            self.date_debut_edit.setDate(QDate.currentDate())
+            self.date_fin_edit.setDate(QDate.currentDate())
+            self.motif_edit.clear()
+
+            # Rafraîchir les données
+            self.refresh_all()
+
         except Exception as e:
-            try:
-                if connection:
-                    connection.rollback()
-            except Exception:
-                pass
-            
-            QMessageBox.critical(self, "Erreur", f"Échec de la régularisation :\n{e}")
-            
-        finally:
-            try:
-                if hasattr(connection, "autocommit"):
-                    connection.autocommit = old_autocommit
-            except Exception:
-                pass
-            try:
-                if cursor:
-                    cursor.close()
-            except Exception:
-                pass
-            try:
-                if connection:
-                    connection.close()
-            except Exception:
-                pass
+            QMessageBox.critical(self, "Erreur", f"Impossible d'enregistrer la déclaration :\n{e}")
+
+    # ==================== ONGLET 3: CALENDRIER ====================
+
+    def create_calendar_tab(self):
+        """Crée l'onglet calendrier."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Split horizontal
+        h_layout = QHBoxLayout()
+
+        # Calendrier
+        cal_group = QGroupBox("Calendrier des absences")
+        cal_layout = QVBoxLayout()
+
+        self.calendar = QCalendarWidget()
+        self.calendar.setGridVisible(True)
+        self.calendar.clicked.connect(self.on_calendar_date_clicked)
+        cal_layout.addWidget(self.calendar)
+
+        cal_group.setLayout(cal_layout)
+        h_layout.addWidget(cal_group, 2)
+
+        # Détails du jour sélectionné
+        details_group = QGroupBox("Absences du jour sélectionné")
+        details_layout = QVBoxLayout()
+
+        self.selected_date_label = QLabel("Sélectionnez une date")
+        self.selected_date_label.setFont(QFont("Arial", 12, QFont.Bold))
+        self.selected_date_label.setStyleSheet("color: #1f2937; padding: 10px;")
+        details_layout.addWidget(self.selected_date_label)
+
+        self.calendar_absents_list = QListWidget()
+        details_layout.addWidget(self.calendar_absents_list)
+
+        details_group.setLayout(details_layout)
+        h_layout.addWidget(details_group, 1)
+
+        layout.addLayout(h_layout)
+
+        return widget
+
+    def load_calendar_absences(self):
+        """Charge les absences pour le mois affiché dans le calendrier et les marque."""
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+
+            # Récupérer le mois affiché
+            current_date = self.calendar.selectedDate().toPyDate()
+            first_day = date(current_date.year, current_date.month, 1)
+
+            # Dernier jour du mois
+            if current_date.month == 12:
+                last_day = date(current_date.year + 1, 1, 1) - timedelta(days=1)
+            else:
+                last_day = date(current_date.year, current_date.month + 1, 1) - timedelta(days=1)
+
+            cursor.execute("""
+                SELECT DISTINCT date_debut, date_fin
+                FROM declaration
+                WHERE (date_debut BETWEEN %s AND %s)
+                   OR (date_fin BETWEEN %s AND %s)
+                   OR (date_debut <= %s AND date_fin >= %s)
+            """, (first_day, last_day, first_day, last_day, first_day, last_day))
+
+            rows = _rows(cursor, dict_mode)
+            cursor.close()
+            connection.close()
+
+            # Réinitialiser le format
+            default_format = QTextCharFormat()
+            default_format.setBackground(QColor("white"))
+
+            # Marquer les dates avec absences
+            absence_format = QTextCharFormat()
+            absence_format.setBackground(QColor("#fef3c7"))  # Jaune pâle
+            absence_format.setForeground(QColor("#92400e"))  # Texte marron
+
+            for r in rows:
+                date_debut = r['date_debut']
+                date_fin = r['date_fin']
+
+                if isinstance(date_debut, str):
+                    date_debut = datetime.strptime(date_debut, '%Y-%m-%d').date()
+                if isinstance(date_fin, str):
+                    date_fin = datetime.strptime(date_fin, '%Y-%m-%d').date()
+
+                # Marquer chaque jour de l'absence
+                current = date_debut
+                while current <= date_fin:
+                    if first_day <= current <= last_day:
+                        qdate = QDate(current.year, current.month, current.day)
+                        self.calendar.setDateTextFormat(qdate, absence_format)
+                    current += timedelta(days=1)
+
+        except Exception as e:
+            print(f"Erreur lors du chargement du calendrier : {e}")
+
+    def on_calendar_date_clicked(self, qdate):
+        """Affiche les absences du jour sélectionné."""
+        selected = qdate.toPyDate()
+        self.selected_date_label.setText(f"📅 Absences du {selected.strftime('%d/%m/%Y')}")
+
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+
+            cursor.execute("""
+                SELECT
+                    p.nom,
+                    p.prenom,
+                    d.type_declaration,
+                    d.motif
+                FROM declaration d
+                LEFT JOIN personnel p ON p.id = d.operateur_id
+                WHERE %s BETWEEN d.date_debut AND d.date_fin
+                ORDER BY p.nom, p.prenom
+            """, (selected,))
+
+            rows = _rows(cursor, dict_mode)
+            cursor.close()
+            connection.close()
+
+            self.calendar_absents_list.clear()
+
+            if not rows:
+                item = QListWidgetItem("✅ Aucune absence ce jour")
+                item.setForeground(QColor("#10b981"))
+                self.calendar_absents_list.addItem(item)
+            else:
+                for r in rows:
+                    nom = r['nom'] or ""
+                    prenom = r['prenom'] or ""
+                    type_decl = self.format_type_declaration(r['type_declaration'])
+                    motif = r['motif'] or ""
+
+                    text = f"{nom} {prenom} - {type_decl}"
+                    if motif:
+                        text += f" ({motif})"
+
+                    item = QListWidgetItem(text)
+                    item.setForeground(QColor(self.get_type_color(r['type_declaration'])))
+                    self.calendar_absents_list.addItem(item)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible de charger les absences :\n{e}")
+
+    # ==================== ONGLET 4: HISTORIQUE ====================
+
+    def create_history_tab(self):
+        """Crée l'onglet historique des déclarations."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Filtres
+        filter_group = QGroupBox("Filtres")
+        filter_layout = QHBoxLayout()
+
+        filter_layout.addWidget(QLabel("Type :"))
+        self.history_type_combo = QComboBox()
+        self.history_type_combo.addItems([
+            "Tous",
+            "CongePaye",
+            "RTT",
+            "Maladie",
+            "AccidentTravail",
+            "ArretTravail",
+            "Formation",
+            "Autre"
+        ])
+        self.history_type_combo.currentIndexChanged.connect(self.load_history)
+        filter_layout.addWidget(self.history_type_combo)
+
+        filter_layout.addWidget(QLabel("Période :"))
+        self.period_combo = QComboBox()
+        self.period_combo.addItems([
+            "30 derniers jours",
+            "3 derniers mois",
+            "6 derniers mois",
+            "Cette année",
+            "Tout"
+        ])
+        self.period_combo.currentIndexChanged.connect(self.load_history)
+        filter_layout.addWidget(self.period_combo)
+
+        filter_layout.addStretch()
+        filter_group.setLayout(filter_layout)
+        layout.addWidget(filter_group)
+
+        # Table historique
+        self.history_table = QTableWidget()
+        self.history_table.setColumnCount(7)
+        self.history_table.setHorizontalHeaderLabels([
+            "ID", "Nom", "Prénom", "Type", "Date Début", "Date Fin", "Motif"
+        ])
+        self.history_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.history_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.history_table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
+        self.history_table.setColumnHidden(0, True)
+        self.history_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.history_table.setAlternatingRowColors(True)
+        self.history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        layout.addWidget(self.history_table, 1)
+
+        # Boutons d'actions
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        delete_btn = QPushButton("🗑️ Supprimer")
+        delete_btn.setStyleSheet("""
+            QPushButton {
+                background: #dc2626;
+                color: white;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #b91c1c;
+            }
+        """)
+        delete_btn.clicked.connect(self.delete_selected_declaration)
+        btn_layout.addWidget(delete_btn)
+
+        layout.addLayout(btn_layout)
+
+        return widget
+
+    def load_history(self):
+        """Charge l'historique des déclarations."""
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+
+            # Construire la requête selon les filtres
+            query = """
+                SELECT
+                    d.id,
+                    p.nom,
+                    p.prenom,
+                    d.type_declaration,
+                    d.date_debut,
+                    d.date_fin,
+                    d.motif
+                FROM declaration d
+                LEFT JOIN personnel p ON p.id = d.operateur_id
+                WHERE 1=1
+            """
+            params = []
+
+            # Filtre par type
+            type_filter = self.history_type_combo.currentText()
+            if type_filter != "Tous":
+                query += " AND d.type_declaration = %s"
+                params.append(type_filter)
+
+            # Filtre par période
+            period = self.period_combo.currentText()
+            if period == "30 derniers jours":
+                start_date = date.today() - timedelta(days=30)
+                query += " AND d.date_debut >= %s"
+                params.append(start_date)
+            elif period == "3 derniers mois":
+                start_date = date.today() - timedelta(days=90)
+                query += " AND d.date_debut >= %s"
+                params.append(start_date)
+            elif period == "6 derniers mois":
+                start_date = date.today() - timedelta(days=180)
+                query += " AND d.date_debut >= %s"
+                params.append(start_date)
+            elif period == "Cette année":
+                start_date = date(date.today().year, 1, 1)
+                query += " AND d.date_debut >= %s"
+                params.append(start_date)
+
+            query += " ORDER BY d.date_debut DESC, p.nom, p.prenom"
+
+            cursor.execute(query, params)
+            rows = _rows(cursor, dict_mode)
+            cursor.close()
+            connection.close()
+
+            self.history_table.setRowCount(0)
+
+            for r in rows:
+                row_pos = self.history_table.rowCount()
+                self.history_table.insertRow(row_pos)
+
+                # ID (caché)
+                self.history_table.setItem(row_pos, 0, QTableWidgetItem(str(r['id'])))
+
+                # Nom
+                self.history_table.setItem(row_pos, 1, QTableWidgetItem(r['nom'] or ""))
+
+                # Prénom
+                self.history_table.setItem(row_pos, 2, QTableWidgetItem(r['prenom'] or ""))
+
+                # Type
+                type_item = QTableWidgetItem(self.format_type_declaration(r['type_declaration']))
+                type_item.setForeground(QColor(self.get_type_color(r['type_declaration'])))
+                self.history_table.setItem(row_pos, 3, type_item)
+
+                # Date début
+                date_debut = r['date_debut']
+                if isinstance(date_debut, str):
+                    date_debut_str = date_debut
+                else:
+                    date_debut_str = date_debut.strftime('%d/%m/%Y')
+                self.history_table.setItem(row_pos, 4, QTableWidgetItem(date_debut_str))
+
+                # Date fin
+                date_fin = r['date_fin']
+                if isinstance(date_fin, str):
+                    date_fin_str = date_fin
+                else:
+                    date_fin_str = date_fin.strftime('%d/%m/%Y')
+                self.history_table.setItem(row_pos, 5, QTableWidgetItem(date_fin_str))
+
+                # Motif
+                self.history_table.setItem(row_pos, 6, QTableWidgetItem(r['motif'] or ""))
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible de charger l'historique :\n{e}")
+
+    def delete_selected_declaration(self):
+        """Supprime la déclaration sélectionnée."""
+        selected = self.history_table.selectedItems()
+        if not selected:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner une déclaration à supprimer.")
+            return
+
+        row = self.history_table.currentRow()
+        decl_id = int(self.history_table.item(row, 0).text())
+        nom = self.history_table.item(row, 1).text()
+        prenom = self.history_table.item(row, 2).text()
+
+        reply = QMessageBox.question(
+            self, "Confirmation",
+            f"Voulez-vous vraiment supprimer la déclaration de {nom} {prenom} ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.No:
+            return
+
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+
+            cursor.execute("DELETE FROM declaration WHERE id = %s", (decl_id,))
+            connection.commit()
+
+            cursor.close()
+            connection.close()
+
+            QMessageBox.information(self, "Succès", "✅ Déclaration supprimée avec succès.")
+
+            self.refresh_all()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible de supprimer la déclaration :\n{e}")
+
+    # ==================== HELPERS ====================
+
+    def refresh_all(self):
+        """Rafraîchit toutes les données."""
+        self.load_absents_today()
+        self.load_personnel_combo()
+        self.load_calendar_absences()
+        self.load_history()
+
+    def format_type_declaration(self, type_decl):
+        """Formate le type de déclaration pour l'affichage."""
+        formats = {
+            'CongePaye': 'Congé Payé',
+            'RTT': 'RTT',
+            'SansSolde': 'Sans Solde',
+            'Maladie': 'Maladie',
+            'AccidentTravail': 'Accident Travail',
+            'AccidentTrajet': 'Accident Trajet',
+            'ArretTravail': 'Arrêt Travail',
+            'CongeNaissance': 'Congé Naissance',
+            'Formation': 'Formation',
+            'Autorisation': 'Autorisation',
+            'Autre': 'Autre'
+        }
+        return formats.get(type_decl, type_decl)
+
+    def get_type_color(self, type_decl):
+        """Retourne la couleur associée à un type de déclaration."""
+        colors = {
+            'CongePaye': '#10b981',
+            'RTT': '#3b82f6',
+            'SansSolde': '#6b7280',
+            'Maladie': '#8b5cf6',
+            'AccidentTravail': '#dc2626',
+            'AccidentTrajet': '#dc2626',
+            'ArretTravail': '#f59e0b',
+            'CongeNaissance': '#ec4899',
+            'Formation': '#06b6d4',
+            'Autorisation': '#14b8a6',
+            'Autre': '#64748b'
+        }
+        return colors.get(type_decl, '#6b7280')
 
 
 # Test autonome
 if __name__ == "__main__":
     import sys
     from PyQt5.QtWidgets import QApplication
-    
+
     app = QApplication(sys.argv)
     dialog = RegularisationDialog()
     dialog.show()

@@ -608,9 +608,12 @@ class GrillesDialog(QDialog):
         LEFT JOIN polyvalence pv ON o.id = pv.operateur_id 
             AND p.id = pv.poste_id
         WHERE o.statut = 'ACTIF'
+          AND o.matricule IS NOT NULL
+          AND o.matricule != ''
           AND p.visible = 1
         ORDER BY o.nom, o.prenom, p.poste_code;
         """
+
 
         try:
             cursor.execute(query)

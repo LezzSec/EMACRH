@@ -49,16 +49,21 @@ class EvaluationDateDialog(QDialog):
         self.connection = connection
         self.cursor = cursor
 
-        self.setWindowTitle("Prochaine évaluation")
+        self.setWindowTitle("Ajouter une polyvalence (optionnel)")
         self.setModal(True)
-        self.setFixedWidth(420)
+        self.setFixedWidth(480)
 
         layout = QVBoxLayout(self)
 
-        title = QLabel("Renseigner la prochaine évaluation")
+        title = QLabel("Ajouter une polyvalence de production ?")
         title.setWordWrap(True)
         title.setFont(QFont("Arial", 12, QFont.Bold))
         layout.addWidget(title)
+
+        subtitle = QLabel("Si cet opérateur n'est PAS dans la production, cliquez sur 'Passer'.")
+        subtitle.setWordWrap(True)
+        subtitle.setStyleSheet("color: #6b7280; font-size: 11px; margin-bottom: 10px;")
+        layout.addWidget(subtitle)
 
         form = QFormLayout()
 
@@ -67,7 +72,7 @@ class EvaluationDateDialog(QDialog):
         self.date_edit.setCalendarPopup(True)
         self.date_edit.setDate(QDate.currentDate().addDays(30))
         self.date_edit.setDisplayFormat("dd/MM/yyyy")
-        form.addRow("Date :", self.date_edit)
+        form.addRow("Prochaine évaluation :", self.date_edit)
 
         # Poste (seulement visibles)
         self.poste_combo = QComboBox(self)
@@ -78,10 +83,18 @@ class EvaluationDateDialog(QDialog):
 
         # Boutons
         btn_row = QHBoxLayout()
+        btn_skip = QPushButton("Passer", self)
+        btn_skip.setStyleSheet("background: #6b7280; color: white; padding: 8px 16px; border-radius: 6px;")
+        btn_skip.clicked.connect(self.reject)
+
         btn_cancel = QPushButton("Annuler", self)
-        btn_ok = QPushButton("Enregistrer", self)
+        btn_ok = QPushButton("Ajouter Polyvalence", self)
+        btn_ok.setStyleSheet("background: #10b981; color: white; padding: 8px 16px; border-radius: 6px; font-weight: bold;")
         btn_cancel.clicked.connect(self.reject)
         btn_ok.clicked.connect(self._validate)
+
+        btn_row.addWidget(btn_skip)
+        btn_row.addStretch()
         btn_row.addWidget(btn_cancel)
         btn_row.addWidget(btn_ok)
         layout.addLayout(btn_row)
@@ -262,25 +275,24 @@ class ManageOperatorsDialog(QDialog):
             else:
                 existing_id = existing["id"] if dict_mode else existing[0]
 
-            # Demande date + poste (si annulé -> rien)
+            # Demande date + poste (OPTIONNEL maintenant)
             dlg = EvaluationDateDialog(connection, cursor, self)
-            if dlg.exec_() != QDialog.Accepted:
-                try:
-                    if hasattr(connection, "autocommit"):
-                        connection.autocommit = old_autocommit
-                except Exception:
-                    pass
-                QMessageBox.information(self, "Info", "Ajout annulé.")
-                return
+            add_polyvalence = (dlg.exec_() == QDialog.Accepted)
 
-            poste_id = dlg.poste_combo.currentData()
-            qdate = dlg.date_edit.date()
-            date_iso = qdate.toString("yyyy-MM-dd")
-            
-            # Récupérer le nom du poste pour le log
-            cursor.execute("SELECT poste_code FROM postes WHERE id = %s", (poste_id,))
-            poste_row = cursor.fetchone()
-            poste_name = poste_row["poste_code"] if (poste_row and dict_mode) else (poste_row[0] if poste_row else f"Poste #{poste_id}")
+            poste_id = None
+            qdate = None
+            date_iso = None
+            poste_name = None
+
+            if add_polyvalence:
+                poste_id = dlg.poste_combo.currentData()
+                qdate = dlg.date_edit.date()
+                date_iso = qdate.toString("yyyy-MM-dd")
+
+                # Récupérer le nom du poste pour le log
+                cursor.execute("SELECT poste_code FROM postes WHERE id = %s", (poste_id,))
+                poste_row = cursor.fetchone()
+                poste_name = poste_row["poste_code"] if (poste_row and dict_mode) else (poste_row[0] if poste_row else f"Poste #{poste_id}")
 
             # Insertion(s)
             if existing_id:
@@ -315,38 +327,51 @@ class ManageOperatorsDialog(QDialog):
                     }
                 )
 
-            # Évaluation liée
-            self._enregistrer_date_polyvalence(connection, cursor, operateur_id, poste_id, qdate)
+            # Évaluation liée (seulement si polyvalence ajoutée)
+            if add_polyvalence and poste_id:
+                self._enregistrer_date_polyvalence(connection, cursor, operateur_id, poste_id, qdate)
 
-            # ✅ LOG planification évaluation dans l'historique
-            log_to_historique(
-                connection, cursor,
-                action="INSERT",
-                operateur_id=operateur_id,
-                poste_id=poste_id,
-                description_data={
-                    "operateur": f"{prenom} {nom}",
-                    "poste": poste_name,
-                    "type": "planification_evaluation",
-                    "prochaine_evaluation": date_iso,
-                    "details": f"Planification évaluation pour le {date_iso}"
-                }
-            )
+                # ✅ LOG planification évaluation dans l'historique
+                log_to_historique(
+                    connection, cursor,
+                    action="INSERT",
+                    operateur_id=operateur_id,
+                    poste_id=poste_id,
+                    description_data={
+                        "operateur": f"{prenom} {nom}",
+                        "poste": poste_name,
+                        "type": "planification_evaluation",
+                        "prochaine_evaluation": date_iso,
+                        "details": f"Planification évaluation pour le {date_iso}"
+                    }
+                )
 
             # Commit unique
             connection.commit()
 
             # UI
             if existing_id:
-                QMessageBox.information(
-                    self, "Succès",
-                    f"Évaluation ajoutée à l'opérateur existant (id={operateur_id})."
-                )
+                if add_polyvalence:
+                    QMessageBox.information(
+                        self, "Succès",
+                        f"Évaluation ajoutée à l'opérateur existant (id={operateur_id})."
+                    )
+                else:
+                    QMessageBox.information(
+                        self, "Info",
+                        f"Opérateur existant, aucune polyvalence ajoutée."
+                    )
             else:
-                QMessageBox.information(
-                    self, "Succès",
-                    f"Opérateur '{nom} {prenom}' et évaluation enregistrés."
-                )
+                if add_polyvalence:
+                    QMessageBox.information(
+                        self, "Succès",
+                        f"Opérateur '{nom} {prenom}' créé avec une polyvalence de production."
+                    )
+                else:
+                    QMessageBox.information(
+                        self, "Succès",
+                        f"Opérateur '{nom} {prenom}' créé (personnel non-production)."
+                    )
 
             # Reset + notifier pour rafraîchir la liste ailleurs
             self.add_nom_input.clear()
