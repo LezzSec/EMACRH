@@ -12,7 +12,8 @@
       "Bash(timeout 5 py:*)",
       "Bash(git add:*)",
       "Bash(del nul)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(git push:*)"
     ],
     "deny": [],
     "ask": []
