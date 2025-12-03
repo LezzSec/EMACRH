@@ -1,10 +1,10 @@
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
     QLabel, QMessageBox, QInputDialog, QDialogButtonBox, QListWidget, QListWidgetItem,
-    QLineEdit, QFileDialog, QAbstractItemView, QComboBox
+    QLineEdit, QFileDialog, QAbstractItemView, QComboBox, QWidget, QHeaderView
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QFont
 import sys
 import pandas as pd
 from datetime import datetime, timedelta
@@ -13,7 +13,7 @@ from core.db.configbd import get_connection as get_db_connection
 from .besoin_poste_dialog import BesoinPosteDialog
 from core.services.logger import log_hist
 try:
-    from core.gui.ui_theme import get_current_theme
+    from core.gui.ui_theme import EmacButton, get_current_theme
     THEME_AVAILABLE = True
 except ImportError:
     THEME_AVAILABLE = False
@@ -50,39 +50,50 @@ class GrillesDialog(QDialog):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Grilles Polyvalence")
-        self.setGeometry(200, 200, 1000, 600)
+        self.setWindowTitle("Grilles de Polyvalence")
+        self.setGeometry(100, 80, 1400, 800)
 
         self.layout = QVBoxLayout()
+        self.layout.setContentsMargins(12, 12, 12, 12)
+        self.layout.setSpacing(8)
+
         self.is_editable = False
         self.modified_cells = set()
-
         self._is_processing_change = False
 
         self._setup_theme_colors()
 
-        # Boutons de modification au-dessus
-        self.add_edit_buttons()
+        # En-tête compact
+        if THEME_AVAILABLE:
+            header_layout = QHBoxLayout()
+            header_label = QLabel("Grilles de Polyvalence")
+            header_label.setStyleSheet("font-size: 18px; font-weight: bold;")
+            header_layout.addWidget(header_label)
+            header_layout.addStretch()
+            self.layout.addLayout(header_layout)
+        else:
+            header = QLabel("Grilles de Polyvalence")
+            header.setStyleSheet("font-size: 18px; font-weight: bold;")
+            self.layout.addWidget(header)
 
-        # Table principale
+        # Barre d'outils unifiée (tout en une ligne)
+        self.add_unified_toolbar()
+
+        # Table principale (sans carte pour économiser l'espace)
         self.main_table = QTableWidget()
         self.main_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.main_table.cellChanged.connect(self.on_cell_changed)
-        self.layout.addWidget(self.main_table)
+        if THEME_AVAILABLE:
+            self._style_table()
+        self.layout.addWidget(self.main_table, 1)  # stretch factor = 1 pour occuper tout l'espace
 
-        # Tri
-        self.main_table.setSortingEnabled(True)
+        # Tri désactivé (on utilise des boutons)
+        self.main_table.setSortingEnabled(False)
         self.sort_column = None
         self.sort_order = Qt.AscendingOrder
-        header = self.main_table.horizontalHeader()
-        header.setSortIndicatorShown(True)
-        header.sortIndicatorChanged.connect(self._remember_sort_state)
 
-        # Boutons principaux
-        self.add_buttons()
-
-        # Infos niveaux
-        self.add_level_info()
+        # Infos niveaux compactes en bas
+        self.add_compact_level_info()
 
         self.setLayout(self.layout)
 
@@ -90,22 +101,6 @@ class GrillesDialog(QDialog):
         self.operateurs = []
         self.postes = []
         self.load_data()
-
-         # Filtre par service
-        filter_service_layout = QHBoxLayout()
-        filter_service_label = QLabel("Filtrer par service :")
-        self.service_combo = QComboBox()
-        self.service_combo.addItem("Tous les services")
-        filter_service_layout.addWidget(filter_service_label)
-        filter_service_layout.addWidget(self.service_combo)
-        filter_service_layout.addStretch()
-        self.layout.insertLayout(2, filter_service_layout)  # Insérer après les autres filtres
-        
-        # Charger les services depuis la base de données
-        self.load_services()
-        
-        # Connecter le signal de changement
-        self.service_combo.currentTextChanged.connect(self.filter_by_service)
 
     def _setup_theme_colors(self):
         """Définit les couleurs adaptées au thème actuel (clair ou sombre)."""
@@ -124,61 +119,440 @@ class GrillesDialog(QDialog):
             self.color_besoins_bg = QColor(255, 255, 255)    # white
             self.color_besoins_text = QColor(17, 24, 39)
 
+    # ----------------- Filtrage -----------------
+    def show_filter_dialog(self):
+        """Affiche le dialogue de sélection rapide pour filtrer"""
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QListWidgetItem, QLineEdit
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Filtrer la grille")
+        dialog.setMinimumWidth(700)
+        dialog.setMinimumHeight(600)
+
+        layout = QVBoxLayout(dialog)
+
+        # Instructions
+        instructions = QLabel("⚡ Sélection rapide : Ctrl+Clic pour sélectionner plusieurs éléments")
+        instructions.setStyleSheet("font-weight: bold; color: #3498db; padding: 10px;")
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
+
+        # Deux colonnes : Opérateurs et Postes
+        content_layout = QHBoxLayout()
+
+        # === COLONNE GAUCHE : OPÉRATEURS ===
+        ops_widget = QWidget()
+        ops_layout = QVBoxLayout(ops_widget)
+
+        ops_header = QLabel("👥 Opérateurs")
+        ops_header.setStyleSheet("font-weight: bold; font-size: 14px;")
+        ops_layout.addWidget(ops_header)
+
+        # Barre de recherche opérateurs
+        self.ops_search = QLineEdit()
+        self.ops_search.setPlaceholderText("🔍 Rechercher un opérateur...")
+        ops_layout.addWidget(self.ops_search)
+
+        # Liste multi-sélection des opérateurs
+        self.ops_list = QListWidget()
+        self.ops_list.setSelectionMode(QListWidget.MultiSelection)
+
+        for idx, (op_id, op_name) in enumerate(self.operateurs):
+            item = QListWidgetItem(op_name)
+            item.setData(Qt.UserRole, idx)  # Stocker l'index de ligne
+            # Pré-sélectionner si visible
+            if not self.main_table.isRowHidden(idx):
+                item.setSelected(True)
+            self.ops_list.addItem(item)
+
+        ops_layout.addWidget(self.ops_list)
+
+        # Boutons rapides pour opérateurs
+        ops_buttons_layout = QHBoxLayout()
+        btn_ops_all = QPushButton("Tous")
+        btn_ops_none = QPushButton("Aucun")
+        btn_ops_inverse = QPushButton("Inverser")
+        ops_buttons_layout.addWidget(btn_ops_all)
+        ops_buttons_layout.addWidget(btn_ops_none)
+        ops_buttons_layout.addWidget(btn_ops_inverse)
+        ops_layout.addLayout(ops_buttons_layout)
+
+        content_layout.addWidget(ops_widget)
+
+        # === COLONNE DROITE : POSTES ===
+        postes_widget = QWidget()
+        postes_layout = QVBoxLayout(postes_widget)
+
+        postes_header = QLabel("📍 Postes")
+        postes_header.setStyleSheet("font-weight: bold; font-size: 14px;")
+        postes_layout.addWidget(postes_header)
+
+        # Barre de recherche postes
+        self.postes_search = QLineEdit()
+        self.postes_search.setPlaceholderText("🔍 Rechercher un poste...")
+        postes_layout.addWidget(self.postes_search)
+
+        # Liste multi-sélection des postes
+        self.postes_list = QListWidget()
+        self.postes_list.setSelectionMode(QListWidget.MultiSelection)
+
+        for idx, (poste_id, poste_code) in enumerate(self.postes):
+            item = QListWidgetItem(poste_code)
+            item.setData(Qt.UserRole, idx)  # Stocker l'index de colonne
+            # Pré-sélectionner si visible
+            if not self.main_table.isColumnHidden(idx):
+                item.setSelected(True)
+            self.postes_list.addItem(item)
+
+        postes_layout.addWidget(self.postes_list)
+
+        # Boutons rapides pour postes
+        postes_buttons_layout = QHBoxLayout()
+        btn_postes_all = QPushButton("Tous")
+        btn_postes_none = QPushButton("Aucun")
+        btn_postes_inverse = QPushButton("Inverser")
+        postes_buttons_layout.addWidget(btn_postes_all)
+        postes_buttons_layout.addWidget(btn_postes_none)
+        postes_buttons_layout.addWidget(btn_postes_inverse)
+        postes_layout.addLayout(postes_buttons_layout)
+
+        content_layout.addWidget(postes_widget)
+
+        layout.addLayout(content_layout)
+
+        # Boutons de validation
+        buttons_layout = QHBoxLayout()
+        btn_apply = QPushButton("✓ Appliquer")
+        btn_apply.setStyleSheet("background-color: #27ae60; color: white; padding: 8px; font-weight: bold;")
+        btn_cancel = QPushButton("✗ Annuler")
+        btn_cancel.setStyleSheet("padding: 8px;")
+        buttons_layout.addStretch()
+        buttons_layout.addWidget(btn_apply)
+        buttons_layout.addWidget(btn_cancel)
+        layout.addLayout(buttons_layout)
+
+        # Connexions des boutons
+        btn_ops_all.clicked.connect(lambda: self.ops_list.selectAll())
+        btn_ops_none.clicked.connect(lambda: self.ops_list.clearSelection())
+        btn_ops_inverse.clicked.connect(lambda: self.inverse_selection(self.ops_list))
+
+        btn_postes_all.clicked.connect(lambda: self.postes_list.selectAll())
+        btn_postes_none.clicked.connect(lambda: self.postes_list.clearSelection())
+        btn_postes_inverse.clicked.connect(lambda: self.inverse_selection(self.postes_list))
+
+        # Note : pas de sélection automatique croisée pour éviter la confusion
+        # L'utilisateur sélectionne manuellement ce qu'il veut voir
+
+        # Connexions recherche
+        self.ops_search.textChanged.connect(lambda text: self.filter_list(self.ops_list, text))
+        self.postes_search.textChanged.connect(lambda text: self.filter_list(self.postes_list, text))
+
+        # Connexions validation
+        btn_apply.clicked.connect(lambda: self.apply_filters_quick(dialog))
+        btn_cancel.clicked.connect(dialog.reject)
+
+        dialog.exec_()
+
+    def filter_list(self, list_widget, search_text):
+        """Filtre une liste selon le texte de recherche"""
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            item.setHidden(search_text.lower() not in item.text().lower())
+
+    def inverse_selection(self, list_widget):
+        """Inverse la sélection d'une liste"""
+        for i in range(list_widget.count()):
+            item = list_widget.item(i)
+            if not item.isHidden():  # Ne pas toucher aux éléments cachés par la recherche
+                item.setSelected(not item.isSelected())
+
+    def auto_select_postes_for_operators(self):
+        """Sélectionne automatiquement les postes où les opérateurs sélectionnés ont des compétences"""
+        if not hasattr(self, 'ops_list') or not hasattr(self, 'postes_list'):
+            return
+
+        # Récupérer les indices des opérateurs sélectionnés
+        selected_op_rows = [item.data(Qt.UserRole) for item in self.ops_list.selectedItems()]
+
+        if not selected_op_rows:
+            return
+
+        # Trouver tous les postes où au moins un opérateur sélectionné a une compétence
+        postes_to_select = set()
+
+        for row_idx in selected_op_rows:
+            for col_idx in range(self.main_table.columnCount()):
+                # Vérifier si l'opérateur a un niveau dans ce poste
+                item = self.main_table.item(row_idx, col_idx)
+                if item and item.text().strip() and item.text().strip().isdigit():
+                    postes_to_select.add(col_idx)
+
+        # Sélectionner ces postes dans la liste
+        for i in range(self.postes_list.count()):
+            item = self.postes_list.item(i)
+            col_idx = item.data(Qt.UserRole)
+            if col_idx in postes_to_select:
+                item.setSelected(True)
+
+    def auto_select_operators_for_postes(self):
+        """Sélectionne automatiquement les opérateurs qui ont des compétences dans les postes sélectionnés"""
+        if not hasattr(self, 'ops_list') or not hasattr(self, 'postes_list'):
+            return
+
+        # Récupérer les indices des postes sélectionnés
+        selected_poste_cols = [item.data(Qt.UserRole) for item in self.postes_list.selectedItems()]
+
+        if not selected_poste_cols:
+            return
+
+        # Trouver tous les opérateurs qui ont une compétence dans au moins un des postes sélectionnés
+        operators_to_select = set()
+
+        for col_idx in selected_poste_cols:
+            for row_idx in range(len(self.operateurs)):
+                # Vérifier si l'opérateur a un niveau dans ce poste
+                item = self.main_table.item(row_idx, col_idx)
+                if item and item.text().strip() and item.text().strip().isdigit():
+                    operators_to_select.add(row_idx)
+
+        # Sélectionner ces opérateurs dans la liste
+        for i in range(self.ops_list.count()):
+            item = self.ops_list.item(i)
+            row_idx = item.data(Qt.UserRole)
+            if row_idx in operators_to_select:
+                item.setSelected(True)
+
+    def apply_filters_quick(self, dialog):
+        """Applique les filtres depuis les listes de sélection"""
+        n_ops = len(self.operateurs)
+
+        # Récupérer les sélections
+        selected_op_rows = [item.data(Qt.UserRole) for item in self.ops_list.selectedItems()]
+        selected_poste_cols = [item.data(Qt.UserRole) for item in self.postes_list.selectedItems()]
+
+        # Cas 1 : Si AUCUN opérateur n'est sélectionné mais des postes sont sélectionnés
+        # → Afficher automatiquement UNIQUEMENT les opérateurs qui ont des compétences dans ces postes
+        if not selected_op_rows and selected_poste_cols:
+            operators_with_skills = set()
+            for col_idx in selected_poste_cols:
+                for row_idx in range(n_ops):
+                    item = self.main_table.item(row_idx, col_idx)
+                    if item and item.text().strip() and item.text().strip().isdigit():
+                        operators_with_skills.add(row_idx)
+
+            # Masquer tous les opérateurs
+            for row in range(n_ops):
+                self.main_table.setRowHidden(row, True)
+
+            # Afficher uniquement ceux avec compétences
+            for row_idx in operators_with_skills:
+                self.main_table.setRowHidden(row_idx, False)
+
+        # Cas 2 : Des opérateurs sont sélectionnés (avec ou sans postes)
+        # → Afficher uniquement les opérateurs sélectionnés
+        else:
+            # Masquer tous les opérateurs
+            for row in range(n_ops):
+                self.main_table.setRowHidden(row, True)
+
+            # Afficher les opérateurs sélectionnés
+            for row_idx in selected_op_rows:
+                self.main_table.setRowHidden(row_idx, False)
+
+        # Gestion des colonnes de postes
+        if selected_poste_cols:
+            # Si des postes sont sélectionnés, afficher uniquement ceux-là
+            for col in range(len(self.postes)):
+                self.main_table.setColumnHidden(col, True)
+            for col_idx in selected_poste_cols:
+                self.main_table.setColumnHidden(col_idx, False)
+        elif selected_op_rows:
+            # Si des opérateurs sont sélectionnés sans postes spécifiques,
+            # afficher uniquement les postes où ces opérateurs ont des compétences
+            postes_with_skills = set()
+            for row_idx in selected_op_rows:
+                for col_idx in range(len(self.postes)):
+                    item = self.main_table.item(row_idx, col_idx)
+                    if item and item.text().strip() and item.text().strip().isdigit():
+                        postes_with_skills.add(col_idx)
+
+            # Masquer tous les postes
+            for col in range(len(self.postes)):
+                self.main_table.setColumnHidden(col, True)
+
+            # Afficher uniquement les postes avec compétences
+            for col_idx in postes_with_skills:
+                self.main_table.setColumnHidden(col_idx, False)
+        else:
+            # Si rien n'est sélectionné, afficher TOUS les postes
+            for col in range(len(self.postes)):
+                self.main_table.setColumnHidden(col, False)
+
+        # Recalculer les statistiques
+        self.update_statistics()
+
+        dialog.accept()
+
+    def reset_filters(self):
+        """Réaffiche toutes les lignes et colonnes cachées."""
+        for row in range(self.main_table.rowCount()):
+            self.main_table.setRowHidden(row, False)
+        for col in range(self.main_table.columnCount()):
+            self.main_table.setColumnHidden(col, False)
+
+        self.update_statistics()
+
     # ----------------- UI haut -----------------
-    def add_edit_buttons(self):
-        edit_button_layout = QHBoxLayout()
+    def add_unified_toolbar(self):
+        """Barre d'outils unifiée avec tous les boutons sur une seule ligne"""
+        toolbar_layout = QHBoxLayout()
+        toolbar_layout.setSpacing(6)
 
-        add_button = QPushButton("+")
-        add_button.setToolTip("Ajouter une colonne ou une ligne")
-        add_button.clicked.connect(self.add_data)
-        edit_button_layout.addWidget(add_button)
+        if THEME_AVAILABLE:
+            # Groupe Édition
+            add_button = EmacButton("+ Ajouter", variant='primary')
+            add_button.setToolTip("Ajouter une colonne (poste) ou une ligne (opérateur)")
+            add_button.clicked.connect(self.add_data)
+            toolbar_layout.addWidget(add_button)
 
-        remove_button = QPushButton("-")
-        remove_button.setToolTip("Supprimer une colonne ou une ligne")
-        remove_button.clicked.connect(self.remove_data)
-        edit_button_layout.addWidget(remove_button)
+            remove_button = EmacButton("− Masquer", variant='ghost')
+            remove_button.setToolTip("Masquer une colonne ou une ligne")
+            remove_button.clicked.connect(self.remove_data)
+            toolbar_layout.addWidget(remove_button)
 
-        edit_button = QPushButton("✏️")
-        edit_button.setToolTip("Activer/Désactiver le mode édition")
-        edit_button.clicked.connect(self.toggle_edit_mode)
-        edit_button_layout.addWidget(edit_button)
+            self.edit_mode_button = EmacButton("✏️ Éditer", variant='ghost')
+            self.edit_mode_button.setToolTip("Activer/Désactiver le mode édition")
+            self.edit_mode_button.clicked.connect(self.toggle_edit_mode)
+            toolbar_layout.addWidget(self.edit_mode_button)
 
-        duplicate_button = QPushButton("📄")
-        duplicate_button.setToolTip("Dupliquer une colonne ou une ligne")
-        duplicate_button.clicked.connect(self.duplicate_data)
-        edit_button_layout.addWidget(duplicate_button)
+            duplicate_button = EmacButton("📄 Dupliquer", variant='ghost')
+            duplicate_button.setToolTip("Dupliquer une colonne ou une ligne")
+            duplicate_button.clicked.connect(self.duplicate_data)
+            toolbar_layout.addWidget(duplicate_button)
 
-        self.layout.addLayout(edit_button_layout)
+            # Séparateur visuel
+            separator = QLabel("|")
+            separator.setStyleSheet("color: #d1d5db; font-size: 18px; padding: 0 8px;")
+            toolbar_layout.addWidget(separator)
 
-    def add_buttons(self):
-        button_layout = QHBoxLayout()
+            # Groupe Filtres
+            filter_button = EmacButton("🔍 Filtrer", variant='ghost')
+            filter_button.setToolTip("Sélectionner les opérateurs et/ou postes à afficher")
+            filter_button.clicked.connect(self.show_filter_dialog)
+            toolbar_layout.addWidget(filter_button)
 
-        export_button = QPushButton("Exporter")
-        export_button.clicked.connect(self.export_data)
-        button_layout.addWidget(export_button)
+            reset_filter_button = EmacButton("↻ Réinitialiser", variant='ghost')
+            reset_filter_button.setToolTip("Réinitialiser les filtres et afficher toutes les données")
+            reset_filter_button.clicked.connect(self.reset_filters)
+            toolbar_layout.addWidget(reset_filter_button)
 
-        refresh_button = QPushButton("Recharger les Données")
-        refresh_button.clicked.connect(self.reload_data)
-        button_layout.addWidget(refresh_button)
+            toolbar_layout.addStretch()
 
-        filter_button = QPushButton("Filtrer les Données")
-        filter_button.clicked.connect(self.filter_data)
-        button_layout.addWidget(filter_button)
+            # Groupe Actions
+            export_button = EmacButton("📤 Exporter", variant='ghost')
+            export_button.setToolTip("Exporter l'état visuel actuel (avec filtres appliqués)")
+            export_button.clicked.connect(self.export_data)
+            toolbar_layout.addWidget(export_button)
+        else:
+            # Version sans thème
+            add_button = QPushButton("+ Ajouter")
+            add_button.clicked.connect(self.add_data)
+            toolbar_layout.addWidget(add_button)
 
-        self.layout.addLayout(button_layout)
+            remove_button = QPushButton("− Masquer")
+            remove_button.clicked.connect(self.remove_data)
+            toolbar_layout.addWidget(remove_button)
 
-    def add_level_info(self):
-        level_info = QLabel(
-            """
-            <b>Niveaux :</b><br>
-            - <b>Niveau 1</b>: Opérateur nouveau à encadrer par titulaire N3/4 ou absent du poste depuis plus de 12 mois. (<b>&lt; 80%</b>)<br>
-            - <b>Niveau 2</b>: Opérateur formé et apte à conduire le poste seul. Certaines notions sont en cours d'acquisition. (<b>&gt; 80%</b>)<br>
-            - <b>Niveau 3</b>: Opérateur titulaire, formé, apte à conduire le poste et apte à former. (<b>&gt; 90%</b>)<br>
-            - <b>Niveau 4</b>: N3 + Leader ou Polyvalent (maîtrise 3 postes d'une ligne : mél. interne, cylindres, conditionnement) (<b>&gt; 90%</b>)<br>
-            """
-        )
-        level_info.setStyleSheet("font-size: 12px; margin-top: 10px;")
-        self.layout.addWidget(level_info)
+            self.edit_mode_button = QPushButton("✏️ Éditer")
+            self.edit_mode_button.clicked.connect(self.toggle_edit_mode)
+            toolbar_layout.addWidget(self.edit_mode_button)
+
+            duplicate_button = QPushButton("📄 Dupliquer")
+            duplicate_button.clicked.connect(self.duplicate_data)
+            toolbar_layout.addWidget(duplicate_button)
+
+            toolbar_layout.addWidget(QLabel("|"))
+
+            filter_button = QPushButton("🔍 Filtrer")
+            filter_button.clicked.connect(self.show_filter_dialog)
+            toolbar_layout.addWidget(filter_button)
+
+            reset_filter_button = QPushButton("↻ Réinitialiser")
+            reset_filter_button.clicked.connect(self.reset_filters)
+            toolbar_layout.addWidget(reset_filter_button)
+
+            toolbar_layout.addStretch()
+
+            export_button = QPushButton("📤 Exporter")
+            export_button.clicked.connect(self.export_data)
+            toolbar_layout.addWidget(export_button)
+
+        self.layout.addLayout(toolbar_layout)
+
+    def add_compact_level_info(self):
+        """Section compacte d'informations sur les niveaux de compétence"""
+        info_layout = QHBoxLayout()
+        info_layout.setSpacing(12)
+
+        info_label = QLabel("<b>Niveaux :</b>")
+        info_layout.addWidget(info_label)
+
+        # Niveaux en ligne
+        level_descriptions = [
+            ("<b>N1</b> : &lt;80% (nouveau/absent 12 mois)", "#dc2626"),
+            ("<b>N2</b> : ≥80% (formé, autonome)", "#d97706"),
+            ("<b>N3</b> : &gt;90% (formateur)", "#059669"),
+            ("<b>N4</b> : &gt;90% (leader/polyvalent ≥3 postes)", "#0369a1"),
+        ]
+
+        for desc, color in level_descriptions:
+            label = QLabel(desc)
+            label.setStyleSheet(f"color: {color}; font-size: 11px;")
+            info_layout.addWidget(label)
+
+        info_layout.addStretch()
+        self.layout.addLayout(info_layout)
+
+    def _style_table(self):
+        """Applique un style moderne à la table"""
+        if not THEME_AVAILABLE:
+            return
+
+        ThemeCls = get_current_theme()
+
+        # Style de la table
+        self.main_table.setStyleSheet(f"""
+            QTableWidget {{
+                background: {ThemeCls.BG_TABLE};
+                border: 1px solid {ThemeCls.BDR};
+                border-radius: 10px;
+                gridline-color: {ThemeCls.BDR};
+            }}
+            QTableWidget::item {{
+                padding: 6px;
+                border: none;
+            }}
+            QTableWidget::item:selected {{
+                background: {ThemeCls.PRI};
+                color: white;
+            }}
+            QHeaderView::section {{
+                background: {ThemeCls.BG_ELEV};
+                color: {ThemeCls.TXT};
+                padding: 8px;
+                border: 1px solid {ThemeCls.BDR};
+                font-weight: 600;
+                font-size: 13px;
+            }}
+            QHeaderView::section:hover {{
+                background: {ThemeCls.BDR};
+            }}
+        """)
+
+        # Ajuster les en-têtes
+        self.main_table.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
+        self.main_table.verticalHeader().setDefaultSectionSize(32)
+        self.main_table.horizontalHeader().setDefaultSectionSize(70)
 
     # ----------------- Filtres -----------------
     def show_multiselect_dialog(self, title, items):
@@ -206,142 +580,6 @@ class GrillesDialog(QDialog):
             return [item.text() for item in list_widget.selectedItems()]
         return []
 
-    def filter_data(self):
-        try:
-            mode, ok = QInputDialog.getItem(
-                self, "Mode de Filtrage",
-                "Choisissez le mode de filtrage :",
-                ["Par Opérateur", "Par Poste"], 0, False
-            )
-            if not ok or not mode:
-                return
-
-            # Sauvegarder toutes les données visibles avant le filtrage
-            saved_data = {}
-            for row in range(self.main_table.rowCount()):
-                for col in range(self.main_table.columnCount()):
-                    item = self.main_table.item(row, col)
-                    if item:
-                        saved_data[(row, col)] = item.text()
-
-            if mode == "Par Opérateur":
-                noms = [self.main_table.verticalHeaderItem(row).text()
-                        for row in range(self.main_table.rowCount())]
-                selected_noms = self.show_multiselect_dialog("Filtrer les Opérateurs", noms)
-
-                # Masquer toutes les lignes puis réafficher les sélectionnées
-                for row in range(self.main_table.rowCount()):
-                    nom = self.main_table.verticalHeaderItem(row).text()
-                    is_visible = nom in selected_noms
-                    self.main_table.setRowHidden(row, not is_visible)
-                    if is_visible:
-                        for col in range(self.main_table.columnCount()):
-                            if (row, col) in saved_data:
-                                item = QTableWidgetItem(saved_data[(row, col)])
-                                item.setTextAlignment(Qt.AlignCenter)
-                                self.main_table.setItem(row, col, item)
-
-                # Masquer les colonnes vides
-                for col in range(self.main_table.columnCount() - 1, -1, -1):
-                    has_values = False
-                    for row in range(self.main_table.rowCount()):
-                        if not self.main_table.isRowHidden(row):
-                            item = self.main_table.item(row, col)
-                            if item and item.text().strip():
-                                has_values = True
-                                break
-                    self.main_table.setColumnHidden(col, not has_values)
-
-            elif mode == "Par Poste":
-                postes = [self.main_table.horizontalHeaderItem(col).text()
-                          for col in range(self.main_table.columnCount())]
-                selected_postes = self.show_multiselect_dialog("Filtrer les Postes", postes)
-
-                # Masquer toutes les colonnes puis réafficher les sélectionnées
-                for col in range(self.main_table.columnCount()):
-                    poste = self.main_table.horizontalHeaderItem(col).text()
-                    is_visible = poste in selected_postes
-                    self.main_table.setColumnHidden(col, not is_visible)
-                    if is_visible:
-                        for row in range(self.main_table.rowCount()):
-                            if (row, col) in saved_data:
-                                item = QTableWidgetItem(saved_data[(row, col)])
-                                item.setTextAlignment(Qt.AlignCenter)
-                                self.main_table.setItem(row, col, item)
-
-                # Masquer les lignes sans données
-                for row in range(self.main_table.rowCount()):
-                    has_values = False
-                    for col in range(self.main_table.columnCount()):
-                        if not self.main_table.isColumnHidden(col):
-                            item = self.main_table.item(row, col)
-                            if item and item.text().strip():
-                                has_values = True
-                                break
-                    self.main_table.setRowHidden(row, not has_values)
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors du filtrage : {e}")
-
-    def load_services(self):
-        """Charge la liste des services depuis la base de données."""
-        try:
-            connection = get_db_connection()
-            cursor = connection.cursor()
-
-            cursor.execute("SELECT DISTINCT nom_service FROM services ORDER BY nom_service")
-            services = cursor.fetchall()
-
-            for service in services:
-                self.service_combo.addItem(service[0])
-
-            cursor.close()
-            connection.close()
-        except Exception as e:
-            print(f"Erreur lors du chargement des services : {e}")
-
-    def filter_by_service(self):
-        """Filtre les opérateurs par service sélectionné."""
-        selected_service = self.service_combo.currentText()
-
-        if selected_service == "Tous les services":
-            # Afficher tous les opérateurs (sauf lignes de synthèse)
-            for row in range(self.main_table.rowCount() - len(self.SUMMARY_ROWS)):  # ✅ self.SUMMARY_ROWS
-                self.main_table.setRowHidden(row, False)
-            return
-
-        try:
-            connection = get_db_connection()
-            cursor = connection.cursor()
-
-            # Récupérer les opérateurs du service sélectionné
-            query = """
-                SELECT DISTINCT p.id, p.nom, p.prenom
-                FROM personnel p
-                LEFT JOIN services s ON p.service_id = s.id
-                WHERE s.nom_service = %s AND p.statut = 'ACTIF'
-            """
-            cursor.execute(query, (selected_service,))
-            operateurs_service = cursor.fetchall()
-
-            # Créer un set des noms complets des opérateurs du service
-            operateurs_set = {f"{row[1]} {row[2]}" for row in operateurs_service}
-
-            # Masquer/afficher les lignes selon le filtre (sauf lignes de synthèse)
-            for row in range(self.main_table.rowCount() - len(self.SUMMARY_ROWS)):  # ✅ self.SUMMARY_ROWS
-                header_item = self.main_table.verticalHeaderItem(row)
-                if header_item:
-                    nom_complet = header_item.text()
-                    self.main_table.setRowHidden(row, nom_complet not in operateurs_set)
-
-            cursor.close()
-            connection.close()
-
-            # Mettre à jour les statistiques après filtrage
-            self.update_statistics()
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors du filtrage par service : {e}")
 
     # ----------------- Édition -----------------
     def on_cell_changed(self, row, column):
@@ -596,7 +834,7 @@ class GrillesDialog(QDialog):
         cursor, dict_mode = _cursor(connection)
 
         query = """
-        SELECT 
+        SELECT
             o.id as operateur_id,
             o.nom,
             o.prenom,
@@ -605,7 +843,7 @@ class GrillesDialog(QDialog):
             COALESCE(pv.niveau, '') AS niveau
         FROM personnel o
         CROSS JOIN postes p
-        LEFT JOIN polyvalence pv ON o.id = pv.operateur_id 
+        LEFT JOIN polyvalence pv ON o.id = pv.operateur_id
             AND p.id = pv.poste_id
         WHERE o.statut = 'ACTIF'
           AND o.matricule IS NOT NULL
@@ -725,17 +963,32 @@ class GrillesDialog(QDialog):
         if self.is_editable:
             # Mode édition activé
             self.main_table.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.EditKeyPressed)
-            QMessageBox.information(self, "Mode Édition", 
+
+            # Changer l'apparence du bouton
+            if THEME_AVAILABLE and hasattr(self, 'edit_mode_button'):
+                self.edit_mode_button.setProperty('class', 'primary')
+                self.edit_mode_button.style().unpolish(self.edit_mode_button)
+                self.edit_mode_button.style().polish(self.edit_mode_button)
+                self.edit_mode_button.setText("✏️ Mode Édition (Actif)")
+
+            QMessageBox.information(self, "Mode Édition",
                 "✅ Mode édition activé\n\n"
                 "💡 Les modifications seront sauvegardées automatiquement\n"
                 "   lorsque vous désactiverez le mode édition.")
         else:
             # Mode édition désactivé - SAUVEGARDER AUTOMATIQUEMENT
+            # Restaurer l'apparence du bouton
+            if THEME_AVAILABLE and hasattr(self, 'edit_mode_button'):
+                self.edit_mode_button.setProperty('class', 'ghost')
+                self.edit_mode_button.style().unpolish(self.edit_mode_button)
+                self.edit_mode_button.style().polish(self.edit_mode_button)
+                self.edit_mode_button.setText("✏️ Mode Édition")
+
             if self.modified_cells:
                 self.save_changes()
             else:
                 self.main_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-                QMessageBox.information(self, "Mode Édition", 
+                QMessageBox.information(self, "Mode Édition",
                     "Mode édition désactivé.\n\nAucune modification à sauvegarder.")
                 
     def save_changes(self):
@@ -895,17 +1148,58 @@ class GrillesDialog(QDialog):
                     else:
                         QMessageBox.critical(self, "Erreur", f"Le poste '{col_name}' n'existe pas ou est déjà masqué.")
             elif choice == "Ligne":
-                row_name, name_ok = QInputDialog.getText(self, "Nom de la Ligne", "Entrez le nom complet de l'opérateur à masquer :")
-                if name_ok and row_name:
-                    cursor.execute("SELECT id FROM personnel WHERE CONCAT(nom, ' ', prenom) = %s AND statut = 'ACTIF'", (row_name,))
-                    operateur = cursor.fetchone()
-                    if operateur:
-                        operateur_id = operateur["id"] if dict_mode else operateur[0]
-                        cursor.execute("UPDATE personnel SET statut = 'INACTIF' WHERE id = %s", (operateur_id,))
-                        connection.commit()
-                        self.load_data()
+                # Récupérer la liste des opérateurs actifs avec matricule
+                cursor.execute("""
+                    SELECT id, nom, prenom, matricule
+                    FROM personnel
+                    WHERE statut = 'ACTIF'
+                    AND matricule IS NOT NULL
+                    AND matricule != ''
+                    ORDER BY nom, prenom
+                """)
+                operateurs = cursor.fetchall()
+
+                if not operateurs:
+                    QMessageBox.information(self, "Information", "Aucun opérateur actif à masquer.")
+                    cursor.close()
+                    connection.close()
+                    return
+
+                # Créer une liste de noms pour la sélection
+                operateur_names = []
+                operateur_map = {}
+                for op in operateurs:
+                    if dict_mode:
+                        op_id = op["id"]
+                        nom = op["nom"]
+                        prenom = op["prenom"]
+                        matricule = op["matricule"]
                     else:
-                        QMessageBox.critical(self, "Erreur", f"L'opérateur '{row_name}' n'existe pas ou est déjà inactif.")
+                        op_id = op[0]
+                        nom = op[1]
+                        prenom = op[2]
+                        matricule = op[3]
+
+                    display_name = f"{nom} {prenom} ({matricule})"
+                    operateur_names.append(display_name)
+                    operateur_map[display_name] = op_id
+
+                # Afficher le dialogue de sélection
+                selected_name, name_ok = QInputDialog.getItem(
+                    self,
+                    "Masquer un opérateur",
+                    "Sélectionnez l'opérateur à masquer :",
+                    operateur_names,
+                    0,
+                    False
+                )
+
+                if name_ok and selected_name:
+                    operateur_id = operateur_map[selected_name]
+                    cursor.execute("UPDATE personnel SET statut = 'INACTIF' WHERE id = %s", (operateur_id,))
+                    connection.commit()
+                    QMessageBox.information(self, "Succès", f"L'opérateur {selected_name} a été masqué.")
+                    self.load_data()
             cursor.close()
             connection.close()
 
@@ -1024,19 +1318,6 @@ class GrillesDialog(QDialog):
             current_visual = header.visualIndex(logical_index)
             if current_visual != new_pos:
                 header.moveSection(current_visual, new_pos)
-
-    def reset_filters(self):
-        if hasattr(self, 'search_operator_input'):
-            self.search_operator_input.clear()
-        if hasattr(self, 'search_poste_input'):
-            self.search_poste_input.clear()
-        if hasattr(self, 'service_combo'):
-            self.service_combo.setCurrentIndex(0)  # Revenir à "Tous les services"
-
-        for row in range(self.main_table.rowCount()):
-            self.main_table.setRowHidden(row, False)
-        for col in range(self.main_table.columnCount()):
-            self.main_table.setColumnHidden(col, False)
 
     # ----------------- Export -----------------
     def export_data(self):
@@ -1183,33 +1464,35 @@ class GrillesDialog(QDialog):
 
 
     def export_to_pdf(self, file_name, export_current_state):
-        """Export PDF format A4 portrait avec colonnes de postes optimisées"""
+        """Export PDF ultra-compact sur une seule page avec résumé par opérateur"""
         try:
             from datetime import datetime
-            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
             from reportlab.lib import colors
-            from reportlab.lib.pagesizes import A4
+            from reportlab.lib.pagesizes import A4, landscape
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib.units import mm
-    
+            from reportlab.platypus import Flowable
+
+            # Récupération des données visibles
             headers = []
             for c in range(self.main_table.columnCount()):
                 if export_current_state and self.main_table.isColumnHidden(c):
                     continue
                 hi = self.main_table.horizontalHeaderItem(c)
                 headers.append(hi.text() if hi else "")
-    
+
             data_rows = []
             row_headers = []
             n_ops = len(self.operateurs)
-            
+
             for r in range(self.main_table.rowCount()):
                 if export_current_state and self.main_table.isRowHidden(r):
                     continue
                 vh = self.main_table.verticalHeaderItem(r)
                 row_name = vh.text() if vh else ""
                 row_headers.append(row_name)
-                
+
                 row = []
                 for c in range(self.main_table.columnCount()):
                     if export_current_state and self.main_table.isColumnHidden(c):
@@ -1217,175 +1500,163 @@ class GrillesDialog(QDialog):
                     it = self.main_table.item(r, c)
                     row.append("" if it is None else it.text())
                 data_rows.append(row)
-    
+
             if not data_rows:
                 QMessageBox.warning(self, "Exportation annulée", "Aucune donnée à exporter.")
                 return
-    
+
             synthesis_start = len(data_rows) - 7
             operator_rows = data_rows[:synthesis_start]
             operator_headers = row_headers[:synthesis_start]
             synthesis_rows = data_rows[synthesis_start:]
             synthesis_headers = row_headers[synthesis_start:]
-    
-            operator_rows_with_levels = operator_rows
-            synthesis_rows_with_levels = synthesis_rows
-    
-            styles = getSampleStyleSheet()
-            title_style = ParagraphStyle("T", parent=styles["Title"],
-                                         fontName="Helvetica-Bold", fontSize=14,
-                                         alignment=1, spaceAfter=3*mm)
-            
-            th_size = 8
-            td_size = 7.5
-            leading = 9
-            th = ParagraphStyle("TH", parent=styles["BodyText"], fontName="Helvetica-Bold",
-                                fontSize=th_size, leading=leading, alignment=1)
-            td_c = ParagraphStyle("TDc", parent=styles["BodyText"], fontName="Helvetica",
-                                  fontSize=td_size, leading=leading, alignment=1)
-            td_l = ParagraphStyle("TDl", parent=styles["BodyText"], fontName="Helvetica",
-                                  fontSize=td_size, leading=leading, alignment=0)
-    
+
+            # Configuration page A4 portrait - marges ultra-minimales
             page = A4
-            LM, RM, TM, BM = 8*mm, 8*mm, 15*mm, 12*mm
+            LM, RM, TM, BM = 3*mm, 3*mm, 8*mm, 3*mm  # Marges minimales (TM réduit)
             usable_w = page[0] - LM - RM
-    
-            first_col_w = 32*mm
+            usable_h = page[1] - TM - BM
+
+            # Tailles de police augmentées avec l'espace maximal
+            title_size = 11
+            th_size = 6.5
+            td_size = 6
+
+            # Calcul largeurs colonnes avec espace maximal
             n_poste_cols = len(headers)
-            poste_col_w = 5*mm
-            
-            total_poste_w = poste_col_w * n_poste_cols
-            if first_col_w + total_poste_w > usable_w:
-                remaining_w = usable_w - first_col_w
-                poste_col_w = max(4*mm, remaining_w / n_poste_cols)
-    
-            col_widths = [first_col_w] + [poste_col_w] * n_poste_cols
-    
-            from reportlab.platypus import Flowable
-            
+            first_col_w = 30*mm  # Colonne noms élargie
+            summary_col_w = 12*mm  # Colonne résumé élargie
+            remaining_w = usable_w - first_col_w - summary_col_w
+            poste_col_w = max(4.2*mm, remaining_w / n_poste_cols)  # Colonnes postes élargies
+
+            col_widths = [first_col_w] + [poste_col_w] * n_poste_cols + [summary_col_w]
+
+            # Texte vertical pour les en-têtes de postes
             class RotatedText(Flowable):
-                def __init__(self, text, fontSize=8):
+                def __init__(self, text, fontSize=5):
                     Flowable.__init__(self)
                     self.text = text
                     self.fontSize = fontSize
                     self.width = fontSize * 1.2
-                    self.height = len(text) * fontSize * 0.7
-                    
+                    self.height = min(22, len(text) * fontSize * 0.6)
+
                 def draw(self):
                     canvas = self.canv
                     canvas.saveState()
                     canvas.translate(self.width / 2, 0)
                     canvas.rotate(90)
                     canvas.setFont("Helvetica-Bold", self.fontSize)
-                    canvas.drawString(2, -self.fontSize/3, self.text)
+                    canvas.drawString(1, -self.fontSize/3, self.text)
                     canvas.restoreState()
-            
-            header_row = [""] + [RotatedText(h, th_size) for h in headers]
-            
+
+            # Construction du tableau principal
+            styles = getSampleStyleSheet()
+            td_c_style = ParagraphStyle("TDc", fontName="Helvetica", fontSize=td_size, leading=td_size+1, alignment=1)
+            td_l_style = ParagraphStyle("TDl", fontName="Helvetica", fontSize=td_size, leading=td_size+1, alignment=0)
+            td_b_style = ParagraphStyle("TDb", fontName="Helvetica-Bold", fontSize=td_size, leading=td_size+1, alignment=1)
+
+            # En-tête avec résumé
+            header_row = [""] + [RotatedText(h, th_size) for h in headers] + [RotatedText("Résumé", th_size)]
+
             data = [header_row]
-            for i, row in enumerate(operator_rows_with_levels):
-                data.append([Paragraph(operator_headers[i], td_l)] + 
-                           [Paragraph(str(v), td_c) for v in row])
-    
-            for i, row in enumerate(synthesis_rows_with_levels):
-                data.append([Paragraph(f"<b>{synthesis_headers[i]}</b>", td_l)] + 
-                           [Paragraph(str(v) if v else "", td_c) for v in row])
-    
-            table = Table(data, colWidths=col_widths, repeatRows=1)
-            
-            n_total_cols = len(headers) + 1
-            n_rows = len(data)
-            n_op_rows = len(operator_rows_with_levels) + 1
-            
+
+            # Lignes opérateurs avec calcul du résumé
+            for i, row in enumerate(operator_rows):
+                # Calcul résumé : compter les niveaux
+                levels = [val.strip() for val in row if val.strip().isdigit()]
+                n1 = levels.count('1')
+                n2 = levels.count('2')
+                n3 = levels.count('3')
+                n4 = levels.count('4')
+                total = len(levels)
+
+                # Format détaillé : afficher tous les niveaux présents
+                summary_parts = []
+                if n1 > 0:
+                    summary_parts.append(f"{n1}xN1")
+                if n2 > 0:
+                    summary_parts.append(f"{n2}xN2")
+                if n3 > 0:
+                    summary_parts.append(f"{n3}xN3")
+                if n4 > 0:
+                    summary_parts.append(f"{n4}xN4")
+
+                # Afficher tous les niveaux ou rien si aucun poste
+                summary = "<br/>".join(summary_parts) if summary_parts else ""
+
+                data.append(
+                    [Paragraph(operator_headers[i], td_l_style)] +
+                    [Paragraph(str(v) if v else "", td_c_style) for v in row] +
+                    [Paragraph(f"<b>{summary}</b>", td_b_style)]
+                )
+
+            # Lignes de synthèse
+            for i, row in enumerate(synthesis_rows):
+                data.append(
+                    [Paragraph(f"<b>{synthesis_headers[i]}</b>", td_l_style)] +
+                    [Paragraph(str(v) if v else "", td_c_style) for v in row] +
+                    [Paragraph("", td_c_style)]  # Pas de résumé pour les lignes de synthèse
+                )
+
+            table = Table(data, colWidths=col_widths)
+
+            n_op_rows = len(operator_rows) + 1
+
             table_style = [
-                ("GRID", (0, 0), (-1, -1), 0.3, colors.black),
-                ("BOX", (0, 0), (-1, -1), 0.8, colors.black),
+                ("GRID", (0, 0), (-1, -1), 0.25, colors.black),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.black),
                 ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#BFBFBF")),
-                ("FONTSIZE", (0, 0), (-1, 0), th_size),
                 ("ALIGN", (0, 0), (0, 0), "LEFT"),
                 ("ALIGN", (1, 0), (-1, 0), "CENTER"),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("FONTSIZE", (0, 1), (-1, n_op_rows - 1), td_size),
                 ("ALIGN", (1, 1), (-1, -1), "CENTER"),
-                ("BACKGROUND", (0, n_op_rows), (-1, -1), colors.HexColor("#D0D0D0")),
-                ("FONTSIZE", (0, n_op_rows), (-1, -1), th_size),
+                ("BACKGROUND", (0, n_op_rows), (-1, -1), colors.HexColor("#E0E0E0")),
+                ("BACKGROUND", (-1, 1), (-1, n_op_rows-1), colors.HexColor("#FFF9C4")),  # Colonne résumé en jaune
                 ("LEFTPADDING", (0, 0), (-1, -1), 1),
                 ("RIGHTPADDING", (0, 0), (-1, -1), 1),
-                ("TOPPADDING", (0, 0), (-1, 0), 2),
-                ("BOTTOMPADDING", (0, 0), (-1, 0), 2),
-                ("TOPPADDING", (0, 1), (-1, -1), 1.5),
-                ("BOTTOMPADDING", (0, 1), (-1, -1), 1.5),
+                ("TOPPADDING", (0, 0), (-1, -1), 2),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
             ]
-            
+
             table.setStyle(TableStyle(table_style))
-    
-            legend_title = Paragraph("<b>Définition</b>", styles["Heading4"])
-            
-            legend_header_style = ParagraphStyle("LegHeader", parent=styles["BodyText"], 
-                                                fontName="Helvetica-Bold", fontSize=9, 
-                                                alignment=1, leading=10)
-            legend_cell_style = ParagraphStyle("LegCell", parent=styles["BodyText"], 
-                                              fontName="Helvetica", fontSize=8, 
-                                              alignment=0, leading=10)
-            
-            leg = [
-                [Paragraph("Niveau", legend_header_style), 
-                 Paragraph("Définition", legend_header_style), 
-                 Paragraph("Valeur de la<br/>dernière<br/>évaluation", legend_header_style)],
-                [Paragraph("1", legend_cell_style), 
-                 Paragraph("Opérateur nouveau à encadrer par titulaire N3/4 ou absent du poste depuis plus de 12 mois", legend_cell_style), 
-                 Paragraph("&lt; 80%", legend_cell_style)],
-                [Paragraph("2", legend_cell_style), 
-                 Paragraph("Opérateur formé et apte à conduire le poste seul. Certaines notions sont en cours d'acquisition", legend_cell_style), 
-                 Paragraph("≥ 80%", legend_cell_style)],
-                [Paragraph("3", legend_cell_style), 
-                 Paragraph("Opérateur titulaire, formé, apte à conduire le poste et apte à former", legend_cell_style), 
-                 Paragraph("&gt; 90%", legend_cell_style)],
-                [Paragraph("4", legend_cell_style), 
-                 Paragraph("N3 + Leader ou Polyvalent (maîtrise ≥ 3 postes d'une ligne: mél. interne, cylindres, conditionnement)", legend_cell_style), 
-                 Paragraph("&gt; 90%", legend_cell_style)],
-            ]
-            
-            legend_w = usable_w
-            leg_tbl = Table(leg, colWidths=[15*mm, legend_w - 45*mm, 30*mm])
-            leg_tbl.setStyle(TableStyle([
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.black),
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#D9D9D9")),
-                ("ALIGN", (0, 0), (0, -1), "CENTER"),
-                ("ALIGN", (2, 0), (2, -1), "CENTER"),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("LEFTPADDING", (0, 0), (-1, -1), 4),
-                ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-                ("TOPPADDING", (0, 0), (-1, -1), 3),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-            ]))
-    
+
+            # Légende compacte en bas
+            legend_style = ParagraphStyle("Leg", fontName="Helvetica", fontSize=6, leading=7, alignment=0)
+            legend_text = (
+                "<b>Niveaux :</b> "
+                "<b>N1</b>: &lt;80% (nouveau/absent 12m) | "
+                "<b>N2</b>: ≥80% (formé, autonome) | "
+                "<b>N3</b>: &gt;90% (formateur) | "
+                "<b>N4</b>: &gt;90% (leader/polyvalent) | "
+                "<b>Résumé :</b> affiche le nombre de postes N3 et N4 (ex: 5xN3 = 5 postes niveau 3)"
+            )
+            legend = Paragraph(legend_text, legend_style)
+
+            # En-tête page
             def on_page(canvas, doc):
                 canvas.saveState()
-                canvas.setFont("Helvetica", 7)
-                canvas.drawString(LM, page[1] - TM + 6*mm, "LQ 07 02 02 rév.1")
-                canvas.drawRightString(page[0] - RM, BM - 3*mm, f"Page {doc.page}")
+                canvas.setFont("Helvetica-Bold", title_size)
+                canvas.drawCentredString(page[0]/2, page[1] - TM + 3*mm,
+                                        f"Grille de Polyvalence au {datetime.now().strftime('%d/%m/%Y')}")
+                canvas.setFont("Helvetica", 6)
+                canvas.drawString(LM, TM - 3*mm, "LQ 07 02 02 rév.1")
                 canvas.restoreState()
-    
+
             doc = SimpleDocTemplate(
                 file_name, pagesize=page,
-                leftMargin=LM, rightMargin=RM, topMargin=TM, bottomMargin=BM,
+                leftMargin=LM, rightMargin=RM, topMargin=TM + 5*mm, bottomMargin=BM + 3*mm,
                 title="Grille de Polyvalence"
             )
-    
+
             story = [
-                Paragraph(f"Grille de Polyvalence au {datetime.now().strftime('%d/%m/%Y')}", title_style),
-                Spacer(1, 2*mm),
                 table,
-                Spacer(1, 4*mm),
-                legend_title,
-                Spacer(1, 1*mm),
-                leg_tbl
+                Spacer(1, 2*mm),
+                legend
             ]
-            
+
             doc.build(story, onFirstPage=on_page, onLaterPages=on_page)
             QMessageBox.information(self, "Exportation réussie", f"PDF généré : {file_name}")
-    
+
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur lors de l'export PDF : {e}")
             import traceback

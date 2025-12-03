@@ -13,6 +13,7 @@ from core.db.configbd import get_connection as get_db_connection
 from core.services.logger import log_hist
 from core.services.contrat_service import get_all_contracts
 from core.gui.contract_management import ContractFormDialog
+from core.gui.historique_personnel import HistoriquePersonnelTab
 
 import datetime as dt
 
@@ -318,85 +319,14 @@ class DetailOperateurDialog(QDialog):
 
         tabs.addTab(contract_tab, "Contrats")
 
-        # Onglet 5 : Historique des modifications
-        history_tab = QWidget()
-        history_layout = QVBoxLayout(history_tab)
-        history_layout.setSpacing(15)
-        history_layout.setContentsMargins(20, 20, 20, 20)
-        
-        # En-tête avec design moderne
-        header_history = QWidget()
-        header_history.setStyleSheet("""
-            QWidget {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #7c3aed, stop:1 #a78bfa);
-                border-radius: 10px;
-                padding: 15px;
-            }
-        """)
-        header_layout = QVBoxLayout(header_history)
-        
-        history_label = QLabel("📜 Historique des Modifications")
-        history_label.setFont(QFont("Arial", 16, QFont.Bold))
-        history_label.setStyleSheet("color: white; background: transparent;")
-        header_layout.addWidget(history_label)
-        
-        history_subtitle = QLabel("Journal de toutes les actions effectuées")
-        history_subtitle.setStyleSheet("color: #e9d5ff; font-size: 11px; background: transparent;")
-        header_layout.addWidget(history_subtitle)
-        
-        history_layout.addWidget(header_history)
-        
-        self.history_table = QTableWidget()
-        self.history_table.setColumnCount(3)
-        self.history_table.setHorizontalHeaderLabels(["Date", "Action", "Description"])
-        self.history_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.history_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.history_table.setAlternatingRowColors(True)
-        self.history_table.setStyleSheet("""
-            QTableWidget {
-                background-color: white;
-                alternate-background-color: #faf5ff;
-                gridline-color: #e9d5ff;
-                border: 2px solid #e2e8f0;
-                border-radius: 10px;
-                font-size: 11px;
-            }
-            QHeaderView::section {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #f1f5f9, stop:1 #e2e8f0);
-                color: #1e293b;
-                font-weight: bold;
-                font-size: 12px;
-                padding: 12px 15px;
-                border: none;
-                border-bottom: 3px solid #7c3aed;
-            }
-            QTableWidget::item {
-                padding: 12px 15px;
-                border-bottom: 1px solid #f1f5f9;
-            }
-            QTableWidget::item:selected {
-                background-color: #e9d5ff;
-                color: #5b21b6;
-            }
-            QScrollBar:vertical {
-                background: #f1f5f9;
-                width: 12px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background: #cbd5e1;
-                border-radius: 6px;
-                min-height: 30px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #7c3aed;
-            }
-        """)
-        history_layout.addWidget(self.history_table)
-        
-        tabs.addTab(history_tab, "Historique")
+        # Onglet 5 : Historique des modifications (nouveau widget complet)
+        self.history_tab = HistoriquePersonnelTab(
+            operateur_id=self.operateur_id,
+            operateur_nom=nom,
+            operateur_prenom=prenom,
+            parent=self
+        )
+        tabs.addTab(self.history_tab, "Historique")
 
         self.tabs_widget = tabs
         layout.addWidget(tabs)
@@ -490,7 +420,7 @@ class DetailOperateurDialog(QDialog):
         self.load_summary()
         self.load_additional_infos() # <--- AJOUT : Chargement des nouvelles infos
         self.load_contracts()
-        self.load_history()
+        # L'historique se charge automatiquement via le widget HistoriquePersonnelTab
 
     
     
@@ -873,42 +803,8 @@ pour les affectations de poste.
         except Exception as e:
             self.summary_text.setPlainText(f"Erreur lors du chargement du résumé :\n{e}")
     
-    def load_history(self):
-        """Charge l'historique des modifications."""
-        try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            
-            cursor.execute(
-                """SELECT date_time, action, description 
-                   FROM historique 
-                   WHERE operateur_id = %s 
-                   ORDER BY date_time DESC 
-                   LIMIT 50""",
-                (self.operateur_id,)
-            )
-            rows = _rows(cursor, dict_mode)
-            
-            cursor.close()
-            connection.close()
-            
-            self.history_table.setRowCount(0)
-            
-            for r in rows:
-                row = self.history_table.rowCount()
-                self.history_table.insertRow(row)
-                
-                date_str = self._format_datetime(r.get("date_time"))
-                action = r.get("action", "")
-                desc = r.get("description", "")
-                
-                self.history_table.setItem(row, 0, QTableWidgetItem(date_str))
-                self.history_table.setItem(row, 1, QTableWidgetItem(action))
-                self.history_table.setItem(row, 2, QTableWidgetItem(desc))
-            
-        except Exception as e:
-            QMessageBox.warning(self, "Historique", f"Impossible de charger l'historique :\n{e}")
-    
+    # Méthode load_history() supprimée - remplacée par le widget HistoriquePersonnelTab
+
     def toggle_operateur_status(self):
         """Change le statut de l'opérateur (ACTIF <-> INACTIF)."""
         new_statut = "INACTIF" if self.current_statut == "ACTIF" else "ACTIF"
@@ -928,27 +824,50 @@ pour les affectations de poste.
         try:
             connection = get_db_connection()
             cursor, _ = _cursor(connection)
-            
+
+            # Récupérer nom/prénom pour le log
+            cursor.execute("SELECT nom, prenom FROM personnel WHERE id = %s", (self.operateur_id,))
+            pers = cursor.fetchone()
+
             cursor.execute(
                 "UPDATE personnel SET statut = %s WHERE id = %s",
                 (new_statut, self.operateur_id)
             )
-            
+
             connection.commit()
+
+            # Logger le changement de statut
+            if pers:
+                from core.services.logger import log_hist
+                import json
+                log_hist(
+                    action="UPDATE",
+                    table_name="personnel",
+                    record_id=self.operateur_id,
+                    operateur_id=self.operateur_id,
+                    description=json.dumps({
+                        "operateur": f"{pers[1]} {pers[0]}",
+                        "old_statut": self.current_statut,
+                        "new_statut": new_statut,
+                        "type": "changement_statut"
+                    }, ensure_ascii=False),
+                    source="GUI/gestion_personnel"
+                )
+
             cursor.close()
             connection.close()
-            
+
             self.current_statut = new_statut
             self.update_status_button()
-            
+
             QMessageBox.information(
                 self, "Statut modifié",
                 f"Le statut de l'opérateur a été changé à {new_statut} avec succès !"
             )
-            
+
             self.operateur_status_changed.emit(self.operateur_id)
             self.load_summary()  # Recharger le résumé pour mettre à jour le statut
-            
+
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible de modifier le statut :\n{e}")
 

@@ -1,13 +1,16 @@
 import mysql.connector
 
+
+
+
 def get_connection():
-    conn = mysql.connector.connect(
+    return mysql.connector.connect(
         host="localhost",
         user="root",
         password="emacViodos$13",
         database="emac_db",
+        port=3306,
         charset="utf8mb4",
-        collation="utf8mb4_general_ci",
         use_unicode=True,
         autocommit=False
     )

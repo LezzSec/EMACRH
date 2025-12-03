@@ -12,11 +12,10 @@ from core.gui.gestion_evaluation import GestionEvaluationDialog
 from core.gui.manage_operateur import ManageOperatorsDialog
 from core.gui.historique import HistoriqueDialog
 from core.gui.gestion_personnel import GestionPersonnelDialog
-from core.gui.evaluation_calendar import EvaluationCalendarDialog
-from core.gui.regularisation import RegularisationDialog
+from core.gui.planning import RegularisationDialog
 from core.gui.contract_management import ContractManagementDialog
+from core.gui.planning_absences import PlanningAbsencesDialog
 from core.db.configbd import get_connection as get_db_connection
-from core.services.contrat_service import get_expiring_contracts
 
 
 try:
@@ -64,13 +63,6 @@ class MainWindow(QMainWindow):
         self.next_card.body.addWidget(self.next_eval_scroll)
         left.addWidget(self.next_card)
 
-        # Carte contrats à renouveler
-        self.contract_card = EmacStatusCard("Contrats à Renouveler", variant='warning', subtitle="30 prochains jours")
-        self.contract_scroll, self.contract_list = self.create_scrollable_list()
-        self.contract_card.body.addWidget(self.contract_scroll)
-        self.contract_list.itemDoubleClicked.connect(self.show_contract_management)
-        left.addWidget(self.contract_card)
-
         root.addLayout(left, 0, 0, 2, 1)
 
         right = QVBoxLayout(); right.setSpacing(18)
@@ -112,7 +104,6 @@ class MainWindow(QMainWindow):
 
         QTimer.singleShot(0, self.populate_filters)
         QTimer.singleShot(100, self.load_evaluations)
-        QTimer.singleShot(150, self.load_contracts)
 
     # ================= Filtre d'événements pour clic extérieur =================
     def eventFilter(self, source, event):
@@ -171,9 +162,8 @@ class MainWindow(QMainWindow):
         self.add_drawer_button(drawer_layout, "Ajouter du personnel", self.show_manage_operator, 'ghost')
         self.add_drawer_button(drawer_layout, "Création/Suppression de poste", self.show_poste_form, 'ghost')
         self.add_drawer_button(drawer_layout, "Gestion des Contrats", self.show_contract_management, 'ghost')
-        self.add_drawer_button(drawer_layout, "Planning & Absences", self.show_regularisation, 'ghost')
+        self.add_drawer_button(drawer_layout, "Planning & Évaluations", self.show_regularisation, 'ghost')
         self.add_drawer_button(drawer_layout, "Historique", self.show_historique, 'ghost')
-        self.add_drawer_button(drawer_layout, "Calendrier", self.show_calendrier_evaluations, 'ghost')
 
         if export_day:
             self.add_drawer_button(drawer_layout, "Exporter les logs", self.export_logs_today, 'ghost')
@@ -260,14 +250,25 @@ class MainWindow(QMainWindow):
         CreationModificationPosteDialog().exec_()
     def show_historique(self):
         HistoriqueDialog().exec_()
-    def show_calendrier_evaluations(self):
-        EvaluationCalendarDialog(self).exec_()
     def show_regularisation(self):
-        RegularisationDialog(self).exec_()
+        # TODO: Récupérer l'ID du personnel connecté
+        # Pour l'instant, utilise le premier personnel actif
+        conn = get_db_connection()
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
+            result = cur.fetchone()
+            personnel_id = result[0] if result else None
+        finally:
+            cur.close()
+            conn.close()
+
+        if personnel_id:
+            PlanningAbsencesDialog(personnel_id=personnel_id, parent=self).exec_()
+        else:
+            QMessageBox.warning(self, "Erreur", "Aucun personnel actif trouvé")
     def show_contract_management(self):
         ContractManagementDialog(self).exec_()
-        # Recharger les contrats après fermeture
-        self.load_contracts()
 
     # ================= Données / DB (Fonctions inchangées) =================
     def populate_filters(self):
@@ -337,42 +338,6 @@ class MainWindow(QMainWindow):
         finally:
             cur.close(); conn.close()
 
-    def load_contracts(self):
-        """Charge les contrats à renouveler dans les 30 prochains jours."""
-        try:
-            contracts = get_expiring_contracts(30)
-
-            self.contract_list.clear()
-            for contract in contracts:
-                nom = contract.get('nom', '')
-                prenom = contract.get('prenom', '')
-                type_contrat = contract.get('type_contrat', '')
-                date_fin = contract.get('date_fin')
-                jours_restants = contract.get('jours_restants', 0)
-
-                date_fin_str = date_fin.strftime('%d/%m/%Y') if date_fin else '?'
-
-                # Texte avec couleur selon urgence
-                if jours_restants < 0:
-                    urgence = "⚠️ EXPIRÉ"
-                elif jours_restants <= 7:
-                    urgence = f"⚠️ {jours_restants}j"
-                else:
-                    urgence = f"{jours_restants}j"
-
-                self.contract_list.addItem(
-                    f"{nom} {prenom} · {type_contrat}  —  Fin: {date_fin_str} ({urgence})"
-                )
-
-            # Mettre à jour le sous-titre de la carte
-            count = len(contracts)
-            if count == 0:
-                self.contract_card.subtitle_label.setText("Aucun contrat à renouveler")
-            else:
-                self.contract_card.subtitle_label.setText(f"{count} contrat(s) à traiter")
-
-        except Exception as e:
-            print(f"Erreur lors du chargement des contrats : {e}")
 
     # ================= Export (Fonction inchangée) =================
     def export_logs_today(self):

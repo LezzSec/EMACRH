@@ -1,12 +1,13 @@
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox,
-    QHBoxLayout, QFormLayout, QDateEdit, QComboBox, QApplication
+    QHBoxLayout, QFormLayout, QDateEdit, QComboBox, QApplication, QInputDialog
 )
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 
 from core.gui.historique import HistoriqueDialog
 from core.db.configbd import get_connection as get_db_connection
+from core.services.matricule_service import generer_prochain_matricule
 import json
 import datetime
 
@@ -143,28 +144,28 @@ class ManageOperatorsDialog(QDialog):
     def __init__(self):
         super().__init__()
 
-        self.setWindowTitle("Ajouter un opérateur")
+        self.setWindowTitle("Ajouter du personnel")
         self.setGeometry(200, 200, 440, 300)
 
         layout = QVBoxLayout(self)
 
         # Titre
-        title = QLabel("Gestion des opérateurs")
+        title = QLabel("Gestion du personnel")
         title.setAlignment(Qt.AlignCenter)
         title.setFont(QFont("Arial", 14, QFont.Bold))
         layout.addWidget(title)
 
         # Section saisie
-        section = QLabel("Ajouter un opérateur")
+        section = QLabel("Ajouter du personnel")
         section.setFont(QFont("Arial", 11))
         layout.addWidget(section)
 
         self.add_nom_input = QLineEdit(self)
-        self.add_nom_input.setPlaceholderText("Nom de l'opérateur")
+        self.add_nom_input.setPlaceholderText("Nom")
         layout.addWidget(self.add_nom_input)
 
         self.add_prenom_input = QLineEdit(self)
-        self.add_prenom_input.setPlaceholderText("Prénom de l'opérateur")
+        self.add_prenom_input.setPlaceholderText("Prénom")
         layout.addWidget(self.add_prenom_input)
 
         # Bouton Ajouter
@@ -223,21 +224,61 @@ class ManageOperatorsDialog(QDialog):
 
     def _enregistrer_date_polyvalence(self, connection, cursor, operateur_id: int, poste_id: int, qdate: QDate):
         """
-        Insère la prochaine évaluation dans `polyvalence` (poste_id obligatoire).
+        Insère ou met à jour la prochaine évaluation dans `polyvalence` (poste_id obligatoire).
         NE FAIT NI commit() NI start_transaction().
+        Évite les doublons en vérifiant d'abord si l'entrée existe déjà.
         """
         date_iso = qdate.toString("yyyy-MM-dd")
+
+        # Vérifier si l'entrée existe déjà
         cursor.execute(
             """
-            INSERT INTO polyvalence (operateur_id, poste_id, prochaine_evaluation)
-            VALUES (%s, %s, %s)
+            SELECT id FROM polyvalence
+            WHERE operateur_id = %s AND poste_id = %s
             """,
-            (operateur_id, poste_id, date_iso),
+            (operateur_id, poste_id),
         )
+        existing = cursor.fetchone()
+
+        if existing:
+            # Mettre à jour l'entrée existante
+            cursor.execute(
+                """
+                UPDATE polyvalence
+                SET prochaine_evaluation = %s
+                WHERE operateur_id = %s AND poste_id = %s
+                """,
+                (date_iso, operateur_id, poste_id),
+            )
+        else:
+            # Insérer une nouvelle entrée
+            cursor.execute(
+                """
+                INSERT INTO polyvalence (operateur_id, poste_id, prochaine_evaluation)
+                VALUES (%s, %s, %s)
+                """,
+                (operateur_id, poste_id, date_iso),
+            )
 
     # --------------------------- Action UI ---------------------------
 
     def add_operator(self):
+        # Demander le type de personnel EN PREMIER
+        type_personnel, ok = QInputDialog.getItem(
+            self,
+            "Type de personnel",
+            "Quel type de personnel souhaitez-vous ajouter ?",
+            ["Opérateur de Production (avec matricule)", "Autre Personnel (sans matricule)"],
+            0,
+            False
+        )
+
+        if not ok:
+            return  # Annulation
+
+        is_production = "Production" in type_personnel
+
+        # Ensuite vérifier nom et prénom
         nom = self.add_nom_input.text().strip()
         prenom = self.add_prenom_input.text().strip()
 
@@ -269,15 +310,18 @@ class ManageOperatorsDialog(QDialog):
                 (nom, prenom)
             )
             existing = cursor.fetchone()
-            
+
             if existing is None:
                 existing_id = None
             else:
                 existing_id = existing["id"] if dict_mode else existing[0]
 
-            # Demande date + poste (OPTIONNEL maintenant)
-            dlg = EvaluationDateDialog(connection, cursor, self)
-            add_polyvalence = (dlg.exec_() == QDialog.Accepted)
+            # Si production, demander le poste pour la polyvalence
+            add_polyvalence = False
+            if is_production:
+                dlg = EvaluationDateDialog(connection, cursor, self)
+                result = dlg.exec_()
+                add_polyvalence = (result == QDialog.Accepted)
 
             poste_id = None
             qdate = None
@@ -290,41 +334,68 @@ class ManageOperatorsDialog(QDialog):
                 date_iso = qdate.toString("yyyy-MM-dd")
 
                 # Récupérer le nom du poste pour le log
-                cursor.execute("SELECT poste_code FROM postes WHERE id = %s", (poste_id,))
-                poste_row = cursor.fetchone()
-                poste_name = poste_row["poste_code"] if (poste_row and dict_mode) else (poste_row[0] if poste_row else f"Poste #{poste_id}")
+                if poste_id:
+                    cursor.execute("SELECT poste_code FROM postes WHERE id = %s", (poste_id,))
+                    poste_row = cursor.fetchone()
+                    poste_name = poste_row["poste_code"] if (poste_row and dict_mode) else (poste_row[0] if poste_row else f"Poste #{poste_id}")
 
             # Insertion(s)
             if existing_id:
                 operateur_id = int(existing_id)
             else:
+                # Générer le matricule si c'est du personnel de production
+                matricule = None
+                if is_production:  # Si production, générer un matricule
+                    matricule = generer_prochain_matricule()
+
+                # Insérer avec ou sans matricule
                 if col_statut:
-                    cursor.execute(
-                        f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`, `{col_statut}`) "
-                        f"VALUES (%s, %s, 'ACTIF')",
-                        (nom, prenom)
-                    )
+                    if matricule:
+                        cursor.execute(
+                            f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`, `{col_statut}`, `matricule`) "
+                            f"VALUES (%s, %s, 'ACTIF', %s)",
+                            (nom, prenom, matricule)
+                        )
+                    else:
+                        cursor.execute(
+                            f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`, `{col_statut}`) "
+                            f"VALUES (%s, %s, 'ACTIF')",
+                            (nom, prenom)
+                        )
                 else:
-                    cursor.execute(
-                        f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`) "
-                        f"VALUES (%s, %s)",
-                        (nom, prenom)
-                    )
+                    if matricule:
+                        cursor.execute(
+                            f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`, `matricule`) "
+                            f"VALUES (%s, %s, %s)",
+                            (nom, prenom, matricule)
+                        )
+                    else:
+                        cursor.execute(
+                            f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`) "
+                            f"VALUES (%s, %s)",
+                            (nom, prenom)
+                        )
+
                 operateur_id = self._get_or_create_operateur_id(cursor, nom, prenom)
                 if not operateur_id:
                     raise RuntimeError("Impossible de récupérer l'id du nouvel opérateur.")
 
                 # ✅ LOG création opérateur dans l'historique
+                log_data = {
+                    "operateur": f"{prenom} {nom}",
+                    "type": "creation_operateur",
+                    "details": f"Création de l'opérateur {prenom} {nom}"
+                }
+                if matricule:
+                    log_data["matricule"] = matricule
+                    log_data["details"] += f" (matricule: {matricule})"
+
                 log_to_historique(
                     connection, cursor,
                     action="INSERT",
                     operateur_id=operateur_id,
                     poste_id=None,  # Pas de poste associé à la création d'opérateur
-                    description_data={
-                        "operateur": f"{prenom} {nom}",
-                        "type": "creation_operateur",
-                        "details": f"Création de l'opérateur {prenom} {nom}"
-                    }
+                    description_data=log_data
                 )
 
             # Évaluation liée (seulement si polyvalence ajoutée)
@@ -349,7 +420,7 @@ class ManageOperatorsDialog(QDialog):
             # Commit unique
             connection.commit()
 
-            # UI
+            # UI - Messages informatifs
             if existing_id:
                 if add_polyvalence:
                     QMessageBox.information(
@@ -362,15 +433,22 @@ class ManageOperatorsDialog(QDialog):
                         f"Opérateur existant, aucune polyvalence ajoutée."
                     )
             else:
-                if add_polyvalence:
-                    QMessageBox.information(
-                        self, "Succès",
-                        f"Opérateur '{nom} {prenom}' créé avec une polyvalence de production."
-                    )
+                if is_production:
+                    msg = f"Opérateur '{prenom} {nom}' créé avec succès !\n\n"
+                    if matricule:
+                        msg += f"Matricule : {matricule}\n"
+                        msg += f"Cet opérateur apparaîtra dans les Listes et Grilles."
+                        if add_polyvalence and poste_id:
+                            msg += f"\nPolyvalence ajoutée au poste {poste_name}"
+                    else:
+                        msg += "Erreur : Pas de matricule généré."
+                    QMessageBox.information(self, "Succès", msg)
                 else:
                     QMessageBox.information(
                         self, "Succès",
-                        f"Opérateur '{nom} {prenom}' créé (personnel non-production)."
+                        f"Opérateur '{prenom} {nom}' créé (personnel non-production).\n\n"
+                        f"Cet opérateur n'apparaîtra PAS dans les Listes et Grilles\n"
+                        f"car il n'a pas de matricule."
                     )
 
             # Reset + notifier pour rafraîchir la liste ailleurs

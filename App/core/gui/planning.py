@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QMessageBox, QTableWidget, QTableWidgetItem, QDateEdit, QComboBox,
     QHeaderView, QAbstractItemView, QGroupBox, QFormLayout, QTextEdit,
-    QTabWidget, QWidget, QCalendarWidget, QListWidget, QListWidgetItem
+    QTabWidget, QWidget, QCalendarWidget, QListWidget, QListWidgetItem, QLineEdit
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QTextCharFormat
@@ -90,11 +90,15 @@ class RegularisationDialog(QDialog):
         self.declare_tab = self.create_declare_tab()
         self.tabs.addTab(self.declare_tab, "➕ Déclarer une Absence")
 
-        # Onglet 3: Calendrier
+        # Onglet 3: Calendrier Absences
         self.calendar_tab = self.create_calendar_tab()
-        self.tabs.addTab(self.calendar_tab, "📅 Calendrier")
+        self.tabs.addTab(self.calendar_tab, "📅 Calendrier Absences")
 
-        # Onglet 4: Historique
+        # Onglet 4: Calendrier Évaluations
+        self.eval_calendar_tab = self.create_eval_calendar_tab()
+        self.tabs.addTab(self.eval_calendar_tab, "📆 Calendrier Évaluations")
+
+        # Onglet 5: Historique
         self.history_tab = self.create_history_tab()
         self.tabs.addTab(self.history_tab, "📊 Historique")
 
@@ -587,7 +591,246 @@ class RegularisationDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible de charger les absences :\n{e}")
 
-    # ==================== ONGLET 4: HISTORIQUE ====================
+    # ==================== ONGLET 4: CALENDRIER ÉVALUATIONS ====================
+
+    def create_eval_calendar_tab(self):
+        """Crée l'onglet calendrier des évaluations."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Filtres en haut
+        filters = QHBoxLayout()
+
+        self.eval_search = QLineEdit()
+        self.eval_search.setPlaceholderText("Rechercher opérateur (nom/prénom)...")
+        self.eval_search.textChanged.connect(self.load_eval_calendar_data)
+        filters.addWidget(self.eval_search, stretch=1)
+
+        filters.addWidget(QLabel("Poste :"))
+        self.eval_poste_filter = QComboBox()
+        self.eval_poste_filter.addItem("(Tous)")
+        self.eval_poste_filter.currentIndexChanged.connect(self.load_eval_calendar_data)
+        filters.addWidget(self.eval_poste_filter)
+
+        refresh_eval_btn = QPushButton("🔄 Actualiser")
+        refresh_eval_btn.clicked.connect(self.load_eval_calendar_data)
+        filters.addWidget(refresh_eval_btn)
+
+        layout.addLayout(filters)
+
+        # Split horizontal: Calendrier + Liste
+        h_layout = QHBoxLayout()
+
+        # Calendrier
+        cal_group = QGroupBox("Calendrier des évaluations")
+        cal_layout = QVBoxLayout()
+
+        self.eval_calendar = QCalendarWidget()
+        self.eval_calendar.setGridVisible(True)
+        self.eval_calendar.clicked.connect(self.on_eval_calendar_date_clicked)
+        self.eval_calendar.currentPageChanged.connect(self.load_eval_calendar_markings)
+        cal_layout.addWidget(self.eval_calendar)
+
+        cal_group.setLayout(cal_layout)
+        h_layout.addWidget(cal_group, 2)
+
+        # Détails du jour sélectionné
+        details_group = QGroupBox("Évaluations du jour sélectionné")
+        details_layout = QVBoxLayout()
+
+        self.eval_selected_date_label = QLabel("Sélectionnez une date")
+        self.eval_selected_date_label.setFont(QFont("Arial", 12, QFont.Bold))
+        self.eval_selected_date_label.setStyleSheet("color: #1f2937; padding: 10px;")
+        details_layout.addWidget(self.eval_selected_date_label)
+
+        self.eval_calendar_list = QListWidget()
+        details_layout.addWidget(self.eval_calendar_list)
+
+        details_group.setLayout(details_layout)
+        h_layout.addWidget(details_group, 1)
+
+        layout.addLayout(h_layout)
+
+        # Charger les postes dans le filtre
+        self.load_eval_postes_filter()
+
+        # Charger les données initiales
+        self.load_eval_calendar_markings()
+
+        return widget
+
+    def load_eval_postes_filter(self):
+        """Charge la liste des postes pour le filtre d'évaluations."""
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+
+            cursor.execute("""
+                SELECT DISTINCT p.id, p.poste_code
+                FROM postes p
+                INNER JOIN polyvalence poly ON poly.poste_id = p.id
+                WHERE p.visible = 1
+                ORDER BY p.poste_code
+            """)
+
+            rows = _rows(cursor, dict_mode)
+            cursor.close()
+            connection.close()
+
+            self.eval_poste_filter.clear()
+            self.eval_poste_filter.addItem("(Tous)", None)
+
+            for r in rows:
+                self.eval_poste_filter.addItem(r['poste_code'], r['id'])
+
+        except Exception as e:
+            print(f"Erreur lors du chargement des postes : {e}")
+
+    def load_eval_calendar_markings(self):
+        """Marque les jours avec des évaluations prévues dans le calendrier."""
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+
+            # Récupérer le mois affiché
+            current_date = self.eval_calendar.selectedDate().toPyDate()
+            first_day = date(current_date.year, current_date.month, 1)
+
+            # Dernier jour du mois
+            if current_date.month == 12:
+                last_day = date(current_date.year + 1, 1, 1) - timedelta(days=1)
+            else:
+                last_day = date(current_date.year, current_date.month + 1, 1) - timedelta(days=1)
+
+            # Récupérer les dates d'évaluation
+            cursor.execute("""
+                SELECT DISTINCT DATE(poly.prochaine_evaluation) as eval_date
+                FROM polyvalence poly
+                JOIN personnel pers ON poly.operateur_id = pers.id
+                JOIN postes p ON poly.poste_id = p.id
+                WHERE poly.prochaine_evaluation BETWEEN %s AND %s
+                  AND pers.statut = 'ACTIF'
+                  AND p.visible = 1
+            """, (first_day, last_day))
+
+            rows = _rows(cursor, dict_mode)
+            cursor.close()
+            connection.close()
+
+            # Réinitialiser le format
+            default_format = QTextCharFormat()
+            default_format.setBackground(QColor("white"))
+
+            # Appliquer le format par défaut à toutes les dates du mois
+            current = first_day
+            while current <= last_day:
+                qdate = QDate(current.year, current.month, current.day)
+                self.eval_calendar.setDateTextFormat(qdate, default_format)
+                current += timedelta(days=1)
+
+            # Marquer les dates avec évaluations
+            eval_format = QTextCharFormat()
+            eval_format.setBackground(QColor("#dbeafe"))  # Bleu pâle
+            eval_format.setForeground(QColor("#1e40af"))  # Texte bleu foncé
+            eval_format.setFontWeight(QFont.Bold)
+
+            for r in rows:
+                eval_date = r['eval_date']
+                if eval_date:
+                    if isinstance(eval_date, str):
+                        eval_date = datetime.strptime(eval_date, '%Y-%m-%d').date()
+                    qdate = QDate(eval_date.year, eval_date.month, eval_date.day)
+                    self.eval_calendar.setDateTextFormat(qdate, eval_format)
+
+        except Exception as e:
+            print(f"Erreur lors du marquage du calendrier : {e}")
+
+    def on_eval_calendar_date_clicked(self, qdate):
+        """Affiche les évaluations du jour sélectionné."""
+        selected = qdate.toPyDate()
+        self.eval_selected_date_label.setText(f"📆 Évaluations du {selected.strftime('%d/%m/%Y')}")
+
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+
+            # Récupérer les filtres
+            search_text = self.eval_search.text().lower()
+            poste_id = self.eval_poste_filter.currentData()
+
+            # Construire la requête
+            query = """
+                SELECT
+                    pers.nom,
+                    pers.prenom,
+                    p.poste_code,
+                    poly.niveau,
+                    poly.prochaine_evaluation
+                FROM polyvalence poly
+                JOIN personnel pers ON poly.operateur_id = pers.id
+                JOIN postes p ON poly.poste_id = p.id
+                WHERE DATE(poly.prochaine_evaluation) = %s
+                  AND pers.statut = 'ACTIF'
+                  AND p.visible = 1
+            """
+            params = [selected]
+
+            if poste_id is not None:
+                query += " AND p.id = %s"
+                params.append(poste_id)
+
+            query += " ORDER BY pers.nom, pers.prenom, p.poste_code"
+
+            cursor.execute(query, params)
+            rows = _rows(cursor, dict_mode)
+            cursor.close()
+            connection.close()
+
+            self.eval_calendar_list.clear()
+
+            if not rows:
+                item = QListWidgetItem("✅ Aucune évaluation prévue ce jour")
+                item.setForeground(QColor("#10b981"))
+                self.eval_calendar_list.addItem(item)
+            else:
+                for r in rows:
+                    nom = r['nom'] or ""
+                    prenom = r['prenom'] or ""
+                    poste = r['poste_code'] or ""
+                    niveau = r['niveau'] or "N/A"
+
+                    # Filtrer par recherche
+                    if search_text:
+                        searchable = f"{nom} {prenom} {poste}".lower()
+                        if search_text not in searchable:
+                            continue
+
+                    text = f"{nom} {prenom} - {poste} (Niveau {niveau})"
+
+                    item = QListWidgetItem(text)
+                    # Couleur selon niveau
+                    if niveau == 1:
+                        item.setForeground(QColor("#dc2626"))  # Rouge
+                    elif niveau == 2:
+                        item.setForeground(QColor("#d97706"))  # Orange
+                    elif niveau == 3:
+                        item.setForeground(QColor("#059669"))  # Vert
+                    elif niveau == 4:
+                        item.setForeground(QColor("#0369a1"))  # Bleu
+
+                    self.eval_calendar_list.addItem(item)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible de charger les évaluations :\n{e}")
+
+    def load_eval_calendar_data(self):
+        """Recharge les marquages et les données du calendrier d'évaluations."""
+        self.load_eval_calendar_markings()
+        if hasattr(self, 'eval_calendar'):
+            selected = self.eval_calendar.selectedDate()
+            self.on_eval_calendar_date_clicked(selected)
+
+    # ==================== ONGLET 5: HISTORIQUE ====================
 
     def create_history_tab(self):
         """Crée l'onglet historique des déclarations."""

@@ -128,6 +128,21 @@ class CreationModificationPosteDialog(QDialog):
             )
             connection.commit()
 
+            # Logger la création du poste
+            from core.services.logger import log_hist
+            import json
+            log_hist(
+                action="INSERT",
+                table_name="postes",
+                record_id=None,
+                description=json.dumps({
+                    "poste_code": post_name,
+                    "besoins_postes": besoin_val if besoin_val is not None else 0,
+                    "type": "creation_poste"
+                }, ensure_ascii=False),
+                source="GUI/creation_modification_poste"
+            )
+
             QMessageBox.information(self, "Succès", f"Le poste '{post_name}' a été créé avec succès.")
             self.add_input.clear()
             self.load_posts()
@@ -174,6 +189,20 @@ class CreationModificationPosteDialog(QDialog):
             # Suppression (⚠️ laisse la contrainte d'intégrité référentielle décider si relié à polyvalence)
             cursor.execute("DELETE FROM postes WHERE poste_code = %s", (post_name,))
             connection.commit()
+
+            # Logger la suppression du poste
+            from core.services.logger import log_hist
+            import json
+            log_hist(
+                action="DELETE",
+                table_name="postes",
+                record_id=None,
+                description=json.dumps({
+                    "poste_code": post_name,
+                    "type": "suppression_poste"
+                }, ensure_ascii=False),
+                source="GUI/creation_modification_poste"
+            )
 
             QMessageBox.information(self, "Succès",
                                     f"Le poste '{post_name}' a été supprimé avec succès.")

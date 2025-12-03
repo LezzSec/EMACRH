@@ -8,10 +8,34 @@ logs/
 .vscode/
 .idea/
 .venv/
+venv/
+env/
 .DS_Store
 *.zip
 *.log
 
+# --- Build et distribution ---
+build/
+dist/
+*.spec
+*.exe
+
+# --- Base de données ---
+database/backups/*.sql
+!database/backups/README.md
+*.db
+*.sqlite
+
 # --- Fichiers temporaires ---
 Thumbs.db
 desktop.ini
+nul
+*~
+*.tmp
+*.bak
+*.swp
+
+# --- Tests ---
+.pytest_cache/
+.coverage
+htmlcov/

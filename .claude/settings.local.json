@@ -1,7 +1,18 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(dir:*)",
+      "Bash(py -m core.gui.main_qt:*)",
+      "Bash(py scriptsquick_db_query.py)",
+      "Bash(py:*)",
+      "Bash(timeout 5 bash:*)",
+      "Bash(mkdir:*)",
+      "Bash(tree:*)",
+      "Bash(timeout 5 py:*)",
+      "Bash(git add:*)",
+      "Bash(del nul)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []
