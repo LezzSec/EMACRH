@@ -16,6 +16,7 @@ from datetime import datetime, date, timedelta
 
 from core.services import absence_service
 from core.db.configbd import get_connection
+from core.gui.emac_ui_kit import add_custom_title_bar
 
 
 class PlanningAbsencesDialog(QDialog):
@@ -39,7 +40,20 @@ class PlanningAbsencesDialog(QDialog):
 
     def init_ui(self):
         """Initialise l'interface"""
-        layout = QVBoxLayout(self)
+        # Layout principal avec marges nulles
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Barre de titre personnalisée
+        title_bar = add_custom_title_bar(self, "Planning des Absences & Évaluations")
+        main_layout.addWidget(title_bar)
+
+        # Widget de contenu
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
         # Titre
         title = QLabel("Planning des Absences & Évaluations")
@@ -222,6 +236,9 @@ class PlanningAbsencesDialog(QDialog):
 
         layout.addLayout(bottom_layout)
 
+        # Ajouter le widget de contenu au layout principal
+        main_layout.addWidget(content_widget)
+
         # Initialiser la date sélectionnée
         self.update_month_label()
         today = QDate.currentDate()
@@ -229,9 +246,12 @@ class PlanningAbsencesDialog(QDialog):
 
     def update_month_label(self):
         """Met à jour le label du mois courant"""
-        current = self.calendar.selectedDate()
-        month_name = current.toString("MMMM yyyy")
+        year = self.calendar.yearShown()
+        month = self.calendar.monthShown()
+        qdate = QDate(year, month, 1)
+        month_name = qdate.toString("MMMM yyyy")
         self.current_month_label.setText(month_name.capitalize())
+
 
     def previous_month(self):
         """Mois précédent"""
@@ -254,18 +274,19 @@ class PlanningAbsencesDialog(QDialog):
         self.date_selected(today)
 
     def month_changed(self, year, month):
-        """Chargement quand on change de mois"""
-        self.update_month_label()
-        self.load_absences_month()
-        self.load_evaluations_month()
+        """Chargement quand on change de mois (flèches ou molette)"""
+        self.update_month_label()      # s'appuie sur yearShown/monthShown
+        self.load_absences_month(year, month)
+        self.load_evaluations_month(year, month)
 
-    def load_absences_month(self):
+
+    def load_absences_month(self, year=None, month=None):
         """Charge toutes les absences du mois visible"""
-        current = self.calendar.selectedDate()
-        year = current.year()
-        month = current.month()
+        # ✅ Si pas de param, on prend le mois AFFICHÉ
+        if year is None or month is None:
+            year = self.calendar.yearShown()
+            month = self.calendar.monthShown()
 
-        # Calculer le premier et dernier jour du mois
         first_day = QDate(year, month, 1)
         last_day = QDate(year, month, first_day.daysInMonth())
 
@@ -284,27 +305,22 @@ class PlanningAbsencesDialog(QDialog):
                 JOIN personnel p ON da.personnel_id = p.id
                 JOIN type_absence ta ON da.type_absence_id = ta.id
                 WHERE da.statut = 'VALIDEE'
-                AND p.statut = 'ACTIF'
-                AND da.date_debut <= %s
-                AND da.date_fin >= %s
+                  AND p.statut = 'ACTIF'
+                  AND da.date_debut <= %s
+                  AND da.date_fin >= %s
                 ORDER BY da.date_debut
             """, (last_day.toString("yyyy-MM-dd"), first_day.toString("yyyy-MM-dd")))
 
             absences = cur.fetchall()
-
-            # Réinitialiser le cache
             self.absences_by_date = {}
 
-            # Remplir le cache par date
             for absence in absences:
                 debut = absence['date_debut']
                 fin = absence['date_fin']
 
-                # Pour chaque jour de l'absence
                 current_date = debut
                 while current_date <= fin:
                     date_key = current_date.strftime('%Y-%m-%d')
-
                     if date_key not in self.absences_by_date:
                         self.absences_by_date[date_key] = []
 
@@ -314,23 +330,21 @@ class PlanningAbsencesDialog(QDialog):
                         'debut': debut,
                         'fin': fin
                     })
-
                     current_date += timedelta(days=1)
 
-            # Mettre à jour le calendrier avec les couleurs
             self.update_calendar_colors()
 
         finally:
             cur.close()
             conn.close()
 
-    def load_evaluations_month(self):
-        """Charge toutes les évaluations du mois visible"""
-        current = self.calendar.selectedDate()
-        year = current.year()
-        month = current.month()
 
-        # Calculer le premier et dernier jour du mois
+    def load_evaluations_month(self, year=None, month=None):
+        """Charge toutes les évaluations du mois visible"""
+        if year is None or month is None:
+            year = self.calendar.yearShown()
+            month = self.calendar.monthShown()
+
         first_day = QDate(year, month, 1)
         last_day = QDate(year, month, first_day.daysInMonth())
 
@@ -348,17 +362,14 @@ class PlanningAbsencesDialog(QDialog):
                 JOIN personnel p ON poly.operateur_id = p.id
                 JOIN postes pos ON poly.poste_id = pos.id
                 WHERE p.statut = 'ACTIF'
-                AND poly.prochaine_evaluation >= %s
-                AND poly.prochaine_evaluation <= %s
+                  AND poly.prochaine_evaluation >= %s
+                  AND poly.prochaine_evaluation <= %s
                 ORDER BY poly.prochaine_evaluation
             """, (first_day.toString("yyyy-MM-dd"), last_day.toString("yyyy-MM-dd")))
 
             evaluations = cur.fetchall()
-
-            # Réinitialiser le cache
             self.evaluations_by_date = {}
 
-            # Remplir le cache par date
             for evaluation in evaluations:
                 date_eval = evaluation['prochaine_evaluation']
                 date_key = date_eval.strftime('%Y-%m-%d')
@@ -372,23 +383,20 @@ class PlanningAbsencesDialog(QDialog):
                     'niveau': evaluation['niveau']
                 })
 
-            # Mettre à jour le calendrier avec les couleurs
             self.update_calendar_colors()
 
         finally:
             cur.close()
             conn.close()
 
+
     def update_calendar_colors(self):
         """Colore les jours avec absences et évaluations dans le calendrier"""
-        # IMPORTANT: Réinitialiser tous les formats du mois visible
-        current = self.calendar.selectedDate()
-        year = current.year()
-        month = current.month()
+        # ✅ Utiliser le mois affiché
+        year = self.calendar.yearShown()
+        month = self.calendar.monthShown()
         first_day = QDate(year, month, 1)
-        last_day = QDate(year, month, first_day.daysInMonth())
 
-        # Format par défaut (vide)
         default_format = QTextCharFormat()
 
         # Réinitialiser tous les jours du mois
@@ -396,30 +404,27 @@ class PlanningAbsencesDialog(QDialog):
             qdate = QDate(year, month, day)
             self.calendar.setDateTextFormat(qdate, default_format)
 
-        # Format pour les jours avec absences
+        # Formats
         format_absence = QTextCharFormat()
-        format_absence.setBackground(QBrush(QColor(231, 76, 60, 100)))  # Rouge transparent
-        format_absence.setForeground(QBrush(QColor(255, 255, 255)))  # Texte blanc
+        format_absence.setBackground(QBrush(QColor(231, 76, 60, 100)))
+        format_absence.setForeground(QBrush(QColor(255, 255, 255)))
 
-        # Format pour les jours avec évaluations
         format_evaluation = QTextCharFormat()
-        format_evaluation.setBackground(QBrush(QColor(243, 156, 18, 100)))  # Orange transparent
-        format_evaluation.setForeground(QBrush(QColor(255, 255, 255)))  # Texte blanc
+        format_evaluation.setBackground(QBrush(QColor(243, 156, 18, 100)))
+        format_evaluation.setForeground(QBrush(QColor(255, 255, 255)))
 
-        # Format pour les jours avec absences ET évaluations
         format_both = QTextCharFormat()
-        format_both.setBackground(QBrush(QColor(155, 89, 182, 100)))  # Violet transparent
-        format_both.setForeground(QBrush(QColor(255, 255, 255)))  # Texte blanc
+        format_both.setBackground(QBrush(QColor(155, 89, 182, 100)))
+        format_both.setForeground(QBrush(QColor(255, 255, 255)))
 
-        # Parcourir toutes les dates
         all_dates = set(self.absences_by_date.keys()) | set(self.evaluations_by_date.keys())
 
         for date_key in all_dates:
             date_obj = datetime.strptime(date_key, '%Y-%m-%d').date()
             qdate = QDate(date_obj.year, date_obj.month, date_obj.day)
 
-            has_absence = date_key in self.absences_by_date and len(self.absences_by_date[date_key]) > 0
-            has_evaluation = date_key in self.evaluations_by_date and len(self.evaluations_by_date[date_key]) > 0
+            has_absence = date_key in self.absences_by_date and self.absences_by_date[date_key]
+            has_evaluation = date_key in self.evaluations_by_date and self.evaluations_by_date[date_key]
 
             if has_absence and has_evaluation:
                 self.calendar.setDateTextFormat(qdate, format_both)
@@ -427,6 +432,7 @@ class PlanningAbsencesDialog(QDialog):
                 self.calendar.setDateTextFormat(qdate, format_absence)
             elif has_evaluation:
                 self.calendar.setDateTextFormat(qdate, format_evaluation)
+
 
     def date_selected(self, qdate):
         """Affiche les absences et évaluations pour la date sélectionnée"""

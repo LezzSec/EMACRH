@@ -14,6 +14,7 @@ from .besoin_poste_dialog import BesoinPosteDialog
 from core.services.logger import log_hist
 try:
     from core.gui.ui_theme import EmacButton, get_current_theme
+    from core.gui.emac_ui_kit import add_custom_title_bar
     THEME_AVAILABLE = True
 except ImportError:
     THEME_AVAILABLE = False
@@ -53,24 +54,32 @@ class GrillesDialog(QDialog):
         self.setWindowTitle("Grilles de Polyvalence")
         self.setGeometry(100, 80, 1400, 800)
 
-        self.layout = QVBoxLayout()
-        self.layout.setContentsMargins(12, 12, 12, 12)
-        self.layout.setSpacing(8)
-
         self.is_editable = False
         self.modified_cells = set()
         self._is_processing_change = False
 
         self._setup_theme_colors()
 
+        # Layout principal avec marges nulles
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Barre de titre personnalisée
+        title_bar = add_custom_title_bar(self, "Grilles de Polyvalence")
+        main_layout.addWidget(title_bar)
+
+        # Widget de contenu
+        content_widget = QWidget()
+        self.layout = QVBoxLayout(content_widget)
+        self.layout.setContentsMargins(12, 12, 12, 12)
+        self.layout.setSpacing(8)
+
         # En-tête compact
         if THEME_AVAILABLE:
-            header_layout = QHBoxLayout()
             header_label = QLabel("Grilles de Polyvalence")
             header_label.setStyleSheet("font-size: 18px; font-weight: bold;")
-            header_layout.addWidget(header_label)
-            header_layout.addStretch()
-            self.layout.addLayout(header_layout)
+            self.layout.addWidget(header_label)
         else:
             header = QLabel("Grilles de Polyvalence")
             header.setStyleSheet("font-size: 18px; font-weight: bold;")
@@ -95,7 +104,8 @@ class GrillesDialog(QDialog):
         # Infos niveaux compactes en bas
         self.add_compact_level_info()
 
-        self.setLayout(self.layout)
+        # Ajouter le widget de contenu au layout principal
+        main_layout.addWidget(content_widget)
 
         # Données
         self.operateurs = []
@@ -131,12 +141,6 @@ class GrillesDialog(QDialog):
 
         layout = QVBoxLayout(dialog)
 
-        # Instructions
-        instructions = QLabel("⚡ Sélection rapide : Ctrl+Clic pour sélectionner plusieurs éléments")
-        instructions.setStyleSheet("font-weight: bold; color: #3498db; padding: 10px;")
-        instructions.setWordWrap(True)
-        layout.addWidget(instructions)
-
         # Deux colonnes : Opérateurs et Postes
         content_layout = QHBoxLayout()
 
@@ -167,15 +171,6 @@ class GrillesDialog(QDialog):
 
         ops_layout.addWidget(self.ops_list)
 
-        # Boutons rapides pour opérateurs
-        ops_buttons_layout = QHBoxLayout()
-        btn_ops_all = QPushButton("Tous")
-        btn_ops_none = QPushButton("Aucun")
-        btn_ops_inverse = QPushButton("Inverser")
-        ops_buttons_layout.addWidget(btn_ops_all)
-        ops_buttons_layout.addWidget(btn_ops_none)
-        ops_buttons_layout.addWidget(btn_ops_inverse)
-        ops_layout.addLayout(ops_buttons_layout)
 
         content_layout.addWidget(ops_widget)
 
@@ -206,39 +201,21 @@ class GrillesDialog(QDialog):
 
         postes_layout.addWidget(self.postes_list)
 
-        # Boutons rapides pour postes
-        postes_buttons_layout = QHBoxLayout()
-        btn_postes_all = QPushButton("Tous")
-        btn_postes_none = QPushButton("Aucun")
-        btn_postes_inverse = QPushButton("Inverser")
-        postes_buttons_layout.addWidget(btn_postes_all)
-        postes_buttons_layout.addWidget(btn_postes_none)
-        postes_buttons_layout.addWidget(btn_postes_inverse)
-        postes_layout.addLayout(postes_buttons_layout)
-
         content_layout.addWidget(postes_widget)
 
         layout.addLayout(content_layout)
 
         # Boutons de validation
         buttons_layout = QHBoxLayout()
-        btn_apply = QPushButton("✓ Appliquer")
+        btn_apply = QPushButton("Appliquer")
         btn_apply.setStyleSheet("background-color: #27ae60; color: white; padding: 8px; font-weight: bold;")
-        btn_cancel = QPushButton("✗ Annuler")
+        btn_cancel = QPushButton("Annuler")
         btn_cancel.setStyleSheet("padding: 8px;")
         buttons_layout.addStretch()
         buttons_layout.addWidget(btn_apply)
         buttons_layout.addWidget(btn_cancel)
         layout.addLayout(buttons_layout)
 
-        # Connexions des boutons
-        btn_ops_all.clicked.connect(lambda: self.ops_list.selectAll())
-        btn_ops_none.clicked.connect(lambda: self.ops_list.clearSelection())
-        btn_ops_inverse.clicked.connect(lambda: self.inverse_selection(self.ops_list))
-
-        btn_postes_all.clicked.connect(lambda: self.postes_list.selectAll())
-        btn_postes_none.clicked.connect(lambda: self.postes_list.clearSelection())
-        btn_postes_inverse.clicked.connect(lambda: self.inverse_selection(self.postes_list))
 
         # Note : pas de sélection automatique croisée pour éviter la confusion
         # L'utilisateur sélectionne manuellement ce qu'il veut voir
@@ -584,99 +561,150 @@ class GrillesDialog(QDialog):
     # ----------------- Édition -----------------
     def on_cell_changed(self, row, column):
         """
-        Version finale avec message de confirmation
+        Version finale propre, sans erreurs d'indentation
         """
         if not self.is_editable:
             return
-    
+
         item = self.main_table.item(row, column)
         if not item:
             return
-    
-        # Déconnecter le signal
+
+        # Déconnecter le signal pour éviter la boucle infinie
         try:
             self.main_table.cellChanged.disconnect(self.on_cell_changed)
         except:
             pass
-        
+
         try:
             import json
             from datetime import datetime, timedelta
-            
+
             n_ops = len(self.operateurs)
-            
-            # Ignorer les lignes de synthèse
+
+            # Ignorer les lignes de total
             if row >= n_ops:
                 return
-    
+
             operateur_id = self.operateurs[row][0]
             operateur_nom = self.operateurs[row][1]
             poste_id = self.postes[column][0]
             poste_code = self.postes[column][1]
             value = item.text().strip()
-    
+
             if value and not value.isdigit():
                 QMessageBox.warning(self, "Erreur", "Veuillez entrer un nombre valide")
                 return
-    
-            # --- CONNEXION 1 : Lire l'ancien niveau ---
+
+            # ==============================
+            # 1️⃣ LECTURE ancienne polyvalence
+            # ==============================
+            old_niveau = None
+            old_date_eval = None
+            old_date_next = None
+
             try:
                 conn1 = get_db_connection()
                 cur1 = conn1.cursor()
-                cur1.execute(
-                    "SELECT niveau FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
-                    (operateur_id, poste_id)
-                )
+                cur1.execute("""
+                    SELECT niveau, date_evaluation, prochaine_evaluation
+                    FROM polyvalence
+                    WHERE operateur_id = %s AND poste_id = %s
+                """, (operateur_id, poste_id))
+
                 result = cur1.fetchone()
-                old_niveau = result[0] if result else None
+                if result:
+                    old_niveau, old_date_eval, old_date_next = result
+
                 cur1.close()
                 conn1.close()
+
             except Exception as e:
-                print(f"❌ Erreur lecture : {e}")
-                old_niveau = None
-    
-            # --- CONNEXION 2 : Faire la modification ---
+                print(f"❌ Erreur lecture ancienne valeur : {e}")
+
+            # ==============================
+            # 2️⃣ MODIFICATION de la polyvalence
+            # ==============================
+            action = None
+            new_niveau_int = None
+
             try:
                 conn2 = get_db_connection()
                 cur2 = conn2.cursor()
-                
+
                 if value == "":
+                    # Suppression
                     cur2.execute(
                         "DELETE FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
                         (operateur_id, poste_id)
                     )
                     action = 'DELETE'
-                    new_niveau_int = None
+
                 else:
                     new_niveau_int = int(value)
+
+                    # Archivage si modification
+                    if old_niveau is not None and old_niveau != new_niveau_int:
+                        try:
+                            cur2.execute("""
+                                INSERT INTO historique_polyvalence
+                                (operateur_id, poste_id, action_type,
+                                 ancien_niveau, nouveau_niveau,
+                                 ancienne_date_evaluation, nouvelle_date_evaluation,
+                                 commentaire, date_action)
+                                VALUES (%s, %s, 'IMPORT_MANUEL',
+                                        %s, %s,
+                                        %s, NULL,
+                                        'Ancienne polyvalence archivée lors de modification depuis la grille',
+                                        NOW())
+                            """, (
+                                operateur_id,
+                                poste_id,
+                                old_niveau,
+                                new_niveau_int,
+                                old_date_eval
+                            ))
+                        except Exception as arch_err:
+                            print(f"⚠️ Erreur archivage : {arch_err}")
+
+                    # Insert ou update
+                    if old_niveau is None:
+                        cur2.execute("""
+                            INSERT INTO polyvalence (operateur_id, poste_id, niveau)
+                            VALUES (%s, %s, %s)
+                        """, (operateur_id, poste_id, new_niveau_int))
+                        action = 'INSERT'
+                    else:
+                        cur2.execute("""
+                            UPDATE polyvalence SET niveau = %s
+                            WHERE operateur_id = %s AND poste_id = %s
+                        """, (new_niveau_int, operateur_id, poste_id))
+                        action = 'UPDATE'
+
+                    # Mise à jour prochaine évaluation
                     cur2.execute(
-                        "REPLACE INTO polyvalence (operateur_id, poste_id, niveau) VALUES (%s, %s, %s)",
-                        (operateur_id, poste_id, new_niveau_int)
+                        "UPDATE polyvalence SET prochaine_evaluation = NULL "
+                        "WHERE operateur_id = %s AND poste_id = %s",
+                        (operateur_id, poste_id)
                     )
-                    
-                    nouvelle_date = (datetime.today() + timedelta(days=30)).strftime('%Y-%m-%d')
-                    cur2.execute(
-                        "UPDATE polyvalence SET prochaine_evaluation = %s WHERE operateur_id = %s AND poste_id = %s",
-                        (nouvelle_date, operateur_id, poste_id)
-                    )
-                    
-                    action = 'INSERT' if old_niveau is None else 'UPDATE'
-                
+
                 conn2.commit()
                 cur2.close()
                 conn2.close()
+
             except Exception as e:
-                print(f"❌ Erreur modification : {e}")
-                import traceback
-                traceback.print_exc()
-                QMessageBox.critical(self, "Erreur", f"Erreur lors de la sauvegarde : {e}")
+                print(f"❌ ERREUR MODIFICATION : {e}")
+                QMessageBox.critical(self, "Erreur", f"Erreur modification : {e}")
                 return
-    
-            # --- CONNEXION 3 : Logger dans l'historique ---
+
+            # ==============================
+            # 3️⃣ LOGGING dans l'historique
+            # ==============================
             try:
                 conn3 = get_db_connection()
                 cur3 = conn3.cursor()
-                
+
+                # Construction du JSON
                 if action == 'DELETE':
                     description = json.dumps({
                         "operateur": operateur_nom,
@@ -684,6 +712,7 @@ class GrillesDialog(QDialog):
                         "niveau": old_niveau,
                         "type": "suppression"
                     }, ensure_ascii=False)
+
                 elif action == 'INSERT':
                     description = json.dumps({
                         "operateur": operateur_nom,
@@ -691,52 +720,51 @@ class GrillesDialog(QDialog):
                         "niveau": new_niveau_int,
                         "type": "ajout"
                     }, ensure_ascii=False)
-                else:
+
+                else:  # UPDATE
                     description = json.dumps({
                         "operateur": operateur_nom,
                         "poste": poste_code,
-                        "changes": {"niveau": {"old": old_niveau, "new": new_niveau_int}},
+                        "changes": {
+                            "niveau": {"old": old_niveau, "new": new_niveau_int}
+                        },
                         "type": "modification"
                     }, ensure_ascii=False)
-                
-                cur3.execute(
-                    "INSERT INTO historique (date_time, action, operateur_id, poste_id, description) VALUES (%s, %s, %s, %s, %s)",
-                    (datetime.now(), action, operateur_id, poste_id, description)
-                )
-                
+
+                cur3.execute("""
+                    INSERT INTO historique (date_time, action, operateur_id, poste_id, description)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (datetime.now(), action, operateur_id, poste_id, description))
+
                 conn3.commit()
                 cur3.close()
                 conn3.close()
-                
-                # ✅ MESSAGE DE CONFIRMATION
+
+                # Message final
                 if action == 'DELETE':
-                    message = f"Compétence supprimée\n\n{operateur_nom} - {poste_code}"
+                    QMessageBox.information(self, "Supprimé",
+                        f"Compétence supprimée\n\n{operateur_nom} - {poste_code}")
+
                 elif action == 'INSERT':
-                    message = f"Nouvelle compétence ajoutée !\n\n{operateur_nom} - {poste_code}\nNiveau : {new_niveau_int}"
+                    QMessageBox.information(self, "Ajouté",
+                        f"Nouvelle compétence ajoutée\n\n{operateur_nom} - {poste_code}\nNiveau : {new_niveau_int}")
+
                 else:
-                    message = f"Compétence mise à jour !\n\n{operateur_nom} - {poste_code}\nNiveau : {old_niveau} → {new_niveau_int}"
-                
-                QMessageBox.information(self, "✅ Sauvegardé", message)
-                
+                    QMessageBox.information(self, "Mis à jour",
+                        f"Compétence modifiée\n\n{operateur_nom} - {poste_code}\n"
+                        f"{old_niveau} → {new_niveau_int}")
+
             except Exception as e:
-                print(f"⚠️  Erreur logging : {e}")
-                # Même si le logging échoue, la modification est sauvegardée
-                QMessageBox.warning(self, "⚠️  Attention", 
-                    f"Modification sauvegardée mais erreur dans l'historique :\n{e}")
-    
-        except Exception as e:
-            print(f"❌ ERREUR GÉNÉRALE : {e}")
-            import traceback
-            traceback.print_exc()
-            QMessageBox.critical(self, "Erreur", f"Erreur : {e}")
-        
+                print(f"⚠️ Erreur logging : {e}")
+                QMessageBox.warning(self, "Attention",
+                    f"Modification OK mais erreur dans l'historique :\n{e}")
+
         finally:
             # Reconnecter le signal
             try:
                 self.main_table.cellChanged.connect(self.on_cell_changed)
             except:
                 pass
-
 
 
     def reload_cell(self, row, column):

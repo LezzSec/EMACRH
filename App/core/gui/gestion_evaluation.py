@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QPushButton, QComboBox, QLabel, QFileDialog,
     QStyledItemDelegate, QDateEdit, QAbstractItemView, QMessageBox,
-    QLineEdit, QGroupBox, QWidget
+    QLineEdit, QGroupBox, QWidget, QTabWidget
 )
 from PyQt5.QtCore import QDate, Qt
 from PyQt5.QtGui import QColor, QFont
@@ -19,9 +19,522 @@ from core.db.configbd import get_connection as get_db_connection
 # Import du thème moderne
 try:
     from core.gui.ui_theme import EmacButton, EmacCard, EmacHeader, get_current_theme
+    from core.gui.emac_ui_kit import add_custom_title_bar
     THEME_AVAILABLE = True
 except ImportError:
     THEME_AVAILABLE = False
+
+
+# --- Dialogue popup avec 2 onglets pour un opérateur ---
+class DetailOperateurDialog(QDialog):
+    """Dialogue détaillé pour un opérateur avec résumé et ajout d'anciennes polyvalences."""
+
+    def __init__(self, operateur_id, operateur_nom, operateur_prenom, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.operateur_nom = operateur_nom
+        self.operateur_prenom = operateur_prenom
+
+        self.setWindowTitle(f"Détails - {operateur_prenom} {operateur_nom}")
+        self.resize(800, 600)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+
+        # En-tête avec nom de l'opérateur
+        header_frame = QWidget()
+        header_frame.setStyleSheet("""
+            QWidget {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #8b5cf6, stop:1 #a78bfa);
+                border-radius: 8px;
+                padding: 15px;
+            }
+        """)
+        header_layout = QVBoxLayout(header_frame)
+
+        title = QLabel(f"👤 {operateur_prenom} {operateur_nom}")
+        title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        title.setStyleSheet("color: white; background: transparent;")
+        header_layout.addWidget(title)
+
+        layout.addWidget(header_frame)
+
+        # Tabs
+        self.tabs = QTabWidget()
+        self.tabs.setStyleSheet("""
+            QTabWidget::pane {
+                border: 1px solid #e5e7eb;
+                border-radius: 6px;
+                background: white;
+            }
+            QTabBar::tab {
+                background: #f3f4f6;
+                color: #374151;
+                padding: 10px 20px;
+                border: 1px solid #e5e7eb;
+                border-bottom: none;
+                border-top-left-radius: 6px;
+                border-top-right-radius: 6px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected {
+                background: white;
+                color: #8b5cf6;
+                font-weight: bold;
+            }
+            QTabBar::tab:hover {
+                background: #e5e7eb;
+            }
+        """)
+
+        # Onglet 1 : Résumé
+        self.tab_resume = QWidget()
+        self._init_tab_resume()
+        self.tabs.addTab(self.tab_resume, "📊 Résumé")
+
+        # Onglet 2 : Ajouter anciennes polyvalences
+        self.tab_anciennes = QWidget()
+        self._init_tab_anciennes()
+        self.tabs.addTab(self.tab_anciennes, "➕ Ajouter anciennes polyvalences")
+
+        layout.addWidget(self.tabs, 1)
+
+        # Bouton Fermer
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        close_btn = QPushButton("Fermer")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background: #8b5cf6;
+                color: white;
+                border: none;
+                padding: 8px 20px;
+                border-radius: 6px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #7c3aed;
+            }
+        """)
+        btn_layout.addWidget(close_btn)
+
+        layout.addLayout(btn_layout)
+
+        # Charger les données
+        self._load_data()
+
+    def _init_tab_resume(self):
+        """Initialise l'onglet Résumé."""
+        layout = QVBoxLayout(self.tab_resume)
+        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+
+        # Statistiques générales
+        stats_group = QGroupBox("📈 Statistiques")
+        stats_layout = QVBoxLayout(stats_group)
+        self.stats_label = QLabel("Chargement...")
+        self.stats_label.setStyleSheet("font-size: 11pt; padding: 10px;")
+        self.stats_label.setWordWrap(True)
+        stats_layout.addWidget(self.stats_label)
+        layout.addWidget(stats_group)
+
+        # Tableau des polyvalences actuelles
+        poly_group = QGroupBox("🎯 Polyvalences actuelles")
+        poly_layout = QVBoxLayout(poly_group)
+
+        self.poly_table = QTableWidget()
+        self.poly_table.setColumnCount(6)
+        self.poly_table.setHorizontalHeaderLabels([
+            "Poste", "Niveau", "Date Éval.", "Prochaine Éval.", "Statut", "_poly_id"
+        ])
+        self.poly_table.setColumnHidden(5, True)  # Cacher l'ID
+        self.poly_table.horizontalHeader().setStretchLastSection(True)
+        self.poly_table.setEditTriggers(QAbstractItemView.DoubleClicked)  # Édition au double-clic
+        self.poly_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.poly_table.setAlternatingRowColors(True)
+        self.poly_table.itemChanged.connect(self._on_poly_cell_changed)
+        self.poly_table.setStyleSheet("""
+            QTableWidget {
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                gridline-color: #e5e7eb;
+            }
+            QHeaderView::section {
+                background: #f3f4f6;
+                padding: 8px;
+                border: none;
+                font-weight: bold;
+            }
+        """)
+        poly_layout.addWidget(self.poly_table)
+        layout.addWidget(poly_group, 1)
+
+    def _init_tab_anciennes(self):
+        """Initialise l'onglet Ajouter anciennes polyvalences."""
+        layout = QVBoxLayout(self.tab_anciennes)
+        layout.setSpacing(15)
+        layout.setContentsMargins(15, 15, 15, 15)
+
+        # Formulaire
+        form_group = QGroupBox("Nouvelle ancienne polyvalence")
+        form_layout = QVBoxLayout(form_group)
+        form_layout.setSpacing(10)
+
+        # Ligne 1 : Poste + Niveau
+        row1 = QHBoxLayout()
+        row1.addWidget(QLabel("Poste :"))
+        self.poste_combo = QComboBox()
+        self.poste_combo.setMinimumWidth(150)
+        row1.addWidget(self.poste_combo, 1)
+
+        row1.addWidget(QLabel("Niveau :"))
+        self.niveau_combo = QComboBox()
+        self.niveau_combo.addItems(["1", "2", "3", "4"])
+        self.niveau_combo.setCurrentIndex(0)  # Par défaut : niveau 1
+        self.niveau_combo.setMinimumWidth(60)
+        row1.addWidget(self.niveau_combo)
+
+        form_layout.addLayout(row1)
+
+        # Ligne 2 : Date évaluation
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("Date d'évaluation :"))
+        self.date_eval = QDateEdit()
+        self.date_eval.setCalendarPopup(True)
+        self.date_eval.setDisplayFormat("dd/MM/yyyy")
+        self.date_eval.setDate(QDate.currentDate().addYears(-1))
+        row2.addWidget(self.date_eval, 1)
+        form_layout.addLayout(row2)
+
+        # Ligne 3 : Commentaire
+        row3 = QVBoxLayout()
+        row3.addWidget(QLabel("Commentaire (optionnel) :"))
+        self.commentaire = QLineEdit()
+        self.commentaire.setPlaceholderText("Ex: Ancienne certification, formation passée...")
+        row3.addWidget(self.commentaire)
+        form_layout.addLayout(row3)
+
+        # Bouton Ajouter
+        add_btn = QPushButton("✓ Ajouter cette polyvalence")
+        add_btn.clicked.connect(self._add_ancienne_poly)
+        add_btn.setStyleSheet("""
+            QPushButton {
+                background: #8b5cf6;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                border-radius: 6px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #7c3aed;
+            }
+        """)
+        form_layout.addWidget(add_btn)
+
+        layout.addWidget(form_group)
+
+        # Tableau des anciennes polyvalences déjà ajoutées
+        anciennes_group = QGroupBox("📜 Anciennes polyvalences déjà enregistrées")
+        anciennes_layout = QVBoxLayout(anciennes_group)
+
+        self.anciennes_table = QTableWidget()
+        self.anciennes_table.setColumnCount(5)
+        self.anciennes_table.setHorizontalHeaderLabels([
+            "Poste", "Niveau", "Date Éval.", "Commentaire", "_id"
+        ])
+        self.anciennes_table.setColumnHidden(4, True)
+        self.anciennes_table.horizontalHeader().setStretchLastSection(True)
+        self.anciennes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.anciennes_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.anciennes_table.setAlternatingRowColors(True)
+        self.anciennes_table.setStyleSheet("""
+            QTableWidget {
+                border: 1px solid #e5e7eb;
+                border-radius: 4px;
+                gridline-color: #e5e7eb;
+            }
+            QHeaderView::section {
+                background: #f3f4f6;
+                padding: 8px;
+                border: none;
+                font-weight: bold;
+            }
+        """)
+        anciennes_layout.addWidget(self.anciennes_table)
+        layout.addWidget(anciennes_group, 1)
+
+    def _load_data(self):
+        """Charge toutes les données de l'opérateur."""
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            # Charger tous les postes pour le combo
+            cursor.execute("SELECT id, poste_code FROM postes ORDER BY poste_code")
+            postes = cursor.fetchall()
+            for poste in postes:
+                self.poste_combo.addItem(poste['poste_code'], poste['id'])
+
+            # Charger les statistiques
+            cursor.execute("""
+                SELECT COUNT(*) as total,
+                       SUM(CASE WHEN niveau = 4 THEN 1 ELSE 0 END) as n4,
+                       SUM(CASE WHEN niveau = 3 THEN 1 ELSE 0 END) as n3,
+                       SUM(CASE WHEN niveau = 2 THEN 1 ELSE 0 END) as n2,
+                       SUM(CASE WHEN niveau = 1 THEN 1 ELSE 0 END) as n1,
+                       SUM(CASE WHEN prochaine_evaluation < CURDATE() THEN 1 ELSE 0 END) as retard,
+                       SUM(CASE WHEN prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as a_planifier
+                FROM polyvalence
+                WHERE operateur_id = %s
+            """, (self.operateur_id,))
+            stats = cursor.fetchone()
+
+            if stats:
+                total = stats['total'] or 0
+                parts = []
+                if stats['n4']: parts.append(f"N4×{stats['n4']}")
+                if stats['n3']: parts.append(f"N3×{stats['n3']}")
+                if stats['n2']: parts.append(f"N2×{stats['n2']}")
+                if stats['n1']: parts.append(f"N1×{stats['n1']}")
+
+                poly_text = " | ".join(parts) if parts else "Aucune"
+
+                eval_parts = []
+                if stats['retard']: eval_parts.append(f"⚠️ {stats['retard']} en retard")
+                if stats['a_planifier']: eval_parts.append(f"📅 {stats['a_planifier']} à planifier")
+                if not eval_parts: eval_parts.append("✅ Toutes à jour")
+
+                eval_text = " | ".join(eval_parts)
+
+                self.stats_label.setText(
+                    f"<b>{total} polyvalence(s) actuelle(s)</b><br/>"
+                    f"Niveaux : {poly_text}<br/>"
+                    f"Évaluations : {eval_text}"
+                )
+
+            # Charger les polyvalences actuelles dans le tableau
+            cursor.execute("""
+                SELECT poly.id,
+                       ps.poste_code,
+                       poly.niveau,
+                       poly.date_evaluation,
+                       poly.prochaine_evaluation
+                FROM polyvalence poly
+                JOIN postes ps ON poly.poste_id = ps.id
+                WHERE poly.operateur_id = %s
+                  AND poly.id = (
+                      SELECT MAX(p2.id)
+                      FROM polyvalence p2
+                      WHERE p2.operateur_id = poly.operateur_id
+                        AND p2.poste_id = poly.poste_id
+                  )
+                ORDER BY ps.poste_code
+            """, (self.operateur_id,))
+
+            polyvalences = cursor.fetchall()
+
+            # Bloquer temporairement les signaux pour éviter les mises à jour pendant le remplissage
+            self.poly_table.blockSignals(True)
+            self.poly_table.setRowCount(len(polyvalences))
+
+            for row_idx, poly in enumerate(polyvalences):
+                # Colonne 0 : Poste (non éditable)
+                poste_item = QTableWidgetItem(poly['poste_code'])
+                poste_item.setFlags(poste_item.flags() & ~Qt.ItemIsEditable)
+                self.poly_table.setItem(row_idx, 0, poste_item)
+
+                # Colonne 1 : Niveau (non éditable)
+                niveau_item = QTableWidgetItem(f"N{poly['niveau']}")
+                niveau_item.setTextAlignment(Qt.AlignCenter)
+                niveau_item.setFlags(niveau_item.flags() & ~Qt.ItemIsEditable)
+                self.poly_table.setItem(row_idx, 1, niveau_item)
+
+                # Colonne 2 : Date évaluation (éditable)
+                date_eval = poly['date_evaluation'].strftime('%d/%m/%Y') if poly['date_evaluation'] else "N/A"
+                date_eval_item = QTableWidgetItem(date_eval)
+                self.poly_table.setItem(row_idx, 2, date_eval_item)
+
+                # Colonne 3 : Prochaine évaluation (éditable)
+                date_next = poly['prochaine_evaluation'].strftime('%d/%m/%Y') if poly['prochaine_evaluation'] else "N/A"
+                date_next_item = QTableWidgetItem(date_next)
+                self.poly_table.setItem(row_idx, 3, date_next_item)
+
+                # Colonne 4 : Statut (non éditable)
+                if poly['prochaine_evaluation']:
+                    from datetime import date as dt_date
+                    today = dt_date.today()
+                    if poly['prochaine_evaluation'] < today:
+                        statut = "⚠️ En retard"
+                    elif (poly['prochaine_evaluation'] - today).days <= 30:
+                        statut = "📅 À planifier"
+                    else:
+                        statut = "✅ À jour"
+                else:
+                    statut = "N/A"
+
+                statut_item = QTableWidgetItem(statut)
+                statut_item.setFlags(statut_item.flags() & ~Qt.ItemIsEditable)
+                self.poly_table.setItem(row_idx, 4, statut_item)
+
+                # Colonne 5 : ID (caché)
+                self.poly_table.setItem(row_idx, 5, QTableWidgetItem(str(poly['id'])))
+
+            # Réactiver les signaux
+            self.poly_table.blockSignals(False)
+
+            # Charger les anciennes polyvalences
+            self._load_anciennes_polyvalences(cursor)
+
+            cursor.close()
+            conn.close()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible de charger les données :\n{e}")
+
+    def _load_anciennes_polyvalences(self, cursor):
+        """Charge les anciennes polyvalences dans le tableau."""
+        cursor.execute("""
+            SELECT
+                hp.id,
+                p.poste_code,
+                hp.ancien_niveau AS niveau_affiche,
+                hp.ancienne_date_evaluation AS date_eval_affiche,
+                hp.commentaire
+            FROM historique_polyvalence hp
+            LEFT JOIN postes p ON hp.poste_id = p.id
+            WHERE hp.operateur_id = %s
+              AND hp.action_type = 'IMPORT_MANUEL'
+            ORDER BY hp.date_action DESC
+        """, (self.operateur_id,))
+
+        anciennes = cursor.fetchall()
+        self.anciennes_table.setRowCount(len(anciennes))
+
+        for row_idx, anc in enumerate(anciennes):
+            self.anciennes_table.setItem(row_idx, 0, QTableWidgetItem(anc['poste_code'] or "N/A"))
+
+            niveau_txt = (
+                f"N{anc['niveau_affiche']}"
+                if anc['niveau_affiche'] is not None else "N/A"
+            )
+            niveau_item = QTableWidgetItem(niveau_txt)
+            niveau_item.setTextAlignment(Qt.AlignCenter)
+            self.anciennes_table.setItem(row_idx, 1, niveau_item)
+
+            if anc['date_eval_affiche']:
+                date_eval = anc['date_eval_affiche'].strftime('%d/%m/%Y')
+            else:
+                date_eval = "N/A"
+            self.anciennes_table.setItem(row_idx, 2, QTableWidgetItem(date_eval))
+
+            self.anciennes_table.setItem(
+                row_idx, 3,
+                QTableWidgetItem(anc['commentaire'] or "—")
+            )
+            self.anciennes_table.setItem(
+                row_idx, 4,
+                QTableWidgetItem(str(anc['id']))
+            )
+
+    def _add_ancienne_poly(self):
+        """Ajoute une ancienne polyvalence."""
+        poste_id = self.poste_combo.currentData()
+        if not poste_id:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un poste.")
+            return
+
+        niveau = int(self.niveau_combo.currentText())
+        date_eval = self.date_eval.date().toPyDate()
+        commentaire = self.commentaire.text().strip()
+
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            cursor.execute("""
+                INSERT INTO historique_polyvalence
+                (operateur_id, poste_id, action_type, nouveau_niveau, nouvelle_date_evaluation, commentaire, date_action)
+                VALUES (%s, %s, 'IMPORT_MANUEL', %s, %s, %s, NOW())
+            """, (self.operateur_id, poste_id, niveau, date_eval, commentaire or None))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            QMessageBox.information(self, "Succès", "Ancienne polyvalence ajoutée avec succès.")
+
+            # Recharger les données
+            self._load_data()
+
+            # Réinitialiser le formulaire
+            self.commentaire.clear()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible d'ajouter la polyvalence :\n{e}")
+
+    def _on_poly_cell_changed(self, item):
+        """Gère les modifications de cellules dans le tableau des polyvalences."""
+        if item is None:
+            return
+
+        row = item.row()
+        col = item.column()
+
+        # Seules les colonnes 2 (Date Éval.) et 3 (Prochaine Éval.) sont éditables
+        if col not in [2, 3]:
+            return
+
+        # Récupérer l'ID de la polyvalence
+        poly_id_item = self.poly_table.item(row, 5)
+        if not poly_id_item:
+            return
+
+        poly_id = int(poly_id_item.text())
+        new_value = item.text().strip()
+
+        # Valider le format de date
+        from datetime import datetime
+        try:
+            new_date = datetime.strptime(new_value, "%d/%m/%Y").date()
+        except ValueError:
+            QMessageBox.warning(self, "Format invalide", "Le format de date doit être JJ/MM/AAAA")
+            # Recharger les données pour annuler la modification
+            self._load_data()
+            return
+
+        # Déterminer quelle colonne est modifiée
+        if col == 2:
+            field_name = "date_evaluation"
+            field_label = "Date d'évaluation"
+        else:  # col == 3
+            field_name = "prochaine_evaluation"
+            field_label = "Prochaine évaluation"
+
+        # Mettre à jour dans la base de données
+        try:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+
+            query = f"UPDATE polyvalence SET {field_name} = %s WHERE id = %s"
+            cursor.execute(query, (new_date, poly_id))
+
+            conn.commit()
+            cursor.close()
+            conn.close()
+
+            # Recharger les données pour mettre à jour le statut
+            self._load_data()
+
+            QMessageBox.information(self, "Succès", f"{field_label} mise à jour avec succès.")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour la date :\n{e}")
+            # Recharger les données pour annuler la modification
+            self._load_data()
 
 
 # --- Délégué pour empêcher l'édition ---
@@ -73,8 +586,18 @@ class GestionEvaluationDialog(QDialog):
         # Données
         self.all_evaluations = []
 
-        # Layout principal
-        layout = QVBoxLayout(self)
+        # Layout principal avec marges nulles
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Barre de titre personnalisée
+        title_bar = add_custom_title_bar(self, "Gestion des Évaluations")
+        main_layout.addWidget(title_bar)
+
+        # Widget de contenu
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setSpacing(16)
 
@@ -107,7 +630,7 @@ class GestionEvaluationDialog(QDialog):
             search_label = QLabel("Rechercher :")
             filter_layout.addWidget(search_label)
             self.search_input = QLineEdit()
-            self.search_input.setPlaceholderText("Nom, prénom ou poste...")
+            self.search_input.setPlaceholderText("Nom, prénom ou matricule...")
             self.search_input.setMaximumWidth(200)
             self.search_input.textChanged.connect(self.apply_filters)
             filter_layout.addWidget(self.search_input)
@@ -116,20 +639,6 @@ class GestionEvaluationDialog(QDialog):
             separator1 = QLabel("·")
             separator1.setStyleSheet("color: #d1d5db; font-size: 16px; padding: 0 8px;")
             filter_layout.addWidget(separator1)
-
-            # Poste
-            poste_label = QLabel("Poste :")
-            filter_layout.addWidget(poste_label)
-            self.poste_filter = QComboBox()
-            self.poste_filter.setMinimumWidth(100)
-            self.poste_filter.setMaximumWidth(140)
-            self.poste_filter.currentIndexChanged.connect(self.apply_filters)
-            filter_layout.addWidget(self.poste_filter)
-
-            # Séparateur
-            separator2 = QLabel("·")
-            separator2.setStyleSheet("color: #d1d5db; font-size: 16px; padding: 0 8px;")
-            filter_layout.addWidget(separator2)
 
             # Statut
             statut_label = QLabel("Statut :")
@@ -140,16 +649,6 @@ class GestionEvaluationDialog(QDialog):
             self.status_filter.setMaximumWidth(160)
             self.status_filter.currentIndexChanged.connect(self.apply_filters)
             filter_layout.addWidget(self.status_filter)
-
-            # Niveau
-            niveau_label = QLabel("Niveau :")
-            filter_layout.addWidget(niveau_label)
-            self.niveau_filter = QComboBox()
-            self.niveau_filter.addItems(["Tous", "N/A", "1", "2", "3", "4"])
-            self.niveau_filter.setMinimumWidth(80)
-            self.niveau_filter.setMaximumWidth(100)
-            self.niveau_filter.currentIndexChanged.connect(self.apply_filters)
-            filter_layout.addWidget(self.niveau_filter)
 
             filter_layout.addStretch()
             layout.addLayout(filter_layout)
@@ -162,7 +661,7 @@ class GestionEvaluationDialog(QDialog):
             search_row = QHBoxLayout()
             search_row.addWidget(QLabel("Rechercher :"))
             self.search_input = QLineEdit()
-            self.search_input.setPlaceholderText("Nom, prénom ou poste...")
+            self.search_input.setPlaceholderText("Nom, prénom ou matricule...")
             self.search_input.textChanged.connect(self.apply_filters)
             search_row.addWidget(self.search_input)
             filter_group_layout.addLayout(search_row)
@@ -170,26 +669,16 @@ class GestionEvaluationDialog(QDialog):
             # Ligne 2: Filtres
             combo_row = QHBoxLayout()
 
-            combo_row.addWidget(QLabel("Poste :"))
-            self.poste_filter = QComboBox()
-            self.poste_filter.currentIndexChanged.connect(self.apply_filters)
-            combo_row.addWidget(self.poste_filter)
-
             combo_row.addWidget(QLabel("Statut :"))
             self.status_filter = QComboBox()
             self.status_filter.addItems(["Tous", "En retard", "À planifier (30j)", "À jour"])
             self.status_filter.currentIndexChanged.connect(self.apply_filters)
             combo_row.addWidget(self.status_filter)
 
-            combo_row.addWidget(QLabel("Niveau :"))
-            self.niveau_filter = QComboBox()
-            self.niveau_filter.addItems(["Tous", "N/A", "1", "2", "3", "4"])
-            self.niveau_filter.currentIndexChanged.connect(self.apply_filters)
-            combo_row.addWidget(self.niveau_filter)
-
             filter_group_layout.addLayout(combo_row)
             filter_group.setLayout(filter_group_layout)
             layout.addWidget(filter_group)
+
 
         # === Statistiques dans une carte ===
         if THEME_AVAILABLE:
@@ -250,65 +739,43 @@ class GestionEvaluationDialog(QDialog):
             table_layout.setContentsMargins(0, 0, 0, 0)
 
             self.table = QTableWidget()
-            self.table.setColumnCount(8)
+            self.table.setColumnCount(7)
             self.table.setHorizontalHeaderLabels([
-                "_poly_id", "Nom", "Prénom", "Poste", "Niveau",
-                "Date Évaluation", "Prochaine Évaluation", "Statut"
+                "_pers_id", "Nom", "Prénom", "Matricule", "Polyvalences", "Évaluations", "Statut"
             ])
             self.table.setColumnHidden(0, True)  # ID technique caché
             self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
             self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-            self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+            self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
             self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
             self.table.setAlternatingRowColors(True)
-            # Les dates sont toujours éditables
-            self.table.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.SelectedClicked)
+            self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
             self.table.setSortingEnabled(True)
             self._style_table()
 
-            # Configurer les délégués : dates éditables, autres colonnes protégées
-            self._date_delegate = DateDelegate(self.table, self.update_date_in_db)
-            self._no_edit_delegate = NoEditDelegate(self.table)
-
-            # Colonnes non éditables (1-4, 7)
-            for col in [1, 2, 3, 4, 7]:
-                self.table.setItemDelegateForColumn(col, self._no_edit_delegate)
-
-            # Colonnes de dates éditables (5-6)
-            self.table.setItemDelegateForColumn(5, self._date_delegate)
-            self.table.setItemDelegateForColumn(6, self._date_delegate)
+            # Connexion pour le double-clic sur une ligne d'opérateur
+            self.table.cellDoubleClicked.connect(self._on_row_double_click)
 
             table_layout.addWidget(self.table)
             table_card.body.addLayout(table_layout)
             layout.addWidget(table_card, 1)
         else:
             self.table = QTableWidget()
-            self.table.setColumnCount(8)
+            self.table.setColumnCount(7)
             self.table.setHorizontalHeaderLabels([
-                "_poly_id", "Nom", "Prénom", "Poste", "Niveau",
-                "Date Évaluation", "Prochaine Évaluation", "Statut"
+                "_pers_id", "Nom", "Prénom", "Matricule", "Polyvalences", "Évaluations", "Statut"
             ])
             self.table.setColumnHidden(0, True)
             self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
             self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-            self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+            self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
             self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
             self.table.setAlternatingRowColors(True)
-            # Les dates sont toujours éditables
-            self.table.setEditTriggers(QAbstractItemView.DoubleClicked | QAbstractItemView.SelectedClicked)
+            self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
             self.table.setSortingEnabled(True)
 
-            # Configurer les délégués : dates éditables, autres colonnes protégées
-            self._date_delegate = DateDelegate(self.table, self.update_date_in_db)
-            self._no_edit_delegate = NoEditDelegate(self.table)
-
-            # Colonnes non éditables (1-4, 7)
-            for col in [1, 2, 3, 4, 7]:
-                self.table.setItemDelegateForColumn(col, self._no_edit_delegate)
-
-            # Colonnes de dates éditables (5-6)
-            self.table.setItemDelegateForColumn(5, self._date_delegate)
-            self.table.setItemDelegateForColumn(6, self._date_delegate)
+            # Connexion pour le double-clic sur une ligne d'opérateur
+            self.table.cellDoubleClicked.connect(self._on_row_double_click)
 
             layout.addWidget(self.table, 1)
 
@@ -370,8 +837,10 @@ class GestionEvaluationDialog(QDialog):
 
         layout.addLayout(btn_layout)
 
+        # Ajouter le widget de contenu au layout principal
+        main_layout.addWidget(content_widget)
+
         # Charger les données
-        self.load_filter_options()
         self.load_data()
 
     def _style_table(self):
@@ -412,52 +881,45 @@ class GestionEvaluationDialog(QDialog):
         self.table.horizontalHeader().setDefaultAlignment(Qt.AlignCenter)
         self.table.verticalHeader().setDefaultSectionSize(32)
 
-    def load_filter_options(self):
-        """Charge les options du filtre Poste."""
-        try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
-
-            # Poste
-            self.poste_filter.clear()
-            self.poste_filter.addItem("Tous", None)
-            cursor.execute("""
-                SELECT DISTINCT pos.id, pos.poste_code
-                FROM postes pos
-                INNER JOIN polyvalence poly ON poly.poste_id = pos.id
-                ORDER BY pos.poste_code
-            """)
-            for row in cursor.fetchall():
-                poste_id, poste_code = row
-                self.poste_filter.addItem(poste_code, poste_id)
-
-            cursor.close()
-            conn.close()
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les filtres :\n{e}")
 
     def load_data(self):
-        """Charge toutes les évaluations depuis la base de données."""
+        """Charge la liste des opérateurs avec leur résumé de polyvalences."""
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
 
+            # Charger les opérateurs avec statistiques de polyvalences
+            # Filtrer uniquement ceux qui ont un matricule
             query = """
                 SELECT
-                    poly.id,
-                    pers.id,
-                    pers.nom,
-                    pers.prenom,
                     p.id,
-                    p.poste_code,
-                    COALESCE(poly.niveau, 'N/A') AS niveau,
-                    poly.date_evaluation,
-                    poly.prochaine_evaluation
-                FROM polyvalence poly
-                JOIN personnel pers ON poly.operateur_id = pers.id
-                JOIN postes p ON poly.poste_id = p.id
-                ORDER BY pers.nom, pers.prenom, p.poste_code
+                    p.nom,
+                    p.prenom,
+                    p.matricule,
+                    COUNT(poly.id) as total_poly,
+                    SUM(CASE WHEN poly.niveau = 4 THEN 1 ELSE 0 END) as n4,
+                    SUM(CASE WHEN poly.niveau = 3 THEN 1 ELSE 0 END) as n3,
+                    SUM(CASE WHEN poly.niveau = 2 THEN 1 ELSE 0 END) as n2,
+                    SUM(CASE WHEN poly.niveau = 1 THEN 1 ELSE 0 END) as n1,
+                    SUM(
+                        CASE 
+                            WHEN poly.prochaine_evaluation IS NULL THEN 1
+                            WHEN poly.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1
+                            ELSE 0
+                        END
+                    ) as a_planifier,
+
+                    SUM(
+                        CASE 
+                            WHEN poly.prochaine_evaluation < CURDATE() THEN 1 
+                            ELSE 0 
+                        END
+                    ) as retard
+                FROM personnel p
+                LEFT JOIN polyvalence poly ON poly.operateur_id = p.id
+                WHERE p.statut = 'ACTIF' AND p.matricule IS NOT NULL AND p.matricule != ''
+                GROUP BY p.id, p.nom, p.prenom, p.matricule
+                ORDER BY p.nom, p.prenom
             """
 
             cursor.execute(query)
@@ -467,41 +929,35 @@ class GestionEvaluationDialog(QDialog):
 
             # Stocker toutes les données
             self.all_evaluations = []
-            today = date.today()
 
             for row in rows:
-                poly_id, pers_id, nom, prenom, poste_id, poste_code, niveau, date_eval, prochaine_eval = row
+                pers_id, nom, prenom, matricule, total, n4, n3, n2, n1, retard, a_planifier = row
 
-                # Déterminer le statut
-                statut = "Non défini"
-                if prochaine_eval:
-                    if isinstance(prochaine_eval, str):
-                        from datetime import datetime
-                        prochaine_eval = datetime.strptime(prochaine_eval, '%Y-%m-%d').date()
-
-                    if prochaine_eval < today:
-                        statut = "En retard"
-                    elif prochaine_eval <= today + timedelta(days=30):
-                        statut = "À planifier"
-                    else:
-                        statut = "À jour"
-
-                # Formater les dates
-                date_eval_str = date_eval.strftime('%d/%m/%Y') if date_eval else "Non défini"
-                prochaine_eval_str = prochaine_eval.strftime('%d/%m/%Y') if prochaine_eval else "Non défini"
+                # Déterminer le statut global
+                if retard and retard > 0:
+                    statut = f"⚠️ {retard} en retard"
+                    statut_code = "En retard"
+                elif a_planifier and a_planifier > 0:
+                    statut = f"📅 {a_planifier} à planifier"
+                    statut_code = "À planifier"
+                else:
+                    statut = "✅ À jour"
+                    statut_code = "À jour"
 
                 self.all_evaluations.append({
-                    'poly_id': poly_id,
                     'personnel_id': pers_id,
                     'nom': nom,
                     'prenom': prenom,
-                    'poste_id': poste_id,
-                    'poste': poste_code,
-                    'niveau': niveau,
-                    'date_eval': date_eval_str,
-                    'prochaine_eval': prochaine_eval_str,
-                    'prochaine_eval_date': prochaine_eval,
-                    'statut': statut
+                    'matricule': matricule or "N/A",
+                    'total': total or 0,
+                    'n4': n4 or 0,
+                    'n3': n3 or 0,
+                    'n2': n2 or 0,
+                    'n1': n1 or 0,
+                    'retard': retard or 0,
+                    'a_planifier': a_planifier or 0,
+                    'statut': statut,
+                    'statut_code': statut_code
                 })
 
             # Appliquer les filtres
@@ -513,92 +969,95 @@ class GestionEvaluationDialog(QDialog):
     def apply_filters(self):
         """Applique les filtres de recherche et affiche les résultats."""
         search_text = self.search_input.text().lower()
-        poste_id = self.poste_filter.currentData()
         status_filter = self.status_filter.currentText()
-        niveau_filter = self.niveau_filter.currentText()
 
         # Filtrer les données
         filtered = []
-        for eval_data in self.all_evaluations:
-            # Filtre recherche (nom, prénom ou poste)
+        for oper_data in self.all_evaluations:
+            # Filtre recherche (nom, prénom ou matricule)
             if search_text:
-                searchable = f"{eval_data['nom']} {eval_data['prenom']} {eval_data['poste']}".lower()
+                searchable = f"{oper_data['nom']} {oper_data['prenom']} {oper_data['matricule']}".lower()
                 if search_text not in searchable:
                     continue
 
             # Filtre statut
             if status_filter != "Tous":
-                if status_filter == "À planifier (30j)" and eval_data['statut'] != "À planifier":
+                if status_filter == "À planifier (30j)" and oper_data['statut_code'] != "À planifier":
                     continue
-                elif status_filter != "À planifier (30j)" and eval_data['statut'] != status_filter:
+                elif status_filter != "À planifier (30j)" and oper_data['statut_code'] != status_filter:
                     continue
 
-            # Filtre niveau
-            if niveau_filter != "Tous" and eval_data['niveau'] != niveau_filter:
-                continue
-
-            # Filtre poste
-            if poste_id is not None and eval_data['poste_id'] != poste_id:
-                continue
-
-            filtered.append(eval_data)
+            filtered.append(oper_data)
 
         # Afficher dans le tableau
-        self.display_evaluations(filtered)
+        self.display_operateurs(filtered)
 
         # Mettre à jour les statistiques
         self.update_statistics(filtered)
 
-    def display_evaluations(self, evaluations):
-        """Affiche les évaluations dans le tableau avec code couleur."""
+    def display_operateurs(self, operateurs):
+        """Affiche la liste des opérateurs dans le tableau."""
         self.table.setRowCount(0)
         self.table.setSortingEnabled(False)
 
-        for eval_data in evaluations:
+        for oper_data in operateurs:
             row_pos = self.table.rowCount()
             self.table.insertRow(row_pos)
 
             # Colonne 0: ID (caché)
-            self.table.setItem(row_pos, 0, QTableWidgetItem(str(eval_data['poly_id'])))
+            self.table.setItem(row_pos, 0, QTableWidgetItem(str(oper_data['personnel_id'])))
 
-            # Colonnes 1-6: Données
-            self.table.setItem(row_pos, 1, QTableWidgetItem(eval_data['nom']))
-            self.table.setItem(row_pos, 2, QTableWidgetItem(eval_data['prenom']))
-            self.table.setItem(row_pos, 3, QTableWidgetItem(eval_data['poste']))
-            self.table.setItem(row_pos, 4, QTableWidgetItem(eval_data['niveau']))
-            self.table.setItem(row_pos, 5, QTableWidgetItem(eval_data['date_eval']))
-            self.table.setItem(row_pos, 6, QTableWidgetItem(eval_data['prochaine_eval']))
+            # Colonne 1-3: Nom, Prénom, Matricule
+            self.table.setItem(row_pos, 1, QTableWidgetItem(oper_data['nom']))
+            self.table.setItem(row_pos, 2, QTableWidgetItem(oper_data['prenom']))
+            self.table.setItem(row_pos, 3, QTableWidgetItem(oper_data['matricule']))
 
-            # Colonne 7: Statut avec code couleur
-            statut_item = QTableWidgetItem(eval_data['statut'])
+            # Colonne 4: Polyvalences (résumé compact)
+            poly_parts = []
+            if oper_data['n4']: poly_parts.append(f"N4×{oper_data['n4']}")
+            if oper_data['n3']: poly_parts.append(f"N3×{oper_data['n3']}")
+            if oper_data['n2']: poly_parts.append(f"N2×{oper_data['n2']}")
+            if oper_data['n1']: poly_parts.append(f"N1×{oper_data['n1']}")
+
+            poly_text = " | ".join(poly_parts) if poly_parts else "Aucune"
+            poly_item = QTableWidgetItem(f"{oper_data['total']} : {poly_text}")
+            self.table.setItem(row_pos, 4, poly_item)
+
+            # Colonne 5: Évaluations en retard/à planifier
+            eval_parts = []
+            if oper_data['retard']: eval_parts.append(f"⚠️ {oper_data['retard']} en retard")
+            if oper_data['a_planifier']: eval_parts.append(f"📅 {oper_data['a_planifier']} à planifier")
+
+            eval_text = " | ".join(eval_parts) if eval_parts else "—"
+            self.table.setItem(row_pos, 5, QTableWidgetItem(eval_text))
+
+            # Colonne 6: Statut global
+            statut_item = QTableWidgetItem(oper_data['statut'])
             statut_item.setTextAlignment(Qt.AlignCenter)
 
-            if eval_data['statut'] == "En retard":
+            if oper_data['statut_code'] == "En retard":
                 statut_item.setBackground(QColor("#fecaca"))
                 statut_item.setForeground(QColor("#dc2626"))
-                statut_item.setText("⚠️ En retard")
-            elif eval_data['statut'] == "À planifier":
+            elif oper_data['statut_code'] == "À planifier":
                 statut_item.setBackground(QColor("#fed7aa"))
                 statut_item.setForeground(QColor("#ea580c"))
-                statut_item.setText("📅 À planifier")
-            elif eval_data['statut'] == "À jour":
+            else:
                 statut_item.setBackground(QColor("#d1fae5"))
                 statut_item.setForeground(QColor("#059669"))
-                statut_item.setText("✅ À jour")
-            else:
-                statut_item.setBackground(QColor("#e5e7eb"))
-                statut_item.setForeground(QColor("#6b7280"))
 
-            self.table.setItem(row_pos, 7, statut_item)
+            font = QFont()
+            font.setBold(True)
+            statut_item.setFont(font)
+            self.table.setItem(row_pos, 6, statut_item)
 
         self.table.setSortingEnabled(True)
 
-    def update_statistics(self, evaluations):
+    def update_statistics(self, operateurs):
         """Met à jour les statistiques affichées."""
-        total = len(evaluations)
-        en_retard = sum(1 for e in evaluations if e['statut'] == "En retard")
-        a_planifier = sum(1 for e in evaluations if e['statut'] == "À planifier")
-        a_jour = sum(1 for e in evaluations if e['statut'] == "À jour")
+        total = len(operateurs)
+        en_retard = sum(1 for o in operateurs if o['statut_code'] == "En retard")
+        a_planifier = sum(1 for o in operateurs if o['statut_code'] == "À planifier")
+        a_jour = sum(1 for o in operateurs if o['statut_code'] == "À jour")
 
         self.total_label.setText(f"Total : {total}")
         self.retard_label.setText(f"En retard : {en_retard}")
@@ -734,3 +1193,27 @@ class GestionEvaluationDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible d'exporter en PDF :\n{e}")
+
+    def _on_row_double_click(self, row, col):
+        """Gère le double-clic sur une ligne du tableau."""
+        # Ne pas ouvrir le dialogue si on double-clique sur les colonnes de dates (5-6)
+        if col in [5, 6]:
+            return
+
+        # Récupérer les infos de l'opérateur depuis all_evaluations
+        if row < len(self.all_evaluations):
+            eval_data = self.all_evaluations[row]
+            operateur_id = eval_data.get('personnel_id')
+            nom = eval_data.get('nom')
+            prenom = eval_data.get('prenom')
+
+            if not operateur_id:
+                return
+
+            # Ouvrir le dialogue détaillé avec 2 onglets
+            dialog = DetailOperateurDialog(operateur_id, nom, prenom, self)
+            dialog.exec_()
+
+            # Recharger les données après fermeture du dialogue
+            self.load_data()
+

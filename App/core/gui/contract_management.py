@@ -9,10 +9,10 @@ from PyQt5.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
     QTableWidgetItem, QLabel, QMessageBox, QHeaderView, QComboBox, QWidget,
     QDateEdit, QLineEdit, QDoubleSpinBox, QTextEdit, QFormLayout, QGroupBox,
-    QScrollArea
+    QScrollArea, QTabWidget, QFileDialog, QAbstractItemView
 )
 from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QColor
+from PyQt5.QtGui import QColor, QFont
 
 from core.services.contrat_service import (
     get_all_active_contracts, get_expiring_contracts, delete_contract,
@@ -21,8 +21,16 @@ from core.services.contrat_service import (
 )
 from core.db.configbd import get_connection as get_db_connection
 
+# Import du service documentaire pour les documents contractuels
+try:
+    from core.services.document_service import DocumentService
+    DOCUMENTS_AVAILABLE = True
+except ImportError:
+    DOCUMENTS_AVAILABLE = False
+
 try:
     from core.gui.ui_theme import EmacCard, EmacButton
+    from core.gui.emac_ui_kit import add_custom_title_bar
     THEME_AVAILABLE = True
 except ImportError:
     THEME_AVAILABLE = False
@@ -448,7 +456,29 @@ class ContractManagementDialog(QDialog):
         self.load_data()
 
     def init_ui(self):
-        layout = QVBoxLayout(self)
+        # Layout principal avec marges nulles
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Barre de titre personnalisée
+        if THEME_AVAILABLE:
+            title_bar = add_custom_title_bar(self, "Gestion des Contrats")
+            main_layout.addWidget(title_bar)
+
+        # Widget de contenu avec onglets
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(16, 16, 16, 16)
+        content_layout.setSpacing(16)
+
+        # Créer les onglets
+        self.tabs = QTabWidget()
+
+        # Onglet 1: Liste des contrats
+        contracts_tab = QWidget()
+        layout = QVBoxLayout(contracts_tab)
+        layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
 
         # En-tête avec statistiques
@@ -494,10 +524,10 @@ class ContractManagementDialog(QDialog):
 
         # Table
         self.table = QTableWidget()
-        self.table.setColumnCount(10)
+        self.table.setColumnCount(11)
         self.table.setHorizontalHeaderLabels([
             "ID", "Opérateur", "Matricule", "Type", "Début", "Fin",
-            "ETP", "Catégorie", "Emploi", "Jours restants"
+            "ETP", "Catégorie", "Emploi", "Jours restants", "📄 Docs"
         ])
 
         header = self.table.horizontalHeader()
@@ -533,6 +563,20 @@ class ContractManagementDialog(QDialog):
         action_layout.addWidget(close_btn)
 
         layout.addLayout(action_layout)
+
+        # Ajouter l'onglet Contrats
+        self.tabs.addTab(contracts_tab, "📋 Contrats")
+
+        # Onglet 2: Documents contractuels
+        if DOCUMENTS_AVAILABLE:
+            documents_tab = self.create_documents_tab()
+            self.tabs.addTab(documents_tab, "📄 Documents")
+
+        # Ajouter les onglets au layout de contenu
+        content_layout.addWidget(self.tabs)
+
+        # Ajouter le widget de contenu au layout principal
+        main_layout.addWidget(content_widget)
 
     def load_data(self):
         """Charge les contrats actifs."""
@@ -610,11 +654,50 @@ class ContractManagementDialog(QDialog):
             else:
                 self.table.setItem(row, 9, QTableWidgetItem('—'))
 
+            # Nombre de documents
+            doc_count = self.count_documents_for_operator(contract['operateur_id'])
+            doc_item = QTableWidgetItem(str(doc_count))
+            doc_item.setTextAlignment(Qt.AlignCenter)
+
+            # Coloration selon le nombre de documents
+            if doc_count == 0:
+                doc_item.setForeground(QColor(156, 163, 175))  # Gris
+            else:
+                doc_item.setForeground(QColor(16, 185, 129))  # Vert
+                doc_item.setFont(QFont("Arial", 9, QFont.Bold))
+
+            self.table.setItem(row, 10, doc_item)
+
         # Cacher colonne ID
         self.table.setColumnHidden(0, True)
 
         # Mettre à jour les statistiques
         self.update_statistics()
+
+    def count_documents_for_operator(self, operateur_id):
+        """Compte le nombre de documents contractuels pour un opérateur."""
+        if not DOCUMENTS_AVAILABLE:
+            return 0
+
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor(buffered=True)
+
+            cur.execute("""
+                SELECT COUNT(*) as count
+                FROM documents d
+                INNER JOIN categories_documents c ON d.categorie_id = c.id
+                WHERE d.operateur_id = %s AND c.nom = 'Contrats de travail'
+            """, (operateur_id,))
+
+            result = cur.fetchone()
+            cur.close()
+            conn.close()
+
+            return result[0] if result else 0
+
+        except Exception:
+            return 0
 
     def update_statistics(self):
         """Met à jour les statistiques affichées."""
@@ -641,6 +724,264 @@ class ContractManagementDialog(QDialog):
         dialog = ContractFormDialog(self, contract_id=contract_id)
         if dialog.exec_() == QDialog.Accepted:
             self.load_data()
+
+    def create_documents_tab(self):
+        """Crée l'onglet pour les documents contractuels."""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(16)
+
+        # En-tête
+        header_layout = QHBoxLayout()
+        header_layout.addWidget(QLabel("Documents contractuels (Contrats de travail, Avenants)"))
+        header_layout.addStretch()
+
+        if THEME_AVAILABLE:
+            add_doc_btn = EmacButton("+ Ajouter un document", 'primary')
+            refresh_doc_btn = EmacButton("🔄 Actualiser", 'ghost')
+        else:
+            add_doc_btn = QPushButton("+ Ajouter un document")
+            refresh_doc_btn = QPushButton("🔄 Actualiser")
+
+        add_doc_btn.clicked.connect(self.add_contract_document)
+        refresh_doc_btn.clicked.connect(self.load_contract_documents)
+
+        header_layout.addWidget(add_doc_btn)
+        header_layout.addWidget(refresh_doc_btn)
+        layout.addLayout(header_layout)
+
+        # Table des documents
+        self.docs_table = QTableWidget()
+        self.docs_table.setColumnCount(8)
+        self.docs_table.setHorizontalHeaderLabels([
+            "ID", "Personnel", "Matricule", "Catégorie", "Nom du fichier",
+            "Date d'ajout", "Date d'expiration", "Statut"
+        ])
+
+        header = self.docs_table.horizontalHeader()
+        header.setSectionResizeMode(1, QHeaderView.Stretch)
+        header.setSectionResizeMode(4, QHeaderView.Stretch)
+
+        self.docs_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.docs_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.docs_table.doubleClicked.connect(self.open_document)
+
+        layout.addWidget(self.docs_table)
+
+        # Boutons d'action
+        action_layout = QHBoxLayout()
+        action_layout.addStretch()
+
+        if THEME_AVAILABLE:
+            open_btn = EmacButton("📂 Ouvrir", 'ghost')
+            delete_doc_btn = EmacButton("🗑️ Supprimer", 'ghost')
+        else:
+            open_btn = QPushButton("📂 Ouvrir")
+            delete_doc_btn = QPushButton("🗑️ Supprimer")
+
+        open_btn.clicked.connect(self.open_document)
+        delete_doc_btn.clicked.connect(self.delete_document)
+
+        action_layout.addWidget(open_btn)
+        action_layout.addWidget(delete_doc_btn)
+        layout.addLayout(action_layout)
+
+        # Charger les documents
+        self.load_contract_documents()
+
+        return tab
+
+    def load_contract_documents(self):
+        """Charge les documents contractuels uniquement."""
+        if not DOCUMENTS_AVAILABLE:
+            return
+
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor(dictionary=True, buffered=True)
+
+            # Récupérer seulement les documents de catégorie "Contrats de travail"
+            cur.execute("""
+                SELECT
+                    d.id,
+                    d.operateur_id,
+                    p.nom,
+                    p.prenom,
+                    p.matricule,
+                    c.nom as categorie,
+                    d.nom_fichier,
+                    d.date_ajout,
+                    d.date_expiration,
+                    CASE
+                        WHEN d.date_expiration IS NULL THEN 'Valide'
+                        WHEN d.date_expiration < CURDATE() THEN 'Expiré'
+                        WHEN d.date_expiration <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 'Expire bientôt'
+                        ELSE 'Valide'
+                    END as statut
+                FROM documents d
+                INNER JOIN personnel p ON d.operateur_id = p.id
+                INNER JOIN categories_documents c ON d.categorie_id = c.id
+                WHERE c.nom = 'Contrats de travail'
+                ORDER BY d.date_ajout DESC
+            """)
+
+            documents = cur.fetchall()
+            cur.close()
+            conn.close()
+
+            self.docs_table.setRowCount(0)
+
+            for doc in documents:
+                row = self.docs_table.rowCount()
+                self.docs_table.insertRow(row)
+
+                # ID (caché)
+                self.docs_table.setItem(row, 0, QTableWidgetItem(str(doc['id'])))
+
+                # Personnel
+                nom_complet = f"{doc['nom']} {doc['prenom']}"
+                self.docs_table.setItem(row, 1, QTableWidgetItem(nom_complet))
+
+                # Matricule
+                self.docs_table.setItem(row, 2, QTableWidgetItem(doc['matricule'] or ''))
+
+                # Catégorie
+                self.docs_table.setItem(row, 3, QTableWidgetItem(doc['categorie']))
+
+                # Nom du fichier
+                self.docs_table.setItem(row, 4, QTableWidgetItem(doc['nom_fichier']))
+
+                # Date d'ajout
+                date_ajout_str = doc['date_ajout'].strftime('%d/%m/%Y') if doc['date_ajout'] else ''
+                self.docs_table.setItem(row, 5, QTableWidgetItem(date_ajout_str))
+
+                # Date d'expiration
+                date_exp_str = doc['date_expiration'].strftime('%d/%m/%Y') if doc['date_expiration'] else 'N/A'
+                date_exp_item = QTableWidgetItem(date_exp_str)
+
+                # Coloration selon le statut
+                statut = doc['statut']
+                if statut == 'Expiré':
+                    date_exp_item.setBackground(QColor(220, 38, 38, 50))
+                    date_exp_item.setForeground(QColor(220, 38, 38))
+                elif statut == 'Expire bientôt':
+                    date_exp_item.setBackground(QColor(217, 119, 6, 50))
+                    date_exp_item.setForeground(QColor(217, 119, 6))
+
+                self.docs_table.setItem(row, 6, date_exp_item)
+
+                # Statut
+                statut_item = QTableWidgetItem(statut)
+                if statut == 'Expiré':
+                    statut_item.setForeground(QColor(220, 38, 38))
+                elif statut == 'Expire bientôt':
+                    statut_item.setForeground(QColor(217, 119, 6))
+                else:
+                    statut_item.setForeground(QColor(16, 185, 129))
+
+                self.docs_table.setItem(row, 7, statut_item)
+
+            # Cacher colonne ID
+            self.docs_table.setColumnHidden(0, True)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors du chargement des documents : {e}")
+
+    def add_contract_document(self):
+        """Ouvre la fenêtre pour ajouter un document contractuel."""
+        try:
+            from core.gui.gestion_documentaire import AddDocumentDialog
+
+            # Ouvrir la fenêtre d'ajout de document
+            dialog = AddDocumentDialog(operateur_id=None, parent=self, filter_category="Contrats de travail")
+            if dialog.exec_() == QDialog.Accepted:
+                self.load_contract_documents()
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'ouverture du formulaire : {e}")
+
+    def open_document(self):
+        """Ouvre le document sélectionné."""
+        current_row = self.docs_table.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un document")
+            return
+
+        doc_id = int(self.docs_table.item(current_row, 0).text())
+
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor(dictionary=True, buffered=True)
+            cur.execute("SELECT chemin_fichier FROM documents WHERE id = %s", (doc_id,))
+            result = cur.fetchone()
+            cur.close()
+            conn.close()
+
+            if result and result['chemin_fichier']:
+                import os
+                import subprocess
+                file_path = result['chemin_fichier']
+
+                if os.path.exists(file_path):
+                    # Ouvrir avec l'application par défaut
+                    if sys.platform == 'win32':
+                        os.startfile(file_path)
+                    elif sys.platform == 'darwin':
+                        subprocess.run(['open', file_path])
+                    else:
+                        subprocess.run(['xdg-open', file_path])
+                else:
+                    QMessageBox.warning(self, "Erreur", f"Le fichier n'existe pas : {file_path}")
+            else:
+                QMessageBox.warning(self, "Erreur", "Chemin du fichier non trouvé")
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'ouverture du document : {e}")
+
+    def delete_document(self):
+        """Supprime le document sélectionné."""
+        current_row = self.docs_table.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un document")
+            return
+
+        doc_id = int(self.docs_table.item(current_row, 0).text())
+        doc_name = self.docs_table.item(current_row, 4).text()
+
+        reply = QMessageBox.question(
+            self, "Confirmation",
+            f"Voulez-vous vraiment supprimer le document '{doc_name}' ?\n\nCette action est irréversible.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                conn = get_db_connection()
+                cur = conn.cursor(dictionary=True, buffered=True)
+
+                # Récupérer le chemin du fichier
+                cur.execute("SELECT chemin_fichier FROM documents WHERE id = %s", (doc_id,))
+                result = cur.fetchone()
+
+                if result and result['chemin_fichier']:
+                    import os
+                    file_path = result['chemin_fichier']
+
+                    # Supprimer le fichier physique
+                    if os.path.exists(file_path):
+                        os.remove(file_path)
+
+                # Supprimer l'entrée en base
+                cur.execute("DELETE FROM documents WHERE id = %s", (doc_id,))
+                conn.commit()
+                cur.close()
+                conn.close()
+
+                QMessageBox.information(self, "Succès", "Document supprimé avec succès")
+                self.load_contract_documents()
+
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Erreur lors de la suppression : {e}")
 
     def delete_contract(self):
         """Désactive le contrat sélectionné."""

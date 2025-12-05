@@ -15,6 +15,7 @@ from core.gui.gestion_personnel import GestionPersonnelDialog
 from core.gui.planning import RegularisationDialog
 from core.gui.contract_management import ContractManagementDialog
 from core.gui.planning_absences import PlanningAbsencesDialog
+from core.gui.gestion_documentaire import GestionDocumentaireDialog
 from core.db.configbd import get_connection as get_db_connection
 
 
@@ -162,6 +163,7 @@ class MainWindow(QMainWindow):
         self.add_drawer_button(drawer_layout, "Ajouter du personnel", self.show_manage_operator, 'ghost')
         self.add_drawer_button(drawer_layout, "Création/Suppression de poste", self.show_poste_form, 'ghost')
         self.add_drawer_button(drawer_layout, "Gestion des Contrats", self.show_contract_management, 'ghost')
+        self.add_drawer_button(drawer_layout, "Documents RH", self.show_gestion_documentaire, 'ghost')
         self.add_drawer_button(drawer_layout, "Planning & Évaluations", self.show_regularisation, 'ghost')
         self.add_drawer_button(drawer_layout, "Historique", self.show_historique, 'ghost')
 
@@ -269,6 +271,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Erreur", "Aucun personnel actif trouvé")
     def show_contract_management(self):
         ContractManagementDialog(self).exec_()
+
+    def show_gestion_documentaire(self):
+        GestionDocumentaireDialog(self).exec_()
 
     # ================= Données / DB (Fonctions inchangées) =================
     def populate_filters(self):

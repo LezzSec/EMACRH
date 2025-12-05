@@ -251,11 +251,11 @@ class ManageOperatorsDialog(QDialog):
                 (date_iso, operateur_id, poste_id),
             )
         else:
-            # Insérer une nouvelle entrée
+            # Insérer une nouvelle entrée avec niveau 1 par défaut
             cursor.execute(
                 """
-                INSERT INTO polyvalence (operateur_id, poste_id, prochaine_evaluation)
-                VALUES (%s, %s, %s)
+                INSERT INTO polyvalence (operateur_id, poste_id, niveau, prochaine_evaluation)
+                VALUES (%s, %s, 1, %s)
                 """,
                 (operateur_id, poste_id, date_iso),
             )
@@ -496,7 +496,6 @@ class ManageOperatorsDialog(QDialog):
                 pass
 
 
-# Test rapide en autonome
 if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)

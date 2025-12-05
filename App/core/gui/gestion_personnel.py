@@ -3,7 +3,7 @@
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QGroupBox,
-    QMessageBox, QAbstractItemView, QWidget, QTextEdit, QTabWidget, QCheckBox,
+    QMessageBox, QAbstractItemView, QWidget, QTabWidget, QCheckBox,
     QButtonGroup, QRadioButton
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
@@ -14,6 +14,7 @@ from core.services.logger import log_hist
 from core.services.contrat_service import get_all_contracts
 from core.gui.contract_management import ContractFormDialog
 from core.gui.historique_personnel import HistoriquePersonnelTab
+from core.gui.emac_ui_kit import add_custom_title_bar
 
 import datetime as dt
 
@@ -48,22 +49,38 @@ class DetailOperateurDialog(QDialog):
         self.current_statut = statut.upper()
         self.setWindowTitle(f"Détails - {nom} {prenom}")
         self.setGeometry(200, 150, 900, 600)
-        
-        layout = QVBoxLayout(self)
-        
+
+        # Créer le layout principal avec marges nulles pour la barre de titre
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Ajouter la barre de titre personnalisée
+        title_bar = add_custom_title_bar(self, f"Détails - {nom} {prenom}")
+        main_layout.addWidget(title_bar)
+
+        # Créer le widget de contenu avec marges normales
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(12)
+
         # === Header avec infos opérateur ===
+        header_content = QVBoxLayout()
         header = QLabel(f"{nom} {prenom}")
         header.setFont(QFont("Arial", 18, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
-        layout.addWidget(header)
-        
+        header_content.addWidget(header)
+
         status_label = QLabel(f"Statut : {self.current_statut}")
         if self.current_statut == "ACTIF":
             status_label.setStyleSheet("color: #10b981; font-weight: bold; font-size: 14px;")
         else:
             status_label.setStyleSheet("color: #dc2626; font-weight: bold; font-size: 14px;")
         status_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(status_label)
+        header_content.addWidget(status_label)
+
+        layout.addLayout(header_content)
         
         # === Onglets ===
         tabs = QTabWidget()
@@ -101,72 +118,8 @@ class DetailOperateurDialog(QDialog):
         poly_layout.addLayout(stats_box)
         
         tabs.addTab(poly_tab, "Polyvalences")
-        
-        # Onglet 2 : Résumé / Notes
-        summary_tab = QWidget()
-        summary_layout = QVBoxLayout(summary_tab)
-        summary_layout.setSpacing(15)
-        summary_layout.setContentsMargins(20, 20, 20, 20)
-        
-        # En-tête avec design moderne
-        header_summary = QWidget()
-        header_summary.setStyleSheet("""
-            QWidget {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #1e40af, stop:1 #3b82f6);
-                border-radius: 10px;
-                padding: 15px;
-            }
-        """)
-        header_layout = QVBoxLayout(header_summary)
-        
-        summary_label = QLabel("📋 Résumé du Parcours")
-        summary_label.setFont(QFont("Arial", 16, QFont.Bold))
-        summary_label.setStyleSheet("color: white; background: transparent;")
-        header_layout.addWidget(summary_label)
-        
-        summary_subtitle = QLabel("Vue d'ensemble de la carrière et des compétences")
-        summary_subtitle.setStyleSheet("color: #e0f2fe; font-size: 11px; background: transparent;")
-        header_layout.addWidget(summary_subtitle)
-        
-        summary_layout.addWidget(header_summary)
-        
-        # Zone de texte stylisée avec bordure élégante
-        self.summary_text = QTextEdit()
-        self.summary_text.setReadOnly(True)
-        self.summary_text.setStyleSheet("""
-            QTextEdit {
-                background-color: #ffffff;
-                border: 2px solid #e2e8f0;
-                border-radius: 10px;
-                padding: 20px;
-                font-family: 'Segoe UI', Arial, sans-serif;
-                font-size: 11px;
-                color: #1e293b;
-                line-height: 1.8;
-            }
-            QTextEdit:focus {
-                border: 2px solid #3b82f6;
-            }
-            QScrollBar:vertical {
-                background: #f1f5f9;
-                width: 12px;
-                border-radius: 6px;
-            }
-            QScrollBar::handle:vertical {
-                background: #cbd5e1;
-                border-radius: 6px;
-                min-height: 30px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #94a3b8;
-            }
-        """)
-        summary_layout.addWidget(self.summary_text)
-        
-        tabs.addTab(summary_tab, "Résumé")
-        
-        # Onglet 3 : Infos Complémentaires
+
+        # Onglet 2 : Infos Complémentaires
         infos_tab = QWidget()
         infos_layout = QVBoxLayout(infos_tab)
         infos_layout.setSpacing(15)
@@ -348,9 +301,12 @@ class DetailOperateurDialog(QDialog):
         self.close_btn = QPushButton("Fermer")
         self.close_btn.clicked.connect(self.close)
         actions.addWidget(self.close_btn)
-        
+
         layout.addLayout(actions)
-        
+
+        # Ajouter le widget de contenu au layout principal
+        main_layout.addWidget(content_widget)
+
         # Charger les données
         self.load_data()
     
@@ -417,7 +373,6 @@ class DetailOperateurDialog(QDialog):
     def load_data(self):
         """Charge toutes les données de l'opérateur."""
         self.load_polyvalences()
-        self.load_summary()
         self.load_additional_infos() # <--- AJOUT : Chargement des nouvelles infos
         self.load_contracts()
         # L'historique se charge automatiquement via le widget HistoriquePersonnelTab
@@ -683,7 +638,8 @@ class DetailOperateurDialog(QDialog):
                         statut_item.setText("À jour")
                         statut_item.setForeground(QColor("#059669"))
                 else:
-                    statut_item.setText("N/A")
+                        statut_item.setText("À planifier")
+                        statut_item.setForeground(QColor("#d97706"))  # orange
                 
                 statut_item.setTextAlignment(Qt.AlignCenter)
                 self.poly_table.setItem(row, 5, statut_item)
@@ -698,110 +654,7 @@ class DetailOperateurDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible de charger les polyvalences :\n{e}")
     
-    def load_summary(self):
-        """Génère un résumé textuel du parcours."""
-        try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            
-            # Récupérer les infos
-            cursor.execute(
-                "SELECT nom, prenom, statut FROM personnel WHERE id = %s",
-                (self.operateur_id,)
-            )
-            op = cursor.fetchone()
-            
-            if not op:
-                return
-            
-            nom = op["nom"] if dict_mode else op[0]
-            prenom = op["prenom"] if dict_mode else op[1]
-            statut = op["statut"] if dict_mode else op[2]
-            
-            # Statistiques
-            cursor.execute(
-                """SELECT COUNT(*) as total, 
-                   SUM(CASE WHEN niveau = 1 THEN 1 ELSE 0 END) as n1,
-                   SUM(CASE WHEN niveau = 2 THEN 1 ELSE 0 END) as n2,
-                   SUM(CASE WHEN niveau = 3 THEN 1 ELSE 0 END) as n3,
-                   SUM(CASE WHEN niveau = 4 THEN 1 ELSE 0 END) as n4,
-                   MIN(date_evaluation) as premiere_eval,
-                   MAX(date_evaluation) as derniere_eval
-                   FROM polyvalence WHERE operateur_id = %s""",
-                (self.operateur_id,)
-            )
-            stats = cursor.fetchone()
-            
-            if dict_mode:
-                total = stats["total"]
-                n1, n2, n3, n4 = stats["n1"], stats["n2"], stats["n3"], stats["n4"]
-                premiere = stats["premiere_eval"]
-                derniere = stats["derniere_eval"]
-            else:
-                total = stats[0]
-                n1, n2, n3, n4 = stats[1], stats[2], stats[3], stats[4]
-                premiere = stats[5]
-                derniere = stats[6]
-            
-            cursor.close()
-            connection.close()
-            
-            # Générer le résumé
-            summary = f"""
-═══════════════════════════════════════════════════
-  PROFIL : {nom} {prenom}
-═══════════════════════════════════════════════════
-
-📊 STATISTIQUES GÉNÉRALES
-─────────────────────────────────────────────────
-• Statut actuel : {statut.upper()}
-• Nombre total de postes occupés : {total}
-• Répartition des niveaux :
-  - Niveau 1 : Opérateur nouveau à encadrer par titulaire N3/4 ou absent du poste depuis plus de 12 mois. (< 80%)     : {n1} poste(s)
-  - Niveau 2 : Opérateur formé et apte à conduire le poste seul. Certaines notions sont en cours d'acquisition. (> 80%)     : {n2} poste(s)
-  - Niveau 3 : Opérateur titulaire, formé, apte à conduire le poste et apte à former. (> 90%)       : {n3} poste(s)
-  - Niveau 4 : N3 + Leader ou Polyvalent (maîtrise 3 postes d'une ligne : mél. interne, cylindres, conditionnement) (> 90%)     : {n4} poste(s)
-
-📅 PÉRIODE D'ACTIVITÉ
-─────────────────────────────────────────────────
-• Première évaluation : {self._format_date(premiere)}
-• Dernière évaluation : {self._format_date(derniere)}
-
-⭐ POINTS FORTS
-─────────────────────────────────────────────────
-"""
-            
-            if n4 > 0:
-                summary += f"• {n4} poste(s) maîtrisé(s) au niveau Référent (N4)\n"
-            if n3 > 0:
-                summary += f"• {n3} poste(s) maîtrisé(s) au niveau Expert (N3)\n"
-            
-            if n3 + n4 >= 3:
-                summary += "• Opérateur polyvalent (3+ postes de niveau 3/4)\n"
-            
-            if statut.upper() == "INACTIF":
-                summary += """
-💡 REMARQUES
-─────────────────────────────────────────────────
-L'opérateur est actuellement INACTIF.
-Toutes ses compétences et évaluations sont conservées
-dans le système pour référence future.
-
-Vous pouvez réactiver cet opérateur à tout moment
-en cliquant sur le bouton "Réactiver l'opérateur".
-"""
-            else:
-                summary += """
-💡 REMARQUES
-─────────────────────────────────────────────────
-L'opérateur est actuellement ACTIF et disponible
-pour les affectations de poste.
-"""
-            
-            self.summary_text.setPlainText(summary)
-            
-        except Exception as e:
-            self.summary_text.setPlainText(f"Erreur lors du chargement du résumé :\n{e}")
+    # Méthode load_summary() supprimée - l'onglet Résumé a été retiré
     
     # Méthode load_history() supprimée - remplacée par le widget HistoriquePersonnelTab
 
@@ -866,7 +719,6 @@ pour les affectations de poste.
             )
 
             self.operateur_status_changed.emit(self.operateur_id)
-            self.load_summary()  # Recharger le résumé pour mettre à jour le statut
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible de modifier le statut :\n{e}")
@@ -1140,28 +992,11 @@ pour les affectations de poste.
             flow.append(Paragraph(f"Profil Opérateur", title_style))
             flow.append(Spacer(1, 0.3*cm))
     
-            # ---------- Traiter le résumé ----------
-            resume_raw = self.summary_text.toPlainText() if hasattr(self, "summary_text") else ""
-            resume_clean = _clean_text(resume_raw)
-            sections_data = _parse_section(resume_clean)
-            
-            # Afficher chaque section du résumé
-            for section_title, items in sections_data.items():
-                flow.append(Paragraph(section_title, section_style))
-                
-                for item in items:
-                    if ':' in item:
-                        # Format clé : valeur
-                        parts = item.split(':', 1)
-                        key = parts[0].strip()
-                        value = parts[1].strip() if len(parts) > 1 else ""
-                        text = f"<b>{key}</b> : {value}"
-                        flow.append(Paragraph(text, body_style))
-                    else:
-                        # Item de liste
-                        flow.append(Paragraph(f"• {item}", bullet_style))
-                
-                flow.append(Spacer(1, 0.3*cm))
+            # Note: L'onglet résumé a été supprimé, donc on n'affiche plus le résumé textuel
+            # On affiche directement les informations principales
+            flow.append(Paragraph(f"<b>Nom :</b> {self.operateur_nom}", body_style))
+            flow.append(Paragraph(f"<b>Prénom :</b> {self.operateur_prenom}", body_style))
+            flow.append(Spacer(1, 0.3*cm))
     
             # ---------- Informations complémentaires ----------
             flow.append(Paragraph("Informations Complémentaires", section_style))
@@ -1375,22 +1210,13 @@ pour les affectations de poste.
             ws1["A2"].font = SUB_FONT
             ws1["A2"].alignment = LEFT
     
-            # Sous-titre de section
-            ws1["A4"] = "Résumé du parcours"
+            # Note: L'onglet résumé a été supprimé, donc pas de contenu ici
+            ws1["A4"] = "Informations de base"
             ws1["A4"].font = Font(bold=True)
             ws1["A4"].fill = SEC_FILL
             ws1["A4"].alignment = LEFT
-    
-            # Contenu (wrap), sur A..S
-            ws1.merge_cells("A5:S5")
-            resume_txt = (self.summary_text.toPlainText().strip() if hasattr(self, "summary_text") else "") or "—"
-            ws1["A5"] = resume_txt
-            ws1["A5"].alignment = LEFT_WRAP
-    
-            # Hauteur auto suffisante pour voir tout le bloc résumé
-            set_wrapped_row_height(ws1, 5, wide_cols)
-    
-            ws1.freeze_panes = "A6"
+
+            ws1.freeze_panes = "A5"
     
             # =========================================================
             # 2) FEUILLE INFORMATIONS
@@ -1571,15 +1397,28 @@ class GestionPersonnelDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Gestion du Personnel")
         self.setGeometry(100, 100, 1000, 600)
-        
-        layout = QVBoxLayout(self)
-        
+
+        # Layout principal avec marges nulles
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Barre de titre personnalisée
+        title_bar = add_custom_title_bar(self, "Gestion du Personnel")
+        main_layout.addWidget(title_bar)
+
+        # Widget de contenu
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
         # === Header ===
         header = QLabel("Gestion du Personnel")
         header.setFont(QFont("Arial", 18, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
         layout.addWidget(header)
-        
+
         subtitle = QLabel("Vue complète de tous les opérateurs")
         subtitle.setStyleSheet("color: #6b7280; font-style: italic;")
         subtitle.setAlignment(Qt.AlignCenter)
@@ -1668,7 +1507,10 @@ class GestionPersonnelDialog(QDialog):
         actions.addWidget(self.close_btn)
         
         layout.addLayout(actions)
-        
+
+        # Ajouter le widget de contenu au layout principal
+        main_layout.addWidget(content_widget)
+
         # Charger les données
         self.all_data = []
         self.load_data()

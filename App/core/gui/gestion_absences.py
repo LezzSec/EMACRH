@@ -17,6 +17,7 @@ from datetime import datetime, date
 
 from core.services import absence_service
 from core.db.configbd import get_connection
+from core.gui.emac_ui_kit import add_custom_title_bar
 
 
 class GestionAbsencesDialog(QDialog):
@@ -38,7 +39,20 @@ class GestionAbsencesDialog(QDialog):
 
     def init_ui(self):
         """Initialise l'interface avec onglets"""
-        layout = QVBoxLayout(self)
+        # Layout principal avec marges nulles
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Barre de titre personnalisée
+        title_bar = add_custom_title_bar(self, "Gestion des Absences et Congés")
+        main_layout.addWidget(title_bar)
+
+        # Widget de contenu
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
         # Titre
         title = QLabel("Gestion des Absences et Congés")
@@ -74,6 +88,9 @@ class GestionAbsencesDialog(QDialog):
         btn_close = QPushButton("Fermer")
         btn_close.clicked.connect(self.accept)
         layout.addWidget(btn_close)
+
+        # Ajouter le widget de contenu au layout principal
+        main_layout.addWidget(content_widget)
 
     def create_tab_mes_demandes(self):
         """Onglet listant les demandes du personnel"""

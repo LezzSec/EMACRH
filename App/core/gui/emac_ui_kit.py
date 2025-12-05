@@ -287,6 +287,279 @@ class SideNav(QtWidgets.QFrame):
         self.actions_area.addWidget(btn)
 
 
+# =============================
+# Barre de titre personnalisée
+# =============================
+
+class CustomTitleBar(QtWidgets.QWidget):
+    """
+    Barre de titre personnalisée avec boutons de contrôle Windows.
+    """
+    def __init__(self, parent_dialog, title="", parent=None):
+        super().__init__(parent)
+        self.parent_dialog = parent_dialog
+        self.setFixedHeight(32)
+        self.setStyleSheet("""
+            QWidget {
+                background: white;
+                border-bottom: 1px solid #e5e7eb;
+            }
+        """)
+
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(10, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Titre
+        self.title_label = QtWidgets.QLabel(title)
+        self.title_label.setStyleSheet("color: #000000; font-size: 12px; border: none;")
+        layout.addWidget(self.title_label)
+
+        layout.addStretch()
+
+        # Boutons de contrôle (style Windows 11)
+        btn_size = 46
+        btn_height = 32
+
+        # Bouton Minimiser
+        self.btn_minimize = QtWidgets.QPushButton("―")
+        self.btn_minimize.setFixedSize(btn_size, btn_height)
+        self.btn_minimize.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                color: #000000;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background: #f3f4f6;
+            }
+        """)
+        self.btn_minimize.clicked.connect(lambda: parent_dialog.showMinimized())
+        layout.addWidget(self.btn_minimize)
+
+        # Bouton Maximiser/Plein écran
+        self.btn_maximize = QtWidgets.QPushButton("⛶")
+        self.btn_maximize.setFixedSize(btn_size, btn_height)
+        self.btn_maximize.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                color: #000000;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background: #f3f4f6;
+            }
+        """)
+        self.btn_maximize.clicked.connect(self.toggle_maximize)
+        self.btn_maximize.setToolTip("Plein écran (F11)")
+        layout.addWidget(self.btn_maximize)
+
+        # Bouton Fermer
+        self.btn_close = QtWidgets.QPushButton("✕")
+        self.btn_close.setFixedSize(btn_size, btn_height)
+        self.btn_close.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                color: #000000;
+                font-size: 16px;
+            }
+            QPushButton:hover {
+                background: #e81123;
+                color: white;
+            }
+        """)
+        self.btn_close.clicked.connect(lambda: parent_dialog.close())
+        layout.addWidget(self.btn_close)
+
+        # Pour le drag de la fenêtre
+        self.dragging = False
+        self.offset = None
+
+    def toggle_maximize(self):
+        """Bascule entre fenêtre normale et plein écran."""
+        if self.parent_dialog.isMaximized() or self.parent_dialog.isFullScreen():
+            self.parent_dialog.showNormal()
+            self.btn_maximize.setText("⛶")
+        else:
+            self.parent_dialog.showMaximized()
+            self.btn_maximize.setText("❐")
+
+    def mousePressEvent(self, event):
+        """Permet de déplacer la fenêtre en cliquant sur la barre de titre."""
+        if event.button() == QtCore.Qt.LeftButton:
+            self.dragging = True
+            self.offset = event.globalPos() - self.parent_dialog.frameGeometry().topLeft()
+
+    def mouseMoveEvent(self, event):
+        """Déplace la fenêtre."""
+        if self.dragging and self.offset:
+            self.parent_dialog.move(event.globalPos() - self.offset)
+
+    def mouseReleaseEvent(self, event):
+        """Arrête le déplacement."""
+        self.dragging = False
+
+    def mouseDoubleClickEvent(self, event):
+        """Double-clic pour maximiser/restaurer."""
+        if event.button() == QtCore.Qt.LeftButton:
+            self.toggle_maximize()
+
+
+def add_custom_title_bar(dialog, title=None):
+    """
+    Version simplifiée : on utilise UNIQUEMENT la barre de titre système.
+
+    - Plus de FramelessWindowHint
+    - Plus de barre de titre personnalisée
+    - On renvoie un petit widget vide pour ne pas casser les layouts existants
+    """
+
+    # 1) On remet une fenêtre classique avec barre système
+    flags = QtCore.Qt.Window | QtCore.Qt.WindowSystemMenuHint \
+            | QtCore.Qt.WindowMinimizeButtonHint \
+            | QtCore.Qt.WindowMaximizeButtonHint \
+            | QtCore.Qt.WindowCloseButtonHint
+
+    dialog.setWindowFlags(flags)
+
+    # Optionnel : on met à jour le titre de la fenêtre s'il est fourni
+    if title is not None:
+        dialog.setWindowTitle(title)
+
+    # 2) On ne force pas d'attributs de rendu spéciaux
+    dialog.setAttribute(QtCore.Qt.WA_TranslucentBackground, False)
+    dialog.setAttribute(QtCore.Qt.WA_OpaquePaintEvent, False)
+
+    # 3) On renvoie un widget vide pour que:
+    #    main_layout.addWidget(title_bar)
+    #    ne casse rien mais n'affiche rien
+    placeholder = QtWidgets.QWidget(dialog)
+    placeholder.setFixedHeight(0)
+    placeholder.setSizePolicy(
+        QtWidgets.QSizePolicy.Expanding,
+        QtWidgets.QSizePolicy.Fixed
+    )
+
+    return placeholder
+
+
+# =============================
+# Bouton Plein Écran
+# =============================
+
+def add_fullscreen_button(dialog, button_parent=None, style="compact"):
+    """
+    Ajoute un bouton plein écran à un QDialog et retourne le bouton créé.
+
+    Args:
+        dialog: Le QDialog auquel ajouter la fonctionnalité plein écran
+        button_parent: (Optionnel) Le layout ou widget parent où ajouter le bouton
+                      Si None, retourne juste le bouton sans l'ajouter
+        style: "compact" (style Windows, petit) ou "rounded" (avec bordure arrondie)
+
+    Returns:
+        QPushButton: Le bouton plein écran créé
+
+    Usage:
+        # Dans un coin en haut à droite (style Windows)
+        fullscreen_btn = add_fullscreen_button(self, header_layout, style="compact")
+
+        # Avec style arrondi
+        fullscreen_btn = add_fullscreen_button(self, header_layout, style="rounded")
+    """
+
+    if style == "compact":
+        # Style compact type Windows (comme le screenshot)
+        fullscreen_btn = QtWidgets.QPushButton("⛶")
+        fullscreen_btn.setToolTip("Plein écran (F11)")
+        fullscreen_btn.setFixedSize(46, 32)
+        fullscreen_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: none;
+                color: #000000;
+                font-size: 14px;
+                font-weight: normal;
+            }
+            QPushButton:hover {
+                background: #f3f4f6;
+            }
+            QPushButton:pressed {
+                background: #e5e7eb;
+                color: #6b7280;
+            }
+        """)
+    else:
+        # Style arrondi avec bordure
+        fullscreen_btn = QtWidgets.QPushButton("⛶")
+        fullscreen_btn.setToolTip("Basculer en plein écran (F11)")
+        fullscreen_btn.setFixedSize(32, 32)
+        fullscreen_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                border: 1px solid #e5e7eb;
+                border-radius: 6px;
+                font-size: 16px;
+                color: #6b7280;
+            }
+            QPushButton:hover {
+                background: #f3f4f6;
+                border-color: #d1d5db;
+                color: #111827;
+            }
+            QPushButton:pressed {
+                background: #e5e7eb;
+            }
+        """)
+
+    # Variable pour stocker l'état du plein écran
+    dialog._is_fullscreen = False
+    dialog._previous_geometry = None
+
+    def toggle_fullscreen():
+        """Bascule entre le mode plein écran et le mode fenêtré."""
+        if not dialog._is_fullscreen:
+            # Sauvegarder la géométrie actuelle
+            dialog._previous_geometry = dialog.geometry()
+            # Passer en plein écran
+            dialog.showFullScreen()
+            dialog._is_fullscreen = True
+            fullscreen_btn.setText("⛶")
+            fullscreen_btn.setToolTip("Quitter le plein écran (F11 ou Echap)")
+        else:
+            # Restaurer la fenêtre normale
+            dialog.showNormal()
+            if dialog._previous_geometry:
+                dialog.setGeometry(dialog._previous_geometry)
+            dialog._is_fullscreen = False
+            fullscreen_btn.setText("⛶")
+            fullscreen_btn.setToolTip("Basculer en plein écran (F11)")
+
+    fullscreen_btn.clicked.connect(toggle_fullscreen)
+
+    # Ajouter un raccourci clavier F11
+    shortcut_f11 = QtWidgets.QShortcut(QtGui.QKeySequence("F11"), dialog)
+    shortcut_f11.activated.connect(toggle_fullscreen)
+
+    # Ajouter un raccourci Echap pour quitter le plein écran
+    shortcut_esc = QtWidgets.QShortcut(QtGui.QKeySequence("Esc"), dialog)
+    shortcut_esc.activated.connect(lambda: toggle_fullscreen() if dialog._is_fullscreen else None)
+
+    # Ajouter le bouton au parent si spécifié
+    if button_parent:
+        if isinstance(button_parent, QtWidgets.QLayout):
+            button_parent.addWidget(fullscreen_btn)
+        else:
+            # Supposer que c'est un widget avec un layout
+            if hasattr(button_parent, 'layout') and button_parent.layout():
+                button_parent.layout().addWidget(fullscreen_btn)
+
+    return fullscreen_btn
+
+
 if __name__ == "__main__":
     from PyQt5 import QtWidgets
     import sys

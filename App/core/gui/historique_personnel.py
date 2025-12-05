@@ -7,7 +7,8 @@ Affiche l'historique complet des actions concernant un opérateur spécifique
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QComboBox, QLabel, QPushButton, QFrame, QTextEdit,
-    QSplitter, QDateEdit, QLineEdit, QMessageBox, QDialog, QAbstractItemView
+    QSplitter, QDateEdit, QLineEdit, QMessageBox, QDialog, QAbstractItemView,
+    QGroupBox
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QBrush
@@ -303,148 +304,49 @@ class HistoriquePersonnelTab(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
 
         # === EN-TÊTE ===
-        header_widget = QWidget()
-        header_widget.setStyleSheet("""
-            QWidget {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #6366f1, stop:1 #8b5cf6);
-                border-radius: 8px;
-                padding: 16px;
-            }
-        """)
-        header_layout = QVBoxLayout(header_widget)
+        header_layout = QHBoxLayout()
 
-        title = QLabel(f"📜 Historique complet")
-        title.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        title.setStyleSheet("color: white; background: transparent;")
-        header_layout.addWidget(title)
+        header = QLabel(f"📜 Historique des polyvalences - {self.operateur_prenom} {self.operateur_nom}")
+        header.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        header.setStyleSheet("color: #374151; padding: 8px;")
+        header_layout.addWidget(header)
 
-        subtitle = QLabel(f"Toutes les actions concernant {self.operateur_prenom} {self.operateur_nom}")
-        subtitle.setStyleSheet("color: #e0e7ff; font-size: 10pt; background: transparent;")
-        header_layout.addWidget(subtitle)
+        header_layout.addStretch()
 
-        layout.addWidget(header_widget)
+        # === FILTRE SIMPLE ===
+        filter_layout = QHBoxLayout()
+        filter_layout.setSpacing(10)
 
-        # === FILTRES ===
-        filters_frame = QFrame()
-        filters_frame.setStyleSheet("""
-            QFrame {
-                background: #f9fafb;
-                border: 1px solid #e5e7eb;
-                border-radius: 6px;
-                padding: 12px;
-            }
-        """)
-        filters_layout = QHBoxLayout(filters_frame)
-        filters_layout.setSpacing(10)
+        filter_layout.addWidget(QLabel("Afficher :"))
+        self.type_filter = QComboBox()
+        self.type_filter.addItems(["Toutes les polyvalences", "Actuelles uniquement", "Anciennes uniquement"])
+        self.type_filter.currentIndexChanged.connect(self._apply_filter)
+        filter_layout.addWidget(self.type_filter)
 
-        # Type d'action
-        filters_layout.addWidget(QLabel("Type :"))
-        self.action_filter = QComboBox()
-        self.action_filter.addItems([
-            "Toutes les actions",
-            "Ajouts",
-            "Modifications",
-            "Suppressions",
-            "Erreurs"
-        ])
-        self.action_filter.currentIndexChanged.connect(self._apply_filters)
-        filters_layout.addWidget(self.action_filter)
+        filter_layout.addStretch()
 
-        # Poste
-        filters_layout.addWidget(QLabel("Poste :"))
-        self.poste_filter = QComboBox()
-        self.poste_filter.addItem("Tous les postes", None)
-        self.poste_filter.currentIndexChanged.connect(self._apply_filters)
-        filters_layout.addWidget(self.poste_filter)
+        self.stats_label = QLabel("0 polyvalence(s)")
+        self.stats_label.setStyleSheet("color: #6b7280; font-size: 10pt;")
+        filter_layout.addWidget(self.stats_label)
 
-        # Période
-        filters_layout.addWidget(QLabel("Du :"))
-        self.date_from = QDateEdit()
-        self.date_from.setCalendarPopup(True)
-        self.date_from.setDisplayFormat("dd/MM/yyyy")
-        self.date_from.setDate(QDate.currentDate().addMonths(-6))
-        self.date_from.dateChanged.connect(self._apply_filters)
-        filters_layout.addWidget(self.date_from)
+        layout.addLayout(filter_layout)
 
-        filters_layout.addWidget(QLabel("au :"))
-        self.date_to = QDateEdit()
-        self.date_to.setCalendarPopup(True)
-        self.date_to.setDisplayFormat("dd/MM/yyyy")
-        self.date_to.setDate(QDate.currentDate())
-        self.date_to.dateChanged.connect(self._apply_filters)
-        filters_layout.addWidget(self.date_to)
-
-        # Recherche textuelle
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Rechercher...")
-        self.search_input.textChanged.connect(self._apply_filters)
-        self.search_input.setStyleSheet("""
-            QLineEdit {
-                padding: 6px 12px;
-                border: 1px solid #d1d5db;
-                border-radius: 4px;
-            }
-            QLineEdit:focus {
-                border: 2px solid #6366f1;
-            }
-        """)
-        filters_layout.addWidget(self.search_input, 1)
-
-        # Bouton réinitialiser
-        reset_btn = QPushButton("🔄 Réinitialiser")
-        reset_btn.clicked.connect(self._reset_filters)
-        reset_btn.setStyleSheet("""
-            QPushButton {
-                background: #6b7280;
-                color: white;
-                border: none;
-                padding: 6px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background: #4b5563;
-            }
-        """)
-        filters_layout.addWidget(reset_btn)
-
-        # Bouton import manuel
-        import_btn = QPushButton("📥 Import manuel")
-        import_btn.clicked.connect(self._open_import_dialog)
-        import_btn.setStyleSheet("""
-            QPushButton {
-                background: #8b5cf6;
-                color: white;
-                border: none;
-                padding: 6px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background: #7c3aed;
-            }
-        """)
-        import_btn.setToolTip("Ajouter des anciennes données historiques manuellement")
-        filters_layout.addWidget(import_btn)
-
-        layout.addWidget(filters_frame)
-
-        # === TABLEAU PRINCIPAL (sans splitter, pleine hauteur) ===
+        # === TABLEAU DES POLYVALENCES ===
         self.table = QTableWidget()
-        self.table.setColumnCount(5)
+        self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
-            "Date/Heure", "Type", "Table", "Résumé", "_id"
+            "Type", "Poste", "Niveau", "Date Évaluation", "Prochaine Éval.", "Commentaire", "_id"
         ])
-        self.table.setColumnHidden(4, True)  # Colonne ID cachée
+        self.table.setColumnHidden(6, True)  # ID caché
 
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
 
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
 
@@ -456,7 +358,7 @@ class HistoriquePersonnelTab(QWidget):
                 gridline-color: #e5e7eb;
             }
             QTableWidget::item {
-                padding: 10px;
+                padding: 8px;
             }
             QTableWidget::item:selected {
                 background: #dbeafe;
@@ -464,351 +366,184 @@ class HistoriquePersonnelTab(QWidget):
             }
             QHeaderView::section {
                 background: #f3f4f6;
-                padding: 12px;
+                padding: 10px;
                 border: none;
                 border-bottom: 2px solid #e5e7eb;
                 font-weight: bold;
-                font-size: 10pt;
             }
         """)
 
-        self.table.doubleClicked.connect(self._on_double_click)
-
         layout.addWidget(self.table, 1)
 
-        # Hint pour l'utilisateur
-        hint_label = QLabel("💡 Double-cliquez sur une ligne pour voir tous les détails de l'action")
-        hint_label.setStyleSheet("color: #6b7280; font-style: italic; padding: 4px;")
-        hint_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(hint_label)
 
-        # === STATISTIQUES ===
-        stats_layout = QHBoxLayout()
+    def _format_date(self, date_val):
+        """Formate une date."""
+        if date_val is None:
+            return "N/A"
+        if isinstance(date_val, str):
+            try:
+                return dt.datetime.strptime(date_val, "%Y-%m-%d").strftime("%d/%m/%Y")
+            except:
+                return date_val
+        if hasattr(date_val, "strftime"):
+            return date_val.strftime("%d/%m/%Y")
+        return str(date_val)
 
-        self.stats_label = QLabel("📊 0 action(s)")
-        self.stats_label.setStyleSheet("color: #6b7280; font-size: 10pt; font-weight: bold;")
-        stats_layout.addWidget(self.stats_label)
+    def _calculate_anciennete(self, date_eval):
+        """Calcule l'ancienneté."""
+        if date_eval is None:
+            return "N/A"
+        try:
+            if isinstance(date_eval, str):
+                date_obj = dt.datetime.strptime(date_eval, "%Y-%m-%d").date()
+            elif hasattr(date_eval, "date"):
+                date_obj = date_eval.date()
+            else:
+                date_obj = date_eval
 
-        stats_layout.addStretch()
+            delta = dt.date.today() - date_obj
+            years = delta.days // 365
+            months = (delta.days % 365) // 30
 
-        # Légende des couleurs
-        legend_layout = QHBoxLayout()
-        legend_layout.setSpacing(16)
-
-        for text, color in [
-            ("Ajout", "#10b981"),
-            ("Modification", "#3b82f6"),
-            ("Suppression", "#ef4444"),
-            ("Erreur", "#f59e0b")
-        ]:
-            box = QLabel("  ")
-            box.setStyleSheet(f"background: {color}; border-radius: 2px;")
-            box.setFixedSize(12, 12)
-            legend_layout.addWidget(box)
-
-            label = QLabel(text)
-            label.setStyleSheet("color: #6b7280; font-size: 9pt;")
-            legend_layout.addWidget(label)
-
-        stats_layout.addLayout(legend_layout)
-
-        layout.addLayout(stats_layout)
+            if years > 0:
+                return f"{years} an(s) {months} mois"
+            elif months > 0:
+                return f"{months} mois"
+            else:
+                return f"{delta.days} jour(s)"
+        except:
+            return "N/A"
 
     def _load_data(self):
-        """Charge les données depuis la base de données."""
+        """Charge les polyvalences actuelles et anciennes."""
         try:
             conn = get_db_connection()
             cur = conn.cursor(dictionary=True)
 
-            # Charger TOUTES les actions pour cet opérateur depuis les deux tables
-            # 1. Table historique générale
-            query_historique = """
-                SELECT h.id, h.date_time, h.action, h.poste_id, h.description,
-                       h.table_name,
-                       p.poste_code,
-                       'historique' as source_table
-                FROM historique h
-                LEFT JOIN postes p ON h.poste_id = p.id
-                WHERE h.operateur_id = %s
+            # Charger les polyvalences ACTUELLES (table polyvalence)
+            query_actuelles = """
+                SELECT
+                    'ACTUELLE' as type,
+                    p.id,
+                    ps.poste_code,
+                    p.niveau,
+                    p.date_evaluation,
+                    p.prochaine_evaluation,
+                    NULL as commentaire
+                FROM polyvalence p
+                JOIN postes ps ON p.poste_id = ps.id
+                WHERE p.operateur_id = %s
+                ORDER BY ps.poste_code
             """
-            cur.execute(query_historique, (self.operateur_id,))
-            rows_historique = cur.fetchall()
+            cur.execute(query_actuelles, (self.operateur_id,))
+            polyvalences_actuelles = cur.fetchall()
 
-            # 2. Table historique_polyvalence (données détaillées)
-            query_poly = """
-                SELECT hp.id, hp.date_action as date_time, hp.action_type as action,
-                       hp.poste_id, hp.commentaire as description,
-                       'polyvalence' as table_name,
-                       p.poste_code,
-                       'historique_polyvalence' as source_table,
-                       hp.ancien_niveau, hp.nouveau_niveau,
-                       hp.ancienne_date_evaluation, hp.nouvelle_date_evaluation,
-                       hp.utilisateur, hp.source as poly_source
+            # Charger les ANCIENNES polyvalences (table historique_polyvalence avec action_type='IMPORT_MANUEL')
+            query_anciennes = """
+                SELECT
+                    'ANCIENNE' as type,
+                    hp.id,
+                    p.poste_code,
+                    hp.nouveau_niveau as niveau,
+                    hp.nouvelle_date_evaluation as date_evaluation,
+                    NULL as prochaine_evaluation,
+                    hp.commentaire
                 FROM historique_polyvalence hp
                 LEFT JOIN postes p ON hp.poste_id = p.id
                 WHERE hp.operateur_id = %s
+                  AND hp.action_type = 'IMPORT_MANUEL'
+                ORDER BY p.poste_code, hp.date_action DESC
             """
-            cur.execute(query_poly, (self.operateur_id,))
-            rows_poly = cur.fetchall()
+            cur.execute(query_anciennes, (self.operateur_id,))
+            polyvalences_anciennes = cur.fetchall()
 
-            # Fusionner et trier toutes les données
-            all_rows = list(rows_historique) + list(rows_poly)
-            all_rows.sort(key=lambda x: x['date_time'], reverse=True)
-
-            # Enrichir les données avec info table
-            self.current_data = []
-            for row in all_rows:
-                row_data = dict(row)
-
-                # Déterminer le nom de table lisible
-                table_name = row.get("table_name", "")
-                source_table = row.get("source_table", "historique")
-
-                if table_name:
-                    table_display = {
-                        "polyvalence": "Polyvalence",
-                        "personnel": "Personnel",
-                        "contrat": "Contrat",
-                        "formation": "Formation",
-                        "validite": "Validité",
-                        "absence": "Absence",
-                        "system": "Système"
-                    }.get(table_name.lower(), table_name)
-
-                    # Ajouter un badge si c'est une donnée détaillée
-                    if source_table == "historique_polyvalence":
-                        table_display += " [Détaillé]"
-
-                    row_data["table_display"] = table_display
-                else:
-                    row_data["table_display"] = "Général"
-
-                self.current_data.append(row_data)
-
-            # Charger la liste des postes pour le filtre (seulement ceux dans l'historique)
-            query_postes = """
-                SELECT DISTINCT p.id, p.poste_code
-                FROM historique h
-                JOIN postes p ON h.poste_id = p.id
-                WHERE h.operateur_id = %s
-                ORDER BY p.poste_code
-            """
-            cur.execute(query_postes, (self.operateur_id,))
-            postes = cur.fetchall()
-
-            self.poste_filter.clear()
-            self.poste_filter.addItem("Tous les postes", None)
-            for poste in postes:
-                self.poste_filter.addItem(poste["poste_code"], poste["id"])
+            # Stocker toutes les données
+            self.all_polyvalences = list(polyvalences_actuelles) + list(polyvalences_anciennes)
 
             cur.close()
             conn.close()
 
-            self._apply_filters()
+            self._apply_filter()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger l'historique :\n{e}")
+            QMessageBox.critical(self, "Erreur", f"Impossible de charger les données :\n{e}")
 
-    def _apply_filters(self):
-        """Applique les filtres et met à jour le tableau."""
-        action_filter = self.action_filter.currentText()
-        poste_id = self.poste_filter.currentData()
-        date_from = self.date_from.date().toPyDate()
-        date_to = self.date_to.date().toPyDate()
-        search_text = self.search_input.text().lower()
+    def _apply_filter(self):
+        """Applique le filtre de type et affiche les polyvalences."""
+        filter_type = self.type_filter.currentText()
 
-        # Filtrer les données
+        # Filtrer les données selon le type
         filtered_data = []
-        for row in self.current_data:
-            # Filtre par type d'action
-            action = row["action"].upper()
-            if action_filter == "Ajouts" and action != "INSERT":
+        for poly in self.all_polyvalences:
+            poly_type = poly.get("type", "")
+
+            if filter_type == "Actuelles uniquement" and poly_type != "ACTUELLE":
                 continue
-            elif action_filter == "Modifications" and action != "UPDATE":
-                continue
-            elif action_filter == "Suppressions" and action != "DELETE":
-                continue
-            elif action_filter == "Erreurs" and action != "ERROR":
+            elif filter_type == "Anciennes uniquement" and poly_type != "ANCIENNE":
                 continue
 
-            # Filtre par poste
-            if poste_id is not None and row.get("poste_id") != poste_id:
-                continue
+            filtered_data.append(poly)
 
-            # Filtre par période
-            row_date = row["date_time"]
-            if isinstance(row_date, str):
-                row_date = dt.datetime.fromisoformat(row_date).date()
-            elif hasattr(row_date, 'date'):
-                row_date = row_date.date()
-
-            if row_date < date_from or row_date > date_to:
-                continue
-
-            # Filtre par recherche textuelle
-            if search_text:
-                searchable = f"{row.get('action', '')} {row.get('poste_code', '')} {row.get('description', '')}".lower()
-                if search_text not in searchable:
-                    continue
-
-            filtered_data.append(row)
-
-        # Afficher les données filtrées
-        self._display_data(filtered_data)
-        self.stats_label.setText(f"📊 {len(filtered_data)} action(s) affichée(s) sur {len(self.current_data)} au total")
-
-    def _display_data(self, data):
-        """Affiche les données dans le tableau."""
+        # Afficher dans le tableau
         self.table.setRowCount(0)
-        self.table.setSortingEnabled(False)
 
-        for row in data:
-            row_pos = self.table.rowCount()
-            self.table.insertRow(row_pos)
+        for poly in filtered_data:
+            row = self.table.rowCount()
+            self.table.insertRow(row)
 
-            # Date/Heure
-            dt_str = format_datetime(row["date_time"])
-            self.table.setItem(row_pos, 0, QTableWidgetItem(dt_str))
-
-            # Type avec icône et couleur
-            action = row["action"]
-            icon, color, bg_color = get_action_icon_and_color(action)
-            type_item = QTableWidgetItem(f"{icon} {action.upper()}")
-            type_item.setForeground(QBrush(QColor(color)))
-            type_item.setBackground(QBrush(QColor(bg_color)))
+            # Colonne 0 : Type (badge coloré)
+            type_poly = poly.get("type", "")
+            type_item = QTableWidgetItem(type_poly)
+            type_item.setTextAlignment(Qt.AlignCenter)
+            if type_poly == "ACTUELLE":
+                type_item.setBackground(QColor("#d1fae5"))
+                type_item.setForeground(QColor("#065f46"))
+            else:
+                type_item.setBackground(QColor("#fef3c7"))
+                type_item.setForeground(QColor("#92400e"))
             font = QFont()
             font.setBold(True)
             type_item.setFont(font)
-            type_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row_pos, 1, type_item)
+            self.table.setItem(row, 0, type_item)
 
-            # Table concernée
-            table_display = row.get("table_display", "Général")
-            table_item = QTableWidgetItem(table_display)
-            table_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row_pos, 2, table_item)
+            # Colonne 1 : Poste
+            self.table.setItem(row, 1, QTableWidgetItem(poly.get("poste_code", "N/A")))
 
-            # Résumé
-            source_table = row.get("source_table", "historique")
-            poste_code = row.get("poste_code", None)
-            table_name = row.get("table_name", "")
+            # Colonne 2 : Niveau (coloré)
+            niveau = poly.get("niveau")
+            niveau_item = QTableWidgetItem(f"N{niveau}" if niveau else "N/A")
+            niveau_item.setTextAlignment(Qt.AlignCenter)
+            if niveau:
+                if niveau == 1:
+                    niveau_item.setBackground(QColor("#fef2f2"))
+                    niveau_item.setForeground(QColor("#dc2626"))
+                elif niveau == 2:
+                    niveau_item.setBackground(QColor("#fffbeb"))
+                    niveau_item.setForeground(QColor("#d97706"))
+                elif niveau == 3:
+                    niveau_item.setBackground(QColor("#f0fdf4"))
+                    niveau_item.setForeground(QColor("#059669"))
+                elif niveau == 4:
+                    niveau_item.setBackground(QColor("#eff6ff"))
+                    niveau_item.setForeground(QColor("#2563eb"))
+            self.table.setItem(row, 2, niveau_item)
 
-            # Si c'est une donnée de historique_polyvalence, générer un résumé détaillé
-            if source_table == "historique_polyvalence":
-                ancien_niveau = row.get("ancien_niveau")
-                nouveau_niveau = row.get("nouveau_niveau")
-                action_type = row.get("action", "").upper()
+            # Colonne 3 : Date évaluation
+            date_eval = poly.get("date_evaluation")
+            date_str = self._format_date(date_eval) if date_eval else "N/A"
+            self.table.setItem(row, 3, QTableWidgetItem(date_str))
 
-                if action_type == "AJOUT":
-                    resume = f"Ajout N{nouveau_niveau} - {poste_code or '?'}"
-                elif action_type == "MODIFICATION":
-                    resume = f"Modification N{ancien_niveau} → N{nouveau_niveau} - {poste_code or '?'}"
-                elif action_type == "SUPPRESSION":
-                    resume = f"Suppression N{ancien_niveau} - {poste_code or '?'}"
-                elif action_type == "IMPORT_MANUEL":
-                    if nouveau_niveau:
-                        resume = f"Import manuel N{nouveau_niveau} - {poste_code or '?'}"
-                    else:
-                        resume = f"Import manuel - {poste_code or '?'}"
-                else:
-                    resume = f"{action_type} - {poste_code or '?'}"
+            # Colonne 4 : Prochaine évaluation
+            date_next = poly.get("prochaine_evaluation")
+            date_next_str = self._format_date(date_next) if date_next else "—"
+            self.table.setItem(row, 4, QTableWidgetItem(date_next_str))
 
-                # Ajouter le commentaire s'il existe
-                commentaire = row.get("commentaire", "")
-                if commentaire and commentaire != "None":
-                    resume += f" ({commentaire[:50]}{'...' if len(commentaire) > 50 else ''})"
+            # Colonne 5 : Commentaire
+            commentaire = poly.get("commentaire", "")
+            self.table.setItem(row, 5, QTableWidgetItem(commentaire or "—"))
 
-            # Sinon, utiliser l'ancien système de génération de résumé
-            else:
-                data_json = parse_description_json(row.get("description", "{}"))
+            # Colonne 6 : ID (caché)
+            self.table.setItem(row, 6, QTableWidgetItem(str(poly.get("id", ""))))
 
-                # Générer résumé adapté selon la table
-                if table_name == "personnel":
-                    # Changement de statut, infos perso, etc.
-                    if "changes" in data_json and "statut" in data_json.get("changes", {}):
-                        old = data_json["changes"]["statut"].get("old", "?")
-                        new = data_json["changes"]["statut"].get("new", "?")
-                        resume = f"Changement statut : {old} → {new}"
-                    else:
-                        resume = f"Modification des informations personnelles"
-                elif table_name == "contrat":
-                    # Contrat
-                    if action.upper() == "INSERT":
-                        type_contrat = data_json.get("type_contrat", "")
-                        resume = f"Nouveau contrat : {type_contrat}"
-                    elif action.upper() == "UPDATE":
-                        resume = f"Modification de contrat"
-                    else:
-                        resume = f"Suppression de contrat"
-                elif table_name in ["formation", "validite", "absence"]:
-                    # Autres tables
-                    resume = f"{action.upper()} - {table_display}"
-                else:
-                    # Polyvalence ou autre
-                    resume = format_action_resume(action, data_json, poste_code)
-
-            self.table.setItem(row_pos, 3, QTableWidgetItem(resume))
-
-            # ID (caché)
-            self.table.setItem(row_pos, 4, QTableWidgetItem(str(row["id"])))
-
-        self.table.setSortingEnabled(True)
-
-    def _on_double_click(self):
-        """Ouvre le dialogue de détails complets."""
-        selected_rows = self.table.selectionModel().selectedRows()
-        if not selected_rows:
-            return
-
-        row_idx = selected_rows[0].row()
-        hist_id = int(self.table.item(row_idx, 4).text())
-        row_data = next((r for r in self.current_data if r["id"] == hist_id), None)
-
-        if row_data:
-            poste_code = row_data.get("poste_code", "Inconnu")
-            dialog = DetailHistoriqueDialog(row_data, poste_code, self)
-            dialog.exec_()
-
-    def _reset_filters(self):
-        """Réinitialise tous les filtres."""
-        self.action_filter.setCurrentIndex(0)
-        self.poste_filter.setCurrentIndex(0)
-        self.date_from.setDate(QDate.currentDate().addMonths(-6))
-        self.date_to.setDate(QDate.currentDate())
-        self.search_input.clear()
-        self._apply_filters()
-
-    def _open_import_dialog(self):
-        """Ouvre le dialogue d'import de données historiques."""
-        try:
-            print("[DEBUG] Début _open_import_dialog")
-            from core.gui.import_historique_polyvalence import ImportHistoriquePolyvalenceDialog
-            print("[DEBUG] Import réussi")
-
-            dialog = ImportHistoriquePolyvalenceDialog(
-                operateur_id=self.operateur_id,
-                parent=self
-            )
-            print("[DEBUG] Dialogue créé")
-
-            result = dialog.exec_()
-            print(f"[DEBUG] Dialogue fermé avec résultat: {result}")
-
-            if result == QDialog.Accepted:
-                # Recharger les données après l'import
-                self._load_data()
-                QMessageBox.information(
-                    self,
-                    "Import réussi",
-                    "Les données historiques ont été importées avec succès !\n\n"
-                    "L'historique a été rechargé pour afficher les nouvelles données."
-                )
-        except Exception as e:
-            print(f"[ERREUR] _open_import_dialog: {e}")
-            import traceback
-            traceback.print_exc()
-            QMessageBox.critical(
-                self,
-                "Erreur",
-                f"Erreur lors de l'ouverture du dialogue d'import :\n{e}"
-            )
+        # Mise à jour des stats
+        self.stats_label.setText(f"{len(filtered_data)} polyvalence(s)")

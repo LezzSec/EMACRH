@@ -8,6 +8,7 @@ from PyQt5.QtGui import QFont, QColor, QPalette, QCursor
 
 from core.db.configbd import get_connection as get_db_connection
 from core.services.log_exporter import export_day
+from core.gui.emac_ui_kit import add_custom_title_bar
 
 import json
 import datetime as dt
@@ -461,25 +462,37 @@ class HistoriqueDialog(QDialog):
         self.conn = None
         self._ensure_conn()
 
-        root = QVBoxLayout(self)
+        # Layout principal avec marges nulles
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Barre de titre personnalisée
+        title_bar = add_custom_title_bar(self, "Historique des modifications")
+        main_layout.addWidget(title_bar)
+
+        # Widget de contenu
+        content_widget = QWidget()
+        root = QVBoxLayout(content_widget)
+        root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(12)
 
         # --- En-tête simplifié ---
         header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(8, 8, 8, 8)
-        
+        header_layout.setContentsMargins(0, 0, 0, 0)
+
         title = QLabel("Historique des modifications")
         title_font = QFont("Segoe UI", 13, QFont.Bold)
         title.setFont(title_font)
         title.setStyleSheet("color: #212121; padding: 4px;")
         header_layout.addWidget(title)
-        
+
         subtitle = QLabel("• Chronologie complète des actions")
         subtitle.setStyleSheet("color: #757575; font-size: 10px; padding: 4px;")
         header_layout.addWidget(subtitle)
-        
+
         header_layout.addStretch()
-        
+
         root.addLayout(header_layout)
 
         # --- Barre de filtres ---
@@ -597,6 +610,9 @@ class HistoriqueDialog(QDialog):
             }
         """)
         root.addWidget(self.count_label)
+
+        # Ajouter le widget de contenu au layout principal
+        main_layout.addWidget(content_widget)
 
         self.reload()
 

@@ -12,6 +12,7 @@ from PyQt5.QtGui import QFont, QColor, QTextCharFormat
 from datetime import date, datetime, timedelta
 from core.db.configbd import get_connection as get_db_connection
 from core.services.logger import log_hist
+from core.gui.emac_ui_kit import add_custom_title_bar
 
 try:
     from core.services.audit_logger import log_insert, log_action
@@ -65,19 +66,34 @@ class RegularisationDialog(QDialog):
         self.setWindowTitle("Planning & Absences")
         self.setGeometry(150, 150, 1200, 800)
 
-        layout = QVBoxLayout(self)
+        # Layout principal avec marges nulles
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Barre de titre personnalisée
+        title_bar = add_custom_title_bar(self, "Planning & Absences")
+        main_layout.addWidget(title_bar)
+
+        # Widget de contenu
+        content_widget = QWidget()
+        layout = QVBoxLayout(content_widget)
+        layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(16)
 
         # === En-tête ===
+        header_content = QVBoxLayout()
         header = QLabel("Planning & Absences")
         header.setFont(QFont("Arial", 16, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
-        layout.addWidget(header)
+        header_content.addWidget(header)
 
         subtitle = QLabel("Déclarez les absences et consultez le planning du personnel")
         subtitle.setStyleSheet("color: #6b7280; font-size: 12px;")
         subtitle.setAlignment(Qt.AlignCenter)
-        layout.addWidget(subtitle)
+        header_content.addWidget(subtitle)
+
+        layout.addLayout(header_content)
 
         # === Onglets ===
         self.tabs = QTabWidget()
@@ -129,6 +145,9 @@ class RegularisationDialog(QDialog):
         action_row.addWidget(close_btn)
 
         layout.addLayout(action_row)
+
+        # Ajouter le widget de contenu au layout principal
+        main_layout.addWidget(content_widget)
 
         # Charger les données initiales
         self.refresh_all()
@@ -629,6 +648,10 @@ class RegularisationDialog(QDialog):
         self.eval_calendar.setGridVisible(True)
         self.eval_calendar.clicked.connect(self.on_eval_calendar_date_clicked)
         self.eval_calendar.currentPageChanged.connect(self.load_eval_calendar_markings)
+
+        # Forcer le rafraîchissement lors de l'affichage (fix scroll bug)
+        self.eval_calendar.selectionChanged.connect(self.refresh_calendar_display)
+
         cal_layout.addWidget(self.eval_calendar)
 
         cal_group.setLayout(cal_layout)
@@ -692,17 +715,17 @@ class RegularisationDialog(QDialog):
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
 
-            # Récupérer le mois affiché
-            current_date = self.eval_calendar.selectedDate().toPyDate()
-            first_day = date(current_date.year, current_date.month, 1)
+            # ✅ Utiliser le mois AFFICHÉ, pas la date sélectionnée
+            year = self.eval_calendar.yearShown()
+            month = self.eval_calendar.monthShown()
+            first_day = date(year, month, 1)
 
             # Dernier jour du mois
-            if current_date.month == 12:
-                last_day = date(current_date.year + 1, 1, 1) - timedelta(days=1)
+            if month == 12:
+                last_day = date(year + 1, 1, 1) - timedelta(days=1)
             else:
-                last_day = date(current_date.year, current_date.month + 1, 1) - timedelta(days=1)
+                last_day = date(year, month + 1, 1) - timedelta(days=1)
 
-            # Récupérer les dates d'évaluation
             cursor.execute("""
                 SELECT DISTINCT DATE(poly.prochaine_evaluation) as eval_date
                 FROM polyvalence poly
@@ -717,33 +740,63 @@ class RegularisationDialog(QDialog):
             cursor.close()
             connection.close()
 
-            # Réinitialiser le format
-            default_format = QTextCharFormat()
-            default_format.setBackground(QColor("white"))
-
-            # Appliquer le format par défaut à toutes les dates du mois
-            current = first_day
-            while current <= last_day:
-                qdate = QDate(current.year, current.month, current.day)
-                self.eval_calendar.setDateTextFormat(qdate, default_format)
-                current += timedelta(days=1)
-
-            # Marquer les dates avec évaluations
-            eval_format = QTextCharFormat()
-            eval_format.setBackground(QColor("#dbeafe"))  # Bleu pâle
-            eval_format.setForeground(QColor("#1e40af"))  # Texte bleu foncé
-            eval_format.setFontWeight(QFont.Bold)
-
+            self.eval_dates_cache = set()
             for r in rows:
                 eval_date = r['eval_date']
                 if eval_date:
                     if isinstance(eval_date, str):
                         eval_date = datetime.strptime(eval_date, '%Y-%m-%d').date()
-                    qdate = QDate(eval_date.year, eval_date.month, eval_date.day)
-                    self.eval_calendar.setDateTextFormat(qdate, eval_format)
+                    self.eval_dates_cache.add(eval_date)
+
+            # Appliquer les formats
+            self._apply_calendar_formats(first_day, last_day)
 
         except Exception as e:
             print(f"Erreur lors du marquage du calendrier : {e}")
+
+
+    def _apply_calendar_formats(self, first_day, last_day):
+        """Applique les formats au calendrier (méthode séparée pour réutilisation)."""
+        # Réinitialiser le format
+        default_format = QTextCharFormat()
+        default_format.setBackground(QColor("white"))
+
+        # Appliquer le format par défaut à toutes les dates du mois
+        current = first_day
+        while current <= last_day:
+            qdate = QDate(current.year, current.month, current.day)
+            self.eval_calendar.setDateTextFormat(qdate, default_format)
+            current += timedelta(days=1)
+
+        # Marquer les dates avec évaluations
+        eval_format = QTextCharFormat()
+        eval_format.setBackground(QColor("#dbeafe"))  # Bleu pâle
+        eval_format.setForeground(QColor("#1e40af"))  # Texte bleu foncé
+        eval_format.setFontWeight(QFont.Bold)
+
+        if hasattr(self, 'eval_dates_cache'):
+            for eval_date in self.eval_dates_cache:
+                qdate = QDate(eval_date.year, eval_date.month, eval_date.day)
+                self.eval_calendar.setDateTextFormat(qdate, eval_format)
+
+    def refresh_calendar_display(self):
+        """Rafraîchit l'affichage du calendrier pour corriger le bug de scroll."""
+        try:
+            # ✅ Utiliser le mois affiché
+            year = self.eval_calendar.yearShown()
+            month = self.eval_calendar.monthShown()
+            first_day = date(year, month, 1)
+    
+            if month == 12:
+                last_day = date(year + 1, 1, 1) - timedelta(days=1)
+            else:
+                last_day = date(year, month + 1, 1) - timedelta(days=1)
+    
+            if hasattr(self, 'eval_dates_cache'):
+                self._apply_calendar_formats(first_day, last_day)
+        except Exception as e:
+            print(f"Erreur lors du rafraîchissement du calendrier : {e}")
+
 
     def on_eval_calendar_date_clicked(self, qdate):
         """Affiche les évaluations du jour sélectionné."""
