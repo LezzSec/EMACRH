@@ -1,1 +1,2 @@
 C:\Program Files\MySQL\MySQL Server 8.0\bin>mysqldump -u root -p emac_db > "C:\Users\tlahirigoyen\Desktop\bddserver.sql"
+
