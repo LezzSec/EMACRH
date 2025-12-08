@@ -1,10 +1,10 @@
 import sys, os, datetime as dt
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QListWidget, QScrollArea,
-    QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QMessageBox, QFrame 
+    QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QMessageBox, QFrame
 )
-from PyQt5.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent 
-from PyQt5.QtGui import QDesktopServices, QIcon
+from PyQt5.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent
+from PyQt5.QtGui import QDesktopServices
 from core.gui.ui_theme import EmacTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard, HamburgerButton
 from core.gui.liste_et_grilles import GrillesDialog
 from core.gui.creation_modification_poste import CreationModificationPosteDialog
@@ -54,6 +54,12 @@ class MainWindow(QMainWindow):
         self.retard_scroll, self.retard_list = self.create_scrollable_list()
         self.retard_card.body.addWidget(self.retard_filter)
         self.retard_card.body.addWidget(self.retard_scroll)
+
+        # Bouton pour voir le récapitulatif complet des retards
+        btn_voir_retards = EmacButton("📋 Voir tout", variant='ghost')
+        btn_voir_retards.clicked.connect(lambda: self.ouvrir_gestion_evaluations("En retard"))
+        self.retard_card.body.addWidget(btn_voir_retards)
+
         left.addWidget(self.retard_card)
 
         self.next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="10 prochaines")
@@ -62,6 +68,12 @@ class MainWindow(QMainWindow):
         self.next_eval_scroll, self.next_eval_list = self.create_scrollable_list()
         self.next_card.body.addWidget(self.next_eval_filter)
         self.next_card.body.addWidget(self.next_eval_scroll)
+
+        # Bouton pour voir le récapitulatif complet des prochaines évaluations
+        btn_voir_prochaines = EmacButton("📋 Voir tout", variant='ghost')
+        btn_voir_prochaines.clicked.connect(lambda: self.ouvrir_gestion_evaluations("À planifier (30j)"))
+        self.next_card.body.addWidget(btn_voir_prochaines)
+
         left.addWidget(self.next_card)
 
         root.addLayout(left, 0, 0, 2, 1)
@@ -246,6 +258,25 @@ class MainWindow(QMainWindow):
         ManageOperatorsDialog().exec_()
     def show_gestion_evaluations(self):
         GestionEvaluationDialog().exec_()
+
+    def ouvrir_gestion_evaluations(self, filtre_statut):
+        """Ouvre le dialogue de gestion des évaluations avec un filtre pré-appliqué."""
+        try:
+            dialog = GestionEvaluationDialog()
+
+            # Appliquer le filtre de statut
+            if hasattr(dialog, 'status_filter'):
+                index = dialog.status_filter.findText(filtre_statut)
+                if index >= 0:
+                    dialog.status_filter.setCurrentIndex(index)
+
+            dialog.exec_()
+
+            # Recharger les données après fermeture
+            self.load_evaluations()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible d'ouvrir la gestion des évaluations :\n{e}")
     def show_listes_grilles_dialog(self):
         GrillesDialog().exec_()
     def show_poste_form(self):

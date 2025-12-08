@@ -192,9 +192,13 @@ class DetailOperateurDialog(QDialog):
 
         row1.addWidget(QLabel("Niveau :"))
         self.niveau_combo = QComboBox()
-        self.niveau_combo.addItems(["1", "2", "3", "4"])
+        self.niveau_combo.addItem("Niveau 1 - Débutant (réévaluation dans 1 mois)", 1)
+        self.niveau_combo.addItem("Niveau 2 - Intermédiaire (réévaluation dans 1 mois)", 2)
+        self.niveau_combo.addItem("Niveau 3 - Confirmé (réévaluation dans 10 ans)", 3)
+        self.niveau_combo.addItem("Niveau 4 - Expert/Formateur (réévaluation dans 10 ans)", 4)
         self.niveau_combo.setCurrentIndex(0)  # Par défaut : niveau 1
-        self.niveau_combo.setMinimumWidth(60)
+        self.niveau_combo.setMinimumWidth(200)
+        self.niveau_combo.currentIndexChanged.connect(self._calculer_prochaine_eval_ancienne)
         row1.addWidget(self.niveau_combo)
 
         form_layout.addLayout(row1)
@@ -206,8 +210,22 @@ class DetailOperateurDialog(QDialog):
         self.date_eval.setCalendarPopup(True)
         self.date_eval.setDisplayFormat("dd/MM/yyyy")
         self.date_eval.setDate(QDate.currentDate().addYears(-1))
+        self.date_eval.dateChanged.connect(self._calculer_prochaine_eval_ancienne)
         row2.addWidget(self.date_eval, 1)
         form_layout.addLayout(row2)
+
+        # Ligne 2b : Prochaine évaluation (calculée automatiquement)
+        row2b = QHBoxLayout()
+        row2b.addWidget(QLabel("Prochaine évaluation :"))
+        self.date_prochaine_eval = QDateEdit()
+        self.date_prochaine_eval.setCalendarPopup(True)
+        self.date_prochaine_eval.setDisplayFormat("dd/MM/yyyy")
+        self.date_prochaine_eval.setDate(QDate.currentDate())
+        row2b.addWidget(self.date_prochaine_eval, 1)
+        form_layout.addLayout(row2b)
+
+        # Calcul initial de la prochaine évaluation
+        self._calculer_prochaine_eval_ancienne()
 
         # Ligne 3 : Commentaire
         row3 = QVBoxLayout()
@@ -347,10 +365,9 @@ class DetailOperateurDialog(QDialog):
                 poste_item.setFlags(poste_item.flags() & ~Qt.ItemIsEditable)
                 self.poly_table.setItem(row_idx, 0, poste_item)
 
-                # Colonne 1 : Niveau (non éditable)
-                niveau_item = QTableWidgetItem(f"N{poly['niveau']}")
+                # Colonne 1 : Niveau (éditable - seulement les chiffres 1-4)
+                niveau_item = QTableWidgetItem(str(poly['niveau']))
                 niveau_item.setTextAlignment(Qt.AlignCenter)
-                niveau_item.setFlags(niveau_item.flags() & ~Qt.ItemIsEditable)
                 self.poly_table.setItem(row_idx, 1, niveau_item)
 
                 # Colonne 2 : Date évaluation (éditable)
@@ -358,9 +375,10 @@ class DetailOperateurDialog(QDialog):
                 date_eval_item = QTableWidgetItem(date_eval)
                 self.poly_table.setItem(row_idx, 2, date_eval_item)
 
-                # Colonne 3 : Prochaine évaluation (éditable)
+                # Colonne 3 : Prochaine évaluation (NON éditable - calculée automatiquement)
                 date_next = poly['prochaine_evaluation'].strftime('%d/%m/%Y') if poly['prochaine_evaluation'] else "N/A"
                 date_next_item = QTableWidgetItem(date_next)
+                date_next_item.setFlags(date_next_item.flags() & ~Qt.ItemIsEditable)
                 self.poly_table.setItem(row_idx, 3, date_next_item)
 
                 # Colonne 4 : Statut (non éditable)
@@ -394,6 +412,28 @@ class DetailOperateurDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible de charger les données :\n{e}")
+
+    def _calculer_prochaine_eval_ancienne(self):
+        """Calcule automatiquement la date de prochaine évaluation selon le niveau et la date d'évaluation."""
+        niveau = self.niveau_combo.currentData()
+        if niveau is None:
+            return
+
+        # Récupérer la date d'évaluation
+        date_eval = self.date_eval.date()
+
+        # Calcul selon le niveau
+        if niveau == 1:
+            jours = 30  # 1 mois
+        elif niveau == 2:
+            jours = 30  # 1 mois
+        elif niveau in [3, 4]:
+            jours = 3650  # 10 ans
+        else:
+            jours = 30  # Par défaut 1 mois
+
+        date_future = date_eval.addDays(jours)
+        self.date_prochaine_eval.setDate(date_future)
 
     def _load_anciennes_polyvalences(self, cursor):
         """Charge les anciennes polyvalences dans le tableau."""
@@ -447,19 +487,31 @@ class DetailOperateurDialog(QDialog):
             QMessageBox.warning(self, "Attention", "Veuillez sélectionner un poste.")
             return
 
-        niveau = int(self.niveau_combo.currentText())
+        niveau = self.niveau_combo.currentData()  # Utiliser currentData() au lieu de currentText()
         date_eval = self.date_eval.date().toPyDate()
+        date_prochaine = self.date_prochaine_eval.date().toPyDate()  # Récupérer la prochaine évaluation calculée
         commentaire = self.commentaire.text().strip()
 
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
 
+            # Insérer dans historique_polyvalence
             cursor.execute("""
                 INSERT INTO historique_polyvalence
                 (operateur_id, poste_id, action_type, nouveau_niveau, nouvelle_date_evaluation, commentaire, date_action)
                 VALUES (%s, %s, 'IMPORT_MANUEL', %s, %s, %s, NOW())
             """, (self.operateur_id, poste_id, niveau, date_eval, commentaire or None))
+
+            # Également insérer/mettre à jour dans polyvalence avec la prochaine évaluation
+            cursor.execute("""
+                INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
+                VALUES (%s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    niveau = VALUES(niveau),
+                    date_evaluation = VALUES(date_evaluation),
+                    prochaine_evaluation = VALUES(prochaine_evaluation)
+            """, (self.operateur_id, poste_id, niveau, date_eval, date_prochaine))
 
             conn.commit()
             cursor.close()
@@ -484,8 +536,9 @@ class DetailOperateurDialog(QDialog):
         row = item.row()
         col = item.column()
 
-        # Seules les colonnes 2 (Date Éval.) et 3 (Prochaine Éval.) sont éditables
-        if col not in [2, 3]:
+        # Colonnes éditables : 1 (Niveau) et 2 (Date Éval.) uniquement
+        # La colonne 3 (Prochaine Éval.) est calculée automatiquement et non éditable
+        if col not in [1, 2]:
             return
 
         # Récupérer l'ID de la polyvalence
@@ -495,6 +548,71 @@ class DetailOperateurDialog(QDialog):
 
         poly_id = int(poly_id_item.text())
         new_value = item.text().strip()
+
+        # === GESTION DU NIVEAU (colonne 1) ===
+        if col == 1:
+            # Valider que c'est un niveau valide (1-4)
+            try:
+                new_niveau = int(new_value)
+                if new_niveau not in [1, 2, 3, 4]:
+                    raise ValueError()
+            except ValueError:
+                QMessageBox.warning(self, "Valeur invalide", "Le niveau doit être 1, 2, 3 ou 4")
+                self._load_data()
+                return
+
+            # Récupérer la date d'évaluation actuelle
+            date_eval_item = self.poly_table.item(row, 2)
+            if not date_eval_item or date_eval_item.text() == "N/A":
+                # Pas de date d'évaluation, utiliser aujourd'hui
+                from datetime import date, timedelta
+                date_eval = date.today()
+            else:
+                from datetime import datetime
+                try:
+                    date_eval = datetime.strptime(date_eval_item.text(), "%d/%m/%Y").date()
+                except ValueError:
+                    date_eval = date.today()
+
+            # Calculer automatiquement la prochaine évaluation selon le niveau
+            from datetime import timedelta
+            if new_niveau == 1:
+                jours = 30  # 1 mois
+            elif new_niveau == 2:
+                jours = 30  # 1 mois
+            elif new_niveau in [3, 4]:
+                jours = 3650  # 10 ans
+            else:
+                jours = 30
+
+            prochaine_eval = date_eval + timedelta(days=jours)
+
+            # Mettre à jour dans la base de données
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+
+                cursor.execute("""
+                    UPDATE polyvalence
+                    SET niveau = %s, date_evaluation = %s, prochaine_evaluation = %s
+                    WHERE id = %s
+                """, (new_niveau, date_eval, prochaine_eval, poly_id))
+
+                conn.commit()
+                cursor.close()
+                conn.close()
+
+                # Recharger les données pour afficher la nouvelle prochaine évaluation
+                self._load_data()
+
+                QMessageBox.information(self, "Succès",
+                    f"Niveau mis à jour.\nProchaine évaluation automatiquement calculée : {prochaine_eval.strftime('%d/%m/%Y')}")
+
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour le niveau :\n{e}")
+                self._load_data()
+
+            return
 
         # Valider le format de date
         from datetime import datetime
@@ -506,35 +624,76 @@ class DetailOperateurDialog(QDialog):
             self._load_data()
             return
 
-        # Déterminer quelle colonne est modifiée
+        # === GESTION DE LA DATE D'ÉVALUATION (colonne 2) ===
         if col == 2:
-            field_name = "date_evaluation"
-            field_label = "Date d'évaluation"
-        else:  # col == 3
-            field_name = "prochaine_evaluation"
-            field_label = "Prochaine évaluation"
+            # Si on modifie la date d'évaluation, recalculer automatiquement la prochaine évaluation
+            # Récupérer le niveau actuel
+            niveau_item = self.poly_table.item(row, 1)
+            if niveau_item:
+                try:
+                    niveau = int(niveau_item.text())
 
-        # Mettre à jour dans la base de données
-        try:
-            conn = get_db_connection()
-            cursor = conn.cursor()
+                    # Calculer automatiquement la prochaine évaluation selon le niveau
+                    from datetime import timedelta
+                    if niveau == 1:
+                        jours = 30  # 1 mois
+                    elif niveau == 2:
+                        jours = 30  # 1 mois
+                    elif niveau in [3, 4]:
+                        jours = 3650  # 10 ans
+                    else:
+                        jours = 30
 
-            query = f"UPDATE polyvalence SET {field_name} = %s WHERE id = %s"
-            cursor.execute(query, (new_date, poly_id))
+                    prochaine_eval = new_date + timedelta(days=jours)
 
-            conn.commit()
-            cursor.close()
-            conn.close()
+                    # Mettre à jour les DEUX dates
+                    try:
+                        conn = get_db_connection()
+                        cursor = conn.cursor()
 
-            # Recharger les données pour mettre à jour le statut
-            self._load_data()
+                        cursor.execute("""
+                            UPDATE polyvalence
+                            SET date_evaluation = %s, prochaine_evaluation = %s
+                            WHERE id = %s
+                        """, (new_date, prochaine_eval, poly_id))
 
-            QMessageBox.information(self, "Succès", f"{field_label} mise à jour avec succès.")
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
 
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour la date :\n{e}")
-            # Recharger les données pour annuler la modification
-            self._load_data()
+                        # Recharger les données pour mettre à jour le statut
+                        self._load_data()
+
+                        QMessageBox.information(self, "Succès",
+                            f"Date d'évaluation mise à jour.\nProchaine évaluation automatiquement recalculée : {prochaine_eval.strftime('%d/%m/%Y')}")
+                        return
+
+                    except Exception as e:
+                        QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour la date :\n{e}")
+                        self._load_data()
+                        return
+
+                except (ValueError, AttributeError):
+                    pass  # Niveau invalide, continuer avec mise à jour simple
+
+            # Si on arrive ici, c'est qu'il n'y avait pas de niveau valide
+            # Faire une simple mise à jour de la date d'évaluation sans recalcul
+            try:
+                conn = get_db_connection()
+                cursor = conn.cursor()
+
+                cursor.execute("UPDATE polyvalence SET date_evaluation = %s WHERE id = %s", (new_date, poly_id))
+
+                conn.commit()
+                cursor.close()
+                conn.close()
+
+                self._load_data()
+                QMessageBox.information(self, "Succès", "Date d'évaluation mise à jour.")
+
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour la date :\n{e}")
+                self._load_data()
 
 
 # --- Délégué pour empêcher l'édition ---
@@ -889,7 +1048,7 @@ class GestionEvaluationDialog(QDialog):
             cursor = conn.cursor()
 
             # Charger les opérateurs avec statistiques de polyvalences
-            # Filtrer uniquement ceux qui ont un matricule
+            # Filtrer uniquement ceux qui ont au moins une polyvalence
             query = """
                 SELECT
                     p.id,
@@ -902,7 +1061,7 @@ class GestionEvaluationDialog(QDialog):
                     SUM(CASE WHEN poly.niveau = 2 THEN 1 ELSE 0 END) as n2,
                     SUM(CASE WHEN poly.niveau = 1 THEN 1 ELSE 0 END) as n1,
                     SUM(
-                        CASE 
+                        CASE
                             WHEN poly.prochaine_evaluation IS NULL THEN 1
                             WHEN poly.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1
                             ELSE 0
@@ -910,15 +1069,16 @@ class GestionEvaluationDialog(QDialog):
                     ) as a_planifier,
 
                     SUM(
-                        CASE 
-                            WHEN poly.prochaine_evaluation < CURDATE() THEN 1 
-                            ELSE 0 
+                        CASE
+                            WHEN poly.prochaine_evaluation < CURDATE() THEN 1
+                            ELSE 0
                         END
                     ) as retard
                 FROM personnel p
-                LEFT JOIN polyvalence poly ON poly.operateur_id = p.id
-                WHERE p.statut = 'ACTIF' AND p.matricule IS NOT NULL AND p.matricule != ''
+                INNER JOIN polyvalence poly ON poly.operateur_id = p.id
+                WHERE p.statut = 'ACTIF'
                 GROUP BY p.id, p.nom, p.prenom, p.matricule
+                HAVING COUNT(poly.id) > 0
                 ORDER BY p.nom, p.prenom
             """
 

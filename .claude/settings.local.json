@@ -18,7 +18,9 @@
       "Bash(where:*)",
       "Bash(iconv:*)",
       "Bash(timeout 5 python:*)",
-      "Bash(timeout 10 python:*)"
+      "Bash(timeout 10 python:*)",
+      "Bash(del evaluation_service.py)",
+      "Bash(del calendrier_service.py)"
     ],
     "deny": [],
     "ask": []

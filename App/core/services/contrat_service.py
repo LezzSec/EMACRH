@@ -513,3 +513,30 @@ def get_categories() -> List[str]:
         'Agent de maîtrise',
         'Cadre'
     ]
+
+
+# ========================= ALIASES POUR COMPATIBILITÉ =========================
+
+def get_contrats_expirant_bientot(days: int = 30) -> List[dict]:
+    """
+    Alias pour get_expiring_contracts()
+    Récupère les contrats qui expirent bientôt
+
+    Args:
+        days (int): Nombre de jours (défaut: 30)
+
+    Returns:
+        Liste des contrats expirant dans les N jours
+    """
+    return get_expiring_contracts(days)
+
+
+def get_tous_contrats() -> List[dict]:
+    """
+    Alias pour get_all_active_contracts()
+    Récupère tous les contrats actifs
+
+    Returns:
+        Liste de tous les contrats actifs
+    """
+    return get_all_active_contracts()

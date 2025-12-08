@@ -61,7 +61,7 @@ class GestionRHDialog(QDialog):
 
         # Onglet 3: Mes absences/congés
         self.tab_absences = self.create_tab_absences()
-        self.tabs.addTab(self.tab_absences, "🏖️ Mes Absences")
+        self.tabs.addTab(self.tab_absences, "Mes Absences")
 
         # Onglet 4: Planning d'équipe
         self.tab_planning = self.create_tab_planning()
@@ -105,9 +105,29 @@ class GestionRHDialog(QDialog):
         retard_card.layout().addWidget(self.retard_count_label)
 
         self.retard_list = QListWidget()
-        self.retard_list.setMaximumHeight(200)
+        self.retard_list.setMaximumHeight(180)
         self.retard_list.setStyleSheet("background-color: white;")
         retard_card.layout().addWidget(self.retard_list)
+
+        # Bouton pour voir le détail des retards
+        btn_voir_retards = QPushButton("→ Voir le récapitulatif complet")
+        btn_voir_retards.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: white;
+                border: none;
+                padding: 5px 10px;
+                text-align: left;
+                font-size: 11px;
+                text-decoration: underline;
+            }
+            QPushButton:hover {
+                color: #fce4e4;
+            }
+        """)
+        btn_voir_retards.setCursor(Qt.PointingHandCursor)
+        btn_voir_retards.clicked.connect(lambda: self._ouvrir_gestion_evaluations("En retard"))
+        retard_card.layout().addWidget(btn_voir_retards)
 
         left_col.addWidget(retard_card)
 
@@ -124,9 +144,29 @@ class GestionRHDialog(QDialog):
         next_card.layout().addWidget(self.next_count_label)
 
         self.next_eval_list = QListWidget()
-        self.next_eval_list.setMaximumHeight(200)
+        self.next_eval_list.setMaximumHeight(180)
         self.next_eval_list.setStyleSheet("background-color: white;")
         next_card.layout().addWidget(self.next_eval_list)
+
+        # Bouton pour voir le détail des prochaines évaluations
+        btn_voir_prochaines = QPushButton("→ Voir le récapitulatif complet")
+        btn_voir_prochaines.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                color: white;
+                border: none;
+                padding: 5px 10px;
+                text-align: left;
+                font-size: 11px;
+                text-decoration: underline;
+            }
+            QPushButton:hover {
+                color: #e8f8f0;
+            }
+        """)
+        btn_voir_prochaines.setCursor(Qt.PointingHandCursor)
+        btn_voir_prochaines.clicked.connect(lambda: self._ouvrir_gestion_evaluations("À planifier (30j)"))
+        next_card.layout().addWidget(btn_voir_prochaines)
 
         left_col.addWidget(next_card)
 
@@ -137,7 +177,7 @@ class GestionRHDialog(QDialog):
 
         # Card: Mes soldes de congés
         solde_card = self.create_info_card(
-            "🏖️ Mes Soldes de Congés",
+            "Mes Soldes de Congés",
             "#3498db",
             f"Année {self.annee_courante}"
         )
@@ -222,6 +262,27 @@ class GestionRHDialog(QDialog):
         layout.addWidget(btn_refresh)
 
         return widget
+
+    def _ouvrir_gestion_evaluations(self, filtre_statut):
+        """Ouvre le dialogue de gestion des évaluations avec un filtre pré-appliqué"""
+        try:
+            from core.gui.gestion_evaluation import GestionEvaluationDialog
+
+            dialog = GestionEvaluationDialog()
+
+            # Appliquer le filtre de statut
+            if hasattr(dialog, 'status_filter'):
+                index = dialog.status_filter.findText(filtre_statut)
+                if index >= 0:
+                    dialog.status_filter.setCurrentIndex(index)
+
+            dialog.exec_()
+
+            # Recharger les données après fermeture
+            self.load_data()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible d'ouvrir la gestion des évaluations :\n{e}")
 
     def create_info_card(self, title, color, subtitle=""):
         """Crée une card d'information colorée"""

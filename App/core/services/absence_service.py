@@ -423,3 +423,19 @@ def get_types_absence():
     finally:
         cur.close()
         conn.close()
+
+
+# ========================= ALIASES POUR COMPATIBILITÉ =========================
+
+def get_absences_actuelles():
+    """
+    Alias pour get_absences_periode()
+    Récupère les absences en cours (période de 30 jours)
+
+    Returns:
+        Liste des absences actuelles
+    """
+    from datetime import date, timedelta
+    date_debut = date.today() - timedelta(days=7)  # 7 jours avant
+    date_fin = date.today() + timedelta(days=30)   # 30 jours après
+    return get_absences_periode(date_debut, date_fin)

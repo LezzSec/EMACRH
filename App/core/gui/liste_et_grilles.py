@@ -667,26 +667,32 @@ class GrillesDialog(QDialog):
                         except Exception as arch_err:
                             print(f"⚠️ Erreur archivage : {arch_err}")
 
+                    # Calculer la prochaine évaluation selon le niveau
+                    from datetime import date, timedelta
+                    if new_niveau_int == 1:
+                        jours = 30  # 1 mois
+                    elif new_niveau_int == 2:
+                        jours = 30  # 1 mois
+                    elif new_niveau_int in [3, 4]:
+                        jours = 3650  # 10 ans
+                    else:
+                        jours = 30  # Par défaut 1 mois
+
+                    prochaine_eval = date.today() + timedelta(days=jours)
+
                     # Insert ou update
                     if old_niveau is None:
                         cur2.execute("""
-                            INSERT INTO polyvalence (operateur_id, poste_id, niveau)
-                            VALUES (%s, %s, %s)
-                        """, (operateur_id, poste_id, new_niveau_int))
+                            INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
+                            VALUES (%s, %s, %s, CURDATE(), %s)
+                        """, (operateur_id, poste_id, new_niveau_int, prochaine_eval))
                         action = 'INSERT'
                     else:
                         cur2.execute("""
-                            UPDATE polyvalence SET niveau = %s
+                            UPDATE polyvalence SET niveau = %s, date_evaluation = CURDATE(), prochaine_evaluation = %s
                             WHERE operateur_id = %s AND poste_id = %s
-                        """, (new_niveau_int, operateur_id, poste_id))
+                        """, (new_niveau_int, prochaine_eval, operateur_id, poste_id))
                         action = 'UPDATE'
-
-                    # Mise à jour prochaine évaluation
-                    cur2.execute(
-                        "UPDATE polyvalence SET prochaine_evaluation = NULL "
-                        "WHERE operateur_id = %s AND poste_id = %s",
-                        (operateur_id, poste_id)
-                    )
 
                 conn2.commit()
                 cur2.close()

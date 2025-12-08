@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QGroupBox,
     QMessageBox, QAbstractItemView, QWidget, QTabWidget, QCheckBox,
-    QButtonGroup, QRadioButton
+    QButtonGroup, QRadioButton, QDateEdit
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
@@ -68,7 +68,7 @@ class DetailOperateurDialog(QDialog):
         # === Header avec infos opérateur ===
         header_content = QVBoxLayout()
         header = QLabel(f"{nom} {prenom}")
-        header.setFont(QFont("Arial", 18, QFont.Bold))
+        header.setFont(QFont("Segoe UI", 18, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
         header_content.addWidget(header)
 
@@ -90,7 +90,7 @@ class DetailOperateurDialog(QDialog):
         poly_layout = QVBoxLayout(poly_tab)
         
         poly_label = QLabel("Polyvalences et Compétences")
-        poly_label.setFont(QFont("Arial", 12, QFont.Bold))
+        poly_label.setFont(QFont("Segoe UI", 12, QFont.Bold))
         poly_layout.addWidget(poly_label)
         
         self.poly_table = QTableWidget()
@@ -125,30 +125,17 @@ class DetailOperateurDialog(QDialog):
         infos_layout.setSpacing(15)
         infos_layout.setContentsMargins(20, 20, 20, 20)
 
-        # En-tête avec design moderne
-        header_infos = QWidget()
-        header_infos.setStyleSheet("""
-            QWidget {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #059669, stop:1 #10b981);
-                border-radius: 10px;
-                padding: 15px;
-            }
-        """)
-        header_layout = QVBoxLayout(header_infos)
-
-        infos_label = QLabel("ℹ️ Informations Complémentaires")
-        infos_label.setFont(QFont("Arial", 16, QFont.Bold))
-        infos_label.setStyleSheet("color: white; background: transparent;")
-        header_layout.addWidget(infos_label)
+        # En-tête simple (comme Historique)
+        infos_label = QLabel("Informations Complémentaires")
+        infos_label.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        infos_label.setStyleSheet("color: #1e293b; padding: 5px 0px;")
+        infos_layout.addWidget(infos_label)
 
         infos_subtitle = QLabel("Contrat, formations, validités et autres données")
-        infos_subtitle.setStyleSheet("color: #d1fae5; font-size: 11px; background: transparent;")
-        header_layout.addWidget(infos_subtitle)
+        infos_subtitle.setStyleSheet("color: #64748b; font-size: 10px; padding-bottom: 10px;")
+        infos_layout.addWidget(infos_subtitle)
 
-        infos_layout.addWidget(header_infos)
-
-        # Tableau Catégorie / Valeur
+        # Tableau Catégorie / Valeur - Style professionnel
         self.infos_table = QTableWidget()
         self.infos_table.setColumnCount(2)
         self.infos_table.setHorizontalHeaderLabels(["Catégorie", "Valeur"])
@@ -157,6 +144,38 @@ class DetailOperateurDialog(QDialog):
         self.infos_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.infos_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.infos_table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.infos_table.setAlternatingRowColors(True)
+        self.infos_table.setShowGrid(True)
+
+        # Style simple et épuré (comme Historique)
+        self.infos_table.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                alternate-background-color: #f9fafb;
+                gridline-color: #e5e7eb;
+                border: 1px solid #d1d5db;
+                font-size: 11px;
+            }
+            QHeaderView::section {
+                background-color: #f3f4f6;
+                color: #374151;
+                font-weight: 600;
+                font-size: 11px;
+                padding: 8px 12px;
+                border: none;
+                border-bottom: 1px solid #d1d5db;
+                border-right: 1px solid #e5e7eb;
+            }
+            QTableWidget::item {
+                padding: 8px 12px;
+                border: none;
+                color: #111827;
+            }
+            QTableWidget::item:selected {
+                background-color: #dbeafe;
+                color: #111827;
+            }
+        """)
 
         infos_layout.addWidget(self.infos_table)
 
@@ -180,8 +199,8 @@ class DetailOperateurDialog(QDialog):
         """)
         header_layout_contract = QVBoxLayout(header_contract)
 
-        contract_label = QLabel("📄 Contrats de Travail")
-        contract_label.setFont(QFont("Arial", 16, QFont.Bold))
+        contract_label = QLabel("Contrats de Travail")
+        contract_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
         contract_label.setStyleSheet("color: white; background: transparent;")
         header_layout_contract.addWidget(contract_label)
 
@@ -209,7 +228,7 @@ class DetailOperateurDialog(QDialog):
         self.add_contract_btn.clicked.connect(self.add_contract)
         contract_actions.addWidget(self.add_contract_btn)
 
-        self.edit_contract_btn = QPushButton("✏️ Modifier")
+        self.edit_contract_btn = QPushButton("Modifier")
         self.edit_contract_btn.setStyleSheet("""
             QPushButton {
                 background: #6b7280;
@@ -357,7 +376,7 @@ class DetailOperateurDialog(QDialog):
         layout.setSpacing(2)
         
         val_label = QLabel(value)
-        val_label.setFont(QFont("Arial", 16, QFont.Bold))
+        val_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
         val_label.setStyleSheet("color: white;")
         val_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(val_label)
@@ -392,10 +411,17 @@ class DetailOperateurDialog(QDialog):
             cursor.close(); connection.close()
 
             if row_data:
-                self._insert_section("👤 Informations personnelles")
+                self._insert_section("Informations personnelles")
                 data = row_data[0]
+
+                # Afficher d'abord la date d'entrée si elle existe (mise en évidence)
+                if data.get('date_entree'):
+                    date_entree_str = data['date_entree'].strftime("%d/%m/%Y") if isinstance(data['date_entree'], dt.date) else str(data['date_entree'])
+                    self._insert_kv("Date d'entrée", date_entree_str)
+
+                # Afficher les autres informations
                 for key, val in data.items():
-                    if key == "operateur_id":
+                    if key in ("operateur_id", "date_entree"):  # Skip operateur_id et date_entree (déjà affiché)
                         continue
                     label = self._format_column_name(key)
                     value = (
@@ -404,9 +430,13 @@ class DetailOperateurDialog(QDialog):
                     )
                     if value is not None:
                         self._insert_kv(label, value)
+            else:
+                # Si pas de personnel_infos, vérifier quand même s'il y a une date d'entrée
+                self._insert_section("Informations personnelles")
+                self._insert_kv("Information", "Aucune information complémentaire enregistrée")
 
             # -------- Contrat actuel --------
-            self._insert_section("📄 Contrat actuel")
+            self._insert_section("Contrat actuel")
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
             cursor.execute("""
@@ -437,7 +467,7 @@ class DetailOperateurDialog(QDialog):
 
             # -------- Congés / Absences --------
             # Les tables compteur_conges et absences_conges ne sont plus utilisées.
-            self._insert_section("⛱ Congés / absences")
+            self._insert_section("Congés / Absences")
             self._insert_kv(
                 "Information",
                 "Module congés/absences non utilisé dans cette application."
@@ -455,12 +485,12 @@ class DetailOperateurDialog(QDialog):
             formations = _rows(cursor, dict_mode)
             cursor.close(); connection.close()
 
-            self._insert_section("📚 Formations")
+            self._insert_section("Formations")
             if formations:
                 for f in formations:
                     d1 = self._format_date(f.get("date_debut"))
                     d2 = self._format_date(f.get("date_fin"))
-                    cert = "✅" if f.get("certificat_obtenu") else "—"
+                    cert = "Oui" if f.get("certificat_obtenu") else "Non"
                     texte = f"{d1} → {d2} — {f.get('statut','')} {cert}"
                     self._insert_kv(f.get("intitule", "(formation)"), texte)
             else:
@@ -478,7 +508,7 @@ class DetailOperateurDialog(QDialog):
             validites = _rows(cursor, dict_mode)
             cursor.close(); connection.close()
 
-            self._insert_section("✅ Validités")
+            self._insert_section("Validités")
             if validites:
                 for v in validites:
                     d1 = self._format_date(v.get("date_debut"))
@@ -510,7 +540,7 @@ class DetailOperateurDialog(QDialog):
         self.infos_table.insertRow(row)
 
         cat = QTableWidgetItem(label)
-        cat.setFont(QFont("Arial", 10, QFont.Bold))
+        cat.setFont(QFont("Segoe UI", 10, QFont.Bold))
         self.infos_table.setItem(row, 0, cat)
 
         if value in (None, "",):
@@ -758,7 +788,7 @@ class DetailOperateurDialog(QDialog):
                 self.contract_table.setItem(row, 5, QTableWidgetItem(categorie or ''))
 
                 # Actif
-                actif_str = "✅ Actif" if contract.get('actif') else "❌ Inactif"
+                actif_str = "Actif" if contract.get('actif') else "Inactif"
                 actif_item = QTableWidgetItem(actif_str)
                 if contract.get('actif'):
                     actif_item.setForeground(QColor("#10b981"))
@@ -861,11 +891,11 @@ class DetailOperateurDialog(QDialog):
                 current_items = []
                 
                 for line in lines:
-                    # Détecter les titres de section (avec emoji ou tout en majuscules)
-                    if re.match(r'^[🔊📅⭐💡■]', line) or (line.isupper() and len(line) > 3):
+                    # Détecter les titres de section (tout en majuscules)
+                    if line.isupper() and len(line) > 3:
                         if current_section:
                             sections[current_section] = current_items
-                        current_section = re.sub(r'^[🔊📅⭐💡■]\s*', '', line)
+                        current_section = line
                         current_items = []
                     elif line.startswith('•') or line.startswith('-'):
                         # Item de liste
@@ -1325,7 +1355,7 @@ class DetailOperateurDialog(QDialog):
 
         # Colonne 0 : libellé
         cat_item = QTableWidgetItem(label)
-        cat_item.setFont(QFont("Arial", 10, QFont.Bold))
+        cat_item.setFont(QFont("Segoe UI", 10, QFont.Bold))
         self.infos_table.setItem(row_index, 0, cat_item)
 
         # Colonne 1 : valeur
@@ -1335,13 +1365,17 @@ class DetailOperateurDialog(QDialog):
         self.infos_table.setItem(row_index, 1, val_item)
 
     def _insert_section(self, title: str):
-        """Insère un séparateur de section (ligne pleine largeur)."""
+        """Insère un séparateur de section simple (ligne pleine largeur)."""
         row = self.infos_table.rowCount()
         self.infos_table.insertRow(row)
-        item = QTableWidgetItem(title.upper())
-        item.setFont(QFont("Arial", 10, QFont.Bold))
-        item.setForeground(QColor("#111827"))
-        item.setBackground(QColor("#f1f5f9"))
+
+        # Nettoyer le titre
+        title_clean = title.strip()
+
+        item = QTableWidgetItem(title_clean.upper())
+        item.setFont(QFont("Segoe UI", 10, QFont.Bold))
+        item.setForeground(QColor("#374151"))  # Gris foncé simple
+        item.setBackground(QColor("#f3f4f6"))  # Gris très clair
         item.setFlags(item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEditable)
         self.infos_table.setItem(row, 0, item)
         self.infos_table.setSpan(row, 0, 1, 2)
@@ -1352,7 +1386,7 @@ class DetailOperateurDialog(QDialog):
         self.infos_table.insertRow(row)
 
         cat = QTableWidgetItem(label)
-        cat.setFont(QFont("Arial", 10, QFont.Bold))
+        cat.setFont(QFont("Segoe UI", 10, QFont.Bold))
         self.infos_table.setItem(row, 0, cat)
 
         val = QTableWidgetItem(value if value not in (None, "",) else "—")
@@ -1415,7 +1449,7 @@ class GestionPersonnelDialog(QDialog):
 
         # === Header ===
         header = QLabel("Gestion du Personnel")
-        header.setFont(QFont("Arial", 18, QFont.Bold))
+        header.setFont(QFont("Segoe UI", 18, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
         layout.addWidget(header)
 
@@ -1484,28 +1518,44 @@ class GestionPersonnelDialog(QDialog):
         layout.addWidget(self.table, 1)
         
         # === Stats globales ===
-        stats_label = QLabel("💡 Double-cliquez sur une ligne pour voir les détails complets")
+        stats_label = QLabel("Double-cliquez sur une ligne pour voir les détails complets")
         stats_label.setStyleSheet("color: #6b7280; font-style: italic; padding: 8px;")
         stats_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(stats_label)
         
         self.total_label = QLabel("Total : 0 opérateur(s)")
-        self.total_label.setFont(QFont("Arial", 11, QFont.Bold))
+        self.total_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
         self.total_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.total_label)
         
         # === Actions ===
         actions = QHBoxLayout()
         actions.addStretch()
-        
+
+        self.dates_entree_btn = QPushButton("Affecter dates d'entrée")
+        self.dates_entree_btn.setStyleSheet("""
+            QPushButton {
+                background: #3b82f6;
+                color: white;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #2563eb;
+            }
+        """)
+        self.dates_entree_btn.clicked.connect(self.open_dates_entree_dialog)
+        actions.addWidget(self.dates_entree_btn)
+
         self.export_btn = QPushButton("Exporter la liste")
         self.export_btn.clicked.connect(self.export_list)
         actions.addWidget(self.export_btn)
-        
+
         self.close_btn = QPushButton("Fermer")
         self.close_btn.clicked.connect(self.close)
         actions.addWidget(self.close_btn)
-        
+
         layout.addLayout(actions)
 
         # Ajouter le widget de contenu au layout principal
@@ -1661,7 +1711,12 @@ class GestionPersonnelDialog(QDialog):
     def on_operateur_status_changed(self, operateur_id):
         """Callback quand le statut d'un opérateur est modifié."""
         self.load_data()
-    
+
+    def open_dates_entree_dialog(self):
+        """Ouvre le dialogue d'affectation des dates d'entrée"""
+        dialog = AffecterDatesEntreeDialog(self)
+        dialog.exec_()
+
     def export_list(self):
         """Exporte la liste en Excel."""
         try:
@@ -1772,6 +1827,289 @@ class GestionPersonnelDialog(QDialog):
             )
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible d'exporter :\n{e}")
+
+
+class AffecterDatesEntreeDialog(QDialog):
+    """Dialogue pour affecter les dates d'entrée aux employés sans date"""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Affectation des dates d'entrée")
+        self.setMinimumWidth(1000)
+        self.setMinimumHeight(600)
+
+        self.date_widgets = {}  # Dictionnaire pour stocker les QDateEdit par operateur_id
+        self.init_ui()
+        self.load_personnel_sans_date()
+
+    def init_ui(self):
+        """Initialise l'interface"""
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
+
+        # Header
+        header = QLabel("Affectation des dates d'entrée")
+        header.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        header.setAlignment(Qt.AlignCenter)
+        layout.addWidget(header)
+
+        subtitle = QLabel("Saisissez la date d'entrée pour chaque employé puis cliquez sur 'Enregistrer'")
+        subtitle.setStyleSheet("color: #6b7280; font-style: italic;")
+        subtitle.setAlignment(Qt.AlignCenter)
+        layout.addWidget(subtitle)
+
+        # Stats
+        self.stats_label = QLabel()
+        self.stats_label.setStyleSheet("color: #3b82f6; font-weight: bold; padding: 10px;")
+        self.stats_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(self.stats_label)
+
+        # Table des employés
+        self.table = QTableWidget()
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels([
+            "Nom", "Prénom", "Matricule", "Statut", "Date d'entrée", "Action"
+        ])
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)  # Nom
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)  # Prénom
+        self.table.setColumnWidth(0, 150)  # Nom
+        self.table.setColumnWidth(3, 100)  # Statut
+        self.table.setColumnWidth(4, 150)  # Date
+        self.table.setColumnWidth(5, 120)  # Action
+        self.table.setSelectionMode(QAbstractItemView.NoSelection)
+        self.table.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                alternate-background-color: #f9fafb;
+                gridline-color: #e5e7eb;
+                border: 1px solid #d1d5db;
+            }
+            QHeaderView::section {
+                background-color: #f3f4f6;
+                color: #374151;
+                font-weight: 600;
+                padding: 8px;
+                border: none;
+            }
+        """)
+        self.table.setAlternatingRowColors(True)
+        layout.addWidget(self.table)
+
+        # Boutons d'actions
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        self.close_btn = QPushButton("Fermer")
+        self.close_btn.clicked.connect(self.close)
+        self.close_btn.setStyleSheet("""
+            QPushButton {
+                background: #ef4444;
+                color: white;
+                padding: 8px 16px;
+                border-radius: 4px;
+            }
+            QPushButton:hover {
+                background: #dc2626;
+            }
+        """)
+        btn_layout.addWidget(self.close_btn)
+
+        layout.addLayout(btn_layout)
+
+    def load_personnel_sans_date(self):
+        """Charge les employés sans date d'entrée"""
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor(dictionary=True)
+
+            cur.execute("""
+                SELECT
+                    p.id,
+                    p.nom,
+                    p.prenom,
+                    p.matricule,
+                    p.statut,
+                    pi.date_entree
+                FROM personnel p
+                LEFT JOIN personnel_infos pi ON p.id = pi.operateur_id
+                WHERE pi.date_entree IS NULL OR pi.operateur_id IS NULL
+                ORDER BY p.nom, p.prenom
+            """)
+
+            personnel = cur.fetchall()
+            cur.close()
+            conn.close()
+
+            # Mettre à jour les stats
+            self.stats_label.setText(
+                f"{len(personnel)} employé(s) sans date d'entrée"
+            )
+
+            # Remplir la table
+            self.table.setRowCount(len(personnel))
+            self.date_widgets.clear()
+
+            for row, emp in enumerate(personnel):
+                operateur_id = emp['id']
+
+                # Nom
+                nom_item = QTableWidgetItem(emp['nom'])
+                nom_item.setData(Qt.UserRole, operateur_id)  # Stocker l'ID
+                self.table.setItem(row, 0, nom_item)
+
+                # Prénom
+                prenom_item = QTableWidgetItem(emp['prenom'])
+                self.table.setItem(row, 1, prenom_item)
+
+                # Matricule
+                matricule_item = QTableWidgetItem(emp['matricule'] or "—")
+                self.table.setItem(row, 2, matricule_item)
+
+                # Statut
+                statut = emp['statut']
+                statut_item = QTableWidgetItem(statut)
+                if statut == "ACTIF":
+                    statut_item.setForeground(QColor("#10b981"))
+                else:
+                    statut_item.setForeground(QColor("#6b7280"))
+                self.table.setItem(row, 3, statut_item)
+
+                # Date d'entrée - QDateEdit
+                date_edit = QDateEdit()
+                date_edit.setCalendarPopup(True)
+                date_edit.setDate(QDate.currentDate())
+                date_edit.setDisplayFormat("dd/MM/yyyy")
+                date_edit.setMinimumDate(QDate(1950, 1, 1))
+                date_edit.setMaximumDate(QDate.currentDate())
+                date_edit.setStyleSheet("""
+                    QDateEdit {
+                        padding: 6px;
+                        border: 1px solid #d1d5db;
+                        border-radius: 4px;
+                    }
+                    QDateEdit:focus {
+                        border-color: #3b82f6;
+                    }
+                """)
+                self.table.setCellWidget(row, 4, date_edit)
+                self.date_widgets[operateur_id] = date_edit
+
+                # Bouton Enregistrer
+                btn_enregistrer = QPushButton("Enregistrer")
+                btn_enregistrer.setStyleSheet("""
+                    QPushButton {
+                        background: #10b981;
+                        color: white;
+                        padding: 6px 12px;
+                        border-radius: 4px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background: #059669;
+                    }
+                """)
+                btn_enregistrer.clicked.connect(
+                    lambda checked, oid=operateur_id, r=row: self.enregistrer_date(oid, r)
+                )
+                self.table.setCellWidget(row, 5, btn_enregistrer)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors du chargement :\n{e}")
+
+    def enregistrer_date(self, operateur_id, row):
+        """Enregistre la date d'entrée pour un employé spécifique"""
+        try:
+            # Récupérer les informations
+            nom = self.table.item(row, 0).text()
+            prenom = self.table.item(row, 1).text()
+            date_widget = self.date_widgets.get(operateur_id)
+
+            if not date_widget:
+                return
+
+            date_entree = date_widget.date().toString("yyyy-MM-dd")
+            date_display = date_widget.date().toString("dd/MM/yyyy")
+
+            # Confirmer
+            reply = QMessageBox.question(
+                self,
+                "Confirmation",
+                f"Affecter la date {date_display} à {nom} {prenom} ?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+
+            if reply != QMessageBox.Yes:
+                return
+
+            # Enregistrer dans la base
+            conn = get_db_connection()
+            cur = conn.cursor()
+
+            try:
+                # Vérifier si l'enregistrement existe
+                cur.execute(
+                    "SELECT operateur_id FROM personnel_infos WHERE operateur_id = %s",
+                    (operateur_id,)
+                )
+                exists = cur.fetchone()
+
+                if exists:
+                    cur.execute(
+                        "UPDATE personnel_infos SET date_entree = %s WHERE operateur_id = %s",
+                        (date_entree, operateur_id)
+                    )
+                else:
+                    cur.execute(
+                        "INSERT INTO personnel_infos (operateur_id, date_entree) VALUES (%s, %s)",
+                        (operateur_id, date_entree)
+                    )
+
+                # Logger
+                log_hist(
+                    "AFFECTATION_DATE_ENTREE",
+                    f"Date d'entrée affectée: {date_display}",
+                    operateur_id,
+                    None
+                )
+
+                conn.commit()
+
+                QMessageBox.information(
+                    self,
+                    "Succès",
+                    f"Date d'entrée enregistrée pour {nom} {prenom}"
+                )
+
+                # Retirer la ligne du tableau
+                self.table.removeRow(row)
+                del self.date_widgets[operateur_id]
+
+                # Mettre à jour les stats
+                nb_restants = self.table.rowCount()
+                self.stats_label.setText(f"{nb_restants} employé(s) sans date d'entrée")
+
+                if nb_restants == 0:
+                    QMessageBox.information(
+                        self,
+                        "Terminé",
+                        "Tous les employés ont maintenant une date d'entrée!"
+                    )
+                    self.close()
+
+            except Exception as e:
+                conn.rollback()
+                QMessageBox.critical(
+                    self,
+                    "Erreur",
+                    f"Erreur lors de l'enregistrement :\n{e}"
+                )
+            finally:
+                cur.close()
+                conn.close()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur :\n{e}")
 
 
 if __name__ == "__main__":

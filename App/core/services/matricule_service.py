@@ -121,3 +121,20 @@ def assigner_matricule_si_production(operateur_id, est_production=True):
     finally:
         cur.close()
         conn.close()
+
+
+# ========================= ALIASES POUR COMPATIBILITÉ =========================
+
+def generer_matricule(nom: str, prenom: str) -> str:
+    """
+    Alias pour generer_prochain_matricule()
+    Génère un nouveau matricule (format M000XXX)
+
+    Args:
+        nom (str): Nom de l'employé (non utilisé, pour compatibilité)
+        prenom (str): Prénom de l'employé (non utilisé, pour compatibilité)
+
+    Returns:
+        str: Nouveau matricule généré
+    """
+    return generer_prochain_matricule()

@@ -68,17 +68,28 @@ class EvaluationDateDialog(QDialog):
 
         form = QFormLayout()
 
-        # Date d'évaluation (à venir)
-        self.date_edit = QDateEdit(self)
-        self.date_edit.setCalendarPopup(True)
-        self.date_edit.setDate(QDate.currentDate().addDays(30))
-        self.date_edit.setDisplayFormat("dd/MM/yyyy")
-        form.addRow("Prochaine évaluation :", self.date_edit)
-
         # Poste (seulement visibles)
         self.poste_combo = QComboBox(self)
         form.addRow("Poste :", self.poste_combo)
         self._charger_postes()
+
+        # Niveau de compétence
+        self.niveau_combo = QComboBox(self)
+        self.niveau_combo.addItem("Niveau 1 - Débutant (réévaluation dans 1 mois)", 1)
+        self.niveau_combo.addItem("Niveau 2 - Intermédiaire (réévaluation dans 1 mois)", 2)
+        self.niveau_combo.addItem("Niveau 3 - Confirmé (réévaluation dans 10 ans)", 3)
+        self.niveau_combo.addItem("Niveau 4 - Expert/Formateur (réévaluation dans 10 ans)", 4)
+        self.niveau_combo.currentIndexChanged.connect(self._calculer_date_evaluation)
+        form.addRow("Niveau de compétence :", self.niveau_combo)
+
+        # Date d'évaluation (à venir) - calculée automatiquement
+        self.date_edit = QDateEdit(self)
+        self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat("dd/MM/yyyy")
+        form.addRow("Prochaine évaluation :", self.date_edit)
+
+        # Calcul initial de la date
+        self._calculer_date_evaluation()
 
         layout.addLayout(form)
 
@@ -99,6 +110,25 @@ class EvaluationDateDialog(QDialog):
         btn_row.addWidget(btn_cancel)
         btn_row.addWidget(btn_ok)
         layout.addLayout(btn_row)
+
+    def _calculer_date_evaluation(self):
+        """Calcule automatiquement la date de prochaine évaluation selon le niveau choisi."""
+        niveau = self.niveau_combo.currentData()
+        if niveau is None:
+            return
+
+        # Calcul selon le niveau
+        if niveau == 1:
+            jours = 30  # 1 mois
+        elif niveau == 2:
+            jours = 30  # 1 mois
+        elif niveau in [3, 4]:
+            jours = 3650  # 10 ans
+        else:
+            jours = 30  # Par défaut 1 mois
+
+        date_future = QDate.currentDate().addDays(jours)
+        self.date_edit.setDate(date_future)
 
     def _charger_postes(self):
         """Remplit le combo avec les postes visibles (id + poste_code)."""
@@ -168,6 +198,36 @@ class ManageOperatorsDialog(QDialog):
         self.add_prenom_input.setPlaceholderText("Prénom")
         layout.addWidget(self.add_prenom_input)
 
+        # Date d'entrée
+        date_layout = QHBoxLayout()
+        date_label = QLabel("Date d'entrée :")
+        date_label.setFont(QFont("Arial", 10))
+        self.add_date_entree = QDateEdit(self)
+        self.add_date_entree.setCalendarPopup(True)  # Active le calendrier déroulant
+        self.add_date_entree.setDate(QDate.currentDate())  # Date par défaut = aujourd'hui
+        self.add_date_entree.setDisplayFormat("dd/MM/yyyy")
+        self.add_date_entree.setMinimumDate(QDate(1950, 1, 1))  # Date min = 1950
+        self.add_date_entree.setMaximumDate(QDate.currentDate())  # Date max = aujourd'hui
+        self.add_date_entree.setMinimumWidth(150)
+        self.add_date_entree.setStyleSheet("""
+            QDateEdit {
+                padding: 5px;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+            QDateEdit::drop-down {
+                subcontrol-origin: padding;
+                subcontrol-position: top right;
+                width: 20px;
+                border-left: 1px solid #ccc;
+            }
+        """)
+        date_layout.addWidget(date_label)
+        date_layout.addWidget(self.add_date_entree)
+        date_layout.addStretch()
+        layout.addLayout(date_layout)
+
         # Bouton Ajouter
         self.add_button = QPushButton("Ajouter", self)
         self.add_button.setFont(QFont("Arial", 10))
@@ -222,7 +282,7 @@ class ManageOperatorsDialog(QDialog):
                 op_id = row["id"] if isinstance(row, dict) else row[0]
         return op_id
 
-    def _enregistrer_date_polyvalence(self, connection, cursor, operateur_id: int, poste_id: int, qdate: QDate):
+    def _enregistrer_date_polyvalence(self, connection, cursor, operateur_id: int, poste_id: int, qdate: QDate, niveau: int = 1):
         """
         Insère ou met à jour la prochaine évaluation dans `polyvalence` (poste_id obligatoire).
         NE FAIT NI commit() NI start_transaction().
@@ -245,19 +305,19 @@ class ManageOperatorsDialog(QDialog):
             cursor.execute(
                 """
                 UPDATE polyvalence
-                SET prochaine_evaluation = %s
+                SET prochaine_evaluation = %s, niveau = %s
                 WHERE operateur_id = %s AND poste_id = %s
                 """,
-                (date_iso, operateur_id, poste_id),
+                (date_iso, niveau, operateur_id, poste_id),
             )
         else:
-            # Insérer une nouvelle entrée avec niveau 1 par défaut
+            # Insérer une nouvelle entrée avec le niveau choisi
             cursor.execute(
                 """
                 INSERT INTO polyvalence (operateur_id, poste_id, niveau, prochaine_evaluation)
-                VALUES (%s, %s, 1, %s)
+                VALUES (%s, %s, %s, %s)
                 """,
-                (operateur_id, poste_id, date_iso),
+                (operateur_id, poste_id, niveau, date_iso),
             )
 
     # --------------------------- Action UI ---------------------------
@@ -327,11 +387,13 @@ class ManageOperatorsDialog(QDialog):
             qdate = None
             date_iso = None
             poste_name = None
+            niveau = 1  # Niveau par défaut
 
             if add_polyvalence:
                 poste_id = dlg.poste_combo.currentData()
                 qdate = dlg.date_edit.date()
                 date_iso = qdate.toString("yyyy-MM-dd")
+                niveau = dlg.niveau_combo.currentData()  # Récupérer le niveau choisi
 
                 # Récupérer le nom du poste pour le log
                 if poste_id:
@@ -380,11 +442,31 @@ class ManageOperatorsDialog(QDialog):
                 if not operateur_id:
                     raise RuntimeError("Impossible de récupérer l'id du nouvel opérateur.")
 
+                # Insérer la date d'entrée dans personnel_infos
+                date_entree = self.add_date_entree.date().toString("yyyy-MM-dd")
+
+                # Vérifier si personnel_infos existe déjà
+                cursor.execute("SELECT operateur_id FROM personnel_infos WHERE operateur_id = %s", (operateur_id,))
+                exists_infos = cursor.fetchone()
+
+                if exists_infos:
+                    # Mettre à jour
+                    cursor.execute(
+                        "UPDATE personnel_infos SET date_entree = %s WHERE operateur_id = %s",
+                        (date_entree, operateur_id)
+                    )
+                else:
+                    # Créer
+                    cursor.execute(
+                        "INSERT INTO personnel_infos (operateur_id, date_entree) VALUES (%s, %s)",
+                        (operateur_id, date_entree)
+                    )
+
                 # ✅ LOG création opérateur dans l'historique
                 log_data = {
                     "operateur": f"{prenom} {nom}",
                     "type": "creation_operateur",
-                    "details": f"Création de l'opérateur {prenom} {nom}"
+                    "details": f"Création de l'opérateur {prenom} {nom} (Date d'entrée: {self.add_date_entree.date().toString('dd/MM/yyyy')})"
                 }
                 if matricule:
                     log_data["matricule"] = matricule
@@ -400,7 +482,15 @@ class ManageOperatorsDialog(QDialog):
 
             # Évaluation liée (seulement si polyvalence ajoutée)
             if add_polyvalence and poste_id:
-                self._enregistrer_date_polyvalence(connection, cursor, operateur_id, poste_id, qdate)
+                self._enregistrer_date_polyvalence(connection, cursor, operateur_id, poste_id, qdate, niveau)
+
+                # Déterminer le texte du niveau pour le log
+                niveau_texte = {
+                    1: "Niveau 1 - Débutant",
+                    2: "Niveau 2 - Intermédiaire",
+                    3: "Niveau 3 - Confirmé",
+                    4: "Niveau 4 - Expert/Formateur"
+                }.get(niveau, f"Niveau {niveau}")
 
                 # ✅ LOG planification évaluation dans l'historique
                 log_to_historique(
@@ -411,9 +501,10 @@ class ManageOperatorsDialog(QDialog):
                     description_data={
                         "operateur": f"{prenom} {nom}",
                         "poste": poste_name,
+                        "niveau": niveau_texte,
                         "type": "planification_evaluation",
                         "prochaine_evaluation": date_iso,
-                        "details": f"Planification évaluation pour le {date_iso}"
+                        "details": f"Planification évaluation pour le {date_iso} ({niveau_texte})"
                     }
                 )
 

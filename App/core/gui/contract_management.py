@@ -811,7 +811,7 @@ class ContractManagementDialog(QDialog):
                     p.matricule,
                     c.nom as categorie,
                     d.nom_fichier,
-                    d.date_ajout,
+                    d.date_upload,
                     d.date_expiration,
                     CASE
                         WHEN d.date_expiration IS NULL THEN 'Valide'
@@ -823,7 +823,7 @@ class ContractManagementDialog(QDialog):
                 INNER JOIN personnel p ON d.operateur_id = p.id
                 INNER JOIN categories_documents c ON d.categorie_id = c.id
                 WHERE c.nom = 'Contrats de travail'
-                ORDER BY d.date_ajout DESC
+                ORDER BY d.date_upload DESC
             """)
 
             documents = cur.fetchall()
@@ -853,8 +853,8 @@ class ContractManagementDialog(QDialog):
                 self.docs_table.setItem(row, 4, QTableWidgetItem(doc['nom_fichier']))
 
                 # Date d'ajout
-                date_ajout_str = doc['date_ajout'].strftime('%d/%m/%Y') if doc['date_ajout'] else ''
-                self.docs_table.setItem(row, 5, QTableWidgetItem(date_ajout_str))
+                date_upload_str = doc['date_upload'].strftime('%d/%m/%Y') if doc['date_upload'] else ''
+                self.docs_table.setItem(row, 5, QTableWidgetItem(date_upload_str))
 
                 # Date d'expiration
                 date_exp_str = doc['date_expiration'].strftime('%d/%m/%Y') if doc['date_expiration'] else 'N/A'
