@@ -11,6 +11,7 @@ from core.db.configbd import get_connection
 def get_evaluations_en_retard() -> List[Dict]:
     """
     Recupere toutes les evaluations en retard (date passee)
+    Triees par urgence (plus de retard en premier)
 
     Returns:
         List[Dict]: Liste des evaluations en retard avec informations employe et poste
@@ -39,7 +40,7 @@ def get_evaluations_en_retard() -> List[Dict]:
             LEFT JOIN atelier a ON pos.atelier_id = a.id
             WHERE pers.statut = 'ACTIF'
               AND p.prochaine_evaluation < CURDATE()
-            ORDER BY p.prochaine_evaluation ASC
+            ORDER BY jours_retard DESC, p.prochaine_evaluation ASC
         """)
 
         return cur.fetchall()

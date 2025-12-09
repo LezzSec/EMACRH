@@ -6,18 +6,10 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent
 from PyQt5.QtGui import QDesktopServices
 from core.gui.ui_theme import EmacTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard, HamburgerButton
-from core.gui.liste_et_grilles import GrillesDialog
-from core.gui.creation_modification_poste import CreationModificationPosteDialog
-from core.gui.gestion_evaluation import GestionEvaluationDialog
-from core.gui.manage_operateur import ManageOperatorsDialog
-from core.gui.historique import HistoriqueDialog
-from core.gui.gestion_personnel import GestionPersonnelDialog
-from core.gui.planning import RegularisationDialog
-from core.gui.contract_management import ContractManagementDialog
-from core.gui.planning_absences import PlanningAbsencesDialog
-from core.gui.gestion_documentaire import GestionDocumentaireDialog
 from core.db.configbd import get_connection as get_db_connection
 
+# ✅ OPTIMISATION: Imports paresseux des dialogues (chargés uniquement à l'ouverture)
+# Réduit le temps de démarrage de l'application
 
 try:
     from core.services.log_exporter import export_day
@@ -115,8 +107,10 @@ class MainWindow(QMainWindow):
 
         root.addLayout(right, 0, 1)
 
-        QTimer.singleShot(0, self.populate_filters)
-        QTimer.singleShot(100, self.load_evaluations)
+        # ✅ OPTIMISATION: Chargement différé pour afficher la fenêtre plus rapidement
+        # La fenêtre s'affiche immédiatement, les données se chargent ensuite
+        QTimer.singleShot(50, self.populate_filters)
+        QTimer.singleShot(150, self.load_evaluations)
 
     # ================= Filtre d'événements pour clic extérieur =================
     def eventFilter(self, source, event):
@@ -251,17 +245,23 @@ class MainWindow(QMainWindow):
         lw = QListWidget(); sc.setWidget(lw)
         return sc, lw
 
-    # ================= Fenêtres secondaires =================
+    # ================= Fenêtres secondaires (avec imports paresseux) =================
     def show_liste_personnel(self):
+        from core.gui.gestion_personnel import GestionPersonnelDialog
         GestionPersonnelDialog(self).exec_()
+
     def show_manage_operator(self):
+        from core.gui.manage_operateur import ManageOperatorsDialog
         ManageOperatorsDialog().exec_()
+
     def show_gestion_evaluations(self):
+        from core.gui.gestion_evaluation import GestionEvaluationDialog
         GestionEvaluationDialog().exec_()
 
     def ouvrir_gestion_evaluations(self, filtre_statut):
         """Ouvre le dialogue de gestion des évaluations avec un filtre pré-appliqué."""
         try:
+            from core.gui.gestion_evaluation import GestionEvaluationDialog
             dialog = GestionEvaluationDialog()
 
             # Appliquer le filtre de statut
@@ -277,13 +277,21 @@ class MainWindow(QMainWindow):
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible d'ouvrir la gestion des évaluations :\n{e}")
+
     def show_listes_grilles_dialog(self):
+        from core.gui.liste_et_grilles import GrillesDialog
         GrillesDialog().exec_()
+
     def show_poste_form(self):
+        from core.gui.creation_modification_poste import CreationModificationPosteDialog
         CreationModificationPosteDialog().exec_()
+
     def show_historique(self):
+        from core.gui.historique import HistoriqueDialog
         HistoriqueDialog().exec_()
+
     def show_regularisation(self):
+        from core.gui.planning_absences import PlanningAbsencesDialog
         # TODO: Récupérer l'ID du personnel connecté
         # Pour l'instant, utilise le premier personnel actif
         conn = get_db_connection()
@@ -300,79 +308,101 @@ class MainWindow(QMainWindow):
             PlanningAbsencesDialog(personnel_id=personnel_id, parent=self).exec_()
         else:
             QMessageBox.warning(self, "Erreur", "Aucun personnel actif trouvé")
+
     def show_contract_management(self):
+        from core.gui.contract_management import ContractManagementDialog
         ContractManagementDialog(self).exec_()
 
     def show_gestion_documentaire(self):
+        from core.gui.gestion_documentaire import GestionDocumentaireDialog
         GestionDocumentaireDialog(self).exec_()
 
-    # ================= Données / DB (Fonctions inchangées) =================
+    # ================= Données / DB (Optimisées) =================
     def populate_filters(self):
-        conn = get_db_connection(); cur = conn.cursor()
+        """Charge les filtres de postes de manière optimisée."""
         try:
-            cur.execute("SELECT DISTINCT poste_code FROM postes ORDER BY poste_code;")
-            for (poste,) in cur.fetchall():
-                # Vérifie si l'élément existe déjà pour éviter le doublon (cas rare)
-                if self.retard_filter.findData(poste) == -1: 
-                    self.retard_filter.addItem(poste, poste)
-                    self.next_eval_filter.addItem(poste, poste)
-        finally:
-            cur.close(); conn.close()
+            conn = get_db_connection()
+            cur = conn.cursor()
+            try:
+                cur.execute("SELECT DISTINCT poste_code FROM postes ORDER BY poste_code;")
+                postes = cur.fetchall()
+
+                # Remplir les filtres en une seule passe
+                for (poste,) in postes:
+                    if self.retard_filter.findData(poste) == -1:
+                        self.retard_filter.addItem(poste, poste)
+                        self.next_eval_filter.addItem(poste, poste)
+            finally:
+                cur.close()
+                conn.close()
+        except Exception as e:
+            print(f"⚠️ Erreur lors du chargement des filtres: {e}")
             
     def load_evaluations(self):
-        conn = get_db_connection(); cur = conn.cursor()
+        """Charge les évaluations en retard et à venir de manière optimisée."""
         try:
-            poste_retard = self.retard_filter.currentData()
-            poste_next = self.next_eval_filter.currentData()
+            conn = get_db_connection()
+            cur = conn.cursor()
+            try:
+                poste_retard = self.retard_filter.currentData()
+                poste_next = self.next_eval_filter.currentData()
 
-            # ✅ CORRIGÉ: Utilisation de la table 'personnel' au lieu de 'operateurs'
-            q1 = """
-                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
-                FROM polyvalence poly
-                JOIN personnel p ON p.id = poly.operateur_id
-                LEFT JOIN postes pos ON pos.id = poly.poste_id
-                WHERE poly.prochaine_evaluation < CURDATE()
-                  AND p.statut = 'ACTIF'
-            """
-            pr = []
-            if poste_retard:
-                q1 += " AND pos.poste_code = %s"
-                pr.append(poste_retard)
-            q1 += " ORDER BY poly.prochaine_evaluation ASC LIMIT 10"  
-            cur.execute(q1, tuple(pr))
-            retard = cur.fetchall()
+                # ✅ OPTIMISATION: Une seule requête avec UNION au lieu de 2 requêtes séparées
+                query = """
+                    (SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation, 'retard' as type
+                     FROM polyvalence poly
+                     JOIN personnel p ON p.id = poly.operateur_id
+                     LEFT JOIN postes pos ON pos.id = poly.poste_id
+                     WHERE poly.prochaine_evaluation < CURDATE()
+                       AND p.statut = 'ACTIF'
+                       {retard_filter}
+                     ORDER BY poly.prochaine_evaluation ASC
+                     LIMIT 10)
+                    UNION ALL
+                    (SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation, 'prochain' as type
+                     FROM polyvalence poly
+                     JOIN personnel p ON p.id = poly.operateur_id
+                     LEFT JOIN postes pos ON pos.id = poly.poste_id
+                     WHERE poly.prochaine_evaluation >= CURDATE()
+                       AND p.statut = 'ACTIF'
+                       {next_filter}
+                     ORDER BY poly.prochaine_evaluation ASC
+                     LIMIT 10)
+                """
 
-            # Prochaines évaluations
-            q2 = """
-                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
-                FROM polyvalence poly
-                JOIN personnel p ON p.id = poly.operateur_id
-                LEFT JOIN postes pos ON pos.id = poly.poste_id
-                WHERE poly.prochaine_evaluation >= CURDATE()
-                  AND p.statut = 'ACTIF'
-            """
-            pn = []
-            if poste_next:
-                q2 += " AND pos.poste_code = %s"
-                pn.append(poste_next)
-            q2 += " ORDER BY poly.prochaine_evaluation ASC LIMIT 10"
-            cur.execute(q2, tuple(pn))
-            prochaines = cur.fetchall()
+                retard_filter = "AND pos.poste_code = %s" if poste_retard else ""
+                next_filter = "AND pos.poste_code = %s" if poste_next else ""
+                query = query.format(retard_filter=retard_filter, next_filter=next_filter)
 
-            # Rendu UI
-            self.retard_list.clear()
-            for nom, prenom, poste, date_ev in retard:
-                date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
-                self.retard_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
+                params = []
+                if poste_retard:
+                    params.append(poste_retard)
+                if poste_next:
+                    params.append(poste_next)
 
-            self.next_eval_list.clear()
-            for nom, prenom, poste, date_ev in prochaines:
-                date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
-                self.next_eval_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
+                cur.execute(query, tuple(params))
+                results = cur.fetchall()
+
+                # Séparer les résultats
+                retard = [r[:4] for r in results if r[4] == 'retard']
+                prochaines = [r[:4] for r in results if r[4] == 'prochain']
+
+                # Rendu UI optimisé
+                self.retard_list.clear()
+                for nom, prenom, poste, date_ev in retard:
+                    date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
+                    self.retard_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
+
+                self.next_eval_list.clear()
+                for nom, prenom, poste, date_ev in prochaines:
+                    date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
+                    self.next_eval_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
+            finally:
+                cur.close()
+                conn.close()
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Échec du chargement des évaluations : {e}")
-        finally:
-            cur.close(); conn.close()
+            print(f"⚠️ Erreur lors du chargement des évaluations: {e}")
+            # Ne pas bloquer l'application avec un MessageBox au démarrage
 
 
     # ================= Export (Fonction inchangée) =================
