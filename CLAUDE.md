@@ -38,19 +38,20 @@ The database password is **NO LONGER hardcoded** in the source code. It is loade
 2. **`.env` file** (recommended for development):
    ```bash
    # Run the configuration script (Windows)
-   cd App
+   cd App/config
    configure_db.bat
 
    # Or manually create .env file
-   copy .env.example .env
-   # Edit .env with your password
+   copy config/.env.example .env
+   # Edit App/.env with your password
    ```
 
-3. **Default value** (fallback for local dev only): `emacViodos$13`
+3. **No default fallback**: Configuration is now **mandatory** for security reasons.
 
 **Important**: The `.env` file is in `.gitignore` and will never be committed to Git.
 
-For detailed configuration instructions, see [App/SECURITE_DB.md](App/SECURITE_DB.md).
+For detailed configuration instructions, see [docs/security/database-credentials.md](docs/security/database-credentials.md).
+For security changelog, see [docs/security/security-changelog.md](docs/security/security-changelog.md).
 
 Database schema is located in [App/database/schema/bddemac.sql](App/database/schema/bddemac.sql).
 
@@ -71,67 +72,89 @@ Database schema is located in [App/database/schema/bddemac.sql](App/database/sch
 
 ```
 EMAC/
-├── docs/                          # Documentation
-│   ├── GUIDE_UTILISATION_ABSENCES.md
-│   ├── MODULE_ABSENCES_README.md
-│   └── ANALYSE_FONCTIONNALITES_RH_MANQUANTES.md
-├── App/
-│   ├── core/                      # Core application code
-│   │   ├── db/                    # Database layer
-│   │   │   ├── configbd.py       # MySQL connection setup
-│   │   │   ├── insert_*.py       # Database population scripts
-│   │   │   └── import_infos.py   # Data import utilities
-│   │   ├── services/             # Business logic layer
-│   │   │   ├── evaluation_service.py      # Evaluation scheduling logic
-│   │   │   ├── calendrier_service.py      # Calendar computations
-│   │   │   ├── contrat_service.py         # Contract expiration tracking
-│   │   │   ├── absence_service.py         # Absence management
-│   │   │   ├── matricule_service.py       # Employee ID management
+├── 📄 README.md                    # Main project documentation
+├── 📄 CLAUDE.md                    # Instructions for Claude Code
+│
+├── 📁 docs/                        # Documentation
+│   ├── dev/                        # Developer documentation
+│   │   ├── architecture.md         # System architecture
+│   │   ├── tests-report.md         # Test reports
+│   │   ├── build-optimization.md   # Build & optimization guide
+│   │   └── exemples-logging.md     # Logging examples
+│   ├── user/                       # User guides
+│   │   ├── guide-absences.md       # Absence management guide
+│   │   └── guide-interface-historique.md
+│   ├── features/                   # Feature documentation
+│   │   ├── module-absences.md
+│   │   ├── module-documents.md
+│   │   └── historique-polyvalence.md
+│   └── security/                   # Security documentation
+│       ├── database-credentials.md # Credential management
+│       └── security-changelog.md   # Security audit log
+│
+├── 📁 App/
+│   ├── core/                       # Core application code
+│   │   ├── db/                     # Database layer
+│   │   │   ├── configbd.py        # MySQL connection setup
+│   │   │   ├── insert_*.py        # Database population scripts
+│   │   │   └── import_infos.py    # Data import utilities
+│   │   ├── services/              # Business logic layer
+│   │   │   ├── evaluation_service.py       # Evaluation scheduling logic
+│   │   │   ├── calendrier_service.py       # Calendar computations
+│   │   │   ├── contrat_service.py          # Contract expiration tracking
+│   │   │   ├── absence_service.py          # Absence management
+│   │   │   ├── matricule_service.py        # Employee ID management
 │   │   │   ├── liste_et_grilles_service.py # Grid generation
-│   │   │   ├── audit_logger.py            # Basic logging (deprecated)
-│   │   │   ├── logger.py                  # Historique table logging
-│   │   │   └── log_exporter.py            # Export logs to files
-│   │   ├── gui/                  # PyQt5 UI layer
-│   │   │   ├── main_qt.py                 # Main application window
-│   │   │   ├── ui_theme.py                # Theme system (EmacTheme, EmacDarkTheme)
-│   │   │   ├── emac_ui_kit.py            # Reusable UI components
-│   │   │   ├── gestion_evaluation.py      # Evaluation management dialog
-│   │   │   ├── gestion_personnel.py       # Personnel details & management
-│   │   │   ├── gestion_absences.py        # Absence management dialog
-│   │   │   ├── manage_operateur.py        # Add/edit employees
-│   │   │   ├── liste_et_grilles.py        # Skill matrix grids
-│   │   │   ├── creation_modification_poste.py  # Position CRUD
-│   │   │   ├── historique.py              # Audit log viewer
-│   │   │   ├── planning.py                # Planning/schedule view
-│   │   │   └── contract_management.py     # Contract renewal interface
-│   │   └── exporters/            # File export layer
-│   │       ├── excel_export.py   # Export grids to Excel
-│   │       ├── pdf_export.py     # PDF generation with ReportLab
-│   │       └── log_export.py     # CSV export of logs
-│   ├── database/                 # Database files
-│   │   ├── schema/               # Schema definitions
+│   │   │   ├── logger.py                   # Historique table logging
+│   │   │   └── log_exporter.py             # Export logs to files
+│   │   ├── gui/                   # PyQt5 UI layer
+│   │   │   ├── main_qt.py                  # Main application window
+│   │   │   ├── ui_theme.py                 # Theme system (EmacTheme, EmacDarkTheme)
+│   │   │   ├── emac_ui_kit.py             # Reusable UI components
+│   │   │   ├── gestion_evaluation.py       # Evaluation management dialog
+│   │   │   ├── gestion_personnel.py        # Personnel details & management
+│   │   │   ├── gestion_absences.py         # Absence management dialog
+│   │   │   ├── manage_operateur.py         # Add/edit employees
+│   │   │   ├── liste_et_grilles.py         # Skill matrix grids
+│   │   │   ├── creation_modification_poste.py   # Position CRUD
+│   │   │   ├── historique.py               # Audit log viewer
+│   │   │   ├── planning.py                 # Planning/schedule view
+│   │   │   └── contract_management.py      # Contract renewal interface
+│   │   ├── exporters/             # File export layer
+│   │   │   ├── excel_export.py    # Export grids to Excel
+│   │   │   ├── pdf_export.py      # PDF generation with ReportLab
+│   │   │   └── log_export.py      # CSV export of logs
+│   │   └── utils/                 # Utility functions
+│   │
+│   ├── config/                    # Configuration templates
+│   │   ├── .env.example           # Environment variables template
+│   │   ├── configure_db.bat       # DB configuration script (Windows)
+│   │   └── README.md              # Configuration guide
+│   │
+│   ├── database/                  # Database files
+│   │   ├── schema/                # Schema definitions
 │   │   │   └── bddemac.sql       # Main database schema
-│   │   ├── migrations/           # Schema migrations
-│   │   │   └── schema_absences_conges.sql
-│   │   └── backups/              # SQL backup files
-│   ├── tests/                    # Test files
-│   │   ├── test_add_operateur.py
-│   │   ├── test_advanced.py
-│   │   ├── test_database_integrity.py
-│   │   ├── test_masquage_operateur.py
-│   │   ├── test_matricule_service.py
-│   │   └── test_personnel_non_production.py
-│   ├── scripts/                  # Utility scripts
+│   │   ├── migrations/            # Schema migrations
+│   │   └── backups/               # SQL backup files
+│   │
+│   ├── tests/                     # Test files
+│   │   ├── unit/                  # Unit tests
+│   │   ├── integration/           # Integration tests
+│   │   └── run_all_tests.py      # Test runner
+│   │
+│   ├── scripts/                   # Utility scripts
 │   │   ├── cleanup_test_data.py
 │   │   ├── fix_matricule_lowercase.py
 │   │   ├── install_absences_module.py
-│   │   ├── delete_operators.py
 │   │   └── quick_db_query.py
-│   ├── logs/                     # Application logs
-│   ├── run/                      # Runtime files
-│   └── run_emac.vbs             # Windows launcher
-├── Deploy/                       # Deployment files
-└── CLAUDE.md                     # Claude Code instructions
+│   │
+│   ├── .env                       # Local configuration (Git ignored)
+│   ├── .gitignore
+│   ├── logs/                      # Application logs (Git ignored)
+│   ├── run/                       # Runtime files
+│   └── run_emac.vbs              # Windows launcher
+│
+└── 📁 Deploy/                     # Deployment files
 ```
 
 ### UI Theme System
