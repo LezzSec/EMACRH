@@ -244,16 +244,14 @@ class GestionDocumentaireDialog(QDialog):
             conn = get_connection()
             cur = conn.cursor(buffered=True)
 
-            # Utiliser la table personnel
-            table_name = 'personnel'
-
+            # ✅ SÉCURITÉ: Utiliser directement le nom de table (hardcodé)
             # Fermer et rouvrir le curseur avec dictionary=True
             cur.close()
             cur = conn.cursor(dictionary=True, buffered=True)
 
-            query = f"""
+            query = """
             SELECT id, nom, prenom, statut
-            FROM {table_name}
+            FROM personnel
             WHERE statut = 'ACTIF'
             ORDER BY nom, prenom
             """

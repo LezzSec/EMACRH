@@ -668,10 +668,12 @@ class HistoriqueDialog(QDialog):
                              ")")
                 params += [like, like, like, like]
 
+            # ✅ SÉCURITÉ: Construction sécurisée de la clause WHERE
+            where_clause = " AND ".join(where) if where else "1=1"
             sql = (
                 "SELECT id, date_time, action, operateur_id, poste_id, description "
                 "FROM historique "
-                f"WHERE {' AND '.join(where)} "
+                f"WHERE {where_clause} "
                 "ORDER BY date_time DESC, id DESC"
             )
             cur.execute(sql, params)

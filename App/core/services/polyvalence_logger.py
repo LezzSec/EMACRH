@@ -247,8 +247,15 @@ def get_historique_operateur(operateur_id, limit=None):
             ORDER BY date_action DESC
         """
 
+        # ✅ SÉCURITÉ: Validation stricte de LIMIT (MySQL ne supporte pas les paramètres pour LIMIT)
         if limit:
-            query += f" LIMIT {int(limit)}"
+            try:
+                limit_val = int(limit)
+                if limit_val <= 0 or limit_val > 10000:  # Protection contre valeurs extrêmes
+                    raise ValueError("LIMIT doit être entre 1 et 10000")
+                query += f" LIMIT {limit_val}"
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Valeur LIMIT invalide: {e}")
 
         cur.execute(query, (operateur_id,))
         return cur.fetchall()
@@ -280,8 +287,15 @@ def get_historique_poste(operateur_id, poste_id, limit=None):
             ORDER BY date_action DESC
         """
 
+        # ✅ SÉCURITÉ: Validation stricte de LIMIT
         if limit:
-            query += f" LIMIT {int(limit)}"
+            try:
+                limit_val = int(limit)
+                if limit_val <= 0 or limit_val > 10000:
+                    raise ValueError("LIMIT doit être entre 1 et 10000")
+                query += f" LIMIT {limit_val}"
+            except (ValueError, TypeError) as e:
+                raise ValueError(f"Valeur LIMIT invalide: {e}")
 
         cur.execute(query, (operateur_id, poste_id))
         return cur.fetchall()

@@ -43,20 +43,35 @@ cursor.execute("SELECT id, nom, prenom FROM personnel WHERE statut = 'ACTIF' LIM
 ---
 
 #### 3. [App/core/gui/manage_operateur.py](App/core/gui/manage_operateur.py)
-**Problème** : Noms de colonnes extraits dynamiquement de la base sans validation
+**Problème** : Noms de colonnes extraits dynamiquement de la base et utilisés dans f-strings
 ```python
-# ❌ AVANT
+# ❌ AVANT (3 occurrences)
 cursor.execute("SHOW COLUMNS FROM personnel;")
 cols = {r["Field"] for r in rows}  # Pas de validation
 cursor.execute(f"SELECT id FROM personnel WHERE `{col_nom}`=%s AND `{col_prenom}`=%s", ...)
+cursor.execute(f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`, `{col_statut}`) VALUES (%s, %s, 'ACTIF')", ...)
 ```
 
-**Solution** : Whitelist stricte des colonnes autorisées
+**Solution v1** : Whitelist stricte des colonnes autorisées (ajoutée initialement)
 ```python
-# ✅ APRÈS
+# ✅ Première étape
 ALLOWED_COLUMNS = {"nom", "lastname", "prenom", "firstname", "statut", "status"}
 cols = cols & ALLOWED_COLUMNS  # Intersection = filtrage
 ```
+
+**Solution v2** : Suppression complète des f-strings (version finale)
+```python
+# ✅ APRÈS (sécurité maximale)
+# Utiliser directement les colonnes standard
+cursor.execute("SELECT id FROM personnel WHERE `nom`=%s AND `prenom`=%s", ...)
+cursor.execute("INSERT INTO personnel (`nom`, `prenom`, `statut`) VALUES (%s, %s, 'ACTIF')", ...)
+# Plus AUCUNE f-string avec des noms de colonnes
+```
+
+**Fichiers modifiés** :
+- Ligne 284-289: `_get_or_create_operateur_id()` - f-strings supprimées
+- Ligne 380-382: Vérification doublon - f-strings supprimées
+- Ligne 428-437: Insertion personnel - f-strings supprimées
 
 ---
 

@@ -280,11 +280,12 @@ class ManageOperatorsDialog(QDialog):
         """Récupère l'id de l'opérateur tout juste inséré (fallback via SELECT)."""
         op_id = getattr(cursor, "lastrowid", None)
         if not op_id:
-            col_nom, col_prenom, _ = self._resolve_operateurs_columns(cursor)
+            # ✅ SÉCURITÉ: Utiliser des colonnes standard validées
+            # La table personnel utilise toujours 'nom' et 'prenom'
             cursor.execute(
-                f"SELECT id FROM personnel "
-                f"WHERE `{col_nom}`=%s AND `{col_prenom}`=%s "
-                f"ORDER BY id DESC LIMIT 1",
+                "SELECT id FROM personnel "
+                "WHERE `nom`=%s AND `prenom`=%s "
+                "ORDER BY id DESC LIMIT 1",
                 (nom, prenom),
             )
             row = cursor.fetchone()
@@ -372,11 +373,12 @@ class ManageOperatorsDialog(QDialog):
                 except Exception:
                     pass
 
-            col_nom, col_prenom, col_statut = self._resolve_operateurs_columns(cursor)
+            # ✅ SÉCURITÉ: Utiliser les colonnes standard (nom, prenom, statut)
+            # La table personnel a été standardisée avec ces colonnes
 
             # Vérifier doublon exact nom+prenom
             cursor.execute(
-                f"SELECT id FROM personnel WHERE `{col_nom}`=%s AND `{col_prenom}`=%s",
+                "SELECT id FROM personnel WHERE `nom`=%s AND `prenom`=%s",
                 (nom, prenom)
             )
             existing = cursor.fetchone()
@@ -420,33 +422,20 @@ class ManageOperatorsDialog(QDialog):
                 if is_production:  # Si production, générer un matricule
                     matricule = generer_prochain_matricule()
 
-                # Insérer avec ou sans matricule
-                if col_statut:
-                    if matricule:
-                        cursor.execute(
-                            f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`, `{col_statut}`, `matricule`) "
-                            f"VALUES (%s, %s, 'ACTIF', %s)",
-                            (nom, prenom, matricule)
-                        )
-                    else:
-                        cursor.execute(
-                            f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`, `{col_statut}`) "
-                            f"VALUES (%s, %s, 'ACTIF')",
-                            (nom, prenom)
-                        )
+                # ✅ SÉCURITÉ: Requêtes SQL avec colonnes hardcodées
+                # Insérer avec ou sans matricule et statut
+                if matricule:
+                    cursor.execute(
+                        "INSERT INTO personnel (`nom`, `prenom`, `statut`, `matricule`) "
+                        "VALUES (%s, %s, 'ACTIF', %s)",
+                        (nom, prenom, matricule)
+                    )
                 else:
-                    if matricule:
-                        cursor.execute(
-                            f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`, `matricule`) "
-                            f"VALUES (%s, %s, %s)",
-                            (nom, prenom, matricule)
-                        )
-                    else:
-                        cursor.execute(
-                            f"INSERT INTO personnel (`{col_nom}`, `{col_prenom}`) "
-                            f"VALUES (%s, %s)",
-                            (nom, prenom)
-                        )
+                    cursor.execute(
+                        "INSERT INTO personnel (`nom`, `prenom`, `statut`) "
+                        "VALUES (%s, %s, 'ACTIF')",
+                        (nom, prenom)
+                    )
 
                 operateur_id = self._get_or_create_operateur_id(cursor, nom, prenom)
                 if not operateur_id:
