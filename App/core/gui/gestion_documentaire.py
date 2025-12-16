@@ -244,11 +244,8 @@ class GestionDocumentaireDialog(QDialog):
             conn = get_connection()
             cur = conn.cursor(buffered=True)
 
-            # Vérifier quelle table existe (personnel ou operateurs)
-            cur.execute("SHOW TABLES LIKE 'personnel'")
-            table_exists = cur.fetchone()
-
-            table_name = 'personnel' if table_exists else 'operateurs'
+            # Utiliser la table personnel
+            table_name = 'personnel'
 
             # Fermer et rouvrir le curseur avec dictionary=True
             cur.close()

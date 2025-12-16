@@ -25,7 +25,13 @@
       "Bash(pyinstaller:*)",
       "Bash(timeout 10 py:*)",
       "Bash(timeout 180 py:*)",
-      "Bash(timeout 60 py:*)"
+      "Bash(timeout 60 py:*)",
+      "Bash(find:*)",
+      "Bash(wc:*)",
+      "Bash(ls:*)",
+      "Bash(xargs:*)",
+      "Bash(grep:*)",
+      "Bash(git check-ignore:*)"
     ],
     "deny": [],
     "ask": []

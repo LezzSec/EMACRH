@@ -4,6 +4,7 @@
 import os, csv, json, datetime as dt, zipfile
 from typing import Dict
 from core.db.configbd import get_connection as get_db_connection
+from core.utils.app_paths import get_logs_dir
 
 def _ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)
@@ -35,11 +36,20 @@ def _query_for_day(cursor, target_day: dt.date):
             params,
         )
 
-def export_day(day: dt.date, base_dir: str = "logs", make_zip: bool = True) -> Dict[str, str]:
+def export_day(day: dt.date, base_dir: str = None, make_zip: bool = True) -> Dict[str, str]:
     """
     Exporte les entrées de la table 'historique' pour la date 'day'.
     Retourne les chemins créés: {'csv': ..., 'zip': ...?}
+
+    Args:
+        day: Date à exporter
+        base_dir: Dossier de base (None = utilise get_logs_dir(), compatible .exe)
+        make_zip: Créer un fichier ZIP
     """
+    if base_dir is None:
+        # Utiliser le dossier logs compatible dev/exe
+        base_dir = str(get_logs_dir())
+
     out_dir = os.path.join(base_dir, day.isoformat())
     _ensure_dir(out_dir)
     csv_path = os.path.join(out_dir, f"historique_{day.isoformat()}.csv")

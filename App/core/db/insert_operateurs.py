@@ -61,14 +61,14 @@ def insert_operateurs():
         connection = get_db_connection()
         cursor = connection.cursor()
 
-        # Insérer chaque opérateur dans la table 'operateurs'
+        # Insérer chaque opérateur dans la table 'personnel'
         for operateur in operateurs:
-            query = "INSERT INTO operateurs (nom_prenom) VALUES (%s)"
+            query = "INSERT INTO personnel (nom_prenom) VALUES (%s)"
             cursor.execute(query, (operateur,))
-        
+
         # Valider les modifications
         connection.commit()
-        print(f"{cursor.rowcount} opérateurs ont été insérés dans la table 'operateurs'.")
+        print(f"{cursor.rowcount} opérateurs ont été insérés dans la table 'personnel'.")
     except Exception as e:
         print(f"Une erreur est survenue : {e}")
     finally:

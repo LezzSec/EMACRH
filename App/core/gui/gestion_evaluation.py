@@ -1238,15 +1238,16 @@ class GestionEvaluationDialog(QDialog):
         except ValueError:
             return
 
-        if col == 5:
-            field = "date_evaluation"
-            field_display = "Date d'évaluation"
-        elif col == 6:
-            field = "prochaine_evaluation"
-            field_display = "Prochaine évaluation"
-        else:
+        # ✅ SÉCURITÉ: Whitelist des champs autorisés pour éviter les injections SQL
+        ALLOWED_FIELDS = {
+            5: ("date_evaluation", "Date d'évaluation"),
+            6: ("prochaine_evaluation", "Prochaine évaluation")
+        }
+
+        if col not in ALLOWED_FIELDS:
             return
 
+        field, field_display = ALLOWED_FIELDS[col]
         date_iso = qdate.toString("yyyy-MM-dd")
 
         try:
@@ -1254,13 +1255,25 @@ class GestionEvaluationDialog(QDialog):
             cursor = conn.cursor()
 
             # Récupérer l'ancienne valeur et les infos pour le log
-            cursor.execute(f"""
-                SELECT pv.{field}, p.nom, p.prenom, po.poste_code, po.id
-                FROM polyvalence pv
-                JOIN personnel p ON p.id = pv.operateur_id
-                JOIN postes po ON po.id = pv.poste_id
-                WHERE pv.id = %s
-            """, (poly_id,))
+            # ✅ SÉCURITÉ: Construction sécurisée de la requête avec whitelist
+            if field == "date_evaluation":
+                query_select = """
+                    SELECT pv.date_evaluation, p.nom, p.prenom, po.poste_code, po.id
+                    FROM polyvalence pv
+                    JOIN personnel p ON p.id = pv.operateur_id
+                    JOIN postes po ON po.id = pv.poste_id
+                    WHERE pv.id = %s
+                """
+            else:  # prochaine_evaluation
+                query_select = """
+                    SELECT pv.prochaine_evaluation, p.nom, p.prenom, po.poste_code, po.id
+                    FROM polyvalence pv
+                    JOIN personnel p ON p.id = pv.operateur_id
+                    JOIN postes po ON po.id = pv.poste_id
+                    WHERE pv.id = %s
+                """
+
+            cursor.execute(query_select, (poly_id,))
             result = cursor.fetchone()
 
             if result:
@@ -1271,7 +1284,13 @@ class GestionEvaluationDialog(QDialog):
                 poste_id = result[4]
 
                 # Mettre à jour la date
-                cursor.execute(f"UPDATE polyvalence SET {field} = %s WHERE id = %s", (date_iso, poly_id))
+                # ✅ SÉCURITÉ: Construction sécurisée de la requête UPDATE
+                if field == "date_evaluation":
+                    query_update = "UPDATE polyvalence SET date_evaluation = %s WHERE id = %s"
+                else:  # prochaine_evaluation
+                    query_update = "UPDATE polyvalence SET prochaine_evaluation = %s WHERE id = %s"
+
+                cursor.execute(query_update, (date_iso, poly_id))
                 conn.commit()
 
                 # Logger l'action

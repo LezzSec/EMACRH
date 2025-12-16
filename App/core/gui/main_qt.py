@@ -30,6 +30,10 @@ class MainWindow(QMainWindow):
         self.is_drawer_open = False
         self.installEventFilter(self)
 
+        # ✅ OPTIMISATION: Cache pour les filtres de postes (évite requête répétée)
+        self._postes_cache = None
+        self._postes_cache_time = None
+
         # ... reste du code __init__ identique ...
         rootw = QWidget(); self.setCentralWidget(rootw)
         root = QGridLayout(rootw)
@@ -173,8 +177,7 @@ class MainWindow(QMainWindow):
         self.add_drawer_button(drawer_layout, "Planning & Évaluations", self.show_regularisation, 'ghost')
         self.add_drawer_button(drawer_layout, "Historique", self.show_historique, 'ghost')
 
-        if export_day:
-            self.add_drawer_button(drawer_layout, "Exporter les logs", self.export_logs_today, 'ghost')
+        # ✅ Fonction "Exporter les logs" retirée du menu (inutile pour l'utilisateur final)
 
         drawer_layout.addStretch(1)
 
@@ -285,6 +288,10 @@ class MainWindow(QMainWindow):
     def show_poste_form(self):
         from core.gui.creation_modification_poste import CreationModificationPosteDialog
         CreationModificationPosteDialog().exec_()
+        # ✅ Invalider le cache des postes après modification
+        self._postes_cache = None
+        self._postes_cache_time = None
+        self.populate_filters()  # Recharger les filtres
 
     def show_historique(self):
         from core.gui.historique import HistoriqueDialog
@@ -319,27 +326,49 @@ class MainWindow(QMainWindow):
 
     # ================= Données / DB (Optimisées) =================
     def populate_filters(self):
-        """Charge les filtres de postes de manière optimisée."""
-        try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            try:
-                cur.execute("SELECT DISTINCT poste_code FROM postes ORDER BY poste_code;")
-                postes = cur.fetchall()
+        """Charge les filtres de postes de manière optimisée avec cache.
 
-                # Remplir les filtres en une seule passe
-                for (poste,) in postes:
-                    if self.retard_filter.findData(poste) == -1:
-                        self.retard_filter.addItem(poste, poste)
-                        self.next_eval_filter.addItem(poste, poste)
-            finally:
-                cur.close()
-                conn.close()
+        ✅ OPTIMISATION: Utilise un cache pour éviter la requête SQL répétée
+        """
+        try:
+            # Vérifier le cache (valide pendant 5 minutes)
+            import time
+            if self._postes_cache is not None and self._postes_cache_time is not None:
+                cache_age = time.time() - self._postes_cache_time
+                if cache_age < 300:  # Cache valide pendant 5 minutes
+                    postes = self._postes_cache
+                else:
+                    postes = None
+            else:
+                postes = None
+
+            # Si pas de cache, charger depuis la base
+            if postes is None:
+                conn = get_db_connection()
+                cur = conn.cursor()
+                try:
+                    cur.execute("SELECT DISTINCT poste_code FROM postes WHERE visible = 1 ORDER BY poste_code;")
+                    postes = cur.fetchall()
+                    # Mettre en cache
+                    self._postes_cache = postes
+                    self._postes_cache_time = time.time()
+                finally:
+                    cur.close()
+                    conn.close()
+
+            # Remplir les filtres en une seule passe
+            for (poste,) in postes:
+                if self.retard_filter.findData(poste) == -1:
+                    self.retard_filter.addItem(poste, poste)
+                    self.next_eval_filter.addItem(poste, poste)
         except Exception as e:
             print(f"⚠️ Erreur lors du chargement des filtres: {e}")
             
     def load_evaluations(self):
-        """Charge les évaluations en retard et à venir de manière optimisée."""
+        """Charge les évaluations en retard et à venir de manière optimisée.
+
+        ✅ OPTIMISATION v2: Requêtes séparées plus rapides que UNION avec ORDER BY multiple
+        """
         try:
             conn = get_db_connection()
             cur = conn.cursor()
@@ -347,56 +376,65 @@ class MainWindow(QMainWindow):
                 poste_retard = self.retard_filter.currentData()
                 poste_next = self.next_eval_filter.currentData()
 
-                # ✅ OPTIMISATION: Une seule requête avec UNION au lieu de 2 requêtes séparées
-                query = """
-                    (SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation, 'retard' as type
-                     FROM polyvalence poly
-                     JOIN personnel p ON p.id = poly.operateur_id
-                     LEFT JOIN postes pos ON pos.id = poly.poste_id
-                     WHERE poly.prochaine_evaluation < CURDATE()
-                       AND p.statut = 'ACTIF'
-                       {retard_filter}
-                     ORDER BY poly.prochaine_evaluation ASC
-                     LIMIT 10)
-                    UNION ALL
-                    (SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation, 'prochain' as type
-                     FROM polyvalence poly
-                     JOIN personnel p ON p.id = poly.operateur_id
-                     LEFT JOIN postes pos ON pos.id = poly.poste_id
-                     WHERE poly.prochaine_evaluation >= CURDATE()
-                       AND p.statut = 'ACTIF'
-                       {next_filter}
-                     ORDER BY poly.prochaine_evaluation ASC
-                     LIMIT 10)
+                # ✅ REQUÊTE 1: Évaluations en retard (RAPIDE - index sur prochaine_evaluation)
+                query_retard = """
+                    SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
+                    FROM polyvalence poly
+                    INNER JOIN personnel p ON p.id = poly.operateur_id
+                    LEFT JOIN postes pos ON pos.id = poly.poste_id
+                    WHERE poly.prochaine_evaluation < CURDATE()
+                      AND p.statut = 'ACTIF'
+                      {retard_filter}
+                    ORDER BY poly.prochaine_evaluation ASC
+                    LIMIT 10
                 """
 
                 retard_filter = "AND pos.poste_code = %s" if poste_retard else ""
+                query_retard = query_retard.format(retard_filter=retard_filter)
+
+                params_retard = (poste_retard,) if poste_retard else ()
+                cur.execute(query_retard, params_retard)
+                retard = cur.fetchall()
+
+                # ✅ REQUÊTE 2: Prochaines évaluations (RAPIDE - index sur prochaine_evaluation)
+                query_next = """
+                    SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
+                    FROM polyvalence poly
+                    INNER JOIN personnel p ON p.id = poly.operateur_id
+                    LEFT JOIN postes pos ON pos.id = poly.poste_id
+                    WHERE poly.prochaine_evaluation >= CURDATE()
+                      AND p.statut = 'ACTIF'
+                      {next_filter}
+                    ORDER BY poly.prochaine_evaluation ASC
+                    LIMIT 10
+                """
+
                 next_filter = "AND pos.poste_code = %s" if poste_next else ""
-                query = query.format(retard_filter=retard_filter, next_filter=next_filter)
+                query_next = query_next.format(next_filter=next_filter)
 
-                params = []
-                if poste_retard:
-                    params.append(poste_retard)
-                if poste_next:
-                    params.append(poste_next)
+                params_next = (poste_next,) if poste_next else ()
+                cur.execute(query_next, params_next)
+                prochaines = cur.fetchall()
 
-                cur.execute(query, tuple(params))
-                results = cur.fetchall()
-
-                # Séparer les résultats
-                retard = [r[:4] for r in results if r[4] == 'retard']
-                prochaines = [r[:4] for r in results if r[4] == 'prochain']
-
-                # Rendu UI optimisé
+                # ✅ Rendu UI optimisé (batch insert pour éviter les repaints multiples)
                 self.retard_list.clear()
+                items_retard = []
                 for nom, prenom, poste, date_ev in retard:
                     date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
-                    self.retard_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
+                    items_retard.append(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
+
+                for item_text in items_retard:
+                    self.retard_list.addItem(item_text)
 
                 self.next_eval_list.clear()
+                items_next = []
                 for nom, prenom, poste, date_ev in prochaines:
                     date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
-                    self.next_eval_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
+                    items_next.append(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
+
+                for item_text in items_next:
+                    self.next_eval_list.addItem(item_text)
+
             finally:
                 cur.close()
                 conn.close()

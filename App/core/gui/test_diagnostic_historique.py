@@ -208,15 +208,8 @@ def test_5_verifier_personnel_et_postes():
             print(f"✅ Table 'personnel' existe - {count} opérateurs actifs")
             table_operateurs = 'personnel'
         else:
-            cursor.execute("SHOW TABLES LIKE 'operateurs'")
-            if cursor.fetchone():
-                cursor.execute("SELECT COUNT(*) FROM operateurs WHERE statut = 'ACTIF'")
-                count = cursor.fetchone()[0]
-                print(f"⚠️  Table 'operateurs' existe (ancienne version) - {count} opérateurs actifs")
-                table_operateurs = 'operateurs'
-            else:
-                print("❌ Aucune table pour les opérateurs !")
-                return False
+            print("❌ Table 'personnel' n'existe pas !")
+            return False
         
         # Vérifier postes
         cursor.execute("SHOW TABLES LIKE 'postes'")
@@ -248,17 +241,19 @@ def test_6_simuler_save_changes():
         conn = get_db_connection()
         cursor = conn.cursor()
         
-        # Déterminer quelle table utiliser
-        cursor.execute("SHOW TABLES LIKE 'personnel'")
-        if cursor.fetchone():
-            table_name = 'personnel'
-        else:
-            table_name = 'operateurs'
-        
+        # Utiliser la table personnel
+        table_name = 'personnel'
         print(f"Utilisation de la table : {table_name}")
-        
+
+        # ✅ SÉCURITÉ: Whitelist des tables autorisées
+        ALLOWED_TABLES = ['personnel', 'operateurs']
+        if table_name not in ALLOWED_TABLES:
+            print(f"❌ Table non autorisée : {table_name}")
+            return False
+
         # Récupérer un opérateur et un poste
-        cursor.execute(f"SELECT id, nom, prenom FROM {table_name} WHERE statut = 'ACTIF' LIMIT 1")
+        # ✅ SÉCURITÉ: Requête sécurisée sans interpolation de nom de table
+        cursor.execute("SELECT id, nom, prenom FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
         operateur = cursor.fetchone()
         
         if not operateur:

@@ -11,25 +11,26 @@ from typing import Optional, List, Dict, Tuple
 import mimetypes
 
 from core.db.configbd import get_connection
+from core.utils.app_paths import get_documents_dir
 
 
 class DocumentService:
     """Service de gestion des documents des opérateurs"""
-    
+
     def __init__(self, base_path: str = None):
         """
         Initialise le service documentaire
-        
+
         Args:
             base_path: Chemin de base pour le stockage des documents
-                      Par défaut: ./documents/ depuis la racine de l'application
+                      Par défaut: Utilise get_documents_dir() (compatible .exe)
         """
         if base_path is None:
-            # Chemin par défaut relatif à l'application
-            self.base_path = Path("documents")
+            # Chemin par défaut compatible dev et .exe
+            self.base_path = get_documents_dir()
         else:
             self.base_path = Path(base_path)
-        
+
         # Créer le répertoire de base s'il n'existe pas
         self.base_path.mkdir(parents=True, exist_ok=True)
     

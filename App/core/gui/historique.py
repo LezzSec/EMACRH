@@ -32,7 +32,7 @@ def get_entity_name(conn, entity_type: str, entity_id) -> str:
     try:
         cur = conn.cursor(dictionary=True)
         if entity_type == "operateur":
-            cur.execute("SELECT nom, prenom FROM operateurs WHERE id = %s", (entity_id,))
+            cur.execute("SELECT nom, prenom FROM personnel WHERE id = %s", (entity_id,))
             row = cur.fetchone()
             if row:
                 return f"{row['prenom']} {row['nom']}"
@@ -149,7 +149,7 @@ class DetailDialog(QDialog):
             action_text = "Ajout de compétence"
             color = "#4caf50"
         elif action == "UPDATE":
-            icon = "✎"
+            icon = "✏️"
             action_text = "Modification de compétence"
             color = "#ffc107"
         elif action == "DELETE":
@@ -341,7 +341,7 @@ class ActionCard(QFrame):
         elif action == "UPDATE":
             bg_color = "#fff8e1"  # Jaune très clair
             border_color = "#ffc107"  # Jaune/orange
-            icon = "✎"
+            icon = "✏️"
             icon_color = "#f57f17"
         elif action == "DELETE":
             bg_color = "#ffebee"  # Rouge très clair

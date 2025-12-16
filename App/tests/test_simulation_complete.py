@@ -147,21 +147,17 @@ def test_database_schema(result: TestResult):
         else:
             result.add_pass()
 
-        # Vérification de la cohérence personnel/operateurs
-        print("\n  → Vérification cohérence personnel/operateurs...")
+        # Vérification du nombre de personnel
+        print("\n  → Vérification table personnel...")
         cur.execute("SELECT COUNT(*) FROM personnel")
         count_personnel = cur.fetchone()[0]
-        cur.execute("SELECT COUNT(*) FROM operateurs")
-        count_operateurs = cur.fetchone()[0]
 
         print(f"    Personnel: {count_personnel} enregistrements")
-        print(f"    Operateurs: {count_operateurs} enregistrements")
 
-        if count_personnel != count_operateurs:
-            result.add_warning("Tables personnel/operateurs",
-                             f"Nombre différent d'enregistrements (personnel: {count_personnel}, operateurs: {count_operateurs})")
-        else:
+        if count_personnel > 0:
             result.add_pass()
+        else:
+            result.add_warning("Table personnel", "Aucun personnel dans la base de données")
 
         cur.close()
         conn.close()

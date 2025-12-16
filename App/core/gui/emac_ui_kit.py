@@ -31,24 +31,24 @@ from PyQt5 import QtWidgets, QtGui, QtCore
 # Thèmes
 # =============================
 _THEME_BASE = """
-* { font-family: 'Segoe UI', 'Roboto', 'Helvetica', 'Arial'; }
+* {{ font-family: 'Segoe UI', 'Roboto', 'Helvetica', 'Arial'; }}
 
-QMainWindow { background: {BG}; }
+QMainWindow {{ background: {BG}; }}
 
 /* FIX: Ajout de QDialog pour que les fenêtres secondaires s'inversent en Dark Mode. */
-QWidget, QDialog { 
+QWidget, QDialog {{
     color: {TXT};
     background: {BG};
-}
+}}
 
-QComboBox, QLineEdit {
+QComboBox, QLineEdit {{
     background: {BG_INPUT};
     border: 1px solid {BDR};
     border-radius: 8px;
     padding: 6px 8px;
     color: {TXT};
-}
-QComboBox::drop-down {
+}}
+QComboBox::drop-down {{
     subcontrol-origin: padding;
     subcontrol-position: top right;
     width: 20px;
@@ -57,65 +57,65 @@ QComboBox::drop-down {
     border-left-style: solid;
     border-top-right-radius: 8px;
     border-bottom-right-radius: 8px;
-}
-QComboBox::down-arrow {
+}}
+QComboBox::down-arrow {{
     image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiN7VFhUfSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iNiA5IDEyIDE1IDE4IDkiPjwvcG9seWxpbmU+PC9zdmc+);
     subcontrol-position: center;
     width: 16px;
     height: 16px;
-}
-QComboBox:on { /* style de QComboBox lorsque la liste est déroulée */
+}}
+QComboBox:on {{ /* style de QComboBox lorsque la liste est déroulée */
     padding-top: 2px;
     padding-left: 9px;
-}
+}}
 
-QListWidget {
+QListWidget {{
     background: {BG_INPUT};
     border: 1px solid {BDR};
     border-radius: 8px;
-}
-QListWidget::item { padding: 6px; }
-QListWidget::item:selected { 
-    background: {ACC_BG}; 
+}}
+QListWidget::item {{ padding: 6px; }}
+QListWidget::item:selected {{
+    background: {ACC_BG};
     color: {ACC_TXT};
-}
-QListWidget::item:hover { background: {HOVER}; }
+}}
+QListWidget::item:hover {{ background: {HOVER}; }}
 
 /* Boutons */
-QPushButton {
+QPushButton {{
     background: {BG_INPUT};
     border: 1px solid {BDR};
     border-radius: 8px;
     padding: 8px 12px;
     color: {TXT};
-}
-QPushButton:hover {
+}}
+QPushButton:hover {{
     background: {HOVER};
     border-color: {BDR_STRONG};
-}
-QPushButton:pressed { background: {BDR}; }
+}}
+QPushButton:pressed {{ background: {BDR}; }}
 
 /* Bouton Primaire (Couleur forte) */
-QPushButton[class="primary"] {
+QPushButton[class="primary"] {{
     background: {PRI};
     color: #ffffff;
     border: 1px solid {PRI};
     font-weight: 600;
-}
-QPushButton[class="primary"]:hover { background: {PRI_H}; border-color: {PRI_H}; }
+}}
+QPushButton[class="primary"]:hover {{ background: {PRI_H}; border-color: {PRI_H}; }}
 
 /* Barre de défilement (Scrollbar) */
-QScrollBar:vertical { width: 10px; background: transparent; }
-QScrollBar::handle:vertical { min-height: 24px; background: {BDR}; border-radius: 5px; }
-QScrollBar::handle:vertical:hover { background: {BDR_STRONG}; }
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
+QScrollBar:vertical {{ width: 10px; background: transparent; }}
+QScrollBar::handle:vertical {{ min-height: 24px; background: {BDR}; border-radius: 5px; }}
+QScrollBar::handle:vertical:hover {{ background: {BDR_STRONG}; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{{{ height: 0; }}}}
 """
 
 _THEME_LIGHT = {
-    "BG": "#f6f7fb", 
+    "BG": "#f6f7fb",
     "BG_CARD": "#ffffff",
     "BG_INPUT": "#ffffff",
-    "TXT": "#111827", 
+    "TXT": "#111827",
     "TXT_DIM": "#6b7280",
     "BDR": "#e5e7eb",
     "BDR_STRONG": "#d1d5db",
@@ -124,14 +124,23 @@ _THEME_LIGHT = {
     "PRI_H": "#0b1220",
     "ACC_BG": "#e8eefc",
     "ACC_TXT": "#111827",
+    # ✅ Couleurs sémantiques
+    "SUCCESS": "#10b981",
+    "SUCCESS_BG": "#d1fae5",
+    "WARNING": "#f59e0b",
+    "WARNING_BG": "#fef3c7",
+    "ERROR": "#ef4444",
+    "ERROR_BG": "#fee2e2",
+    "INFO": "#3b82f6",
+    "INFO_BG": "#dbeafe",
 }
 
 _THEME_DARK = {
     # Palette sombre utilisée pour la désactivation de l'ombre
-    "BG": "#121212", 
+    "BG": "#121212",
     "BG_CARD": "#1e1e1e",
     "BG_INPUT": "#0a0a0a",
-    "TXT": "#e0e0e0", 
+    "TXT": "#e0e0e0",
     "TXT_DIM": "#9c9c9c",
     "BDR": "#2c2c2c",
     "BDR_STRONG": "#3f3f3f",
@@ -140,6 +149,15 @@ _THEME_DARK = {
     "PRI_H": "#4338ca",
     "ACC_BG": "#374151",
     "ACC_TXT": "#e0e0e0",
+    # ✅ Couleurs sémantiques
+    "SUCCESS": "#10b981",
+    "SUCCESS_BG": "#064e3b",
+    "WARNING": "#f59e0b",
+    "WARNING_BG": "#78350f",
+    "ERROR": "#ef4444",
+    "ERROR_BG": "#7f1d1d",
+    "INFO": "#3b82f6",
+    "INFO_BG": "#1e3a8a",
 }
 
 def get_stylesheet(theme="light"):
@@ -150,13 +168,25 @@ def get_stylesheet(theme="light"):
         colors = _THEME_DARK
     else:
         colors = _THEME_LIGHT
-    
-    # Remplacer {TXT} dans l'icône de la flèche du QComboBox avec la couleur du thème
-    arrow_svg_template = "image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5uZy92ZzIwMDAvc3ZnIiB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIje1RYVH0iIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjYgOSAxMiAxNSAxOCA5Ij48L3BvbHlsaW5lPjwvc3ZnPg==);"
-    arrow_svg = arrow_svg_template.replace('{TXT}', colors['TXT'].lstrip('#'))
 
-    # NOTE: J'ai retiré le placeholder commenté du QSS pour éviter toute confusion lors du formatage.
-    return _THEME_BASE.format(**colors).replace("image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiN7VFhUfSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iNiA5IDEyIDE1IDE4IDkiPjwvcG9seWxpbmU+PC9zdmc+);", arrow_svg)
+    # Remplacer d'abord le SVG avec placeholder temporaire pour éviter les conflits de formatage
+    stylesheet = _THEME_BASE.replace(
+        "image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiN7VFhUfSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iNiA5IDEyIDE1IDE4IDkiPjwvcG9seWxpbmU+PC9zdmc+);",
+        "___SVG_ARROW___"
+    )
+
+    # Formater avec les couleurs
+    stylesheet = stylesheet.format(**colors)
+
+    # Générer l'icône de la flèche du QComboBox avec la couleur du thème
+    txt_color = colors['TXT'].lstrip('#')
+    arrow_svg = f"image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiMje3R4dF9jb2xvcn0iIHN0cm9rZS13aWR0aD0iMS41IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiPjxwb2x5bGluZSBwb2ludHM9IjYgOSAxMiAxNSAxOCA5Ij48L3BvbHlsaW5lPjwvc3ZnPg==);"
+    arrow_svg = arrow_svg.replace("{txt_color}", txt_color)
+
+    # Remplacer le placeholder par le vrai SVG
+    stylesheet = stylesheet.replace("___SVG_ARROW___", arrow_svg)
+
+    return stylesheet
 
 
 # =============================
@@ -558,6 +588,206 @@ def add_fullscreen_button(dialog, button_parent=None, style="compact"):
                 button_parent.layout().addWidget(fullscreen_btn)
 
     return fullscreen_btn
+
+
+# =============================
+# Nouveaux Composants (Package Essentiel)
+# =============================
+
+class EmacBadge(QtWidgets.QLabel):
+    """
+    Badge de notification/compteur stylisé.
+
+    Usage:
+        badge = EmacBadge("12", variant="error")
+        badge = EmacBadge("Nouveau", variant="info")
+        badge = EmacBadge("3/4", variant="success")
+    """
+    def __init__(self, text: str = "0", variant: str = "default", parent=None):
+        super().__init__(text, parent)
+        self.setObjectName("EmacBadge")
+        self.setAlignment(QtCore.Qt.AlignCenter)
+
+        # Styles selon le variant
+        styles = {
+            "default": ("background: #6b7280; color: #ffffff;", 4),
+            "primary": ("background: #0f172a; color: #ffffff;", 6),
+            "success": ("background: #10b981; color: #ffffff;", 6),
+            "warning": ("background: #f59e0b; color: #111827;", 6),
+            "error": ("background: #ef4444; color: #ffffff;", 6),
+            "info": ("background: #3b82f6; color: #ffffff;", 6),
+        }
+
+        bg_color, padding = styles.get(variant, styles["default"])
+
+        self.setStyleSheet(f"""
+            QLabel#EmacBadge {{
+                {bg_color}
+                border-radius: 10px;
+                padding: 2px {padding}px;
+                font-size: 11px;
+                font-weight: 600;
+                min-width: 20px;
+            }}
+        """)
+
+        # Taille minimale adaptative
+        self.setMinimumHeight(20)
+
+
+class EmacAlert(QtWidgets.QFrame):
+    """
+    Bandeau d'alerte/information stylisé.
+
+    Usage:
+        alert = EmacAlert("Contrat expire dans 5 jours !", variant="warning")
+        alert = EmacAlert("Sauvegarde réussie", variant="success", dismissible=True)
+        layout.addWidget(alert)
+    """
+    def __init__(self, message: str, variant: str = "info", dismissible: bool = False, parent=None):
+        super().__init__(parent)
+        self.setObjectName("EmacAlert")
+        self.setFrameShape(QtWidgets.QFrame.NoFrame)
+
+        # Couleurs selon le variant
+        styles = {
+            "success": ("#10b981", "#d1fae5", "#065f46"),
+            "warning": ("#f59e0b", "#fef3c7", "#92400e"),
+            "error": ("#ef4444", "#fee2e2", "#991b1b"),
+            "info": ("#3b82f6", "#dbeafe", "#1e3a8a"),
+        }
+
+        border_color, bg_color, text_color = styles.get(variant, styles["info"])
+
+        self.setStyleSheet(f"""
+            QFrame#EmacAlert {{
+                background: {bg_color};
+                border-left: 4px solid {border_color};
+                border-radius: 8px;
+                padding: 12px 16px;
+            }}
+        """)
+
+        layout = QtWidgets.QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        # Icône selon le variant
+        icons = {
+            "success": "✓",
+            "warning": "⚠",
+            "error": "✕",
+            "info": "ℹ",
+        }
+
+        icon_label = QtWidgets.QLabel(icons.get(variant, "ℹ"))
+        icon_label.setStyleSheet(f"color: {text_color}; font-size: 16px; font-weight: bold;")
+        layout.addWidget(icon_label)
+
+        # Message
+        message_label = QtWidgets.QLabel(message)
+        message_label.setStyleSheet(f"color: {text_color}; font-size: 13px;")
+        message_label.setWordWrap(True)
+        layout.addWidget(message_label, 1)
+
+        # Bouton de fermeture optionnel
+        if dismissible:
+            close_btn = QtWidgets.QPushButton("✕")
+            close_btn.setFixedSize(20, 20)
+            close_btn.setCursor(QtCore.Qt.PointingHandCursor)
+            close_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    border: none;
+                    color: {text_color};
+                    font-size: 16px;
+                }}
+                QPushButton:hover {{
+                    background: rgba(0, 0, 0, 0.1);
+                    border-radius: 4px;
+                }}
+            """)
+            close_btn.clicked.connect(lambda: self.setVisible(False))
+            layout.addWidget(close_btn)
+
+
+class EmacChip(QtWidgets.QLabel):
+    """
+    Tag/Chip stylisé pour catégories, niveaux, etc.
+
+    Usage:
+        chip = EmacChip("Niveau 3", variant="success")
+        chip = EmacChip("Formation", variant="info", closable=True)
+        chip.closed.connect(lambda: print("Chip fermé"))
+    """
+
+    closed = QtCore.pyqtSignal()  # Signal émis quand le chip est fermé
+
+    def __init__(self, text: str, variant: str = "default", closable: bool = False, parent=None):
+        super().__init__(parent)
+        self.setObjectName("EmacChip")
+
+        # Conteneur avec layout horizontal
+        self._container = QtWidgets.QWidget(self)
+        self._layout = QtWidgets.QHBoxLayout(self._container)
+        self._layout.setContentsMargins(8, 4, 8, 4)
+        self._layout.setSpacing(4)
+
+        # Couleurs selon le variant
+        styles = {
+            "default": ("#6b7280", "#f3f4f6", "#111827"),
+            "primary": ("#0f172a", "#e8eefc", "#0f172a"),
+            "success": ("#10b981", "#d1fae5", "#065f46"),
+            "warning": ("#f59e0b", "#fef3c7", "#92400e"),
+            "error": ("#ef4444", "#fee2e2", "#991b1b"),
+            "info": ("#3b82f6", "#dbeafe", "#1e3a8a"),
+            "niveau1": ("#ef4444", "#fee2e2", "#991b1b"),  # Rouge
+            "niveau2": ("#f59e0b", "#fef3c7", "#92400e"),  # Orange
+            "niveau3": ("#3b82f6", "#dbeafe", "#1e3a8a"),  # Bleu
+            "niveau4": ("#10b981", "#d1fae5", "#065f46"),  # Vert
+        }
+
+        border_color, bg_color, text_color = styles.get(variant, styles["default"])
+
+        self.setStyleSheet(f"""
+            QLabel#EmacChip {{
+                background: {bg_color};
+                border: 1px solid {border_color};
+                border-radius: 12px;
+                font-size: 12px;
+                font-weight: 500;
+            }}
+        """)
+
+        # Label de texte
+        text_label = QtWidgets.QLabel(text)
+        text_label.setStyleSheet(f"color: {text_color}; border: none; background: transparent;")
+        self._layout.addWidget(text_label)
+
+        # Bouton de fermeture optionnel
+        if closable:
+            close_btn = QtWidgets.QPushButton("✕")
+            close_btn.setFixedSize(14, 14)
+            close_btn.setCursor(QtCore.Qt.PointingHandCursor)
+            close_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent;
+                    border: none;
+                    color: {text_color};
+                    font-size: 12px;
+                    padding: 0;
+                }}
+                QPushButton:hover {{
+                    background: rgba(0, 0, 0, 0.1);
+                    border-radius: 7px;
+                }}
+            """)
+            close_btn.clicked.connect(lambda: (self.setVisible(False), self.closed.emit()))
+            self._layout.addWidget(close_btn)
+
+        # Ajuster la taille
+        self._container.adjustSize()
+        self.setFixedSize(self._container.sizeHint())
 
 
 if __name__ == "__main__":

@@ -6,7 +6,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont
 import sys
-import pandas as pd
+# ✅ OPTIMISATION : Import paresseux de pandas (uniquement si export Excel nécessaire)
+# import pandas as pd  # Déplacé dans les fonctions qui l'utilisent
 from datetime import datetime, timedelta
 from core.gui.historique import HistoriqueDialog
 from core.db.configbd import get_connection as get_db_connection
@@ -863,50 +864,75 @@ class GrillesDialog(QDialog):
 
     # ----------------- Chargement -----------------
     def load_data(self):
-        """Charge opérateurs/postes + prépare 7 lignes de synthèse en bas + remplit la ligne Besoins."""
+        """Charge opérateurs/postes + prépare 7 lignes de synthèse en bas + remplit la ligne Besoins.
+
+        ✅ OPTIMISÉ : Utilise 3 requêtes séparées au lieu d'un CROSS JOIN massif
+        """
         connection = get_db_connection()
         cursor, dict_mode = _cursor(connection)
 
-        query = """
-        SELECT
-            o.id as operateur_id,
-            o.nom,
-            o.prenom,
-            p.id as poste_id,
-            p.poste_code,
-            COALESCE(pv.niveau, '') AS niveau
-        FROM personnel o
-        CROSS JOIN postes p
-        LEFT JOIN polyvalence pv ON o.id = pv.operateur_id
-            AND p.id = pv.poste_id
-        WHERE o.statut = 'ACTIF'
-          AND o.matricule IS NOT NULL
-          AND o.matricule != ''
-          AND p.visible = 1
-        ORDER BY o.nom, o.prenom, p.poste_code;
-        """
-
-
         try:
-            cursor.execute(query)
-            rows = _rows(cursor, dict_mode)
+            # ✅ REQUÊTE 1 : Liste des opérateurs actifs (RAPIDE)
+            cursor.execute("""
+                SELECT id, nom, prenom
+                FROM personnel
+                WHERE statut = 'ACTIF'
+                  AND matricule IS NOT NULL
+                  AND matricule != ''
+                ORDER BY nom, prenom
+            """)
+            operateurs_rows = _rows(cursor, dict_mode)
 
-            # --- indexation opérateurs/postes ---
+            # ✅ REQUÊTE 2 : Liste des postes visibles (RAPIDE)
+            cursor.execute("""
+                SELECT id, poste_code
+                FROM postes
+                WHERE visible = 1
+                ORDER BY poste_code
+            """)
+            postes_rows = _rows(cursor, dict_mode)
+
+            # ✅ REQUÊTE 3 : Seulement les polyvalences existantes (RAPIDE - pas de CROSS JOIN)
+            cursor.execute("""
+                SELECT operateur_id, poste_id, niveau
+                FROM polyvalence
+                WHERE operateur_id IN (
+                    SELECT id FROM personnel
+                    WHERE statut = 'ACTIF'
+                      AND matricule IS NOT NULL
+                      AND matricule != ''
+                )
+                AND poste_id IN (
+                    SELECT id FROM postes WHERE visible = 1
+                )
+            """)
+            polyvalences_rows = _rows(cursor, dict_mode)
+
+            # ✅ OPTIMISATION : Construire les structures de données depuis les 3 requêtes
+            # Créer un dictionnaire de polyvalences indexé par (operateur_id, poste_id)
+            polyvalences_dict = {}
+            for pv in polyvalences_rows:
+                key = (pv['operateur_id'], pv['poste_id'])
+                polyvalences_dict[key] = pv['niveau']
+
+            # Construire la liste des opérateurs
             self.operateurs = []
             operateurs_dict = {}
-            postes_set = set()
+            for op in operateurs_rows:
+                nom_complet = f"{op['nom']} {op['prenom']}".strip()
+                operateurs_dict[nom_complet] = {'id': op['id'], 'postes': {}}
+                self.operateurs.append((op['id'], nom_complet))
 
-            for row in rows:
-                nom_complet = f"{row['nom']} {row['prenom']}".strip()
-                if nom_complet not in operateurs_dict:
-                    operateurs_dict[nom_complet] = {'id': row['operateur_id'], 'postes': {}}
-                    self.operateurs.append((row['operateur_id'], nom_complet))
+            # Construire la liste des postes
+            self.postes = [(p['id'], p['poste_code']) for p in postes_rows]
 
-                if row['poste_code']:
-                    postes_set.add((row['poste_id'], row['poste_code']))
-                    operateurs_dict[nom_complet]['postes'][row['poste_code']] = row['niveau']
-
-            self.postes = sorted(list(postes_set), key=lambda x: x[1])
+            # Remplir les niveaux de polyvalence pour chaque opérateur
+            for nom_complet, data in operateurs_dict.items():
+                op_id = data['id']
+                for poste_id, poste_code in self.postes:
+                    key = (op_id, poste_id)
+                    niveau = polyvalences_dict.get(key, '')
+                    data['postes'][poste_code] = niveau
 
             # --- dimensions : #ops + 7 lignes de synthèse ---
             n_ops = len(operateurs_dict)

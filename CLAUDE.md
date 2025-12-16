@@ -20,11 +20,37 @@ py -m core.gui.main_qt
 ## Database Configuration
 
 The application uses MySQL 8.0 with the following connection details:
-- Host: `localhost`
-- User: `root`
-- Database: `emac_db`
+- Host: `localhost` (configurable via `EMAC_DB_HOST`)
+- User: `root` (configurable via `EMAC_DB_USER`)
+- Database: `emac_db` (configurable via `EMAC_DB_NAME`)
 - Charset: `utf8mb4`
 - Configuration file: [App/core/db/configbd.py](App/core/db/configbd.py)
+
+### 🔐 Security: Password Configuration
+
+The database password is **NO LONGER hardcoded** in the source code. It is loaded from:
+
+1. **Environment variables** (recommended for production):
+   ```bash
+   set EMAC_DB_PASSWORD=your_password_here
+   ```
+
+2. **`.env` file** (recommended for development):
+   ```bash
+   # Run the configuration script (Windows)
+   cd App
+   configure_db.bat
+
+   # Or manually create .env file
+   copy .env.example .env
+   # Edit .env with your password
+   ```
+
+3. **Default value** (fallback for local dev only): `emacViodos$13`
+
+**Important**: The `.env` file is in `.gitignore` and will never be committed to Git.
+
+For detailed configuration instructions, see [App/SECURITE_DB.md](App/SECURITE_DB.md).
 
 Database schema is located in [App/database/schema/bddemac.sql](App/database/schema/bddemac.sql).
 

@@ -56,7 +56,7 @@ CREATE TABLE `historique` (
   PRIMARY KEY (`id`),
   KEY `operateur_id` (`operateur_id`),
   KEY `poste_id` (`poste_id`),
-  CONSTRAINT `historique_ibfk_1` FOREIGN KEY (`operateur_id`) REFERENCES `operateurs` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `historique_ibfk_1` FOREIGN KEY (`operateur_id`) REFERENCES `personnel` (`id`) ON DELETE CASCADE,
   CONSTRAINT `historique_ibfk_2` FOREIGN KEY (`poste_id`) REFERENCES `postes` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=12 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
@@ -71,13 +71,13 @@ LOCK TABLES `historique` WRITE;
 UNLOCK TABLES;
 
 --
--- Table structure for table `operateurs`
+-- Table structure for table `personnel`
 --
 
-DROP TABLE IF EXISTS `operateurs`;
+DROP TABLE IF EXISTS `personnel`;
 /*!40101 SET @saved_cs_client     = @@character_set_client */;
 /*!50503 SET character_set_client = utf8mb4 */;
-CREATE TABLE `operateurs` (
+CREATE TABLE `personnel` (
   `id` int NOT NULL AUTO_INCREMENT,
   `nom` varchar(255) DEFAULT NULL,
   `prenom` varchar(255) DEFAULT NULL,
@@ -87,13 +87,13 @@ CREATE TABLE `operateurs` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
--- Dumping data for table `operateurs`
+-- Dumping data for table `personnel`
 --
 
-LOCK TABLES `operateurs` WRITE;
-/*!40000 ALTER TABLE `operateurs` DISABLE KEYS */;
-INSERT INTO `operateurs` VALUES (1,'ACEDO','Sebastien','INACTIF'),(2,'AGUERRE','Stéphane','ACTIF'),(3,'BAGDASARIANI','Eduardi','ACTIF'),(4,'BEHEREGARAY','Jean Michel','INACTIF'),(5,'BENGOCHEA','Emmanuel','ACTIF'),(6,'BIDONDO','Anthony','ACTIF'),(7,'BIDONDO','Michael','ACTIF'),(8,'BIDONDO','Pierre','ACTIF'),(9,'BRANKAER','Alexandre','ACTIF'),(10,'CAMPANE','Jean François','ACTIF'),(11,'CARRICABURU','Alain','ACTIF'),(12,'CAZENAVE','Jean','ACTIF'),(13,'CORDANI','Jean Marie','ACTIF'),(14,'CORREIA DOS SANTOS','Jorg','ACTIF'),(15,'COSTA','Daniel','ACTIF'),(16,'COUCHINAVE','Eric','ACTIF'),(17,'COURTIES','Doryan','ACTIF'),(18,'DA COSTA','Sergio','ACTIF'),(19,'DAVIES','Edouard','INACTIF'),(20,'DELGADO','Cedric','ACTIF'),(21,'DEVAUX','David','ACTIF'),(22,'DOS SANTOS','Charly','ACTIF'),(23,'ETCHEVERRY','Frédéric','ACTIF'),(24,'FERNANDEZ','Thomas','ACTIF'),(25,'GONOT','Damien','ACTIF'),(26,'GOUVINHAS','Alexandre','ACTIF'),(27,'GUIMON','Alain','ACTIF'),(28,'LUQUET','François','ACTIF'),(29,'MARCADIEU','Cedric','ACTIF'),(30,'MARTA','Frédéric','ACTIF'),(31,'MERCIRIS','Theo','INACTIF'),(32,'MILAGE','Alban','ACTIF'),(33,'MOLUS','Sonia','ACTIF'),(34,'MONTOIS','Xabi','ACTIF'),(35,'MORIAT','Andre','INACTIF'),(36,'MOUSTROUS','Herve','ACTIF'),(37,'ORDUNA','Pierre','ACTIF'),(38,'OYHENART','Nicolas','ACTIF'),(39,'PEREZ','Xavier','ACTIF'),(40,'POCHELU','André Maurice','ACTIF'),(41,'POISSONNET','Jean Louis','ACTIF'),(42,'POUTOU','Eldon Tresor','ACTIF'),(43,'RICE','Matthew','ACTIF'),(44,'SALLETTE','Frédéric','ACTIF'),(45,'SARALEGUI','Eric','ACTIF'),(46,'SERVANT','Mikaël','ACTIF'),(47,'SICRE','Pierre','ACTIF'),(48,'TRADERE','Jonathan','ACTIF'),(49,'UNANUA','Dominique','ACTIF'),(50,'URRUTIA','Laurent','ACTIF'),(51,'VASSEUR','Joffrey','ACTIF'),(52,'VERGE','Olivier','ACTIF'),(76,'VARIN','Fabien','ACTIF');
-/*!40000 ALTER TABLE `operateurs` ENABLE KEYS */;
+LOCK TABLES `personnel` WRITE;
+/*!40000 ALTER TABLE `personnel` DISABLE KEYS */;
+INSERT INTO `personnel` VALUES (1,'ACEDO','Sebastien','INACTIF'),(2,'AGUERRE','Stéphane','ACTIF'),(3,'BAGDASARIANI','Eduardi','ACTIF'),(4,'BEHEREGARAY','Jean Michel','INACTIF'),(5,'BENGOCHEA','Emmanuel','ACTIF'),(6,'BIDONDO','Anthony','ACTIF'),(7,'BIDONDO','Michael','ACTIF'),(8,'BIDONDO','Pierre','ACTIF'),(9,'BRANKAER','Alexandre','ACTIF'),(10,'CAMPANE','Jean François','ACTIF'),(11,'CARRICABURU','Alain','ACTIF'),(12,'CAZENAVE','Jean','ACTIF'),(13,'CORDANI','Jean Marie','ACTIF'),(14,'CORREIA DOS SANTOS','Jorg','ACTIF'),(15,'COSTA','Daniel','ACTIF'),(16,'COUCHINAVE','Eric','ACTIF'),(17,'COURTIES','Doryan','ACTIF'),(18,'DA COSTA','Sergio','ACTIF'),(19,'DAVIES','Edouard','INACTIF'),(20,'DELGADO','Cedric','ACTIF'),(21,'DEVAUX','David','ACTIF'),(22,'DOS SANTOS','Charly','ACTIF'),(23,'ETCHEVERRY','Frédéric','ACTIF'),(24,'FERNANDEZ','Thomas','ACTIF'),(25,'GONOT','Damien','ACTIF'),(26,'GOUVINHAS','Alexandre','ACTIF'),(27,'GUIMON','Alain','ACTIF'),(28,'LUQUET','François','ACTIF'),(29,'MARCADIEU','Cedric','ACTIF'),(30,'MARTA','Frédéric','ACTIF'),(31,'MERCIRIS','Theo','INACTIF'),(32,'MILAGE','Alban','ACTIF'),(33,'MOLUS','Sonia','ACTIF'),(34,'MONTOIS','Xabi','ACTIF'),(35,'MORIAT','Andre','INACTIF'),(36,'MOUSTROUS','Herve','ACTIF'),(37,'ORDUNA','Pierre','ACTIF'),(38,'OYHENART','Nicolas','ACTIF'),(39,'PEREZ','Xavier','ACTIF'),(40,'POCHELU','André Maurice','ACTIF'),(41,'POISSONNET','Jean Louis','ACTIF'),(42,'POUTOU','Eldon Tresor','ACTIF'),(43,'RICE','Matthew','ACTIF'),(44,'SALLETTE','Frédéric','ACTIF'),(45,'SARALEGUI','Eric','ACTIF'),(46,'SERVANT','Mikaël','ACTIF'),(47,'SICRE','Pierre','ACTIF'),(48,'TRADERE','Jonathan','ACTIF'),(49,'UNANUA','Dominique','ACTIF'),(50,'URRUTIA','Laurent','ACTIF'),(51,'VASSEUR','Joffrey','ACTIF'),(52,'VERGE','Olivier','ACTIF'),(76,'VARIN','Fabien','ACTIF');
+/*!40000 ALTER TABLE `personnel` ENABLE KEYS */;
 UNLOCK TABLES;
 
 --
@@ -113,7 +113,7 @@ CREATE TABLE `polyvalence` (
   PRIMARY KEY (`id`),
   KEY `operateur_id` (`operateur_id`),
   KEY `poste_id` (`poste_id`),
-  CONSTRAINT `polyvalence_ibfk_1` FOREIGN KEY (`operateur_id`) REFERENCES `operateurs` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `polyvalence_ibfk_1` FOREIGN KEY (`operateur_id`) REFERENCES `personnel` (`id`) ON DELETE CASCADE,
   CONSTRAINT `polyvalence_ibfk_2` FOREIGN KEY (`poste_id`) REFERENCES `postes` (`id`) ON DELETE CASCADE,
   CONSTRAINT `polyvalence_chk_1` CHECK ((`niveau` between 1 and 4))
 ) ENGINE=InnoDB AUTO_INCREMENT=18284 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;

@@ -249,6 +249,16 @@ class ManageOperatorsDialog(QDialog):
         rows = cursor.fetchall()
         cols = {r["Field"] for r in rows} if rows and isinstance(rows[0], dict) else {r[0] for r in rows}
 
+        # ✅ SÉCURITÉ: Whitelist des colonnes autorisées pour éviter les injections SQL
+        ALLOWED_COLUMNS = {
+            "nom", "lastname", "last_name", "name", "surname",
+            "prenom", "firstname", "first_name", "given_name",
+            "statut", "status"
+        }
+
+        # Filtrer uniquement les colonnes autorisées
+        cols = cols & ALLOWED_COLUMNS
+
         cand_nom = ["nom", "lastname", "last_name", "name", "surname"]
         cand_prenom = ["prenom", "firstname", "first_name", "given_name"]
         cand_statut = ["statut", "status"]
@@ -259,7 +269,7 @@ class ManageOperatorsDialog(QDialog):
                     return c
             if required:
                 raise RuntimeError(
-                    "La table 'operateurs' doit contenir l'une de ces colonnes : "
+                    "La table 'personnel' doit contenir l'une de ces colonnes : "
                     + ", ".join(candidates)
                 )
             return None
