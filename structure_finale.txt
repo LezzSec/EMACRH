@@ -1,0 +1,92 @@
+STRUCTURE FINALE DU PROJET EMAC
+================================
+
+FICHIERS SUIVIS PAR GIT (à commiter):
+======================================
+
+EMAC/
+│
+├── 📄 README.md                           # Documentation principale
+├── 📄 CLAUDE.md                           # Instructions Claude Code
+├── 📄 REORGANISATION_GIT.md               # Documentation réorganisation
+├── 📄 RESUME_REORGANISATION.txt           # Résumé réorganisation
+├── 📄 .gitignore                          # Configuration Git (NOUVEAU)
+│
+├── 📁 .claude/
+│   └── settings.local.json                # (modifié mais ignoré)
+│
+├── 📁 App/                                # CODE SOURCE
+│   ├── core/
+│   │   ├── db/                            # Couche base de données
+│   │   ├── services/                      # Logique métier
+│   │   ├── gui/                           # Interface PyQt5
+│   │   ├── exporters/                     # Export Excel/PDF
+│   │   └── utils/                         # Utilitaires
+│   │
+│   ├── config/
+│   │   ├── .env.example                   # Template configuration
+│   │   ├── configure_db.bat               # Script configuration
+│   │   └── README.md
+│   │
+│   ├── database/
+│   │   ├── schema/                        # Schémas SQL
+│   │   └── migrations/                    # Migrations DB
+│   │
+│   ├── scripts/                           # Scripts utilitaires
+│   ├── tests/                             # Tests unitaires
+│   ├── run_emac.vbs                       # Lanceur Windows
+│   └── .gitignore                         # Ignore local App
+│
+└── 📁 docs/                               # DOCUMENTATION
+    ├── dev/                               # Docs développeur
+    ├── user/                              # Guides utilisateur
+    ├── features/                          # Fonctionnalités
+    └── security/                          # Sécurité
+
+
+FICHIERS IGNORES PAR GIT (local uniquement):
+=============================================
+
+temp_archives/                             # Archives (peut être supprimé)
+├── securite_sql/                          # 8 fichiers analyse SQL
+├── fichiers_inutilises/                   # 34 anciens fichiers
+├── emac_db.sql                            # Dump SQL 130 Ko
+├── REORGANISATION_PLAN.md
+└── REORGANISATION_COMPLETE.md
+
+App/.env                                   # Configuration locale DB
+App/logs/                                  # Logs applicatifs
+App/build/                                 # Builds PyInstaller
+App/dist/                                  # Distributions
+App/__pycache__/                           # Cache Python
+
+
+STATISTIQUES:
+=============
+
+Fichiers suivis avant:    ~180
+Fichiers suivis après:     133
+Fichiers retirés:           47
+
+Fichiers archivés:          47 (dans temp_archives/)
+Fichiers perdus:             0 (tout est sauvegardé)
+
+Taille repository:          Réduite significativement
+
+
+PROTECTION SECURITE:
+====================
+
+✅ App/.env                 Ignoré (mot de passe DB)
+✅ App/logs/                Ignoré (logs)
+✅ *.sql                    Ignoré (dumps DB)
+✅ temp_archives/           Ignoré (archives)
+✅ build/ et dist/          Ignorés (builds)
+
+
+PROCHAINE ETAPE:
+================
+
+git commit -m "Réorganisation: nettoyage repository + ajout .gitignore"
+git push origin main
+

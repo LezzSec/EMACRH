@@ -17,6 +17,7 @@ from datetime import datetime, date, timedelta
 from core.services import absence_service
 from core.db.configbd import get_connection
 from core.gui.emac_ui_kit import add_custom_title_bar
+from core.services.auth_service import has_permission
 
 
 class PlanningAbsencesDialog(QDialog):
@@ -175,22 +176,24 @@ class PlanningAbsencesDialog(QDialog):
         actions_group = QGroupBox("Mes demandes d'absence")
         actions_layout = QVBoxLayout()
 
-        btn_nouvelle_demande = QPushButton("➕ Nouvelle demande d'absence")
-        btn_nouvelle_demande.setStyleSheet("""
-            QPushButton {
-                background-color: #3498db;
-                color: white;
-                padding: 10px;
-                font-size: 13px;
-                font-weight: bold;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #2980b9;
-            }
-        """)
-        btn_nouvelle_demande.clicked.connect(self.show_nouvelle_demande)
-        actions_layout.addWidget(btn_nouvelle_demande)
+        # Bouton "Nouvelle demande" uniquement si permission d'écriture sur planning
+        if has_permission('planning', 'ecriture'):
+            btn_nouvelle_demande = QPushButton("➕ Nouvelle demande d'absence")
+            btn_nouvelle_demande.setStyleSheet("""
+                QPushButton {
+                    background-color: #3498db;
+                    color: white;
+                    padding: 10px;
+                    font-size: 13px;
+                    font-weight: bold;
+                    border-radius: 5px;
+                }
+                QPushButton:hover {
+                    background-color: #2980b9;
+                }
+            """)
+            btn_nouvelle_demande.clicked.connect(self.show_nouvelle_demande)
+            actions_layout.addWidget(btn_nouvelle_demande)
 
         btn_mes_demandes = QPushButton("📋 Voir mes demandes")
         btn_mes_demandes.setStyleSheet("""
@@ -713,9 +716,13 @@ class MesDemandesDialog(QDialog):
 
         # Boutons
         btn_layout = QHBoxLayout()
-        btn_annuler = QPushButton("Annuler la demande sélectionnée")
-        btn_annuler.clicked.connect(self.annuler_demande)
-        btn_layout.addWidget(btn_annuler)
+
+        # Bouton d'annulation seulement si permission d'écriture
+        if has_permission('planning', 'ecriture'):
+            btn_annuler = QPushButton("Annuler la demande sélectionnée")
+            btn_annuler.clicked.connect(self.annuler_demande)
+            btn_layout.addWidget(btn_annuler)
+
         btn_layout.addStretch()
 
         btn_close = QPushButton("Fermer")

@@ -1,12 +1,13 @@
 import sys, os, datetime as dt
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QListWidget, QScrollArea,
-    QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QMessageBox, QFrame
+    QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QMessageBox, QFrame, QDialog
 )
-from PyQt5.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent
+from PyQt5.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent, qInstallMessageHandler, QtMsgType
 from PyQt5.QtGui import QDesktopServices
 from core.gui.ui_theme import EmacTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard, HamburgerButton
 from core.db.configbd import get_connection as get_db_connection
+from core.services.auth_service import has_permission, get_current_user, is_admin, logout_user
 
 # ✅ OPTIMISATION: Imports paresseux des dialogues (chargés uniquement à l'ouverture)
 # Réduit le temps de démarrage de l'application
@@ -86,8 +87,16 @@ class MainWindow(QMainWindow):
         h1 = QLabel("Gestion du Personnel")
         h1.setProperty('class', 'h1')
         title_layout.addWidget(h1)
+
+        # Affichage de l'utilisateur connecté
+        current_user = get_current_user()
+        if current_user:
+            user_info = QLabel(f"👤 {current_user['prenom']} {current_user['nom']} - {current_user['role_nom']}")
+            user_info.setStyleSheet("color: #666; font-size: 12px;")
+            title_layout.addWidget(user_info)
+
         header_layout.addLayout(title_layout, 1)
-        
+
         self.menu_btn = HamburgerButton(self, variant="default")
         self.menu_btn.setToolTip("Menu")
         self.menu_btn.clicked.connect(self.toggle_drawer)
@@ -101,11 +110,24 @@ class MainWindow(QMainWindow):
 
         rows = QVBoxLayout(); rows.setSpacing(8)
         r1 = QHBoxLayout(); b1 = EmacButton("Liste du Personnel", 'primary'); b1.clicked.connect(self.show_liste_personnel); r1.addWidget(b1)
-        r2 = QHBoxLayout(); b2 = EmacButton("Liste et Grilles", 'ghost'); b2.clicked.connect(self.show_listes_grilles_dialog); r2.addWidget(b2)
-        r3 = QHBoxLayout(); b3 = EmacButton("Gestion des Évaluations", 'ghost'); b3.clicked.connect(self.show_gestion_evaluations); r3.addWidget(b3)
+
+        # Liste et Grilles - Seulement si permission de lecture
+        if has_permission('grilles', 'lecture'):
+            r2 = QHBoxLayout(); b2 = EmacButton("Liste et Grilles", 'ghost'); b2.clicked.connect(self.show_listes_grilles_dialog); r2.addWidget(b2)
+
+        # Gestion des Évaluations - Seulement si permission de lecture
+        if has_permission('evaluations', 'lecture'):
+            r3 = QHBoxLayout(); b3 = EmacButton("Gestion des Évaluations", 'ghost'); b3.clicked.connect(self.show_gestion_evaluations); r3.addWidget(b3)
+
         r4 = QHBoxLayout(); b4 = EmacButton("Quitter", 'ghost'); b4.clicked.connect(self.close); r4.addWidget(b4)
-        for r in (r1, r2, r3, r4):
-            rows.addLayout(r)
+
+        # Ajouter les layouts dans l'ordre
+        rows.addLayout(r1)
+        if has_permission('grilles', 'lecture'):
+            rows.addLayout(r2)
+        if has_permission('evaluations', 'lecture'):
+            rows.addLayout(r3)
+        rows.addLayout(r4)
         self.actions_wrap.body.addLayout(rows)
         right.addWidget(self.actions_wrap)
 
@@ -170,16 +192,45 @@ class MainWindow(QMainWindow):
         drawer_layout.addWidget(title)
         drawer_layout.addSpacing(15)
 
-        self.add_drawer_button(drawer_layout, "Ajouter du personnel", self.show_manage_operator, 'ghost')
-        self.add_drawer_button(drawer_layout, "Création/Suppression de poste", self.show_poste_form, 'ghost')
-        self.add_drawer_button(drawer_layout, "Gestion des Contrats", self.show_contract_management, 'ghost')
-        self.add_drawer_button(drawer_layout, "Documents RH", self.show_gestion_documentaire, 'ghost')
-        self.add_drawer_button(drawer_layout, "Planning & Évaluations", self.show_regularisation, 'ghost')
-        self.add_drawer_button(drawer_layout, "Historique", self.show_historique, 'ghost')
+        # Boutons avec contrôle d'accès basé sur les permissions
+        if has_permission('personnel', 'ecriture'):
+            self.add_drawer_button(drawer_layout, "Ajouter du personnel", self.show_manage_operator, 'ghost')
 
-        # ✅ Fonction "Exporter les logs" retirée du menu (inutile pour l'utilisateur final)
+        if has_permission('postes', 'ecriture'):
+            self.add_drawer_button(drawer_layout, "Création/Suppression de poste", self.show_poste_form, 'ghost')
+
+        if has_permission('contrats', 'ecriture'):
+            self.add_drawer_button(drawer_layout, "Gestion des Contrats", self.show_contract_management, 'ghost')
+
+        if has_permission('documents_rh', 'lecture'):
+            self.add_drawer_button(drawer_layout, "Documents RH", self.show_gestion_documentaire, 'ghost')
+
+        if has_permission('planning', 'lecture'):
+            self.add_drawer_button(drawer_layout, "Planning & Évaluations", self.show_regularisation, 'ghost')
+
+        if has_permission('historique', 'lecture'):
+            self.add_drawer_button(drawer_layout, "Historique", self.show_historique, 'ghost')
+
+        # Gestion des utilisateurs (admin uniquement)
+        if is_admin():
+            drawer_layout.addSpacing(10)
+            separator = QFrame()
+            separator.setFrameShape(QFrame.HLine)
+            separator.setStyleSheet("color: #ddd;")
+            drawer_layout.addWidget(separator)
+            drawer_layout.addSpacing(10)
+            self.add_drawer_button(drawer_layout, "Gestion des Utilisateurs", self.show_user_management, 'ghost')
 
         drawer_layout.addStretch(1)
+
+        # Bouton de déconnexion
+        drawer_layout.addSpacing(10)
+        separator2 = QFrame()
+        separator2.setFrameShape(QFrame.HLine)
+        separator2.setStyleSheet("color: #ddd;")
+        drawer_layout.addWidget(separator2)
+        drawer_layout.addSpacing(10)
+        self.add_drawer_button(drawer_layout, "🚪 Déconnexion", self.logout, 'ghost')
 
 
 
@@ -456,9 +507,68 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Export impossible : {e}")
 
+    # ================= Authentification =================
+    def logout(self):
+        """Gère la déconnexion de l'utilisateur"""
+        reply = QMessageBox.question(
+            self,
+            "Déconnexion",
+            "Voulez-vous vraiment vous déconnecter?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            logout_user()
+            self.close()
+            # Relancer l'écran de connexion
+            from core.gui.login_dialog import LoginDialog
+            login_dialog = LoginDialog()
+            if login_dialog.exec_() == QDialog.Accepted:
+                # Relancer la fenêtre principale
+                new_window = MainWindow()
+                new_window.show()
+
+    def show_user_management(self):
+        """Ouvre l'interface de gestion des utilisateurs (admin uniquement)"""
+        if not is_admin():
+            QMessageBox.warning(self, "Accès refusé", "Seuls les administrateurs peuvent gérer les utilisateurs.")
+            return
+
+        from core.gui.user_management import UserManagementDialog
+        UserManagementDialog(self).exec_()
+
+
+def qt_message_handler(msg_type, context, message):
+    """Filtre les warnings Qt inutiles (box-shadow, cursor, etc.)"""
+    # Ignorer les warnings concernant les propriétés CSS inconnues
+    if "Unknown property" in message:
+        return
+    # Afficher les autres messages normalement
+    if msg_type == QtMsgType.QtWarningMsg:
+        print(f"Qt Warning: {message}")
+    elif msg_type == QtMsgType.QtCriticalMsg:
+        print(f"Qt Critical: {message}")
+    elif msg_type == QtMsgType.QtFatalMsg:
+        print(f"Qt Fatal: {message}")
+
 
 if __name__ == "__main__":
+    # Installer le gestionnaire de messages Qt pour filtrer les warnings
+    qInstallMessageHandler(qt_message_handler)
+
     app = QApplication(sys.argv)
     EmacTheme.apply(app)
-    win = MainWindow(); win.show()
-    sys.exit(app.exec_())
+
+    # Afficher l'écran de connexion
+    from core.gui.login_dialog import LoginDialog
+    login_dialog = LoginDialog()
+
+    if login_dialog.exec_() == LoginDialog.Accepted:
+        # Si la connexion réussit, afficher la fenêtre principale
+        win = MainWindow()
+        win.show()
+        sys.exit(app.exec_())
+    else:
+        # Si la connexion est annulée, quitter l'application
+        sys.exit(0)

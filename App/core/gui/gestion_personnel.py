@@ -15,6 +15,7 @@ from core.services.contrat_service import get_all_contracts
 from core.gui.contract_management import ContractFormDialog
 from core.gui.historique_personnel import HistoriquePersonnelTab
 from core.gui.emac_ui_kit import add_custom_title_bar
+from core.services.auth_service import has_permission
 
 import datetime as dt
 
@@ -210,41 +211,42 @@ class DetailOperateurDialog(QDialog):
 
         contract_layout.addWidget(header_contract)
 
-        # Boutons d'action pour les contrats
-        contract_actions = QHBoxLayout()
-        self.add_contract_btn = QPushButton("+ Nouveau contrat")
-        self.add_contract_btn.setStyleSheet("""
-            QPushButton {
-                background: #f59e0b;
-                color: white;
-                font-weight: bold;
-                padding: 8px 16px;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background: #d97706;
-            }
-        """)
-        self.add_contract_btn.clicked.connect(self.add_contract)
-        contract_actions.addWidget(self.add_contract_btn)
+        # Boutons d'action pour les contrats (seulement si permission d'écriture)
+        if has_permission('contrats', 'ecriture'):
+            contract_actions = QHBoxLayout()
+            self.add_contract_btn = QPushButton("+ Nouveau contrat")
+            self.add_contract_btn.setStyleSheet("""
+                QPushButton {
+                    background: #f59e0b;
+                    color: white;
+                    font-weight: bold;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                }
+                QPushButton:hover {
+                    background: #d97706;
+                }
+            """)
+            self.add_contract_btn.clicked.connect(self.add_contract)
+            contract_actions.addWidget(self.add_contract_btn)
 
-        self.edit_contract_btn = QPushButton("Modifier")
-        self.edit_contract_btn.setStyleSheet("""
-            QPushButton {
-                background: #6b7280;
-                color: white;
-                padding: 8px 16px;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background: #4b5563;
-            }
-        """)
-        self.edit_contract_btn.clicked.connect(self.edit_contract)
-        contract_actions.addWidget(self.edit_contract_btn)
+            self.edit_contract_btn = QPushButton("Modifier")
+            self.edit_contract_btn.setStyleSheet("""
+                QPushButton {
+                    background: #6b7280;
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 6px;
+                }
+                QPushButton:hover {
+                    background: #4b5563;
+                }
+            """)
+            self.edit_contract_btn.clicked.connect(self.edit_contract)
+            contract_actions.addWidget(self.edit_contract_btn)
 
-        contract_actions.addStretch()
-        contract_layout.addLayout(contract_actions)
+            contract_actions.addStretch()
+            contract_layout.addLayout(contract_actions)
 
         # Tableau des contrats
         self.contract_table = QTableWidget()
@@ -286,7 +288,9 @@ class DetailOperateurDialog(QDialog):
                 color: #92400e;
             }
         """)
-        self.contract_table.doubleClicked.connect(self.edit_contract)
+        # Double-clic pour modifier seulement si permission d'écriture
+        if has_permission('contrats', 'ecriture'):
+            self.contract_table.doubleClicked.connect(self.edit_contract)
         contract_layout.addWidget(self.contract_table)
 
         tabs.addTab(contract_tab, "Contrats")
