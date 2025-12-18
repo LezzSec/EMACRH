@@ -1,4 +1,4 @@
 @echo off
-cd /d "C:\Users\tlahirigoyen\Desktop\EMAC\App"
+cd /d "%~dp0.."
 py -m core.gui.main_qt
-exit
+pause
