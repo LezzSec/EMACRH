@@ -93,12 +93,12 @@ EMAC/
 │       └── security-changelog.md   # Security audit log
 │
 ├── 📁 App/
-│   ├── core/                       # Core application code
-│   │   ├── db/                     # Database layer
-│   │   │   ├── configbd.py        # MySQL connection setup
-│   │   │   ├── insert_*.py        # Database population scripts
-│   │   │   └── import_infos.py    # Data import utilities
-│   │   ├── services/              # Business logic layer
+│   ├── core/                               # Core application code
+│   │   ├── db/                             # Database layer
+│   │   │   ├── configbd.py                 # MySQL connection setup
+│   │   │   ├── insert_*.py                 # Database population scripts
+│   │   │   └── import_infos.py             # Data import utilities
+│   │   ├── services/                       # Business logic layer
 │   │   │   ├── evaluation_service.py       # Evaluation scheduling logic
 │   │   │   ├── calendrier_service.py       # Calendar computations
 │   │   │   ├── contrat_service.py          # Contract expiration tracking
@@ -107,10 +107,10 @@ EMAC/
 │   │   │   ├── liste_et_grilles_service.py # Grid generation
 │   │   │   ├── logger.py                   # Historique table logging
 │   │   │   └── log_exporter.py             # Export logs to files
-│   │   ├── gui/                   # PyQt5 UI layer
+│   │   ├── gui/                            # PyQt5 UI layer
 │   │   │   ├── main_qt.py                  # Main application window
 │   │   │   ├── ui_theme.py                 # Theme system (EmacTheme, EmacDarkTheme)
-│   │   │   ├── emac_ui_kit.py             # Reusable UI components
+│   │   │   ├── emac_ui_kit.py              # Reusable UI components
 │   │   │   ├── gestion_evaluation.py       # Evaluation management dialog
 │   │   │   ├── gestion_personnel.py        # Personnel details & management
 │   │   │   ├── gestion_absences.py         # Absence management dialog
@@ -120,11 +120,11 @@ EMAC/
 │   │   │   ├── historique.py               # Audit log viewer
 │   │   │   ├── planning.py                 # Planning/schedule view
 │   │   │   └── contract_management.py      # Contract renewal interface
-│   │   ├── exporters/             # File export layer
-│   │   │   ├── excel_export.py    # Export grids to Excel
-│   │   │   ├── pdf_export.py      # PDF generation with ReportLab
-│   │   │   └── log_export.py      # CSV export of logs
-│   │   └── utils/                 # Utility functions
+│   │   ├── exporters/                      # File export layer
+│   │   │   ├── excel_export.py             # Export grids to Excel
+│   │   │   ├── pdf_export.py               # PDF generation with ReportLab
+│   │   │   └── log_export.py               # CSV export of logs
+│   │   └── utils/                          # Utility functions
 │   │
 │   ├── config/                    # Configuration templates
 │   │   ├── .env.example           # Environment variables template
@@ -133,14 +133,14 @@ EMAC/
 │   │
 │   ├── database/                  # Database files
 │   │   ├── schema/                # Schema definitions
-│   │   │   └── bddemac.sql       # Main database schema
+│   │   │   └── bddemac.sql        # Main database schema
 │   │   ├── migrations/            # Schema migrations
 │   │   └── backups/               # SQL backup files
 │   │
 │   ├── tests/                     # Test files
 │   │   ├── unit/                  # Unit tests
 │   │   ├── integration/           # Integration tests
-│   │   └── run_all_tests.py      # Test runner
+│   │   └── run_all_tests.py       # Test runner
 │   │
 │   ├── scripts/                   # Utility scripts
 │   │   ├── cleanup_test_data.py
@@ -152,7 +152,7 @@ EMAC/
 │   ├── .gitignore
 │   ├── logs/                      # Application logs (Git ignored)
 │   ├── run/                       # Runtime files
-│   └── run_emac.vbs              # Windows launcher
+│   └── run_emac.vbs               # Windows launcher
 │
 └── 📁 Deploy/                     # Deployment files
 ```

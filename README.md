@@ -56,6 +56,7 @@ py -m core.gui.main_qt
 - 🏗️ [Architecture du projet](docs/dev/architecture.md)
 - 🧪 [Guide des tests](docs/dev/tests-report.md)
 - 🔧 [Optimisation de l'exécutable](docs/dev/build-optimization.md)
+- 🌐 [Déploiement réseau](docs/dev/deploiement-reseau.md) ⚡ **Résout la lenteur au lancement**
 - 📝 [Exemples de logging](docs/dev/exemples-logging.md)
 
 ### Fonctionnalités
@@ -99,7 +100,11 @@ EMAC/
 │   ├── features/         # Documentation fonctionnelle
 │   └── security/         # Documentation sécurité
 │
-└── Deploy/               # Fichiers de déploiement
+└── Deploy/               # Déploiement réseau
+    ├── Lancer_EMAC.bat         # Lanceur optimisé (cache local)
+    ├── README_DEPLOIEMENT.md   # Guide admin système
+    ├── GUIDE_UTILISATEUR.md    # Guide utilisateur final
+    └── test_deploiement.bat    # Script de validation
 ```
 
 **Documentation complète** : [CLAUDE.md](CLAUDE.md)
@@ -165,6 +170,35 @@ Les tests couvrent :
 - Consultation de l'historique par table, action, ou opérateur
 - Export des logs en CSV
 - Interface de recherche avancée
+
+---
+
+## 🌐 Déploiement en production
+
+### Compilation de l'exécutable
+
+```bash
+cd App
+pyinstaller EMAC_optimized.spec --clean --noconfirm
+```
+
+Résultat : `App\dist\EMAC\EMAC.exe` (mode one-folder)
+
+### Déploiement sur réseau d'entreprise
+
+⚡ **Problème résolu** : Lancement lent (2-5 min) depuis un partage réseau
+
+**Solution** : Système de cache local avec le lanceur `Lancer_EMAC.bat`
+
+| Scénario | Temps | Documentation |
+|----------|-------|---------------|
+| Premier lancement | 30-60 sec | [Deploy/README.md](Deploy/README.md) |
+| Lancements suivants | 2-3 sec | [docs/dev/deploiement-reseau.md](docs/dev/deploiement-reseau.md) |
+
+**Pour déployer** :
+1. Consultez [Deploy/README_DEPLOIEMENT.md](Deploy/README_DEPLOIEMENT.md) (administrateurs)
+2. Testez avec `Deploy\test_deploiement.bat`
+3. Distribuez `Deploy\Lancer_EMAC.bat` aux utilisateurs
 
 ---
 

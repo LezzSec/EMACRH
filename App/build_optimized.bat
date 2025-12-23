@@ -26,6 +26,23 @@ if not exist dist\EMAC\EMAC.exe (
     exit /b 1
 )
 
+REM ✅ Copier le .env à côté de l'exe (IMPORTANT)
+if exist ".env" (
+    copy /y ".env" "dist\EMAC\.env" >nul
+) else if exist "config\.env" (
+    copy /y "config\.env" "dist\EMAC\.env" >nul
+) else (
+    echo.
+    echo ⚠️ ATTENTION : aucun .env trouvé (ni .env, ni config\.env)
+    echo    L'exe peut planter si EMAC_DB_PASSWORD n'est pas défini.
+)
+
+REM ✅ Vérifier que le .env est bien présent (optionnel mais conseillé)
+if not exist "dist\EMAC\.env" (
+    echo.
+    echo ⚠️ WARNING : .env non copié dans dist\EMAC\
+)
+
 echo.
 echo [3/4] Copie des ressources additionnelles...
 REM Copier les fichiers nécessaires si besoin

@@ -102,14 +102,14 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
         user = cur.fetchone()
 
         if not user:
-            return False, "Nom d'utilisateur incorrect"
+            return False, "Nom d'utilisateur ou mot de passe incorrect"
 
         if not user['actif']:
-            return False, "Ce compte est désactivé"
+            return False, "Ce compte est désactivé. Contactez un administrateur."
 
         # Vérifier le mot de passe
         if not verify_password(password, user['password_hash']):
-            return False, "Mot de passe incorrect"
+            return False, "Nom d'utilisateur ou mot de passe incorrect"
 
         # Récupérer les permissions
         cur.execute("""
@@ -170,7 +170,7 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
     except Exception as e:
         print(f"Erreur lors de l'authentification: {e}")
         conn.rollback()
-        return False, f"Erreur lors de l'authentification: {str(e)}"
+        return False, "Erreur de connexion. Veuillez réessayer ou contacter un administrateur."
     finally:
         cur.close()
         conn.close()

@@ -31,7 +31,19 @@
       "Bash(ls:*)",
       "Bash(xargs:*)",
       "Bash(grep:*)",
-      "Bash(git check-ignore:*)"
+      "Bash(git check-ignore:*)",
+      "Bash(test -f \"c:\\Users\\tlahirigoyen\\Desktop\\EMAC\\App\\.env\")",
+      "Bash(git rm:*)",
+      "Bash(pip install:*)",
+      "Bash(mysql:*)",
+      "Bash(test:*)",
+      "Bash(build_optimized.bat)",
+      "Bash(cmd.exe /c build_optimized.bat)",
+      "Bash(cmd.exe /c test_deploiement.bat)",
+      "Bash(cmd.exe /c diagnostic_simple.bat)",
+      "Bash(timeout:*)",
+      "Bash(cat:*)",
+      "Bash(findstr \"SOURCE_RESEAU\")"
     ],
     "deny": [],
     "ask": []

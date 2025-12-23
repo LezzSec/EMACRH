@@ -1,6 +1,7 @@
 # ============================================================================
 # EMAC Project - Git Ignore Configuration
 # ============================================================================
+# Note: Ajoutez temp_archives/ à la fin pour ignorer les archives temporaires
 
 # Python
 __pycache__/
@@ -100,6 +101,9 @@ Fichiers inutilisés/
 *.tmp
 exports/
 temp/
+
+# Archives temporaires (fichiers retirés du git mais conservés localement)
+temp_archives/
 
 # ============================================================================
 # À CONSERVER DANS GIT (exemples pour référence)
