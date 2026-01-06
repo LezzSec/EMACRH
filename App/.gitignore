@@ -1,41 +1,109 @@
-# --- Dossiers à ignorer ---
+# ============================================================================
+# EMAC - FICHIERS À IGNORER PAR GIT
+# ============================================================================
+
+# --- Python: Cache et bytecode ---
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-logs/
-.env
-.vscode/
-.idea/
+*.pdb
+
+# --- Python: Environnements virtuels ---
 .venv/
 venv/
 env/
-.DS_Store
-*.zip
-*.log
+ENV/
 
-# --- Build et distribution ---
+# --- Configuration sensible (CRITIQUE - ne jamais commiter) ---
+.env
+*.env
+!.env.example
+
+# --- Logs et données runtime ---
+logs/
+*.log
+*.log.*
+
+# --- Build et distribution (fichiers générés) ---
 build/
 dist/
-*.spec
+dist_nuitka/
+*.egg-info/
+
+# --- PyInstaller ---
+*.spec.bak
+EMAC.spec
+EMAC_debug.spec
+EMAC_onefile.spec
+# On garde EMAC_optimized.spec car c'est le fichier de build principal
+BUILD_INFO.txt
+nuitka-crash-report.xml
+
+# --- Exécutables générés ---
 *.exe
+*.dll.bak
+*.so
+*.dylib
 
 # --- Base de données ---
 database/backups/*.sql
 !database/backups/README.md
 *.db
 *.sqlite
+*.sqlite3
 
-# --- Fichiers temporaires ---
+# --- Documents générés par l'application ---
+documents/
+documents/*.pdf
+documents/*.xlsx
+documents/*.docx
+
+# --- IDE et éditeurs ---
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# --- Système d'exploitation ---
+.DS_Store
 Thumbs.db
 desktop.ini
+$RECYCLE.BIN/
+
+# --- Fichiers temporaires ---
 nul
 *~
 *.tmp
 *.bak
 *.swp
+*.swo
+*.orig
+
+# --- Archives ---
+*.zip
+*.tar.gz
+*.rar
+*.7z
 
 # --- Tests ---
 .pytest_cache/
 .coverage
 htmlcov/
+.tox/
+*.cover
+.hypothesis/
+
+# --- Scripts de build (optionnel - décommenter si vous ne voulez pas les versionner) ---
+# build_emac.bat
+# build_nuitka.bat
+# build_nuitka_simple.bat
+# build_and_deploy.bat
+# On garde build_clean.bat et build_optimized.bat car ce sont les scripts principaux
+
+# --- Documentation temporaire ---
+*.md~
+
+# ============================================================================
+# FIN DU .gitignore
+# ============================================================================

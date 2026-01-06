@@ -1,22 +1,97 @@
-import sys, os, datetime as dt
+import sys, os, datetime as dt, time, traceback
+from dataclasses import dataclass
+
+# Ajouter le répertoire App au PYTHONPATH pour cx_Freeze
+if getattr(sys, 'frozen', False):
+    # En mode exécutable compilé
+    app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    sys.path.insert(0, app_dir)
+else:
+    # En mode développement
+    app_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    if app_dir not in sys.path:
+        sys.path.insert(0, app_dir)
+
 from PyQt5.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QListWidget, QScrollArea,
     QVBoxLayout, QHBoxLayout, QGridLayout, QComboBox, QMessageBox, QFrame, QDialog
 )
-from PyQt5.QtCore import Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent, qInstallMessageHandler, QtMsgType
+from PyQt5.QtCore import (
+    Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent,
+    qInstallMessageHandler, QtMsgType, QObject, pyqtSignal, QRunnable, QThreadPool
+)
 from PyQt5.QtGui import QDesktopServices
-from core.gui.ui_theme import EmacTheme, EmacButton, EmacCard, EmacHeader, EmacStatusCard, HamburgerButton
-from core.db.configbd import get_connection as get_db_connection
-from core.services.auth_service import has_permission, get_current_user, is_admin, logout_user
 
-# ✅ OPTIMISATION: Imports paresseux des dialogues (chargés uniquement à l'ouverture)
-# Réduit le temps de démarrage de l'application
-
+# ✅ Import optionnel
 try:
     from core.services.log_exporter import export_day
-except ImportError:
+except Exception:
     export_day = None
 
+
+# ===========================
+#  Workers (ThreadPool)
+# ===========================
+
+class WorkerSignals(QObject):
+    result = pyqtSignal(object)
+    error = pyqtSignal(str)
+
+
+class DbWorker(QRunnable):
+    """Exécute une fonction DB en background et renvoie le résultat."""
+    def __init__(self, fn, *args, **kwargs):
+        super().__init__()
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = WorkerSignals()
+
+    def run(self):
+        try:
+            res = self.fn(*self.args, **self.kwargs)
+            self.signals.result.emit(res)
+        except Exception:
+            self.signals.error.emit(traceback.format_exc())
+
+
+# ===========================
+#  Fonctions lazy (DB/Auth/Theme)
+# ===========================
+
+def _lazy_auth():
+    from core.services import auth_service
+    return auth_service
+
+def _lazy_db_conn():
+    from core.db.configbd import get_connection as get_db_connection
+    return get_db_connection
+
+def _lazy_theme():
+    from core.gui import ui_theme
+    return ui_theme
+
+# Cache pour éviter de réimporter à chaque appel
+_theme_cache = None
+
+def get_theme_components():
+    """Retourne les composants du thème (EmacTheme, EmacButton, etc.)"""
+    global _theme_cache
+    if _theme_cache is None:
+        theme_module = _lazy_theme()
+        _theme_cache = {
+            'EmacTheme': theme_module.EmacTheme,
+            'EmacButton': theme_module.EmacButton,
+            'EmacCard': theme_module.EmacCard,
+            'EmacStatusCard': theme_module.EmacStatusCard,
+            'HamburgerButton': theme_module.HamburgerButton,
+        }
+    return _theme_cache
+
+
+# ===========================
+#  Main Window
+# ===========================
 
 class MainWindow(QMainWindow):
     DRAWER_WIDTH = 280
@@ -26,33 +101,45 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Gestion du Personnel")
         self.setGeometry(80, 80, 1180, 720)
 
-        # ✅ IMPORTANT: Initialiser drawer à None AVANT tout
+        # ThreadPool global pour éviter les freezes UI
+        self.pool = QThreadPool.globalInstance()
+
+        # Drawer
         self.drawer = None
         self.is_drawer_open = False
         self.installEventFilter(self)
 
-        # ✅ OPTIMISATION: Cache pour les filtres de postes (évite requête répétée)
+        # Cache postes
         self._postes_cache = None
         self._postes_cache_time = None
 
-        # ... reste du code __init__ identique ...
-        rootw = QWidget(); self.setCentralWidget(rootw)
+        # ✅ Charger les composants du thème
+        theme = get_theme_components()
+        EmacStatusCard = theme['EmacStatusCard']
+        EmacButton = theme['EmacButton']
+        EmacCard = theme['EmacCard']
+        HamburgerButton = theme['HamburgerButton']
+
+        # UI
+        rootw = QWidget()
+        self.setCentralWidget(rootw)
         root = QGridLayout(rootw)
         root.setContentsMargins(18, 18, 18, 18)
         root.setHorizontalSpacing(18)
         root.setVerticalSpacing(18)
         rootw.setLayout(root)
 
-        left = QVBoxLayout(); left.setSpacing(18)
+        left = QVBoxLayout()
+        left.setSpacing(18)
 
         self.retard_card = EmacStatusCard("Retard Évaluations", variant='danger')
-        self.retard_filter = QComboBox(); self.retard_filter.addItem("Tous les postes", "")
-        self.retard_filter.currentIndexChanged.connect(self.load_evaluations)
+        self.retard_filter = QComboBox()
+        self.retard_filter.addItem("Tous les postes", "")
+        self.retard_filter.currentIndexChanged.connect(self.load_evaluations_async)
         self.retard_scroll, self.retard_list = self.create_scrollable_list()
         self.retard_card.body.addWidget(self.retard_filter)
         self.retard_card.body.addWidget(self.retard_scroll)
 
-        # Bouton pour voir le récapitulatif complet des retards
         btn_voir_retards = EmacButton("📋 Voir tout", variant='ghost')
         btn_voir_retards.clicked.connect(lambda: self.ouvrir_gestion_evaluations("En retard"))
         self.retard_card.body.addWidget(btn_voir_retards)
@@ -60,13 +147,13 @@ class MainWindow(QMainWindow):
         left.addWidget(self.retard_card)
 
         self.next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="10 prochaines")
-        self.next_eval_filter = QComboBox(); self.next_eval_filter.addItem("Tous les postes", "")
-        self.next_eval_filter.currentIndexChanged.connect(self.load_evaluations)
+        self.next_eval_filter = QComboBox()
+        self.next_eval_filter.addItem("Tous les postes", "")
+        self.next_eval_filter.currentIndexChanged.connect(self.load_evaluations_async)
         self.next_eval_scroll, self.next_eval_list = self.create_scrollable_list()
         self.next_card.body.addWidget(self.next_eval_filter)
         self.next_card.body.addWidget(self.next_eval_scroll)
 
-        # Bouton pour voir le récapitulatif complet des prochaines évaluations
         btn_voir_prochaines = EmacButton("📋 Voir tout", variant='ghost')
         btn_voir_prochaines.clicked.connect(lambda: self.ouvrir_gestion_evaluations("À planifier (30j)"))
         self.next_card.body.addWidget(btn_voir_prochaines)
@@ -75,25 +162,26 @@ class MainWindow(QMainWindow):
 
         root.addLayout(left, 0, 0, 2, 1)
 
-        right = QVBoxLayout(); right.setSpacing(18)
+        right = QVBoxLayout()
+        right.setSpacing(18)
 
         header_widget = QWidget()
         header_layout = QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 8)
         header_layout.setSpacing(12)
-        
+
         title_layout = QVBoxLayout()
         title_layout.setSpacing(2)
+
         h1 = QLabel("Gestion du Personnel")
         h1.setProperty('class', 'h1')
         title_layout.addWidget(h1)
 
-        # Affichage de l'utilisateur connecté
-        current_user = get_current_user()
-        if current_user:
-            user_info = QLabel(f"👤 {current_user['prenom']} {current_user['nom']} - {current_user['role_nom']}")
-            user_info.setStyleSheet("color: #666; font-size: 12px;")
-            title_layout.addWidget(user_info)
+        # ✅ IMPORTANT: ne pas appeler get_current_user() ici (peut toucher DB/session)
+        # On met un placeholder et on remplira après (async)
+        self.user_info = QLabel("👤 ...")
+        self.user_info.setStyleSheet("color: #666; font-size: 12px;")
+        title_layout.addWidget(self.user_info)
 
         header_layout.addLayout(title_layout, 1)
 
@@ -101,47 +189,111 @@ class MainWindow(QMainWindow):
         self.menu_btn.setToolTip("Menu")
         self.menu_btn.clicked.connect(self.toggle_drawer)
         header_layout.addWidget(self.menu_btn, 0, Qt.AlignRight | Qt.AlignVCenter)
-        
+
         right.addWidget(header_widget)
 
         self.actions_wrap = EmacCard()
-        title = QLabel("Actions rapides"); title.setProperty('class','h2')
+        title = QLabel("Actions rapides")
+        title.setProperty('class', 'h2')
         self.actions_wrap.body.addWidget(title)
 
-        rows = QVBoxLayout(); rows.setSpacing(8)
-        r1 = QHBoxLayout(); b1 = EmacButton("Liste du Personnel", 'primary'); b1.clicked.connect(self.show_liste_personnel); r1.addWidget(b1)
+        # ✅ IMPORTANT: ne pas appeler has_permission() ici (peut toucher DB)
+        # On construit un layout minimal et on l’enrichit après (async).
+        self.rows = QVBoxLayout()
+        self.rows.setSpacing(8)
 
-        # Liste et Grilles - Seulement si permission de lecture
-        if has_permission('grilles', 'lecture'):
-            r2 = QHBoxLayout(); b2 = EmacButton("Liste et Grilles", 'ghost'); b2.clicked.connect(self.show_listes_grilles_dialog); r2.addWidget(b2)
+        r1 = QHBoxLayout()
+        b1 = EmacButton("Liste du Personnel", 'primary')
+        b1.clicked.connect(self.show_liste_personnel)
+        r1.addWidget(b1)
+        self.rows.addLayout(r1)
 
-        # Gestion des Évaluations - Seulement si permission de lecture
-        if has_permission('evaluations', 'lecture'):
-            r3 = QHBoxLayout(); b3 = EmacButton("Gestion des Évaluations", 'ghost'); b3.clicked.connect(self.show_gestion_evaluations); r3.addWidget(b3)
+        r_quit = QHBoxLayout()
+        bq = EmacButton("Quitter", 'ghost')
+        bq.clicked.connect(self.close)
+        r_quit.addWidget(bq)
+        self.rows.addLayout(r_quit)
 
-        r4 = QHBoxLayout(); b4 = EmacButton("Quitter", 'ghost'); b4.clicked.connect(self.close); r4.addWidget(b4)
-
-        # Ajouter les layouts dans l'ordre
-        rows.addLayout(r1)
-        if has_permission('grilles', 'lecture'):
-            rows.addLayout(r2)
-        if has_permission('evaluations', 'lecture'):
-            rows.addLayout(r3)
-        rows.addLayout(r4)
-        self.actions_wrap.body.addLayout(rows)
+        self.actions_wrap.body.addLayout(self.rows)
         right.addWidget(self.actions_wrap)
 
         root.addLayout(right, 0, 1)
 
-        # ✅ OPTIMISATION: Chargement différé pour afficher la fenêtre plus rapidement
-        # La fenêtre s'affiche immédiatement, les données se chargent ensuite
-        QTimer.singleShot(50, self.populate_filters)
-        QTimer.singleShot(150, self.load_evaluations)
+        # ✅ Lancement ultra rapide : on affiche, puis on charge le reste en background
+        QTimer.singleShot(0, self.bootstrap_async)
 
-    # ================= Filtre d'événements pour clic extérieur =================
+    # ---------------------------
+    # Bootstrap async
+    # ---------------------------
+
+    def bootstrap_async(self):
+        """Charge user + permissions + filtres + evals sans bloquer l’UI."""
+        self.load_user_and_permissions_async()
+        self.populate_filters_async()
+        self.load_evaluations_async()
+
+    def load_user_and_permissions_async(self):
+        w = DbWorker(self._fetch_user_and_perms)
+        w.signals.result.connect(self._apply_user_and_perms)
+        w.signals.error.connect(self._on_bg_error)
+        self.pool.start(w)
+
+    def _fetch_user_and_perms(self):
+        auth = _lazy_auth()
+        current_user = auth.get_current_user()
+
+        # Permissions (⚠️ selon ton implémentation, ça peut être DB → ok en thread)
+        perms = {
+            "grilles_lecture": auth.has_permission('grilles', 'lecture'),
+            "evaluations_lecture": auth.has_permission('evaluations', 'lecture'),
+            "personnel_ecriture": auth.has_permission('personnel', 'ecriture'),
+            "postes_ecriture": auth.has_permission('postes', 'ecriture'),
+            "contrats_ecriture": auth.has_permission('contrats', 'ecriture'),
+            "documentsrh_lecture": auth.has_permission('documents_rh', 'lecture'),
+            "planning_lecture": auth.has_permission('planning', 'lecture'),
+            "historique_lecture": auth.has_permission('historique', 'lecture'),
+            "is_admin": auth.is_admin(),
+        }
+        return {"user": current_user, "perms": perms}
+
+    def _apply_user_and_perms(self, payload):
+        user = payload.get("user")
+        perms = payload.get("perms", {})
+
+        # User label
+        if user:
+            self.user_info.setText(f"👤 {user.get('prenom','')} {user.get('nom','')} - {user.get('role_nom','')}")
+        else:
+            self.user_info.setText("👤 Non connecté")
+
+        # Charger EmacButton
+        theme = get_theme_components()
+        EmacButton = theme['EmacButton']
+
+        # Actions rapides : on ajoute les boutons conditionnels
+        # (on évite de les créer au démarrage)
+        if perms.get("grilles_lecture"):
+            r2 = QHBoxLayout()
+            b2 = EmacButton("Liste et Grilles", 'ghost')
+            b2.clicked.connect(self.show_listes_grilles_dialog)
+            r2.addWidget(b2)
+            self.rows.insertLayout(1, r2)
+
+        if perms.get("evaluations_lecture"):
+            r3 = QHBoxLayout()
+            b3 = EmacButton("Gestion des Évaluations", 'ghost')
+            b3.clicked.connect(self.show_gestion_evaluations)
+            r3.addWidget(b3)
+            self.rows.insertLayout(2, r3)
+
+        # Drawer : on le construit au premier clic, mais on garde les perms en mémoire
+        self._perms_cache = perms
+
+    # ---------------------------
+    # Event filter
+    # ---------------------------
+
     def eventFilter(self, source, event):
-        """Filtre les événements de clic pour fermer le drawer."""
-        # ✅ AJOUT: Vérifier que drawer existe et est ouvert
         if self.drawer is not None and self.is_drawer_open and event.type() == QEvent.MouseButtonPress:
             if not self.drawer.geometry().contains(self.mapFromGlobal(event.globalPos())):
                 if source is not self.menu_btn:
@@ -149,22 +301,27 @@ class MainWindow(QMainWindow):
                     return True
         return super().eventFilter(source, event)
 
+    # ---------------------------
+    # Drawer
+    # ---------------------------
 
-    # ================= Menu Latéral (Drawer) =================
     def create_drawer(self):
-        """Crée et initialise le menu latéral coulissant."""
-        # Si déjà créé, ne rien faire
         if self.drawer is not None:
             return
-            
+
+        # Charger les composants du thème
+        theme = get_theme_components()
+        EmacTheme = theme['EmacTheme']
+        EmacButton = theme['EmacButton']
+
         self.drawer = QFrame(self)
         self.drawer.setObjectName("card")
         self.drawer.setFixedSize(self.DRAWER_WIDTH, self.height())
-        
+
         ThemeCls = EmacTheme
         border_color = ThemeCls.BDR
         bg_card = ThemeCls.BG_CARD
-        
+
         self.drawer.setStyleSheet(f"""
             QFrame#card {{
                 background: {bg_card};
@@ -172,119 +329,101 @@ class MainWindow(QMainWindow):
                 border-top: 1px solid {border_color};
                 border-bottom: 1px solid {border_color};
                 border-right: 0px;
-                border-top-left-radius: 0px; 
+                border-top-left-radius: 0px;
                 border-bottom-left-radius: 0px;
-                border-top-right-radius: 14px; 
+                border-top-right-radius: 14px;
                 border-bottom-right-radius: 14px;
             }}
         """)
-        
-        # Position initiale hors écran (à droite)
+
         self.drawer.move(self.width(), 0)
         self.drawer.hide()
-        
+
         drawer_layout = QVBoxLayout(self.drawer)
         drawer_layout.setContentsMargins(16, 16, 16, 16)
         drawer_layout.setAlignment(Qt.AlignTop)
-        
+
         title = QLabel("Menu")
         title.setProperty('class', 'h2')
         drawer_layout.addWidget(title)
         drawer_layout.addSpacing(15)
 
-        # Boutons avec contrôle d'accès basé sur les permissions
-        if has_permission('personnel', 'ecriture'):
-            self.add_drawer_button(drawer_layout, "Ajouter du personnel", self.show_manage_operator, 'ghost')
+        # ✅ Permissions depuis cache si dispo, sinon fallback lazy (sans bloquer)
+        perms = getattr(self, "_perms_cache", None)
+        if perms is None:
+            # fallback minimal (si jamais)
+            perms = {"is_admin": False}
 
-        if has_permission('postes', 'ecriture'):
-            self.add_drawer_button(drawer_layout, "Création/Suppression de poste", self.show_poste_form, 'ghost')
+        def add_btn(text, fn, variant='ghost'):
+            btn = EmacButton(text, variant=variant)
+            btn.setFixedHeight(44)
+            btn.clicked.connect(fn)
+            if fn not in (self.close, self.export_logs_today):
+                btn.clicked.connect(self.toggle_drawer)
+            drawer_layout.addWidget(btn)
 
-        if has_permission('contrats', 'ecriture'):
-            self.add_drawer_button(drawer_layout, "Gestion des Contrats", self.show_contract_management, 'ghost')
+        if perms.get("personnel_ecriture"):
+            add_btn("Ajouter du personnel", self.show_manage_operator)
+        if perms.get("postes_ecriture"):
+            add_btn("Création/Suppression de poste", self.show_poste_form)
+        if perms.get("contrats_ecriture"):
+            add_btn("Gestion des Contrats", self.show_contract_management)
+        if perms.get("documentsrh_lecture"):
+            add_btn("Documents RH", self.show_gestion_documentaire)
+        if perms.get("planning_lecture"):
+            add_btn("Planning & Évaluations", self.show_regularisation)
+        if perms.get("historique_lecture"):
+            add_btn("Historique", self.show_historique)
 
-        if has_permission('documents_rh', 'lecture'):
-            self.add_drawer_button(drawer_layout, "Documents RH", self.show_gestion_documentaire, 'ghost')
-
-        if has_permission('planning', 'lecture'):
-            self.add_drawer_button(drawer_layout, "Planning & Évaluations", self.show_regularisation, 'ghost')
-
-        if has_permission('historique', 'lecture'):
-            self.add_drawer_button(drawer_layout, "Historique", self.show_historique, 'ghost')
-
-        # Gestion des utilisateurs (admin uniquement)
-        if is_admin():
+        if perms.get("is_admin"):
             drawer_layout.addSpacing(10)
-            separator = QFrame()
-            separator.setFrameShape(QFrame.HLine)
-            separator.setStyleSheet("color: #ddd;")
-            drawer_layout.addWidget(separator)
+            sep = QFrame()
+            sep.setFrameShape(QFrame.HLine)
+            sep.setStyleSheet("color: #ddd;")
+            drawer_layout.addWidget(sep)
             drawer_layout.addSpacing(10)
-            self.add_drawer_button(drawer_layout, "Gestion des Utilisateurs", self.show_user_management, 'ghost')
+            add_btn("Gestion des Utilisateurs", self.show_user_management)
 
         drawer_layout.addStretch(1)
 
-        # Bouton de déconnexion
         drawer_layout.addSpacing(10)
-        separator2 = QFrame()
-        separator2.setFrameShape(QFrame.HLine)
-        separator2.setStyleSheet("color: #ddd;")
-        drawer_layout.addWidget(separator2)
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.HLine)
+        sep2.setStyleSheet("color: #ddd;")
+        drawer_layout.addWidget(sep2)
         drawer_layout.addSpacing(10)
-        self.add_drawer_button(drawer_layout, "🚪 Déconnexion", self.logout, 'ghost')
+        add_btn("🚪 Déconnexion", self.logout)
 
-
-
-
-    def add_drawer_button(self, layout: QVBoxLayout, text: str, action: callable, variant: str = None):
-        """Ajoute un bouton de menu au layout du Drawer."""
-        btn = EmacButton(text, variant=variant)
-        btn.setFixedHeight(44)
-        btn.clicked.connect(action)
-        if action not in (self.close, self.export_logs_today):
-            btn.clicked.connect(self.toggle_drawer)
-        layout.addWidget(btn)
-
-    
     def resizeEvent(self, event):
-        """Met à jour la taille et la position du Drawer au redimensionnement."""
         super().resizeEvent(event)
-        # ✅ IMPORTANT: Vérifier que drawer existe
         if self.drawer is not None:
             self.drawer.setFixedHeight(self.height())
             current_x = self.width() - self.DRAWER_WIDTH if self.is_drawer_open else self.width()
             self.drawer.move(current_x, 0)
-    
-    
+
     def toggle_drawer(self):
-        """Anime l'ouverture et la fermeture du menu latéral."""
-        # Créer le drawer à la première utilisation
         if self.drawer is None:
             self.create_drawer()
-        
-        # ✅ SÉCURITÉ: Double vérification après création
         if self.drawer is None:
             print("❌ ERREUR: Impossible de créer le drawer")
             return
-        
+
         self.is_drawer_open = not self.is_drawer_open
-        
         end_x = self.width() - self.DRAWER_WIDTH if self.is_drawer_open else self.width()
-        
-        # ✅ IMPORTANT: Nettoyer l'animation précédente si elle existe
+
         if hasattr(self, 'animation') and self.animation is not None:
             self.animation.stop()
             try:
                 self.animation.finished.disconnect()
-            except:
+            except Exception:
                 pass
-        
+
         self.animation = QPropertyAnimation(self.drawer, b"pos")
         self.animation.setDuration(250)
         self.animation.setEasingCurve(QEasingCurve.OutCubic)
-        
         self.animation.setStartValue(self.drawer.pos())
         self.animation.setEndValue(QPoint(end_x, 0))
-        
+
         if self.is_drawer_open:
             self.drawer.show()
             self.drawer.raise_()
@@ -293,13 +432,21 @@ class MainWindow(QMainWindow):
 
         self.animation.start()
 
+    # ---------------------------
+    # UI helpers
+    # ---------------------------
 
     def create_scrollable_list(self):
-        sc = QScrollArea(); sc.setWidgetResizable(True)
-        lw = QListWidget(); sc.setWidget(lw)
+        sc = QScrollArea()
+        sc.setWidgetResizable(True)
+        lw = QListWidget()
+        sc.setWidget(lw)
         return sc, lw
 
-    # ================= Fenêtres secondaires (avec imports paresseux) =================
+    # ---------------------------
+    # Dialogs (lazy imports)
+    # ---------------------------
+
     def show_liste_personnel(self):
         from core.gui.gestion_personnel import GestionPersonnelDialog
         GestionPersonnelDialog(self).exec_()
@@ -313,22 +460,15 @@ class MainWindow(QMainWindow):
         GestionEvaluationDialog().exec_()
 
     def ouvrir_gestion_evaluations(self, filtre_statut):
-        """Ouvre le dialogue de gestion des évaluations avec un filtre pré-appliqué."""
         try:
             from core.gui.gestion_evaluation import GestionEvaluationDialog
             dialog = GestionEvaluationDialog()
-
-            # Appliquer le filtre de statut
             if hasattr(dialog, 'status_filter'):
                 index = dialog.status_filter.findText(filtre_statut)
                 if index >= 0:
                     dialog.status_filter.setCurrentIndex(index)
-
             dialog.exec_()
-
-            # Recharger les données après fermeture
-            self.load_evaluations()
-
+            self.load_evaluations_async()
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible d'ouvrir la gestion des évaluations :\n{e}")
 
@@ -339,33 +479,39 @@ class MainWindow(QMainWindow):
     def show_poste_form(self):
         from core.gui.creation_modification_poste import CreationModificationPosteDialog
         CreationModificationPosteDialog().exec_()
-        # ✅ Invalider le cache des postes après modification
         self._postes_cache = None
         self._postes_cache_time = None
-        self.populate_filters()  # Recharger les filtres
+        self.populate_filters_async()
 
     def show_historique(self):
         from core.gui.historique import HistoriqueDialog
         HistoriqueDialog().exec_()
 
     def show_regularisation(self):
-        from core.gui.planning_absences import PlanningAbsencesDialog
-        # TODO: Récupérer l'ID du personnel connecté
-        # Pour l'instant, utilise le premier personnel actif
+        # ⚠️ DB => on passe en background, puis on ouvre le dialog sur le thread UI
+        w = DbWorker(self._fetch_one_actif_personnel_id)
+        w.signals.result.connect(self._open_regularisation)
+        w.signals.error.connect(self._on_bg_error)
+        self.pool.start(w)
+
+    def _fetch_one_actif_personnel_id(self):
+        get_db_connection = _lazy_db_conn()
         conn = get_db_connection()
         cur = conn.cursor()
         try:
             cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
-            result = cur.fetchone()
-            personnel_id = result[0] if result else None
+            r = cur.fetchone()
+            return r[0] if r else None
         finally:
             cur.close()
             conn.close()
 
-        if personnel_id:
-            PlanningAbsencesDialog(personnel_id=personnel_id, parent=self).exec_()
-        else:
+    def _open_regularisation(self, personnel_id):
+        if not personnel_id:
             QMessageBox.warning(self, "Erreur", "Aucun personnel actif trouvé")
+            return
+        from core.gui.planning_absences import PlanningAbsencesDialog
+        PlanningAbsencesDialog(personnel_id=personnel_id, parent=self).exec_()
 
     def show_contract_management(self):
         from core.gui.contract_management import ContractManagementDialog
@@ -375,126 +521,120 @@ class MainWindow(QMainWindow):
         from core.gui.gestion_documentaire import GestionDocumentaireDialog
         GestionDocumentaireDialog(self).exec_()
 
-    # ================= Données / DB (Optimisées) =================
-    def populate_filters(self):
-        """Charge les filtres de postes de manière optimisée avec cache.
+    # ---------------------------
+    # DB async (filters + evaluations)
+    # ---------------------------
 
-        ✅ OPTIMISATION: Utilise un cache pour éviter la requête SQL répétée
-        """
+    def populate_filters_async(self):
+        w = DbWorker(self._fetch_postes_cached)
+        w.signals.result.connect(self._apply_postes_to_filters)
+        w.signals.error.connect(self._on_bg_error)
+        self.pool.start(w)
+
+    def _fetch_postes_cached(self):
+        # Cache 5 minutes
+        if self._postes_cache is not None and self._postes_cache_time is not None:
+            if (time.time() - self._postes_cache_time) < 300:
+                return self._postes_cache
+
+        get_db_connection = _lazy_db_conn()
+        conn = get_db_connection()
+        cur = conn.cursor()
         try:
-            # Vérifier le cache (valide pendant 5 minutes)
-            import time
-            if self._postes_cache is not None and self._postes_cache_time is not None:
-                cache_age = time.time() - self._postes_cache_time
-                if cache_age < 300:  # Cache valide pendant 5 minutes
-                    postes = self._postes_cache
-                else:
-                    postes = None
-            else:
-                postes = None
+            cur.execute("SELECT DISTINCT poste_code FROM postes WHERE visible = 1 ORDER BY poste_code;")
+            postes = cur.fetchall()
+            self._postes_cache = postes
+            self._postes_cache_time = time.time()
+            return postes
+        finally:
+            cur.close()
+            conn.close()
 
-            # Si pas de cache, charger depuis la base
-            if postes is None:
-                conn = get_db_connection()
-                cur = conn.cursor()
-                try:
-                    cur.execute("SELECT DISTINCT poste_code FROM postes WHERE visible = 1 ORDER BY poste_code;")
-                    postes = cur.fetchall()
-                    # Mettre en cache
-                    self._postes_cache = postes
-                    self._postes_cache_time = time.time()
-                finally:
-                    cur.close()
-                    conn.close()
-
-            # Remplir les filtres en une seule passe
+    def _apply_postes_to_filters(self, postes):
+        try:
             for (poste,) in postes:
                 if self.retard_filter.findData(poste) == -1:
                     self.retard_filter.addItem(poste, poste)
+                if self.next_eval_filter.findData(poste) == -1:
                     self.next_eval_filter.addItem(poste, poste)
         except Exception as e:
-            print(f"⚠️ Erreur lors du chargement des filtres: {e}")
-            
-    def load_evaluations(self):
-        """Charge les évaluations en retard et à venir de manière optimisée.
+            print(f"⚠️ Erreur apply filtres: {e}")
 
-        ✅ OPTIMISATION v2: Requêtes séparées plus rapides que UNION avec ORDER BY multiple
-        """
+    def load_evaluations_async(self):
+        poste_retard = self.retard_filter.currentData()
+        poste_next = self.next_eval_filter.currentData()
+
+        w = DbWorker(self._fetch_evaluations, poste_retard, poste_next)
+        w.signals.result.connect(self._apply_evaluations_to_ui)
+        w.signals.error.connect(self._on_bg_error)
+        self.pool.start(w)
+
+    def _fetch_evaluations(self, poste_retard, poste_next):
+        get_db_connection = _lazy_db_conn()
+        conn = get_db_connection()
+        cur = conn.cursor()
         try:
-            conn = get_db_connection()
-            cur = conn.cursor()
-            try:
-                poste_retard = self.retard_filter.currentData()
-                poste_next = self.next_eval_filter.currentData()
+            query_retard = """
+                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
+                FROM polyvalence poly
+                INNER JOIN personnel p ON p.id = poly.operateur_id
+                LEFT JOIN postes pos ON pos.id = poly.poste_id
+                WHERE poly.prochaine_evaluation < CURDATE()
+                  AND p.statut = 'ACTIF'
+                  {retard_filter}
+                ORDER BY poly.prochaine_evaluation ASC
+                LIMIT 10
+            """
+            retard_filter = "AND pos.poste_code = %s" if poste_retard else ""
+            query_retard = query_retard.format(retard_filter=retard_filter)
+            params_retard = (poste_retard,) if poste_retard else ()
+            cur.execute(query_retard, params_retard)
+            retard = cur.fetchall()
 
-                # ✅ REQUÊTE 1: Évaluations en retard (RAPIDE - index sur prochaine_evaluation)
-                query_retard = """
-                    SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
-                    FROM polyvalence poly
-                    INNER JOIN personnel p ON p.id = poly.operateur_id
-                    LEFT JOIN postes pos ON pos.id = poly.poste_id
-                    WHERE poly.prochaine_evaluation < CURDATE()
-                      AND p.statut = 'ACTIF'
-                      {retard_filter}
-                    ORDER BY poly.prochaine_evaluation ASC
-                    LIMIT 10
-                """
+            query_next = """
+                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
+                FROM polyvalence poly
+                INNER JOIN personnel p ON p.id = poly.operateur_id
+                LEFT JOIN postes pos ON pos.id = poly.poste_id
+                WHERE poly.prochaine_evaluation >= CURDATE()
+                  AND p.statut = 'ACTIF'
+                  {next_filter}
+                ORDER BY poly.prochaine_evaluation ASC
+                LIMIT 10
+            """
+            next_filter = "AND pos.poste_code = %s" if poste_next else ""
+            query_next = query_next.format(next_filter=next_filter)
+            params_next = (poste_next,) if poste_next else ()
+            cur.execute(query_next, params_next)
+            prochaines = cur.fetchall()
 
-                retard_filter = "AND pos.poste_code = %s" if poste_retard else ""
-                query_retard = query_retard.format(retard_filter=retard_filter)
+            return {"retard": retard, "prochaines": prochaines}
+        finally:
+            cur.close()
+            conn.close()
 
-                params_retard = (poste_retard,) if poste_retard else ()
-                cur.execute(query_retard, params_retard)
-                retard = cur.fetchall()
+    def _apply_evaluations_to_ui(self, payload):
+        retard = payload.get("retard", [])
+        prochaines = payload.get("prochaines", [])
 
-                # ✅ REQUÊTE 2: Prochaines évaluations (RAPIDE - index sur prochaine_evaluation)
-                query_next = """
-                    SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
-                    FROM polyvalence poly
-                    INNER JOIN personnel p ON p.id = poly.operateur_id
-                    LEFT JOIN postes pos ON pos.id = poly.poste_id
-                    WHERE poly.prochaine_evaluation >= CURDATE()
-                      AND p.statut = 'ACTIF'
-                      {next_filter}
-                    ORDER BY poly.prochaine_evaluation ASC
-                    LIMIT 10
-                """
+        self.retard_list.clear()
+        for nom, prenom, poste, date_ev in retard:
+            date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
+            self.retard_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
 
-                next_filter = "AND pos.poste_code = %s" if poste_next else ""
-                query_next = query_next.format(next_filter=next_filter)
+        self.next_eval_list.clear()
+        for nom, prenom, poste, date_ev in prochaines:
+            date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
+            self.next_eval_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
 
-                params_next = (poste_next,) if poste_next else ()
-                cur.execute(query_next, params_next)
-                prochaines = cur.fetchall()
+    def _on_bg_error(self, tb):
+        # Ne bloque pas l'app au démarrage
+        print("⚠️ Erreur background:\n", tb)
 
-                # ✅ Rendu UI optimisé (batch insert pour éviter les repaints multiples)
-                self.retard_list.clear()
-                items_retard = []
-                for nom, prenom, poste, date_ev in retard:
-                    date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
-                    items_retard.append(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
+    # ---------------------------
+    # Export
+    # ---------------------------
 
-                for item_text in items_retard:
-                    self.retard_list.addItem(item_text)
-
-                self.next_eval_list.clear()
-                items_next = []
-                for nom, prenom, poste, date_ev in prochaines:
-                    date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
-                    items_next.append(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
-
-                for item_text in items_next:
-                    self.next_eval_list.addItem(item_text)
-
-            finally:
-                cur.close()
-                conn.close()
-        except Exception as e:
-            print(f"⚠️ Erreur lors du chargement des évaluations: {e}")
-            # Ne pas bloquer l'application avec un MessageBox au démarrage
-
-
-    # ================= Export (Fonction inchangée) =================
     def export_logs_today(self):
         if not export_day:
             QMessageBox.warning(self, "Non disponible", "Module d'export non chargé.")
@@ -507,44 +647,42 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Export impossible : {e}")
 
-    # ================= Authentification =================
-    def logout(self):
-        """Gère la déconnexion de l'utilisateur"""
-        reply = QMessageBox.question(
-            self,
-            "Déconnexion",
-            "Voulez-vous vraiment vous déconnecter?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
+    # ---------------------------
+    # Auth
+    # ---------------------------
 
+    def logout(self):
+        reply = QMessageBox.question(
+            self, "Déconnexion", "Voulez-vous vraiment vous déconnecter?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
         if reply == QMessageBox.Yes:
-            logout_user()
+            auth = _lazy_auth()
+            auth.logout_user()
             self.close()
-            # Relancer l'écran de connexion
+
             from core.gui.login_dialog import LoginDialog
             login_dialog = LoginDialog()
             if login_dialog.exec_() == QDialog.Accepted:
-                # Relancer la fenêtre principale
                 new_window = MainWindow()
                 new_window.show()
 
     def show_user_management(self):
-        """Ouvre l'interface de gestion des utilisateurs (admin uniquement)"""
-        if not is_admin():
+        auth = _lazy_auth()
+        if not auth.is_admin():
             QMessageBox.warning(self, "Accès refusé", "Seuls les administrateurs peuvent gérer les utilisateurs.")
             return
-
         from core.gui.user_management import UserManagementDialog
         UserManagementDialog(self).exec_()
 
 
+# ===========================
+#  Qt message handler
+# ===========================
+
 def qt_message_handler(msg_type, context, message):
-    """Filtre les warnings Qt inutiles (box-shadow, cursor, etc.)"""
-    # Ignorer les warnings concernant les propriétés CSS inconnues
     if "Unknown property" in message:
         return
-    # Afficher les autres messages normalement
     if msg_type == QtMsgType.QtWarningMsg:
         print(f"Qt Warning: {message}")
     elif msg_type == QtMsgType.QtCriticalMsg:
@@ -553,22 +691,27 @@ def qt_message_handler(msg_type, context, message):
         print(f"Qt Fatal: {message}")
 
 
+# ===========================
+#  Entry point
+# ===========================
+
 if __name__ == "__main__":
-    # Installer le gestionnaire de messages Qt pour filtrer les warnings
     qInstallMessageHandler(qt_message_handler)
 
     app = QApplication(sys.argv)
+
+    # ✅ Charger et appliquer le thème (lazy)
+    theme = get_theme_components()
+    EmacTheme = theme['EmacTheme']
     EmacTheme.apply(app)
 
-    # Afficher l'écran de connexion
+    # ✅ Login (lazy)
     from core.gui.login_dialog import LoginDialog
     login_dialog = LoginDialog()
 
     if login_dialog.exec_() == LoginDialog.Accepted:
-        # Si la connexion réussit, afficher la fenêtre principale
         win = MainWindow()
         win.show()
         sys.exit(app.exec_())
     else:
-        # Si la connexion est annulée, quitter l'application
         sys.exit(0)

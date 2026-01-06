@@ -68,7 +68,7 @@ def _get_db_config() -> dict:
 
     # Paramètres pool (optionnels)
     pool_name = os.getenv("EMAC_DB_POOL_NAME", "emac_pool")
-    pool_size = _env_int("EMAC_DB_POOL_SIZE", 10)
+    pool_size = _env_int("EMAC_DB_POOL_SIZE", 5)  # Pool de 5 connexions (bon équilibre)
 
     # Charset/collation (si tu veux les forcer)
     charset = os.getenv("EMAC_DB_CHARSET", os.getenv("DB_CHARSET", "utf8mb4"))
@@ -116,6 +116,8 @@ def _get_pool() -> pooling.MySQLConnectionPool:
         charset=cfg["charset"],
         use_unicode=True,
         autocommit=False,
+        # ✅ Timeouts pour éviter les blocages réseau
+        connection_timeout=5,  # Max 5 secondes pour établir la connexion
         # mysql-connector-python ne prend pas toujours collation ici selon versions,
         # mais on la garde en option (et tu peux aussi la SET après connexion si besoin).
         # collation=cfg["collation"],
@@ -131,3 +133,32 @@ def get_connection():
     pool = _get_pool()
     conn = pool.get_connection()
     return conn
+
+
+class DatabaseConnection:
+    """
+    Gestionnaire de contexte pour gérer automatiquement les connexions.
+
+    Usage:
+        with DatabaseConnection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT ...")
+            # conn.close() est appelé automatiquement à la fin du with
+    """
+    def __init__(self):
+        self.conn = None
+
+    def __enter__(self):
+        self.conn = get_connection()
+        return self.conn
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.conn:
+            if exc_type is not None:
+                # En cas d'erreur, rollback
+                try:
+                    self.conn.rollback()
+                except:
+                    pass
+            self.conn.close()
+        return False  # Ne pas supprimer l'exception

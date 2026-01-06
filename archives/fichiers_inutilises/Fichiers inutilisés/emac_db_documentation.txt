@@ -1,0 +1,413 @@
+
+EMAC_DB — Documentation de la base de données
+=============================================
+Dernière mise à jour : 2025-10-29
+
+Vue d’ensemble
+--------------
+Cette base de données (MySQL 8.x) modélise une application RH/Production pour le suivi des opérateurs,
+de leurs informations personnelles, contrats, compétences (polyvalence), postes, absences/congés,
+formations, déclarations d’accidents et statuts spécifiques (RQTH/OETH).
+
+Conventions générales
+---------------------
+- Encodage recommandé : utf8mb4 avec collation utf8mb4_general_ci.
+- Clés primaires : entiers AUTO_INCREMENT, sauf pour les relations 1:1 (ex. operateur_infos).
+- Intégrité référentielle : clés étrangères avec ON DELETE CASCADE (la plupart des relations).
+- Timestamps : colonnes `created_at` / `date_creation` et `updated_at` / `date_modification` gérées par MySQL.
+- Types DECIMAL : DECIMAL(p,s) signifie p = nombre total de chiffres, s = nombre de décimales.
+  Ex. DECIMAL(5,1) → jusqu’à 9999,9  (4 chiffres entiers + 1 décimale).
+
+====================================================================
+TABLE: operateurs
+--------------------------------------------------------------------
+Rôle: Répertoire principal des opérateurs (employés).
+Clé primaire: id (INT AUTO_INCREMENT)
+Contraintes: uk_matricule (UNIQUE sur matricule)
+Trigger:
+- tr_operateurs_matricule (BEFORE INSERT) : génère un matricule automatique 'M' + 6 chiffres
+  basé sur l'AUTO_INCREMENT si non fourni.
+
+Champs:
+- id INT NOT NULL AUTO_INCREMENT : Identifiant interne.
+- nom VARCHAR(255) NULL : Nom de famille de l’opérateur.
+- prenom VARCHAR(255) NULL : Prénom de l’opérateur.
+- statut VARCHAR(255) NULL : Statut d’activité (ex. 'ACTIF', 'INACTIF').
+- matricule VARCHAR(20) NULL UNIQUE : Identifiant RH lisible, ex. 'M000123'.
+
+Index:
+- PRIMARY KEY (id)
+- UNIQUE (matricule)
+
+====================================================================
+TABLE: operateur_infos
+--------------------------------------------------------------------
+Rôle: Informations personnelles (1:1 avec operateurs), y compris données sensibles.
+Clé primaire: operateur_id (INT) — également FK → operateurs(id) ON DELETE CASCADE
+Contraintes: uk_operateur_infos (UNIQUE sur operateur_id)
+
+Champs:
+- operateur_id INT NOT NULL : Référence vers operateurs.id.
+- sexe ENUM('F','M','X','NSP') DEFAULT 'NSP' : Genre déclaré (NSP = non spécifié).
+- date_entree DATE NULL : Date d’entrée dans l’entreprise.
+- nationalite VARCHAR(50) NULL : Nationalité.
+- cp_naissance VARCHAR(20) NULL : Code postal de naissance.
+- ville_naissance VARCHAR(100) NULL : Ville de naissance.
+- pays_naissance VARCHAR(100) NULL : Pays de naissance.
+- date_naissance DATE NULL : Date de naissance.
+- adresse1 VARCHAR(255) NULL : Adresse (ligne 1).
+- adresse2 VARCHAR(255) NULL : Adresse (ligne 2).
+- cp_adresse VARCHAR(20) NULL : Code postal actuel.
+- ville_adresse VARCHAR(100) NULL : Ville actuelle.
+- pays_adresse VARCHAR(100) NULL : Pays actuel.
+- telephone VARCHAR(20) NULL : Téléphone.
+- email VARCHAR(320) NULL : Email.
+- nir_chiffre VARBINARY(255) NULL : NIR (numéro de sécu) chiffré.
+- nir_nonce VARBINARY(16) NULL : Nonce utilisé pour le chiffrement AEAD.
+- nir_tag VARBINARY(16) NULL : Tag d’authentification (AEAD).
+- commentaire TEXT NULL : Note libre RH.
+
+Index:
+- PRIMARY KEY (operateur_id)
+- UNIQUE (operateur_id)
+- KEY idx_email (email)
+- KEY idx_cp_adresse (cp_adresse)
+- KEY idx_ville_adresse (ville_adresse)
+
+====================================================================
+TABLE: contrat
+--------------------------------------------------------------------
+Rôle: Historique et état des contrats par opérateur (un ou plusieurs par opérateur).
+Clé primaire: id (INT AUTO_INCREMENT)
+FK: operateur_id → operateurs(id) ON DELETE CASCADE
+
+Champs (principaux):
+- id INT NOT NULL AUTO_INCREMENT
+- operateur_id INT NOT NULL : Référence opérateur.
+- type_contrat ENUM('Stagiaire','Apprentissage','Intérimaire','Mise à disposition GE','Etranger hors UE','Temps partiel','CDI','CDD','CIFRE') NOT NULL
+- date_debut DATE NOT NULL : Début de contrat.
+- date_fin DATE NULL : Fin de contrat (NULL = en cours si actif=1).
+- etp DECIMAL(3,2) DEFAULT 1.00 : Equivalent Temps Plein (ex. 0.80).
+- categorie ENUM('Ouvrier','Ouvrier qualifié','Employé','Agent de maîtrise','Cadre') NULL
+- emploi VARCHAR(100) NULL : Intitulé d’emploi/poste RH.
+- salaire DECIMAL(10,2) NULL : Salaire indicatif.
+- actif TINYINT(1) DEFAULT 1 : Indique le contrat courant.
+Champs spécifiques (alternance/intérim/étranger, etc.) :
+- nom_tuteur, prenom_tuteur, ecole : Alternance/formation.
+- nom_ett, adresse_ett : Intérim (Entreprise de Travail Temporaire).
+- nom_ge, adresse_ge : Groupement d’Employeurs.
+- date_autorisation_travail, date_demande_autorisation, type_titre_autorisation, numero_ordre, date_limite_autorisation : Travailleur étranger.
+- date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+- date_modification TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+
+Index:
+- KEY idx_operateur (operateur_id)
+- KEY idx_type_contrat (type_contrat)
+- KEY idx_actif (actif)
+- KEY idx_dates (date_debut, date_fin)
+- KEY idx_contrat_dates_actif (date_debut, date_fin, actif)
+
+Notes:
+- Le contrat "actif" par opérateur est exploité par la vue v_operateurs_complet.
+
+====================================================================
+TABLE: postes
+--------------------------------------------------------------------
+Rôle: Catalogue des postes de production/ateliers.
+Clé primaire: id (INT AUTO_INCREMENT)
+FK: atelier_id → atelier(id) ON DELETE SET NULL
+
+Champs:
+- id INT NOT NULL AUTO_INCREMENT
+- poste_code VARCHAR(50) NOT NULL : Code interne du poste (ex. '0506').
+- besoins_postes INT NOT NULL DEFAULT 0 : Besoin RH cible sur ce poste.
+- visible TINYINT(1) DEFAULT 1 : Affichable dans l’application.
+- atelier_id INT NULL : Regroupement par atelier / ligne.
+
+Index:
+- PRIMARY KEY (id)
+- KEY fk_atelier (atelier_id)
+
+====================================================================
+TABLE: atelier
+--------------------------------------------------------------------
+Rôle: Regroupe des postes par zone / îlot / atelier de production.
+Clé primaire: id (INT AUTO_INCREMENT)
+
+Champs:
+- id INT NOT NULL AUTO_INCREMENT
+- nom VARCHAR(255) NOT NULL : Nom d’atelier (ex. 'Atelier 14')
+
+====================================================================
+TABLE: polyvalence
+--------------------------------------------------------------------
+Rôle: Compétences par opérateur et par poste, avec niveau et planning d’évaluation.
+Clé primaire: id (INT AUTO_INCREMENT)
+FK: operateur_id → operateurs(id) ON DELETE CASCADE
+FK: poste_id → postes(id) ON DELETE CASCADE
+CHECK: niveau BETWEEN 1 AND 4
+
+Champs:
+- id INT NOT NULL AUTO_INCREMENT
+- operateur_id INT NOT NULL : Référence opérateur.
+- poste_id INT NOT NULL : Référence poste.
+- niveau INT NULL (1..4) : 1=Débutant, 2=Autonome partiel, 3=Autonome, 4=Référent.
+- date_evaluation DATE NULL : Date d’évaluation réalisée.
+- prochaine_evaluation DATE NULL : Prochaine date prévue.
+
+Index:
+- KEY operateur_id (operateur_id)
+- KEY poste_id (poste_id)
+
+Triggers (qualité planning):
+- tg_polyvalence_date_bi (BEFORE INSERT)
+- tg_polyvalence_date_bu (BEFORE UPDATE)
+  → Si `prochaine_evaluation` tombe un samedi (7) : +2 jours ; si dimanche (1) : +1 jour.
+
+====================================================================
+TABLE: absences
+--------------------------------------------------------------------
+Rôle: Absences génériques (hors congés saisis dans `conges`).
+Clé primaire: id (INT AUTO_INCREMENT)
+
+Champs (principaux):
+- id INT NOT NULL AUTO_INCREMENT
+- operateur_id INT NOT NULL : (NB: pas de FK dans le dump — à ajouter idéalement)
+- type_absence ENUM('CongePaye','RTT','SansSolde','Maladie','AccidentTravail','CongeNaissance','Formation','Autorisation','Autre') NOT NULL
+- sous_type VARCHAR(50) NULL : Détail (ex. demi-journée, RDV, etc.).
+- motif VARCHAR(120) NULL : Motif rapide.
+- date_debut DATE NOT NULL
+- date_fin DATE NOT NULL
+- statut ENUM('En attente','Validé','Refusé','Annulé') NOT NULL DEFAULT 'En attente'
+- source ENUM('Demande','SaisieRH','Automatique') NOT NULL DEFAULT 'Demande'
+- commentaire TEXT NULL
+- created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+- updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+
+Index:
+- PRIMARY KEY (id)
+
+Remarque:
+- Il est recommandé d’ajouter une FK `operateur_id → operateurs(id)` pour cohérence.
+
+====================================================================
+TABLE: conges
+--------------------------------------------------------------------
+Rôle: Gestion normalisée des congés (impacte le compteur).
+Clé primaire: id (INT AUTO_INCREMENT)
+FK: operateur_id → operateurs(id) ON DELETE CASCADE
+
+Champs:
+- id INT NOT NULL AUTO_INCREMENT
+- operateur_id INT NOT NULL
+- type_conge ENUM('CP','RTT','Sans solde','Maladie','Arrêt de travail') NOT NULL
+- date_debut DATE NOT NULL
+- date_fin DATE NOT NULL
+- nombre_jours DECIMAL(4,1) NOT NULL : Calculé automatiquement par trigger (DATEDIFF + 1).
+- statut ENUM('En attente','Validé','Refusé','En cours','Terminé') DEFAULT 'En attente'
+- date_demande DATETIME DEFAULT CURRENT_TIMESTAMP
+- valideur_id INT NULL : Identifiant du valideur (si besoin d’une table users RH).
+- date_validation DATETIME NULL
+- motif_refus TEXT NULL
+- commentaire TEXT NULL
+- date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+- date_modification TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+
+Index:
+- KEY idx_operateur (operateur_id)
+- KEY idx_type (type_conge)
+- KEY idx_statut (statut)
+- KEY idx_dates (date_debut, date_fin)
+- KEY idx_conges_operateur_annee (operateur_id, date_debut)
+
+Triggers:
+- tg_conges_calcul_jours (BEFORE INSERT) : définit `nombre_jours = DATEDIFF(date_fin, date_debut) + 1`.
+- tg_conges_update_compteur (AFTER UPDATE) : quand `statut` passe à 'Validé', met à jour `compteur_conges` selon le type (CP/RTT).
+
+====================================================================
+TABLE: compteur_conges
+--------------------------------------------------------------------
+Rôle: Compteur annuel CP/RTT par opérateur.
+Clé primaire: id (INT AUTO_INCREMENT)
+FK: operateur_id → operateurs(id) ON DELETE CASCADE
+Contrainte d’unicité: (operateur_id, annee)
+
+Champs:
+- id INT NOT NULL AUTO_INCREMENT
+- operateur_id INT NOT NULL
+- annee YEAR NOT NULL : Année du suivi.
+- cp_acquis DECIMAL(5,1) DEFAULT 0.0
+- cp_pris DECIMAL(5,1) DEFAULT 0.0
+- cp_restant DECIMAL(5,1) GENERATED ALWAYS AS (cp_acquis - cp_pris) STORED
+- rtt_acquis DECIMAL(5,1) DEFAULT 0.0
+- rtt_pris DECIMAL(5,1) DEFAULT 0.0
+- rtt_restant DECIMAL(5,1) GENERATED ALWAYS AS (rtt_acquis - rtt_pris) STORED
+- sans_solde_pris DECIMAL(5,1) DEFAULT 0.0
+- maladie_jours DECIMAL(5,1) DEFAULT 0.0
+- date_mise_a_jour TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+
+Index:
+- UNIQUE uk_operateur_annee (operateur_id, annee)
+- KEY idx_annee (annee)
+
+====================================================================
+TABLE: formation
+--------------------------------------------------------------------
+Rôle: Suivi des formations opérateurs.
+Clé primaire: id (INT AUTO_INCREMENT)
+FK: operateur_id → operateurs(id) ON DELETE CASCADE
+
+Champs:
+- id INT NOT NULL AUTO_INCREMENT
+- operateur_id INT NOT NULL
+- intitule VARCHAR(255) NOT NULL
+- organisme VARCHAR(255) NULL
+- date_debut DATE NOT NULL
+- date_fin DATE NOT NULL
+- duree_heures DECIMAL(6,2) NULL
+- statut ENUM('Planifiée','En cours','Terminée','Annulée') DEFAULT 'Planifiée'
+- certificat_obtenu TINYINT(1) DEFAULT 0
+- cout DECIMAL(10,2) NULL
+- commentaire TEXT NULL
+- date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+- date_modification TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+
+Index:
+- KEY idx_operateur (operateur_id)
+- KEY idx_statut (statut)
+- KEY idx_dates (date_debut, date_fin)
+- KEY idx_formation_operateur_dates (operateur_id, date_debut, date_fin)
+
+====================================================================
+TABLE: declaration
+--------------------------------------------------------------------
+Rôle: Déclarations d’accidents/arrêts (sécurité & RH).
+Clé primaire: id (INT AUTO_INCREMENT)
+FK: operateur_id → operateurs(id) ON DELETE CASCADE
+
+Champs:
+- id INT NOT NULL AUTO_INCREMENT
+- operateur_id INT NOT NULL
+- type_declaration ENUM('Absence','Arrêt maladie','Accident de travail','Accident de trajet') NOT NULL
+- date_debut DATE NOT NULL
+- date_fin DATE NULL
+- date_declaration DATETIME DEFAULT CURRENT_TIMESTAMP
+- motif TEXT NULL
+- justificatif_fourni TINYINT(1) DEFAULT 0
+- chemin_justificatif VARCHAR(500) NULL
+- commentaire TEXT NULL
+- lieu_accident VARCHAR(255) NULL
+- circonstances TEXT NULL
+- temoin_nom VARCHAR(100) NULL
+- temoin_prenom VARCHAR(100) NULL
+- date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+- date_modification TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+
+Index:
+- KEY idx_operateur (operateur_id)
+- KEY idx_type (type_declaration)
+- KEY idx_dates (date_debut, date_fin)
+- KEY idx_date_declaration (date_declaration)
+
+====================================================================
+TABLE: validite
+--------------------------------------------------------------------
+Rôle: Suivi des statuts RQTH/OETH et leurs périodes.
+Clé primaire: id (INT AUTO_INCREMENT)
+FK: operateur_id → operateurs(id) ON DELETE CASCADE
+
+Champs:
+- id INT NOT NULL AUTO_INCREMENT
+- operateur_id INT NOT NULL
+- type_validite ENUM('RQTH','OETH') NOT NULL
+- date_debut DATE NOT NULL
+- date_fin DATE NULL
+- periodicite ENUM('Périodique','Permanent') DEFAULT 'Périodique'
+- taux_incapacite DECIMAL(5,2) NULL : % d’incapacité (pour RQTH).
+- document_justificatif VARCHAR(255) NULL
+- commentaire TEXT NULL
+- date_creation TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+- date_modification TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+
+Index:
+- KEY idx_operateur (operateur_id)
+- KEY idx_type (type_validite)
+- KEY idx_dates (date_debut, date_fin)
+
+====================================================================
+TABLE: historique
+--------------------------------------------------------------------
+Rôle: Journalisation des actions (audit).
+Clé primaire: id (INT AUTO_INCREMENT)
+FK: operateur_id → operateurs(id) ON DELETE CASCADE
+FK: poste_id → postes(id) ON DELETE CASCADE
+
+Champs:
+- id INT NOT NULL AUTO_INCREMENT
+- date_time DATETIME NOT NULL : Date et heure de l’événement.
+- action VARCHAR(255) NOT NULL : Intitulé de l’action.
+- operateur_id INT NULL : Opérateur concerné (facultatif).
+- poste_id INT NULL : Poste concerné (facultatif).
+- description TEXT NULL : Détail de l’action.
+
+Index:
+- KEY operateur_id (operateur_id)
+- KEY poste_id (poste_id)
+
+====================================================================
+TABLE: tranche_age
+--------------------------------------------------------------------
+Rôle: Référentiel des tranches d’âge (statistiques).
+Clé primaire: id (INT AUTO_INCREMENT)
+
+Champs:
+- id INT NOT NULL AUTO_INCREMENT
+- libelle VARCHAR(50) NOT NULL : Ex. '0-25 ans'.
+- age_min INT NOT NULL
+- age_max INT NULL (NULL = pas de borne sup.)
+
+====================================================================
+VUES
+--------------------------------------------------------------------
+
+VUE: v_operateurs_complet
+Rôle: Vue agrégée pour affichage RH (fiche opérateur / listes).
+Jointures: operateurs o
+           LEFT JOIN operateur_infos oi ON o.id = oi.operateur_id
+           LEFT JOIN contrat c ON o.id = c.operateur_id AND c.actif = TRUE
+Champs exposés (principaux):
+- id, matricule, nom, prenom, statut
+- sexe, date_naissance
+- age = TIMESTAMPDIFF(YEAR, oi.date_naissance, CURDATE())
+- tranche_age (CASE calculé)
+- date_entree, email, telephone
+- contrat_actuel (type_contrat), categorie, etp
+
+VUE: v_conges_actifs
+Rôle: Liste des congés en attente / validés / en cours avec date_fin ≥ CURDATE().
+Jointures: conges c JOIN operateurs o ON c.operateur_id = o.id
+Champs: id, matricule, operateur (concat nom+prenom), type_conge, date_debut, date_fin, nombre_jours, statut, date_demande
+Tri par date_debut.
+
+VUE: v_solde_conges
+Rôle: Soldes CP/RTT pour l’année courante.
+Jointures: compteur_conges cc JOIN operateurs o ON cc.operateur_id = o.id
+Filtre: cc.annee = YEAR(CURDATE())
+Champs: matricule, operateur (nom+prenom), annee, cp_acquis, cp_pris, cp_restant, rtt_acquis, rtt_pris, rtt_restant
+
+====================================================================
+RECOMMANDATIONS
+--------------------------------------------------------------------
+1) Encodage: forcer la connexion appli à utf8mb4 et collation utf8mb4_general_ci.
+2) FK manquante dans absences: ajouter `FOREIGN KEY (operateur_id) REFERENCES operateurs(id) ON DELETE CASCADE`.
+3) Pagination et index: utiliser LIMIT + ORDER BY sur les vues en interface.
+4) Historisation des contrats: prévoir une table contrat_historique si besoin d’audit fin.
+5) Sécurité NIR: stocker la clé de chiffrement en dehors de la BDD (ex. vault).
+
+====================================================================
+NOTES DE DOMAINES (RH)
+--------------------------------------------------------------------
+- Niveaux de polyvalence (1..4) : définir un référentiel métier et des règles d’évaluation.
+- ETP (Equivalent Temps Plein) : DECIMAL(3,2), ex. 0.50 = mi-temps, 1.00 = temps plein.
+- Statuts RQTH/OETH : suivre les échéances via `date_fin` et des alertes applicatives.
+- Compteurs CP/RTT: colonnes générées assurent un solde en lecture direct; l’actualisation dépend des triggers de `conges`.

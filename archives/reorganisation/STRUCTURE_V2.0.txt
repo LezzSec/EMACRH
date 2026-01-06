@@ -1,0 +1,320 @@
+EMAC v2.0 - NOUVELLE STRUCTURE
+================================================================================
+
+📁 RACINE DU PROJET
+├── 📄 README.md (nouveau)
+├── 📄 CLAUDE.md (mis à jour)
+├── 📄 CHANGELOG.md
+├── 📄 requirements.txt
+├── 📄 .env (gitignored)
+├── 📄 .gitignore
+│
+├── 📄 REORGANISATION_2026-01-05.md (⭐ DOCUMENTATION COMPLÈTE)
+├── 📄 GUIDE_RAPIDE_REORGANISATION.md (⭐ GUIDE RAPIDE)
+│
+├── 📁 src/emac/                    ⭐ CODE SOURCE PRINCIPAL
+│   ├── __init__.py
+│   ├── __main__.py (point d'entrée: python -m emac)
+│   │
+│   ├── 📁 db/                      💾 BASE DE DONNÉES
+│   │   ├── __init__.py
+│   │   ├── connection.py (ex-configbd.py)
+│   │   └── import_infos.py
+│   │
+│   ├── 📁 services/                🧠 LOGIQUE MÉTIER
+│   │   ├── __init__.py
+│   │   ├── auth.py
+│   │   ├── evaluation.py
+│   │   ├── calendar.py
+│   │   ├── contract.py
+│   │   ├── absence.py
+│   │   ├── document.py
+│   │   ├── matricule.py
+│   │   ├── grid.py
+│   │   ├── logger.py
+│   │   ├── polyvalence.py
+│   │   └── log_exporter.py
+│   │
+│   ├── 📁 gui/                     🎨 INTERFACE UTILISATEUR
+│   │   ├── __init__.py
+│   │   ├── app.py (ex-main_qt.py)
+│   │   │
+│   │   ├── 📁 components/          Composants réutilisables
+│   │   │   ├── __init__.py
+│   │   │   ├── theme.py
+│   │   │   └── ui_kit.py
+│   │   │
+│   │   ├── 📁 dialogs/             Fenêtres de dialogue
+│   │   │   ├── __init__.py
+│   │   │   ├── login.py
+│   │   │   ├── personnel.py
+│   │   │   ├── evaluation.py
+│   │   │   ├── rh.py
+│   │   │   ├── absences.py
+│   │   │   ├── documents.py
+│   │   │   ├── contracts.py
+│   │   │   ├── positions.py
+│   │   │   ├── users.py
+│   │   │   └── manage_employee.py
+│   │   │
+│   │   ├── 📁 views/               Vues principales
+│   │   │   ├── __init__.py
+│   │   │   ├── grids.py
+│   │   │   ├── planning.py
+│   │   │   ├── history.py
+│   │   │   └── dashboard.py
+│   │   │
+│   │   └── 📁 widgets/             Widgets personnalisés
+│   │       ├── __init__.py
+│   │       └── document_widget.py
+│   │
+│   ├── 📁 exporters/               📤 EXPORTS
+│   │   ├── __init__.py
+│   │   ├── excel.py
+│   │   ├── pdf.py
+│   │   └── csv.py
+│   │
+│   └── 📁 utils/                   🛠️ UTILITAIRES
+│       ├── __init__.py
+│       ├── paths.py
+│       └── permissions.py
+│
+├── 📁 tests/                       🧪 TESTS
+│   ├── __init__.py
+│   ├── conftest.py
+│   ├── run_tests.py
+│   │
+│   ├── 📁 unit/                    Tests unitaires
+│   │   ├── __init__.py
+│   │   └── 📁 test_services/
+│   │       ├── __init__.py
+│   │       ├── test_evaluation.py
+│   │       ├── test_matricule.py
+│   │       └── test_contract.py
+│   │
+│   ├── 📁 integration/             Tests d'intégration
+│   │   ├── __init__.py
+│   │   ├── test_database.py
+│   │   ├── test_integration_complete.py
+│   │   └── test_simulation_complete.py
+│   │
+│   └── 📁 ui/                      Tests UI
+│       └── __init__.py
+│
+├── 📁 database/                    💾 BASE DE DONNÉES
+│   ├── README.md
+│   │
+│   ├── 📁 schema/
+│   │   ├── 📁 current/
+│   │   │   ├── 00_main_schema.sql
+│   │   │   ├── 01_historique.sql
+│   │   │   └── 02_users.sql
+│   │   └── 📁 archive/
+│   │
+│   ├── 📁 migrations/
+│   │   ├── 📁 applied/
+│   │   │   ├── 001_add_user_management.sql
+│   │   │   ├── 002_historique_columns.sql
+│   │   │   └── 003_absences_schema.sql
+│   │   └── 📁 rollback/
+│   │       └── rollback_personnel.sql
+│   │
+│   ├── 📁 backups/
+│   │   ├── 📁 latest/
+│   │   └── 📁 archive/
+│   │
+│   └── 📁 seeds/
+│       ├── 📁 dev/
+│       │   ├── insert_atelier.py
+│       │   ├── insert_postes.py
+│       │   └── insert_personnel.py
+│       └── 📁 prod/
+│
+├── 📁 tools/                       🔧 OUTILS DE DÉVELOPPEMENT
+│   ├── 📁 setup/                   Installation & config
+│   │   ├── configure_db.bat
+│   │   └── install_*.py
+│   │
+│   ├── 📁 maintenance/             Maintenance
+│   │   ├── cleanup_*.py
+│   │   ├── fix_*.py
+│   │   ├── reset_*.py
+│   │   └── update_*.py
+│   │
+│   ├── 📁 migration/               Migration
+│   │   ├── migrate_imports.py (⭐ SCRIPT DE MIGRATION)
+│   │   └── migrate_*.py
+│   │
+│   ├── 📁 diagnostics/             Diagnostic
+│   │   ├── quick_db_query.py
+│   │   └── test_*.py
+│   │
+│   └── 📁 security/                Sécurité
+│
+├── 📁 build/                       🏗️ SYSTÈME DE BUILD
+│   ├── README.md
+│   │
+│   ├── 📁 configs/
+│   │   └── emac.spec (PyInstaller config)
+│   │
+│   ├── 📁 scripts/
+│   │   ├── build.bat
+│   │   └── clean.bat
+│   │
+│   ├── 📁 assets/
+│   │
+│   └── 📁 output/ (gitignored)
+│       ├── debug/
+│       └── release/
+│
+├── 📁 deploy/                      🚀 DÉPLOIEMENT
+│   ├── README.md
+│   │
+│   ├── 📁 local/
+│   │   ├── launcher.vbs
+│   │   └── launch.bat
+│   │
+│   ├── 📁 network/
+│   │   └── deploy.bat
+│   │
+│   └── 📁 diagnostics/
+│       └── diagnostic_*.bat
+│
+├── 📁 docs/                        📚 DOCUMENTATION
+│   ├── README.md
+│   │
+│   ├── 📁 getting-started/
+│   │   ├── quick-start.md
+│   │   ├── installation.md
+│   │   └── first-steps.md
+│   │
+│   ├── 📁 user-guides/
+│   │   ├── personnel-management.md
+│   │   ├── evaluations.md
+│   │   ├── absences.md
+│   │   └── troubleshooting.md
+│   │
+│   ├── 📁 developer/
+│   │   ├── architecture.md
+│   │   ├── database-design.md
+│   │   ├── build-system.md
+│   │   └── testing.md
+│   │
+│   ├── 📁 deployment/
+│   │   ├── local-deployment.md
+│   │   └── network-deployment.md
+│   │
+│   ├── 📁 security/
+│   │   ├── credentials-management.md
+│   │   └── best-practices.md
+│   │
+│   └── 📁 features/
+│       ├── authentication.md
+│       ├── polyvalence-history.md
+│       └── absence-module.md
+│
+├── 📁 config/                      ⚙️ CONFIGURATION
+│   ├── README.md
+│   ├── .env.example
+│   └── configure_db.bat
+│
+├── 📁 logs/ (gitignored)           📝 LOGS
+│
+└── 📁 archives/                    📦 ARCHIVES
+    ├── README.md
+    │
+    ├── 📁 code/
+    │   ├── old_specs/
+    │   │   ├── EMAC.spec
+    │   │   ├── EMAC_debug.spec
+    │   │   └── EMAC_optimized.spec
+    │   └── old_build_scripts/
+    │       ├── build_clean.bat
+    │       └── build_nuitka.bat
+    │
+    ├── 📁 database/
+    │   └── old_backups/
+    │       └── bddserver*.sql
+    │
+    ├── 📁 docs/
+    │   └── reorganization_history/
+    │
+    └── 📁 builds/
+
+================================================================================
+ANCIEN CODE (App/) - CONSERVÉ TEMPORAIREMENT
+================================================================================
+
+📁 App/                             ⚠️ ANCIEN CODE (à migrer)
+    ├── core/
+    │   ├── db/
+    │   ├── services/
+    │   ├── gui/
+    │   └── exporters/
+    ├── database/
+    ├── tests/
+    └── scripts/
+
+================================================================================
+STATISTIQUES
+================================================================================
+
+Code Source:
+  - Fichiers Python copiés: ~105
+  - Services renommés: 9 (sans suffix _service)
+  - GUI réorganisé: 28 fichiers en components/dialogs/views/widgets
+
+Tests:
+  - Tests unitaires: 3+
+  - Tests intégration: 5+
+  - Structure: unit/ | integration/ | ui/
+
+Scripts:
+  - Scripts réorganisés: 24
+  - Catégories: setup | maintenance | migration | diagnostics | security
+
+Build:
+  - Specs consolidés: 5 → 1
+  - Scripts build: 7 → 2
+
+Documentation:
+  - Fichiers MD déplacés: 13+
+  - Nouvelles catégories: 6
+
+Base de données:
+  - Schémas organisés: current/ | archive/
+  - Migrations: applied/ | rollback/
+  - Backups archivés: 7
+
+Archives:
+  - Fichiers archivés: 20+
+  - Catégories: code | database | docs | builds
+
+================================================================================
+PROCHAINES ÉTAPES
+================================================================================
+
+1. ⏳ Exécuter: tools/migration/migrate_imports.py
+2. ⏳ Tester: python -m emac
+3. ⏳ Valider build: cd build/scripts && build.bat
+4. ⏳ Exécuter tests: cd tests && python run_tests.py
+5. ⏳ Remplacer README_NEW.md → README.md
+6. ⏳ Remplacer CLAUDE_NEW.md → CLAUDE.md
+7. ⏳ Supprimer code redondant de App/
+8. ⏳ Commit et release v2.0
+
+================================================================================
+DOCUMENTATION CLÉS
+================================================================================
+
+⭐ GUIDE_RAPIDE_REORGANISATION.md   - Démarrage rapide
+⭐ REORGANISATION_2026-01-05.md     - Documentation complète
+⭐ README_NEW.md                     - Nouveau README
+⭐ CLAUDE_NEW.md                     - Guide développeur mis à jour
+⭐ tools/migration/migrate_imports.py - Script de migration
+
+================================================================================
+Date de réorganisation: 2026-01-05
+Version: 2.0.0
+Statut: ✅ Structure créée | ⏳ Migration du code en attente
+================================================================================

@@ -340,10 +340,64 @@ def create_user(username: str, password: str, nom: str, prenom: str, role_id: in
         conn.close()
 
 
+def count_active_admins() -> int:
+    """Compte le nombre d'administrateurs actifs dans le système"""
+    conn = get_connection()
+    if not conn:
+        return 0
+
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT COUNT(*) as count
+            FROM utilisateurs u
+            JOIN roles r ON u.role_id = r.id
+            WHERE r.nom = 'admin' AND u.actif = 1
+        """)
+        result = cur.fetchone()
+        return result[0] if result else 0
+    except Exception as e:
+        print(f"Erreur lors du comptage des admins actifs: {e}")
+        return 0
+    finally:
+        cur.close()
+        conn.close()
+
+
+def is_user_admin(user_id: int) -> bool:
+    """Vérifie si un utilisateur donné est administrateur"""
+    conn = get_connection()
+    if not conn:
+        return False
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        cur.execute("""
+            SELECT r.nom as role_nom
+            FROM utilisateurs u
+            JOIN roles r ON u.role_id = r.id
+            WHERE u.id = %s
+        """, (user_id,))
+        result = cur.fetchone()
+        return result and result['role_nom'] == 'admin'
+    except Exception as e:
+        print(f"Erreur lors de la vérification du rôle: {e}")
+        return False
+    finally:
+        cur.close()
+        conn.close()
+
+
 def update_user_status(user_id: int, actif: bool) -> tuple[bool, Optional[str]]:
     """Active ou désactive un utilisateur (admin uniquement)"""
     if not is_admin():
         return False, "Seuls les administrateurs peuvent modifier les utilisateurs"
+
+    # Vérification de sécurité : empêcher la désactivation du dernier admin
+    if not actif and is_user_admin(user_id):
+        active_admins = count_active_admins()
+        if active_admins <= 1:
+            return False, "Impossible de désactiver le dernier administrateur actif du système"
 
     conn = get_connection()
     if not conn:

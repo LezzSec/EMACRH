@@ -12,7 +12,7 @@ from PyQt5.QtCore import Qt
 from core.gui.ui_theme import EmacTheme, EmacButton, EmacCard
 from core.services.auth_service import (
     get_all_users, create_user, update_user_status,
-    change_password, get_roles, is_admin
+    change_password, get_roles, is_admin, count_active_admins, is_user_admin
 )
 
 
@@ -86,6 +86,9 @@ class UserManagementDialog(QDialog):
         users = get_all_users()
         self.users_table.setRowCount(len(users))
 
+        # Compter les administrateurs actifs pour la sécurité
+        active_admins_count = count_active_admins()
+
         for row, user in enumerate(users):
             # ID
             self.users_table.setItem(row, 0, QTableWidgetItem(str(user['id'])))
@@ -117,10 +120,21 @@ class UserManagementDialog(QDialog):
             actions_layout.setContentsMargins(4, 4, 4, 4)
             actions_layout.setSpacing(4)
 
+            # Vérifier si c'est le dernier admin actif
+            is_last_admin = (user['actif'] and
+                           user['role_nom'] == 'admin' and
+                           active_admins_count <= 1)
+
             # Bouton activer/désactiver
             if user['actif']:
                 btn_toggle = QPushButton("Désactiver")
-                btn_toggle.setStyleSheet("background-color: #f44336; color: white; padding: 4px 8px; border-radius: 4px;")
+                if is_last_admin:
+                    # Désactiver le bouton pour le dernier admin
+                    btn_toggle.setEnabled(False)
+                    btn_toggle.setStyleSheet("background-color: #bdbdbd; color: #757575; padding: 4px 8px; border-radius: 4px; cursor: not-allowed;")
+                    btn_toggle.setToolTip("Impossible de désactiver le dernier administrateur actif")
+                else:
+                    btn_toggle.setStyleSheet("background-color: #f44336; color: white; padding: 4px 8px; border-radius: 4px;")
             else:
                 btn_toggle = QPushButton("Activer")
                 btn_toggle.setStyleSheet("background-color: #4caf50; color: white; padding: 4px 8px; border-radius: 4px;")

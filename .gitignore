@@ -1,7 +1,6 @@
 # ============================================================================
 # EMAC Project - Git Ignore Configuration
 # ============================================================================
-# Note: Ajoutez temp_archives/ à la fin pour ignorer les archives temporaires
 
 # Python
 __pycache__/
@@ -11,7 +10,6 @@ __pycache__/
 .Python
 build/
 develop-eggs/
-dist/
 downloads/
 eggs/
 .eggs/
@@ -40,11 +38,8 @@ env/
 *~
 .DS_Store
 
-# Logs and databases
+# Logs
 *.log
-*.sql
-*.sqlite
-*.db
 logs/
 *.log.*
 
@@ -52,64 +47,43 @@ logs/
 .env
 .env.local
 .env.*.local
+App/.env
 
-# PyInstaller
-*.manifest
-*.spec
+# PyInstaller build
 build/
 dist/
+*.spec.backup
 
 # Application specific
-App/.env
 App/logs/
-App/build/
-App/dist/
 App/__pycache__/
 App/*.log
+App/documents/uploads/
+App/database/backups/
 
-# ============================================================================
-# FICHIERS TEMPORAIRES ET ANALYSES À NE PAS COMMITER
-# ============================================================================
-
-# Fichiers d'analyse de sécurité SQL (temporaires)
-LIRE_D_ABORD.txt
-RESUME_SECURITE.txt
-LISTE_FICHIERS_SECURITE.txt
-INDEX_SECURITE_SQL.md
-RAPPORT_SECURITE_SQL.md
-CORRECTIONS_SECURITE_SQL.md
-SECURITE_SQL_README.md
-sql_security_checker.py
-
-# Fichiers de réorganisation (temporaires)
-REORGANISATION_PLAN.md
-REORGANISATION_COMPLETE.md
-
-# Dumps de base de données
-emac_db.sql
+# Database files
+*.sql
+*.sqlite
+*.db
 *.sql.gz
 *.sql.zip
-database_dumps/
-
-# Dossier de fichiers inutilisés
-Fichiers inutilisés/
-"Fichiers inutilisés/"
 
 # Backups et exports temporaires
 *.backup
 *.bak
 *.tmp
+*.old
 exports/
 temp/
 
-# Archives temporaires (fichiers retirés du git mais conservés localement)
-temp_archives/
-
 # ============================================================================
-# À CONSERVER DANS GIT (exemples pour référence)
+# À CONSERVER DANS GIT
 # ============================================================================
 # App/                    - Code source de l'application
 # docs/                   - Documentation du projet
+# archives/               - Historique du projet (archivé)
 # README.md               - Documentation principale
 # CLAUDE.md               - Instructions pour Claude Code
-# .claude/                - Configuration Claude Code (settings.local.json ignoré)
+# build_pyinstaller.bat   - Script de build
+# EMAC.spec               - Configuration PyInstaller
+# .gitignore              - Cette configuration

@@ -1,0 +1,1 @@
+scp -i "C:\Users\tlahirigoyen\Desktop\PUTTY SERVER\cléprivée" "C:\Users\tlahirigoyen\Desktop\emac_db_safe_merge.sql" administrateur@192.168.1.128:/home/administrateur/
