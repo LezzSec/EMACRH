@@ -27,22 +27,30 @@ git clone <repo-url>
 cd EMAC
 
 # 2. Installer les dépendances
-pip install -r Fichiers\ inutilisés/requirements.txt
+pip install -r App/requirements.txt
 
 # 3. Configurer la base de données
 cd App/config
 configure_db.bat  # Windows
 # Ou copier .env.example vers App/.env et remplir les valeurs
 
-# 4. Initialiser la base de données
-mysql -u root -p emac_db < database/schema/bddemac.sql
+# 4. Initialiser la base de données MySQL
+mysql -u root -p emac_db < App/database/schema/bddemac.sql
 
-# 5. Lancer l'application
-cd ..
+# 5. ⚡ NOUVEAU : Appliquer les optimisations de performance (RECOMMANDÉ)
+cd App/scripts
+python apply_performance_indexes.py  # Ajoute 29 index → app 10-100x plus rapide
+
+# 6. Lancer l'application
+cd App
 py -m core.gui.main_qt
 ```
 
-**Guide détaillé** : [App/config/README.md](App/config/README.md)
+**Guides** :
+- ⚡ [DEMARRAGE_RAPIDE.md](DEMARRAGE_RAPIDE.md) - Installation en 5 minutes
+- 📖 [App/config/README.md](App/config/README.md) - Configuration détaillée
+- 🌐 [docs/INSTALLATION_CLIENT.md](docs/INSTALLATION_CLIENT.md) - Installation réseau
+- 🗺️ [INDEX.md](INDEX.md) - Navigation complète du projet
 
 ---
 
@@ -57,7 +65,23 @@ py -m core.gui.main_qt
 - 🧪 [Guide des tests](docs/dev/tests-report.md)
 - 🔧 [Optimisation de l'exécutable](docs/dev/build-optimization.md)
 - 🌐 [Déploiement réseau](docs/dev/deploiement-reseau.md) ⚡ **Résout la lenteur au lancement**
+
+#### 🔥 Optimisations Performance (NOUVEAU 2026-01-07)
+- ⚡ **[Optimisations Base de Données](docs/dev/optimisation-database.md)** - Gains 10-100x avec indexes
+- 🧵 **[Optimisations UI/Threads](docs/dev/optimisation-ui-threads.md)** - UI fluide, zero freeze
+- 💾 **[Optimisations Cache](docs/dev/optimisation-cache.md)** - Cache mémoire avec TTL
+- 📦 **[Optimisations Packaging](docs/dev/optimisation-packaging.md)** - PyInstaller démarrage 5x plus rapide
+- 📝 **[Optimisations Logs/IO](docs/dev/optimisation-logs-io.md)** - Logs async, évite micro-lenteurs
+
+#### Guides rapides des optimisations
+- 📄 [DB - Guide rapide](OPTIMISATIONS_DB_APPLIQUEES.md)
+- 📄 [UI - Guide rapide](OPTIMISATIONS_UI_APPLIQUEES.md)
+- 📄 [Cache - Guide rapide](OPTIMISATIONS_CACHE_APPLIQUEES.md)
+- 📄 [Packaging - Guide rapide](OPTIMISATIONS_PACKAGING_APPLIQUEES.md)
+- 📄 [Logs - Guide rapide](OPTIMISATIONS_LOGS_APPLIQUEES.md)
+
 - 📝 [Exemples de logging](docs/dev/exemples-logging.md)
+- 💡 [Exemples de cache](docs/dev/exemples-cache.md)
 
 ### Fonctionnalités
 - 📋 [Module Absences](docs/features/module-absences.md)
@@ -73,9 +97,11 @@ py -m core.gui.main_qt
 ## 🛠️ Technologies
 
 - **Interface** : PyQt5 (thème personnalisé)
-- **Base de données** : MySQL 8.0
+- **Base de données** : MySQL 8.0 (serveur distant ou local)
 - **Exports** : Excel (openpyxl), PDF (ReportLab)
 - **Logging** : Système d'audit complet en base de données
+
+**Note importante** : Les postes clients n'ont **PAS besoin** d'installer MySQL. Seul le serveur hébergeant la base de données nécessite MySQL. L'application se connecte au serveur via le réseau.
 
 ---
 
@@ -136,6 +162,39 @@ Les tests couvrent :
 - ✅ Gestion des matricules
 
 **Rapport de tests** : [docs/dev/tests-report.md](docs/dev/tests-report.md)
+
+---
+
+## 📦 Déploiement
+
+### Build de l'exécutable
+
+Pour créer un exécutable autonome optimisé :
+
+```bash
+# Build optimisé (recommandé)
+build_optimized.bat
+
+# Résultat : dist/EMAC/ (~40-60 MB)
+```
+
+**Guide complet** : [docs/dev/guide-optimisation-build.md](docs/dev/guide-optimisation-build.md)
+
+### Installation sur les postes clients
+
+⚠️ **Aucune installation de MySQL nécessaire sur les postes clients !**
+
+1. Copiez le dossier `dist/EMAC/` sur le poste client
+2. Configurez `.env` avec l'adresse du serveur MySQL :
+   ```env
+   EMAC_DB_HOST=192.168.1.100  # IP du serveur
+   EMAC_DB_USER=emac_user
+   EMAC_DB_PASSWORD=***
+   EMAC_DB_NAME=emac_db
+   ```
+3. Lancez `EMAC.exe`
+
+**Guide d'installation client** : [INSTALLATION_CLIENT.md](INSTALLATION_CLIENT.md)
 
 ---
 

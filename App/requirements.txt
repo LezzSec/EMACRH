@@ -1,5 +1,6 @@
 # EMAC - Gestion du Personnel
 # Requirements Python pour l'application
+# Version optimisée : modules inutilisés supprimés
 
 # Interface graphique
 PyQt5==5.15.10
@@ -7,23 +8,26 @@ PyQt5==5.15.10
 # Base de données
 mysql-connector-python==8.4.0
 
-# Manipulation de données
-pandas==2.2.2
-
 # Export Excel
 openpyxl==3.1.5
 
 # Export PDF
 reportlab==4.2.2
 
-# Documents Office
-python-docx==1.1.2
-python-pptx==0.6.23
-odfpy==1.4.1
-pypandoc==1.13
-
 # Sécurité - Système d'authentification
 bcrypt==4.1.2
 
 # Variables d'environnement
 python-dotenv==1.0.0
+
+# ====================================================================================
+# MODULES SUPPRIMÉS (non utilisés - économie: ~81 MB au build):
+# ====================================================================================
+# pandas==2.2.2              # Import commenté dans liste_et_grilles.py (~50 MB)
+# python-docx==1.1.2         # Jamais importé (~5 MB)
+# python-pptx==0.6.23        # Jamais importé (~8 MB)
+# odfpy==1.4.1               # Jamais importé (~3 MB)
+# pypandoc==1.13             # Jamais importé (~15 MB)
+#
+# Si vous avez besoin de réactiver un de ces modules, décommentez la ligne
+# correspondante et réinstallez avec: pip install -r requirements.txt

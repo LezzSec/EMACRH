@@ -61,7 +61,9 @@
       "Bash(git mv:*)",
       "Bash(mv:*)",
       "Bash(cmd.exe /c buildscriptsbuild_for_network.bat)",
-      "Bash(cmd.exe /c VERIFICATION.bat)"
+      "Bash(cmd.exe /c VERIFICATION.bat)",
+      "Bash(awk:*)",
+      "Bash(cmd.exe /c build.bat)"
     ],
     "deny": [],
     "ask": []

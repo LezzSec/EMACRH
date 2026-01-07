@@ -30,29 +30,43 @@ except Exception:
 
 
 # ===========================
-#  Workers (ThreadPool)
+#  Workers (ThreadPool) - ✅ Utilisation du nouveau module db_worker
 # ===========================
 
-class WorkerSignals(QObject):
-    result = pyqtSignal(object)
-    error = pyqtSignal(str)
+# Import du système de workers optimisé
+try:
+    from core.gui.db_worker import (
+        DbWorker, DbThreadPool, run_in_background,
+        show_loading_placeholder, show_error_placeholder
+    )
+    # ✅ Initialiser le pool avec la bonne configuration
+    _thread_pool = DbThreadPool.get_pool()
+    print(f"✅ DbThreadPool initialisé : {_thread_pool.maxThreadCount()} threads max")
+except ImportError:
+    # Fallback si le module n'existe pas encore
+    class WorkerSignals(QObject):
+        result = pyqtSignal(object)
+        error = pyqtSignal(str)
 
+    class DbWorker(QRunnable):
+        """Exécute une fonction DB en background et renvoie le résultat."""
+        def __init__(self, fn, *args, **kwargs):
+            super().__init__()
+            self.fn = fn
+            self.args = args
+            self.kwargs = kwargs
+            self.signals = WorkerSignals()
 
-class DbWorker(QRunnable):
-    """Exécute une fonction DB en background et renvoie le résultat."""
-    def __init__(self, fn, *args, **kwargs):
-        super().__init__()
-        self.fn = fn
-        self.args = args
-        self.kwargs = kwargs
-        self.signals = WorkerSignals()
+        def run(self):
+            try:
+                res = self.fn(*self.args, **self.kwargs)
+                self.signals.result.emit(res)
+            except Exception:
+                self.signals.error.emit(traceback.format_exc())
 
-    def run(self):
-        try:
-            res = self.fn(*self.args, **self.kwargs)
-            self.signals.result.emit(res)
-        except Exception:
-            self.signals.error.emit(traceback.format_exc())
+    _thread_pool = QThreadPool.globalInstance()
+    # Limiter à 4 threads par défaut
+    _thread_pool.setMaxThreadCount(4)
 
 
 # ===========================
@@ -456,8 +470,20 @@ class MainWindow(QMainWindow):
         ManageOperatorsDialog().exec_()
 
     def show_gestion_evaluations(self):
-        from core.gui.gestion_evaluation import GestionEvaluationDialog
-        GestionEvaluationDialog().exec_()
+        """Ouvre le dialogue de gestion des évaluations"""
+        try:
+            from core.gui.gestion_evaluation import GestionEvaluationDialog
+            dialog = GestionEvaluationDialog()
+            dialog.exec_()
+        except Exception as e:
+            from PyQt5.QtWidgets import QMessageBox
+            import traceback
+            error_msg = f"Erreur lors de l'ouverture de la gestion des évaluations :\n\n{str(e)}\n\n"
+            error_msg += f"Type: {type(e).__name__}\n\n"
+            error_msg += "Stack trace:\n" + traceback.format_exc()
+            QMessageBox.critical(self, "Erreur - Gestion Évaluations", error_msg)
+            print(f"[ERREUR] show_gestion_evaluations: {e}")
+            traceback.print_exc()
 
     def ouvrir_gestion_evaluations(self, filtre_statut):
         try:

@@ -1091,7 +1091,8 @@ class GestionEvaluationDialog(QDialog):
             self.all_evaluations = []
 
             for row in rows:
-                pers_id, nom, prenom, matricule, total, n4, n3, n2, n1, retard, a_planifier = row
+                # ATTENTION: L'ordre dans le SELECT est: ..., a_planifier, retard
+                pers_id, nom, prenom, matricule, total, n4, n3, n2, n1, a_planifier, retard = row
 
                 # Déterminer le statut global
                 if retard and retard > 0:

@@ -1,0 +1,30 @@
+# EMAC - Gestion du Personnel
+# Requirements Python OPTIMISÉS pour l'application
+# Version allégée : suppression des modules inutilisés (~81 MB économisés)
+
+# Interface graphique
+PyQt5==5.15.10
+
+# Base de données
+mysql-connector-python==8.4.0
+
+# Export Excel (UTILISÉ dans gestion_personnel.py, liste_et_grilles.py)
+openpyxl==3.1.5
+
+# Export PDF (UTILISÉ dans gestion_evaluation.py, gestion_personnel.py, liste_et_grilles.py)
+reportlab==4.2.2
+
+# Sécurité - Système d'authentification (UTILISÉ dans auth_service.py)
+bcrypt==4.1.2
+
+# Variables d'environnement (UTILISÉ dans configbd.py)
+python-dotenv==1.0.0
+
+# ====================================================================================
+# MODULES SUPPRIMÉS (non utilisés dans le code - gain: ~81 MB):
+# ====================================================================================
+# pandas==2.2.2              # NON UTILISÉ - Aucun import 'pandas' détecté (~50 MB)
+# python-docx==1.1.2         # NON UTILISÉ - Aucun import 'docx' détecté (~5 MB)
+# python-pptx==0.6.23        # NON UTILISÉ - Aucun import 'pptx' détecté (~8 MB)
+# odfpy==1.4.1               # NON UTILISÉ - Aucun import 'odf' détecté (~3 MB)
+# pypandoc==1.13             # NON UTILISÉ - Aucun import 'pypandoc' détecté (~15 MB)

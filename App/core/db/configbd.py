@@ -1,10 +1,17 @@
 # App/core/db/configbd.py
+# -*- coding: utf-8 -*-
+"""
+Module de configuration et gestion du pool de connexions MySQL.
+Centralise toute la logique de connexion à la base de données.
+"""
+
 import os
 import sys
 from pathlib import Path
+from typing import Optional
 
 import mysql.connector
-from mysql.connector import pooling
+from mysql.connector import pooling, Error as MySQLError
 
 from dotenv import load_dotenv
 
@@ -125,28 +132,78 @@ def _get_pool() -> pooling.MySQLConnectionPool:
     return _connection_pool
 
 
+def _ensure_connection_alive(conn) -> bool:
+    """
+    Vérifie qu'une connexion est vivante et tente de la reconnecter si nécessaire.
+    Utile après une mise en veille du PC ou une perte réseau temporaire.
+
+    Returns:
+        bool: True si la connexion est opérationnelle, False sinon
+    """
+    try:
+        conn.ping(reconnect=True, attempts=2, delay=1)
+        return True
+    except Exception:
+        return False
+
+
 def get_connection():
     """
-    Retourne une connexion depuis le pool.
+    Retourne une connexion depuis le pool avec vérification de la santé.
     IMPORTANT : pense à conn.close() après usage (ça la rend au pool).
+
+    Returns:
+        Connection: Une connexion MySQL opérationnelle
+
+    Raises:
+        RuntimeError: Si impossible d'obtenir une connexion saine
     """
     pool = _get_pool()
-    conn = pool.get_connection()
-    return conn
+    try:
+        conn = pool.get_connection()
+        # Vérifier que la connexion est vivante (important après veille PC)
+        if not _ensure_connection_alive(conn):
+            # Si la reconnexion échoue, fermer et récupérer une nouvelle connexion
+            try:
+                conn.close()
+            except:
+                pass
+            conn = pool.get_connection()
+        return conn
+    except MySQLError as e:
+        raise RuntimeError(f"Impossible d'obtenir une connexion DB: {e}") from e
 
 
 class DatabaseConnection:
     """
-    Gestionnaire de contexte pour gérer automatiquement les connexions.
+    Gestionnaire de contexte pour gérer automatiquement les connexions avec commit/rollback.
 
-    Usage:
+    ✅ Recommandé : À utiliser partout pour standardiser l'accès DB
+
+    Usage simple:
         with DatabaseConnection() as conn:
             cur = conn.cursor()
             cur.execute("SELECT ...")
-            # conn.close() est appelé automatiquement à la fin du with
+            # Commit automatique si pas d'erreur
+            # Rollback automatique en cas d'exception
+            # conn.close() appelé automatiquement
+
+    Usage avec transaction explicite:
+        with DatabaseConnection(auto_commit=False) as conn:
+            cur = conn.cursor()
+            cur.execute("INSERT ...")
+            cur.execute("UPDATE ...")
+            conn.commit()  # Commit manuel
     """
-    def __init__(self):
+    def __init__(self, auto_commit: bool = True):
+        """
+        Args:
+            auto_commit: Si True, commit automatique à la fin si pas d'erreur.
+                        Si False, nécessite conn.commit() manuel.
+        """
         self.conn = None
+        self.auto_commit = auto_commit
+        self._committed = False
 
     def __enter__(self):
         self.conn = get_connection()
@@ -154,11 +211,82 @@ class DatabaseConnection:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.conn:
-            if exc_type is not None:
-                # En cas d'erreur, rollback
-                try:
+            try:
+                if exc_type is not None:
+                    # En cas d'erreur, rollback
                     self.conn.rollback()
-                except:
+                elif self.auto_commit and not self._committed:
+                    # Commit automatique si demandé et pas déjà fait
+                    self.conn.commit()
+            except Exception:
+                # Ignorer les erreurs de rollback/commit pendant le cleanup
+                pass
+            finally:
+                try:
+                    self.conn.close()
+                except Exception:
                     pass
-            self.conn.close()
         return False  # Ne pas supprimer l'exception
+
+    def commit(self):
+        """Commit manuel (optionnel)"""
+        if self.conn:
+            self.conn.commit()
+            self._committed = True
+
+
+class DatabaseCursor:
+    """
+    Gestionnaire de contexte pour gérer automatiquement connexion + curseur.
+
+    ✅ Option Pro : Simplifie encore plus le code en gérant conn + cursor.
+
+    Usage:
+        with DatabaseCursor() as cur:
+            cur.execute("SELECT ...")
+            results = cur.fetchall()
+            # Commit + close automatiques
+
+    Usage avec dictionary cursor:
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute("SELECT id, nom FROM personnel")
+            rows = cur.fetchall()
+            # rows = [{'id': 1, 'nom': 'Dupont'}, ...]
+    """
+    def __init__(self, dictionary: bool = False, auto_commit: bool = True):
+        """
+        Args:
+            dictionary: Si True, retourne des dict au lieu de tuples
+            auto_commit: Si True, commit automatique si pas d'erreur
+        """
+        self.dictionary = dictionary
+        self.auto_commit = auto_commit
+        self.conn = None
+        self.cursor = None
+
+    def __enter__(self):
+        self.conn = get_connection()
+        self.cursor = self.conn.cursor(dictionary=self.dictionary)
+        return self.cursor
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.cursor:
+            try:
+                self.cursor.close()
+            except Exception:
+                pass
+
+        if self.conn:
+            try:
+                if exc_type is not None:
+                    self.conn.rollback()
+                elif self.auto_commit:
+                    self.conn.commit()
+            except Exception:
+                pass
+            finally:
+                try:
+                    self.conn.close()
+                except Exception:
+                    pass
+        return False

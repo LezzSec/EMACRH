@@ -55,6 +55,93 @@ For security changelog, see [docs/security/security-changelog.md](docs/security/
 
 Database schema is located in [App/database/schema/bddemac.sql](App/database/schema/bddemac.sql).
 
+### ⚡ Database Performance Optimizations (2026-01-07)
+
+**IMPORTANT**: Major database optimizations have been implemented for 10-100x performance gains:
+
+1. **MySQL Connection Pool** ([configbd.py](App/core/db/configbd.py))
+   - All connections go through `get_connection()` from the centralized pool
+   - 5 reusable connections with 5-second timeout
+   - Automatic ping/reconnect after PC sleep
+   - ❌ **NEVER use** `mysql.connector.connect()` directly
+
+2. **Context Managers** (standardized DB access)
+   ```python
+   # ✅ RECOMMENDED: Use DatabaseConnection or DatabaseCursor
+   from core.db.configbd import DatabaseConnection, DatabaseCursor
+
+   # Simple queries
+   with DatabaseCursor(dictionary=True) as cur:
+       cur.execute("SELECT * FROM personnel WHERE statut = 'ACTIF'")
+       results = cur.fetchall()
+
+   # Complex operations
+   with DatabaseConnection() as conn:
+       cur = conn.cursor()
+       cur.execute("INSERT ...")
+       # Auto commit/rollback/close
+   ```
+
+3. **Performance Indexes** (29 indexes on 9 tables)
+   - Apply with: `python App/scripts/apply_performance_indexes.py`
+   - Migration file: [App/database/migrations/001_add_performance_indexes.sql](App/database/migrations/001_add_performance_indexes.sql)
+   - Critical indexes on: `personnel.statut`, `polyvalence.prochaine_evaluation`, `polyvalence.operateur_id`, etc.
+
+4. **Optimized Queries**
+   - Authentication fetches user + role + permissions in 1 query instead of 2
+   - Avoid N+1 queries (use JOINs instead of loops with queries)
+
+**Full documentation**: [docs/dev/optimisation-database.md](docs/dev/optimisation-database.md)
+
+### ⚡ UI / Threads Optimizations (2026-01-07)
+
+**IMPORTANT**: UI responsiveness optimizations to prevent freezes:
+
+1. **DbWorker System** ([App/core/gui/db_worker.py](App/core/gui/db_worker.py))
+   - Generic worker for all DB operations
+   - QThreadPool configured automatically (4 threads max, aligned with MySQL pool)
+   - Signals: `result`, `error`, `progress`, `started`, `finished`
+   - ❌ **NEVER run** DB queries in the main (UI) thread
+
+2. **Loading Components** ([App/core/gui/loading_components.py](App/core/gui/loading_components.py))
+   - `LoadingLabel` - Simple loading label with animated dots
+   - `LoadingPlaceholder` - Complete widget with icon
+   - `ProgressWidget` - Progress bar with percentage
+   - `EmptyStatePlaceholder` - Empty state display
+   - `ErrorPlaceholder` - Error display
+   - Helper functions: `replace_widget_with_loading()`, etc.
+
+3. **2-Stage Loading Pattern**
+   ```python
+   def __init__(self):
+       # Stage 1: Build minimal UI (0-50ms)
+       self.setup_ui_skeleton()
+
+       # Stage 2: Show immediately with placeholders
+       self.show()
+
+       # Stage 3: Load data in background (after display)
+       QTimer.singleShot(100, self.load_data_async)
+   ```
+
+4. **Usage Example**
+   ```python
+   from core.gui.db_worker import DbWorker, DbThreadPool
+   from core.gui.loading_components import LoadingLabel
+
+   # Show placeholder
+   loading = LoadingLabel("Loading data")
+   layout.addWidget(loading)
+
+   # Load in background
+   worker = DbWorker(fetch_function)
+   worker.signals.result.connect(on_success)
+   worker.signals.error.connect(on_error)
+   DbThreadPool.start(worker)
+   ```
+
+**Full documentation**: [docs/dev/optimisation-ui-threads.md](docs/dev/optimisation-ui-threads.md)
+
 ## Key Database Tables
 
 - `personnel` / `operateurs`: Employee records with status (ACTIF/INACTIF)

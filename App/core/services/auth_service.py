@@ -90,19 +90,26 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
 
     cur = conn.cursor(dictionary=True)
     try:
-        # Récupérer l'utilisateur avec son rôle
+        # ✅ OPTIMISATION : Récupérer utilisateur + rôle + permissions en UNE SEULE requête
+        # Au lieu de 2 requêtes séparées (user+role, puis permissions)
         cur.execute("""
-            SELECT u.id, u.username, u.password_hash, u.nom, u.prenom,
-                   u.role_id, u.actif, r.nom as role_nom
+            SELECT
+                u.id, u.username, u.password_hash, u.nom, u.prenom,
+                u.role_id, u.actif, r.nom as role_nom,
+                p.module, p.lecture, p.ecriture, p.suppression
             FROM utilisateurs u
             JOIN roles r ON u.role_id = r.id
+            LEFT JOIN permissions p ON p.role_id = u.role_id
             WHERE u.username = %s
         """, (username,))
 
-        user = cur.fetchone()
+        rows = cur.fetchall()
 
-        if not user:
+        if not rows:
             return False, "Nom d'utilisateur ou mot de passe incorrect"
+
+        # Le premier row contient les infos user (toutes les lignes ont les mêmes infos user)
+        user = rows[0]
 
         if not user['actif']:
             return False, "Ce compte est désactivé. Contactez un administrateur."
@@ -111,21 +118,15 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
         if not verify_password(password, user['password_hash']):
             return False, "Nom d'utilisateur ou mot de passe incorrect"
 
-        # Récupérer les permissions
-        cur.execute("""
-            SELECT module, lecture, ecriture, suppression
-            FROM permissions
-            WHERE role_id = %s
-        """, (user['role_id'],))
-
-        permissions_raw = cur.fetchall()
+        # ✅ Construire le dictionnaire des permissions depuis les rows
         permissions = {}
-        for perm in permissions_raw:
-            permissions[perm['module']] = {
-                'lecture': bool(perm['lecture']),
-                'ecriture': bool(perm['ecriture']),
-                'suppression': bool(perm['suppression'])
-            }
+        for row in rows:
+            if row['module']:  # Peut être NULL si pas de permissions
+                permissions[row['module']] = {
+                    'lecture': bool(row['lecture']),
+                    'ecriture': bool(row['ecriture']),
+                    'suppression': bool(row['suppression'])
+                }
 
         # Créer une session de connexion
         cur.execute("""

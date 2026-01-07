@@ -1,0 +1,67 @@
+╔════════════════════════════════════════════════════════════════╗
+║          COMPILER EMAC - GUIDE RAPIDE                          ║
+╚════════════════════════════════════════════════════════════════╝
+
+┌─ COMPILATION ────────────────────────────────────────────────┐
+│                                                                │
+│  1. Ouvrir un terminal                                         │
+│  2. cd build-scripts                                           │
+│  3. build.bat                                                  │
+│  4. Attendre 5-10 minutes                                      │
+│                                                                │
+│  Résultat: dist\EMAC\EMAC.exe                                  │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+
+┌─ APRÈS LE BUILD ─────────────────────────────────────────────┐
+│                                                                │
+│  Configuration:                                                │
+│  1. cd dist\EMAC                                               │
+│  2. CONFIGURER.bat                                             │
+│  3. Éditer le fichier .env:                                    │
+│     - EMAC_DB_HOST=192.168.1.100                               │
+│     - EMAC_DB_USER=root                                        │
+│     - EMAC_DB_PASSWORD=votre_mdp                               │
+│     - EMAC_DB_NAME=emac_db                                     │
+│                                                                │
+│  Lancement:                                                    │
+│  4. EMAC.exe                                                   │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+
+┌─ DÉPLOIEMENT ────────────────────────────────────────────────┐
+│                                                                │
+│  Pour installer sur un autre PC:                               │
+│                                                                │
+│  1. Copier tout le dossier dist\EMAC\ sur le PC cible         │
+│  2. Sur le PC cible, exécuter CONFIGURER.bat                  │
+│  3. Éditer .env avec l'adresse du serveur MySQL               │
+│  4. Lancer EMAC.exe                                            │
+│                                                                │
+│  Prérequis:                                                    │
+│  - Windows 7/10/11                                             │
+│  - Accès réseau au serveur MySQL (port 3306)                  │
+│  - MySQL n'a PAS besoin d'être installé sur le PC client      │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+
+┌─ PROBLÈMES COURANTS ─────────────────────────────────────────┐
+│                                                                │
+│  Build échoue:                                                 │
+│  → Vérifier que Python 3.8+ est installé                      │
+│  → Le script installe PyInstaller automatiquement             │
+│                                                                │
+│  "Module not found":                                           │
+│  → Le script installe les dépendances automatiquement         │
+│  → Si échec: cd App && pip install -r requirements.txt        │
+│                                                                │
+│  L'exe ne démarre pas:                                         │
+│  → Vérifier le fichier .env                                    │
+│  → Vérifier que le serveur MySQL est accessible               │
+│  → Voir les logs dans dist\EMAC\logs\                         │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════
+                    C'est tout !
+═══════════════════════════════════════════════════════════════

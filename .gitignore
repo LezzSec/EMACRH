@@ -76,14 +76,25 @@ App/database/backups/
 exports/
 temp/
 
+# Build et tests temporaires
+build-scripts/build/
+build-scripts/dist/
+session-reports/
+tests/__pycache__/
+nul
+
 # ============================================================================
 # À CONSERVER DANS GIT
 # ============================================================================
 # App/                    - Code source de l'application
 # docs/                   - Documentation du projet
+# build-scripts/          - Scripts de build et analyse
+# tests/                  - Scripts de test
 # archives/               - Historique du projet (archivé)
 # README.md               - Documentation principale
 # CLAUDE.md               - Instructions pour Claude Code
-# build_pyinstaller.bat   - Script de build
-# EMAC.spec               - Configuration PyInstaller
 # .gitignore              - Cette configuration
+#
+# À IGNORER
+# session-reports/        - Rapports de sessions de travail (temporaires)
+# temp/                   - Fichiers temporaires de build

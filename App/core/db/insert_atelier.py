@@ -1,9 +1,10 @@
-import mysql.connector
-from configbd import get_db_connection
+# -*- coding: utf-8 -*-
+"""
+Script d'affectation des postes aux ateliers.
+Utilise le pool de connexions centralisé.
+"""
 
-# Connexion MySQL
-conn = get_db_connection()
-cursor = conn.cursor()
+from core.db.configbd import DatabaseConnection
 
 # 🔹 Liste des ateliers et leurs postes associés
 affectations = {
@@ -15,36 +16,38 @@ affectations = {
     9: [942, 941, 940, 924, 923, 920, 906, 903, 902, 901, 900, 910] # Atelier 9
 }
 
-# 🔹 Création des ateliers s'ils n'existent pas encore
-for atelier_id in affectations.keys():
-    cursor.execute("INSERT INTO atelier (id, nom) VALUES (%s, %s) ON DUPLICATE KEY UPDATE nom = nom", 
-                   (atelier_id, f"Atelier {atelier_id}"))
-    print(f"✅ Atelier {atelier_id} ajouté/vérifié")
+# ✅ Utilisation du context manager DatabaseConnection
+with DatabaseConnection() as conn:
+    cursor = conn.cursor()
 
-# 🔹 Affectation des postes aux ateliers
-for atelier_id, postes in affectations.items():
-    cursor.executemany("UPDATE postes SET atelier_id = %s WHERE id = %s", 
-                       [(atelier_id, poste) for poste in postes])
-    print(f"🔄 {len(postes)} postes affectés à l'atelier {atelier_id}")
+    # 🔹 Création des ateliers s'ils n'existent pas encore
+    for atelier_id in affectations.keys():
+        cursor.execute("INSERT INTO atelier (id, nom) VALUES (%s, %s) ON DUPLICATE KEY UPDATE nom = nom",
+                       (atelier_id, f"Atelier {atelier_id}"))
+        print(f"✅ Atelier {atelier_id} ajouté/vérifié")
 
-# 🔹 Validation et affichage des résultats
-conn.commit()
-print("\n✅ Affectations mises à jour avec succès !\n")
+    # 🔹 Affectation des postes aux ateliers
+    for atelier_id, postes in affectations.items():
+        cursor.executemany("UPDATE postes SET atelier_id = %s WHERE id = %s",
+                           [(atelier_id, poste) for poste in postes])
+        print(f"🔄 {len(postes)} postes affectés à l'atelier {atelier_id}")
 
-# 🔹 Vérification de l'affectation
-cursor.execute("""
-    SELECT p.id, p.poste_code, a.nom 
-    FROM postes p 
-    LEFT JOIN atelier a ON p.atelier_id = a.id
-    ORDER BY a.nom, p.id
-""")
+    # ✅ Plus besoin de conn.commit() - le context manager le fait automatiquement
+    print("\n✅ Affectations mises à jour avec succès !\n")
 
-rows = cursor.fetchall()
+    # 🔹 Vérification de l'affectation
+    cursor.execute("""
+        SELECT p.id, p.poste_code, a.nom
+        FROM postes p
+        LEFT JOIN atelier a ON p.atelier_id = a.id
+        ORDER BY a.nom, p.id
+    """)
 
-print("📌 Résumé des affectations :")
-for row in rows:
-    print(f"Poste {row[0]:<4} | {row[1]:<20} -> {row[2]}")
+    rows = cursor.fetchall()
 
-# Fermeture de la connexion
-cursor.close()
-conn.close()
+    print("📌 Résumé des affectations :")
+    for row in rows:
+        print(f"Poste {row[0]:<4} | {row[1]:<20} -> {row[2]}")
+
+    cursor.close()
+# ✅ La connexion est automatiquement fermée et rendue au pool

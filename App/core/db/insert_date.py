@@ -1,20 +1,27 @@
-import mysql.connector
-from configbd import get_db_connection
+# -*- coding: utf-8 -*-
+"""
+Script d'insertion de dates d'évaluation pour la polyvalence.
+Utilise le pool de connexions centralisé.
+"""
+
+from core.db.configbd import DatabaseCursor
+
 
 def insert_polyvalence(operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation):
-    """Insère une évaluation polyvalence dans la table polyvalence et affiche un message de confirmation."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    query = """
-    INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
-    VALUES (%s, %s, %s, %s, %s)
-    ON DUPLICATE KEY UPDATE niveau = VALUES(niveau), date_evaluation = VALUES(date_evaluation), prochaine_evaluation = VALUES(prochaine_evaluation)
     """
-    cursor.execute(query, (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation))
-    conn.commit()
-    print(f"✅ Importation réussie : Opérateur {operateur_id} - Poste {poste_id} - Niveau {niveau} - Date évaluation {date_evaluation} - Prochaine évaluation {prochaine_evaluation}")
-    cursor.close()
-    conn.close()
+    Insère une évaluation polyvalence dans la table polyvalence et affiche un message de confirmation.
+
+    ✅ Utilise DatabaseCursor pour simplifier le code
+    """
+    with DatabaseCursor() as cur:
+        query = """
+        INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
+        VALUES (%s, %s, %s, %s, %s)
+        ON DUPLICATE KEY UPDATE niveau = VALUES(niveau), date_evaluation = VALUES(date_evaluation), prochaine_evaluation = VALUES(prochaine_evaluation)
+        """
+        cur.execute(query, (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation))
+        # ✅ Commit automatique à la fin du with
+        print(f"✅ Importation réussie : Opérateur {operateur_id} - Poste {poste_id} - Niveau {niveau} - Date évaluation {date_evaluation} - Prochaine évaluation {prochaine_evaluation}")
 
 if __name__ == "__main__":
     # Insertion d'évaluations avec des dates
