@@ -53,6 +53,7 @@ App/.env
 build/
 dist/
 *.spec.backup
+EMAC.spec
 
 # Application specific
 App/logs/
@@ -67,6 +68,9 @@ App/database/backups/
 *.db
 *.sql.gz
 *.sql.zip
+# Exception: Keep schema files
+!App/database/schema/*.sql
+!App/database/migrations/*.sql
 
 # Backups et exports temporaires
 *.backup
@@ -82,6 +86,30 @@ build-scripts/dist/
 session-reports/
 tests/__pycache__/
 nul
+
+# Fichiers temporaires de travail à la racine (ne doivent pas être commités)
+# Ces fichiers sont créés pendant les sessions de développement et doivent rester locaux
+SCRIPTS_BUILD_RECREES.txt
+RESUME_REORGANISATION.txt
+BUILD_RAPIDE.txt
+PLAN_REORGANISATION_*.md
+
+# Anciennes locations de documentation (maintenant dans docs/)
+# Ces patterns évitent de re-créer ces fichiers à la racine
+DEMARRAGE_RAPIDE.md
+BIENVENUE.md
+REORGANISATION.md
+STRUCTURE.md
+
+# Rapports d'optimisation (maintenant dans docs/dev/optimisation-reports/)
+CHANGELOG_OPTIMISATIONS.md
+CHANGELOG_DB_OPTIMIZATION.md
+OPTIMISATIONS_*.md
+MONITORING_PERFORMANCE_APPLIQUE.md
+INTEGRATIONS_OPTIMISATIONS_COMPLETEES.md
+MIGRATION_CONTEXT_MANAGERS.md
+RESUME_FINAL_OPTIMISATIONS.md
+RESUME_OPTIMISATIONS.txt
 
 # ============================================================================
 # À CONSERVER DANS GIT

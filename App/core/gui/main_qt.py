@@ -28,6 +28,13 @@ try:
 except Exception:
     export_day = None
 
+# ✅ OPTIMISATION : Monitoring de performance
+try:
+    from core.utils.performance_monitor import print_performance_report, export_performance_stats
+except ImportError:
+    print_performance_report = None
+    export_performance_stats = None
+
 
 # ===========================
 #  Workers (ThreadPool) - ✅ Utilisation du nouveau module db_worker
@@ -39,9 +46,10 @@ try:
         DbWorker, DbThreadPool, run_in_background,
         show_loading_placeholder, show_error_placeholder
     )
-    # ✅ Initialiser le pool avec la bonne configuration
+    # Initialiser le pool avec la bonne configuration
     _thread_pool = DbThreadPool.get_pool()
-    print(f"✅ DbThreadPool initialisé : {_thread_pool.maxThreadCount()} threads max")
+    if _thread_pool:
+        print(f"[OK] DbThreadPool initialise : {_thread_pool.maxThreadCount()} threads max")
 except ImportError:
     # Fallback si le module n'existe pas encore
     class WorkerSignals(QObject):
@@ -76,10 +84,6 @@ except ImportError:
 def _lazy_auth():
     from core.services import auth_service
     return auth_service
-
-def _lazy_db_conn():
-    from core.db.configbd import get_connection as get_db_connection
-    return get_db_connection
 
 def _lazy_theme():
     from core.gui import ui_theme
@@ -241,10 +245,12 @@ class MainWindow(QMainWindow):
     # ---------------------------
 
     def bootstrap_async(self):
-        """Charge user + permissions + filtres + evals sans bloquer l’UI."""
+        """Charge user + permissions + filtres + evals sans bloquer l'UI."""
+        print("[DEBUG] bootstrap_async démarré")
         self.load_user_and_permissions_async()
         self.populate_filters_async()
         self.load_evaluations_async()
+        print("[DEBUG] bootstrap_async terminé (tâches lancées)")
 
     def load_user_and_permissions_async(self):
         w = DbWorker(self._fetch_user_and_perms)
@@ -252,9 +258,11 @@ class MainWindow(QMainWindow):
         w.signals.error.connect(self._on_bg_error)
         self.pool.start(w)
 
-    def _fetch_user_and_perms(self):
+    def _fetch_user_and_perms(self, progress_callback=None):
+        print("[DEBUG] _fetch_user_and_perms appelée")
         auth = _lazy_auth()
         current_user = auth.get_current_user()
+        print(f"[DEBUG] Utilisateur récupéré: {current_user}")
 
         # Permissions (⚠️ selon ton implémentation, ça peut être DB → ok en thread)
         perms = {
@@ -268,17 +276,24 @@ class MainWindow(QMainWindow):
             "historique_lecture": auth.has_permission('historique', 'lecture'),
             "is_admin": auth.is_admin(),
         }
+        print(f"[DEBUG] Permissions calculées: {sum(1 for v in perms.values() if v)} actives")
         return {"user": current_user, "perms": perms}
 
     def _apply_user_and_perms(self, payload):
+        print(f"[DEBUG] _apply_user_and_perms appelée avec payload: {type(payload)}")
         user = payload.get("user")
         perms = payload.get("perms", {})
+        print(f"[DEBUG] User: {user}")
+        print(f"[DEBUG] Perms: {perms}")
 
         # User label
         if user:
-            self.user_info.setText(f"👤 {user.get('prenom','')} {user.get('nom','')} - {user.get('role_nom','')}")
+            user_text = f"👤 {user.get('prenom','')} {user.get('nom','')} - {user.get('role_nom','')}"
+            self.user_info.setText(user_text)
+            print(f"[DEBUG] Label utilisateur mis à jour: {user_text}")
         else:
             self.user_info.setText("👤 Non connecté")
+            print("[DEBUG] Aucun utilisateur connecté")
 
         # Charger EmacButton
         theme = get_theme_components()
@@ -419,7 +434,7 @@ class MainWindow(QMainWindow):
         if self.drawer is None:
             self.create_drawer()
         if self.drawer is None:
-            print("❌ ERREUR: Impossible de créer le drawer")
+            print("[ERREUR] Impossible de creer le drawer")
             return
 
         self.is_drawer_open = not self.is_drawer_open
@@ -520,17 +535,13 @@ class MainWindow(QMainWindow):
         w.signals.error.connect(self._on_bg_error)
         self.pool.start(w)
 
-    def _fetch_one_actif_personnel_id(self):
-        get_db_connection = _lazy_db_conn()
-        conn = get_db_connection()
-        cur = conn.cursor()
-        try:
+    def _fetch_one_actif_personnel_id(self, progress_callback=None):
+        from core.db.configbd import DatabaseCursor
+
+        with DatabaseCursor() as cur:
             cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
             r = cur.fetchone()
             return r[0] if r else None
-        finally:
-            cur.close()
-            conn.close()
 
     def _open_regularisation(self, personnel_id):
         if not personnel_id:
@@ -540,6 +551,12 @@ class MainWindow(QMainWindow):
         PlanningAbsencesDialog(personnel_id=personnel_id, parent=self).exec_()
 
     def show_contract_management(self):
+        # Forcer le rechargement du module pour voir les modifications
+        import sys
+        import importlib
+        if 'core.gui.contract_management' in sys.modules:
+            importlib.reload(sys.modules['core.gui.contract_management'])
+
         from core.gui.contract_management import ContractManagementDialog
         ContractManagementDialog(self).exec_()
 
@@ -557,24 +574,20 @@ class MainWindow(QMainWindow):
         w.signals.error.connect(self._on_bg_error)
         self.pool.start(w)
 
-    def _fetch_postes_cached(self):
+    def _fetch_postes_cached(self, progress_callback=None):
         # Cache 5 minutes
         if self._postes_cache is not None and self._postes_cache_time is not None:
             if (time.time() - self._postes_cache_time) < 300:
                 return self._postes_cache
 
-        get_db_connection = _lazy_db_conn()
-        conn = get_db_connection()
-        cur = conn.cursor()
-        try:
+        from core.db.configbd import DatabaseCursor
+
+        with DatabaseCursor() as cur:
             cur.execute("SELECT DISTINCT poste_code FROM postes WHERE visible = 1 ORDER BY poste_code;")
             postes = cur.fetchall()
             self._postes_cache = postes
             self._postes_cache_time = time.time()
             return postes
-        finally:
-            cur.close()
-            conn.close()
 
     def _apply_postes_to_filters(self, postes):
         try:
@@ -584,78 +597,100 @@ class MainWindow(QMainWindow):
                 if self.next_eval_filter.findData(poste) == -1:
                     self.next_eval_filter.addItem(poste, poste)
         except Exception as e:
-            print(f"⚠️ Erreur apply filtres: {e}")
+            print(f"[WARN] Erreur apply filtres: {e}")
 
     def load_evaluations_async(self):
+        print("[DEBUG] load_evaluations_async appelée")
         poste_retard = self.retard_filter.currentData()
         poste_next = self.next_eval_filter.currentData()
+        print(f"[DEBUG] Filtres: retard={poste_retard}, next={poste_next}")
 
         w = DbWorker(self._fetch_evaluations, poste_retard, poste_next)
         w.signals.result.connect(self._apply_evaluations_to_ui)
         w.signals.error.connect(self._on_bg_error)
         self.pool.start(w)
+        print("[DEBUG] Worker lancé pour charger les évaluations")
 
-    def _fetch_evaluations(self, poste_retard, poste_next):
-        get_db_connection = _lazy_db_conn()
-        conn = get_db_connection()
-        cur = conn.cursor()
+    def _fetch_evaluations(self, poste_retard, poste_next, progress_callback=None):
+        print(f"[DEBUG] _fetch_evaluations appelée avec retard={poste_retard}, next={poste_next}")
+        from core.db.configbd import DatabaseCursor
+
         try:
-            query_retard = """
-                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
-                FROM polyvalence poly
-                INNER JOIN personnel p ON p.id = poly.operateur_id
-                LEFT JOIN postes pos ON pos.id = poly.poste_id
-                WHERE poly.prochaine_evaluation < CURDATE()
-                  AND p.statut = 'ACTIF'
-                  {retard_filter}
-                ORDER BY poly.prochaine_evaluation ASC
-                LIMIT 10
-            """
-            retard_filter = "AND pos.poste_code = %s" if poste_retard else ""
-            query_retard = query_retard.format(retard_filter=retard_filter)
-            params_retard = (poste_retard,) if poste_retard else ()
-            cur.execute(query_retard, params_retard)
-            retard = cur.fetchall()
+            with DatabaseCursor() as cur:
+                query_retard = """
+                    SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
+                    FROM polyvalence poly
+                    INNER JOIN personnel p ON p.id = poly.operateur_id
+                    LEFT JOIN postes pos ON pos.id = poly.poste_id
+                    WHERE poly.prochaine_evaluation < CURDATE()
+                      AND p.statut = 'ACTIF'
+                      {retard_filter}
+                    ORDER BY poly.prochaine_evaluation ASC
+                    LIMIT 10
+                """
+                retard_filter = "AND pos.poste_code = %s" if poste_retard else ""
+                query_retard = query_retard.format(retard_filter=retard_filter)
+                params_retard = (poste_retard,) if poste_retard else ()
+                cur.execute(query_retard, params_retard)
+                retard = cur.fetchall()
+                print(f"[DEBUG] Requête retard: {len(retard)} résultats")
 
-            query_next = """
-                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
-                FROM polyvalence poly
-                INNER JOIN personnel p ON p.id = poly.operateur_id
-                LEFT JOIN postes pos ON pos.id = poly.poste_id
-                WHERE poly.prochaine_evaluation >= CURDATE()
-                  AND p.statut = 'ACTIF'
-                  {next_filter}
-                ORDER BY poly.prochaine_evaluation ASC
-                LIMIT 10
-            """
-            next_filter = "AND pos.poste_code = %s" if poste_next else ""
-            query_next = query_next.format(next_filter=next_filter)
-            params_next = (poste_next,) if poste_next else ()
-            cur.execute(query_next, params_next)
-            prochaines = cur.fetchall()
+                query_next = """
+                    SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
+                    FROM polyvalence poly
+                    INNER JOIN personnel p ON p.id = poly.operateur_id
+                    LEFT JOIN postes pos ON pos.id = poly.poste_id
+                    WHERE poly.prochaine_evaluation >= CURDATE()
+                      AND p.statut = 'ACTIF'
+                      {next_filter}
+                    ORDER BY poly.prochaine_evaluation ASC
+                    LIMIT 10
+                """
+                next_filter = "AND pos.poste_code = %s" if poste_next else ""
+                query_next = query_next.format(next_filter=next_filter)
+                params_next = (poste_next,) if poste_next else ()
+                cur.execute(query_next, params_next)
+                prochaines = cur.fetchall()
+                print(f"[DEBUG] Requête prochaines: {len(prochaines)} résultats")
 
-            return {"retard": retard, "prochaines": prochaines}
-        finally:
-            cur.close()
-            conn.close()
+                result = {"retard": retard, "prochaines": prochaines}
+                print(f"[DEBUG] _fetch_evaluations retourne: {len(retard)} retards, {len(prochaines)} prochaines")
+                return result
+        except Exception as e:
+            print(f"[ERROR] Erreur dans _fetch_evaluations: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
     def _apply_evaluations_to_ui(self, payload):
-        retard = payload.get("retard", [])
-        prochaines = payload.get("prochaines", [])
+        try:
+            print(f"[DEBUG] _apply_evaluations_to_ui appelée avec payload: {type(payload)}")
+            retard = payload.get("retard", [])
+            prochaines = payload.get("prochaines", [])
+            print(f"[DEBUG] Retard: {len(retard)} éléments, Prochaines: {len(prochaines)} éléments")
 
-        self.retard_list.clear()
-        for nom, prenom, poste, date_ev in retard:
-            date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
-            self.retard_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
+            self.retard_list.clear()
+            for nom, prenom, poste, date_ev in retard:
+                date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
+                self.retard_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
 
-        self.next_eval_list.clear()
-        for nom, prenom, poste, date_ev in prochaines:
-            date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
-            self.next_eval_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
+            self.next_eval_list.clear()
+            for nom, prenom, poste, date_ev in prochaines:
+                date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
+                self.next_eval_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
+
+            print(f"[DEBUG] UI mise à jour avec succès: {self.retard_list.count()} en retard, {self.next_eval_list.count()} à venir")
+        except Exception as e:
+            print(f"[ERROR] Erreur dans _apply_evaluations_to_ui: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _on_bg_error(self, tb):
         # Ne bloque pas l'app au démarrage
-        print("⚠️ Erreur background:\n", tb)
+        print("[ERROR] Erreur background:\n", tb)
+        # Afficher également dans la console système
+        import traceback
+        traceback.print_stack()
 
     # ---------------------------
     # Export
@@ -700,6 +735,29 @@ class MainWindow(QMainWindow):
             return
         from core.gui.user_management import UserManagementDialog
         UserManagementDialog(self).exec_()
+
+    def closeEvent(self, event):
+        """
+        Gère la fermeture de l'application.
+        Affiche le rapport de performance et exporte les stats.
+        """
+        # ✅ OPTIMISATION : Rapport de performance en fin de session
+        if print_performance_report:
+            try:
+                print("\n" + "="*80)
+                print("📊 RAPPORT DE PERFORMANCE DE LA SESSION")
+                print("="*80)
+                print_performance_report()
+
+                # Export des stats dans un fichier CSV
+                if export_performance_stats:
+                    timestamp = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
+                    export_performance_stats(f'session_{timestamp}.csv')
+            except Exception as e:
+                print(f"Erreur lors du rapport de performance: {e}")
+
+        # Fermeture normale
+        event.accept()
 
 
 # ===========================

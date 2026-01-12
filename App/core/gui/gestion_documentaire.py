@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QFileDialog,
     QMessageBox, QWidget, QTabWidget, QTextEdit, QDateEdit, QGroupBox,
-    QAbstractItemView, QMenu, QCheckBox
+    QAbstractItemView, QMenu, QCheckBox, QGridLayout
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor, QIcon, QDesktopServices
@@ -23,6 +23,13 @@ from core.db.configbd import get_connection
 from core.services.document_service import DocumentService
 from core.services.logger import log_hist
 from core.gui.emac_ui_kit import add_custom_title_bar
+
+# Import des composants modernes EMAC
+try:
+    from core.gui.ui_theme import EmacCard, EmacButton
+    THEME_AVAILABLE = True
+except ImportError:
+    THEME_AVAILABLE = False
 
 
 class GestionDocumentaireDialog(QDialog):
@@ -42,7 +49,7 @@ class GestionDocumentaireDialog(QDialog):
         self.load_data()
 
     def init_ui(self):
-        """Initialise l'interface utilisateur"""
+        """Initialise l'interface utilisateur moderne"""
         # Layout principal
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -56,134 +63,326 @@ class GestionDocumentaireDialog(QDialog):
         content_widget = QWidget()
         layout = QVBoxLayout(content_widget)
         layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(10)
+        layout.setSpacing(16)
 
         # === En-tête avec sélection opérateur ===
-        header_layout = QHBoxLayout()
+        if THEME_AVAILABLE:
+            header_card = EmacCard()
+            header_layout = QHBoxLayout()
 
-        # Sélection d'opérateur
-        operateur_label = QLabel("Employé :")
-        operateur_label.setFont(QFont("Arial", 10, QFont.Bold))
-        header_layout.addWidget(operateur_label)
+            # Sélection d'opérateur
+            operateur_label = QLabel("👤 Employé:")
+            operateur_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
+            operateur_label.setStyleSheet("color: #1e293b;")
+            header_layout.addWidget(operateur_label)
 
-        self.operateur_combo = QComboBox()
-        self.operateur_combo.setMinimumWidth(250)
-        self.operateur_combo.currentIndexChanged.connect(self.on_operateur_changed)
-        header_layout.addWidget(self.operateur_combo)
+            self.operateur_combo = QComboBox()
+            self.operateur_combo.setMinimumWidth(250)
+            self.operateur_combo.currentIndexChanged.connect(self.on_operateur_changed)
+            self.operateur_combo.setStyleSheet("""
+                QComboBox {
+                    padding: 8px 12px;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 6px;
+                    background: white;
+                }
+            """)
+            header_layout.addWidget(self.operateur_combo)
 
-        header_layout.addStretch()
+            header_layout.addStretch()
 
-        # Bouton rafraîchir
-        btn_refresh = QPushButton("🔄 Rafraîchir")
-        btn_refresh.clicked.connect(self.load_data)
-        header_layout.addWidget(btn_refresh)
+            # Boutons
+            btn_refresh = EmacButton("🔄 Actualiser", 'ghost')
+            btn_refresh.clicked.connect(self.load_data)
+            header_layout.addWidget(btn_refresh)
 
-        # Bouton ajouter document
-        btn_add = QPushButton("➕ Ajouter un document")
-        btn_add.setStyleSheet("""
-            QPushButton {
-                background-color: #10b981;
-                color: white;
-                font-weight: bold;
-                padding: 8px 16px;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #059669;
-            }
-        """)
-        btn_add.clicked.connect(self.add_document)
-        header_layout.addWidget(btn_add)
+            btn_add = EmacButton("➕ Ajouter un document", 'primary')
+            btn_add.clicked.connect(self.add_document)
+            header_layout.addWidget(btn_add)
 
-        layout.addLayout(header_layout)
+            header_card.body.addLayout(header_layout)
+            layout.addWidget(header_card)
+        else:
+            # Fallback simple
+            header_layout = QHBoxLayout()
 
-        # === Filtres ===
-        filters_group = QGroupBox("Filtres")
-        filters_layout = QHBoxLayout()
+            operateur_label = QLabel("Employé :")
+            operateur_label.setFont(QFont("Arial", 10, QFont.Bold))
+            header_layout.addWidget(operateur_label)
 
-        # Filtre catégorie
-        cat_label = QLabel("Catégorie :")
-        filters_layout.addWidget(cat_label)
+            self.operateur_combo = QComboBox()
+            self.operateur_combo.setMinimumWidth(250)
+            self.operateur_combo.currentIndexChanged.connect(self.on_operateur_changed)
+            header_layout.addWidget(self.operateur_combo)
 
-        self.categorie_filter = QComboBox()
-        self.categorie_filter.addItem("Toutes les catégories", None)
-        self.categorie_filter.currentIndexChanged.connect(self.apply_filters)
-        filters_layout.addWidget(self.categorie_filter)
+            header_layout.addStretch()
 
-        # Filtre statut
-        statut_label = QLabel("Statut :")
-        filters_layout.addWidget(statut_label)
+            btn_refresh = QPushButton("🔄 Rafraîchir")
+            btn_refresh.clicked.connect(self.load_data)
+            header_layout.addWidget(btn_refresh)
 
-        self.statut_filter = QComboBox()
-        self.statut_filter.addItems(["Tous", "Actif", "Expiré", "Archivé"])
-        self.statut_filter.currentIndexChanged.connect(self.apply_filters)
-        filters_layout.addWidget(self.statut_filter)
+            btn_add = QPushButton("➕ Ajouter un document")
+            btn_add.setStyleSheet("""
+                QPushButton {
+                    background-color: #10b981;
+                    color: white;
+                    font-weight: bold;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background-color: #059669;
+                }
+            """)
+            btn_add.clicked.connect(self.add_document)
+            header_layout.addWidget(btn_add)
 
-        # Recherche
-        search_label = QLabel("Recherche :")
-        filters_layout.addWidget(search_label)
+            layout.addLayout(header_layout)
 
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Nom du fichier...")
-        self.search_input.textChanged.connect(self.apply_filters)
-        filters_layout.addWidget(self.search_input)
+        # === Filtres modernes ===
+        if THEME_AVAILABLE:
+            filters_card = EmacCard()
+            filters_layout = QHBoxLayout()
 
-        filters_layout.addStretch()
-        filters_group.setLayout(filters_layout)
-        layout.addWidget(filters_group)
+            # Filtre catégorie
+            cat_label = QLabel("📁 Catégorie:")
+            cat_label.setStyleSheet("color: #475569; font-weight: 600;")
+            filters_layout.addWidget(cat_label)
 
-        # === Tableau des documents ===
-        self.table = QTableWidget()
-        self.table.setColumnCount(9)
-        self.table.setHorizontalHeaderLabels([
-            "ID", "Nom du fichier", "Catégorie", "Taille", "Date ajout",
-            "Date expiration", "Statut", "Ajouté par", "Actions"
-        ])
+            self.categorie_filter = QComboBox()
+            self.categorie_filter.addItem("Toutes les catégories", None)
+            self.categorie_filter.currentIndexChanged.connect(self.apply_filters)
+            self.categorie_filter.setStyleSheet("""
+                QComboBox {
+                    padding: 6px 12px;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 6px;
+                    background: white;
+                    min-width: 150px;
+                }
+            """)
+            filters_layout.addWidget(self.categorie_filter)
 
-        # Configuration du tableau
-        self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setStretchLastSection(True)
+            filters_layout.addSpacing(15)
 
-        # Largeurs des colonnes
-        self.table.setColumnWidth(0, 50)   # ID
-        self.table.setColumnWidth(1, 250)  # Nom
-        self.table.setColumnWidth(2, 150)  # Catégorie
-        self.table.setColumnWidth(3, 80)   # Taille
-        self.table.setColumnWidth(4, 120)  # Date ajout
-        self.table.setColumnWidth(5, 120)  # Date expiration
-        self.table.setColumnWidth(6, 100)  # Statut
-        self.table.setColumnWidth(7, 120)  # Ajouté par
+            # Filtre statut
+            statut_label = QLabel("📊 Statut:")
+            statut_label.setStyleSheet("color: #475569; font-weight: 600;")
+            filters_layout.addWidget(statut_label)
 
-        # Menu contextuel
-        self.table.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.table.customContextMenuRequested.connect(self.show_context_menu)
+            self.statut_filter = QComboBox()
+            self.statut_filter.addItems(["Tous", "Actif", "Expiré", "Archivé"])
+            self.statut_filter.currentIndexChanged.connect(self.apply_filters)
+            self.statut_filter.setStyleSheet("""
+                QComboBox {
+                    padding: 6px 12px;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 6px;
+                    background: white;
+                    min-width: 120px;
+                }
+            """)
+            filters_layout.addWidget(self.statut_filter)
 
-        # Double-clic pour ouvrir
-        self.table.doubleClicked.connect(self.open_document)
+            filters_layout.addSpacing(15)
 
-        layout.addWidget(self.table)
+            # Recherche
+            search_label = QLabel("🔍 Recherche:")
+            search_label.setStyleSheet("color: #475569; font-weight: 600;")
+            filters_layout.addWidget(search_label)
 
-        # === Statistiques ===
-        stats_layout = QHBoxLayout()
+            self.search_input = QLineEdit()
+            self.search_input.setPlaceholderText("Nom du fichier...")
+            self.search_input.textChanged.connect(self.apply_filters)
+            self.search_input.setStyleSheet("""
+                QLineEdit {
+                    padding: 6px 12px;
+                    border: 1px solid #cbd5e1;
+                    border-radius: 6px;
+                    background: white;
+                    min-width: 200px;
+                }
+            """)
+            filters_layout.addWidget(self.search_input)
 
-        self.lbl_total = QLabel("Total : 0")
-        self.lbl_total.setFont(QFont("Arial", 9, QFont.Bold))
-        stats_layout.addWidget(self.lbl_total)
+            filters_layout.addStretch()
+            filters_card.body.addLayout(filters_layout)
+            layout.addWidget(filters_card)
+        else:
+            # Fallback
+            filters_group = QGroupBox("Filtres")
+            filters_layout = QHBoxLayout()
 
-        self.lbl_size = QLabel("Taille : 0 MB")
-        self.lbl_size.setFont(QFont("Arial", 9))
-        stats_layout.addWidget(self.lbl_size)
+            cat_label = QLabel("Catégorie :")
+            filters_layout.addWidget(cat_label)
 
-        self.lbl_expired = QLabel("Expirés : 0")
-        self.lbl_expired.setFont(QFont("Arial", 9))
-        self.lbl_expired.setStyleSheet("color: #dc2626;")
-        stats_layout.addWidget(self.lbl_expired)
+            self.categorie_filter = QComboBox()
+            self.categorie_filter.addItem("Toutes les catégories", None)
+            self.categorie_filter.currentIndexChanged.connect(self.apply_filters)
+            filters_layout.addWidget(self.categorie_filter)
 
-        stats_layout.addStretch()
-        layout.addLayout(stats_layout)
+            statut_label = QLabel("Statut :")
+            filters_layout.addWidget(statut_label)
+
+            self.statut_filter = QComboBox()
+            self.statut_filter.addItems(["Tous", "Actif", "Expiré", "Archivé"])
+            self.statut_filter.currentIndexChanged.connect(self.apply_filters)
+            filters_layout.addWidget(self.statut_filter)
+
+            search_label = QLabel("Recherche :")
+            filters_layout.addWidget(search_label)
+
+            self.search_input = QLineEdit()
+            self.search_input.setPlaceholderText("Nom du fichier...")
+            self.search_input.textChanged.connect(self.apply_filters)
+            filters_layout.addWidget(self.search_input)
+
+            filters_layout.addStretch()
+            filters_group.setLayout(filters_layout)
+            layout.addWidget(filters_group)
+
+        # === Tableau moderne des documents ===
+        if THEME_AVAILABLE:
+            table_card = EmacCard()
+            table_layout = QVBoxLayout()
+
+            self.table = QTableWidget()
+            self.table.setColumnCount(9)
+            self.table.setHorizontalHeaderLabels([
+                "ID", "Nom du fichier", "Catégorie", "Taille", "Date ajout",
+                "Date expiration", "Statut", "Ajouté par", "Actions"
+            ])
+
+            # Configuration du tableau
+            self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+            self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            self.table.setAlternatingRowColors(True)
+            self.table.horizontalHeader().setStretchLastSection(True)
+
+            # Largeurs des colonnes
+            self.table.setColumnWidth(0, 50)   # ID
+            self.table.setColumnWidth(1, 250)  # Nom
+            self.table.setColumnWidth(2, 150)  # Catégorie
+            self.table.setColumnWidth(3, 80)   # Taille
+            self.table.setColumnWidth(4, 120)  # Date ajout
+            self.table.setColumnWidth(5, 120)  # Date expiration
+            self.table.setColumnWidth(6, 100)  # Statut
+            self.table.setColumnWidth(7, 120)  # Ajouté par
+
+            # Style moderne EMAC
+            self.table.setStyleSheet("""
+                QTableWidget {
+                    background-color: white;
+                    alternate-background-color: #f8fafc;
+                    gridline-color: #e2e8f0;
+                    border: none;
+                    font-size: 11px;
+                }
+                QHeaderView::section {
+                    background: #f1f5f9;
+                    color: #475569;
+                    font-weight: bold;
+                    padding: 10px;
+                    border: none;
+                    border-bottom: 2px solid #cbd5e1;
+                }
+                QTableWidget::item {
+                    padding: 8px;
+                    border-bottom: 1px solid #f1f5f9;
+                }
+                QTableWidget::item:selected {
+                    background: #dbeafe;
+                    color: #1e293b;
+                }
+            """)
+
+            # Menu contextuel
+            self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+            self.table.customContextMenuRequested.connect(self.show_context_menu)
+
+            # Double-clic pour ouvrir
+            self.table.doubleClicked.connect(self.open_document)
+
+            table_layout.addWidget(self.table)
+            table_card.body.addLayout(table_layout)
+            layout.addWidget(table_card)
+        else:
+            # Fallback sans carte
+            self.table = QTableWidget()
+            self.table.setColumnCount(9)
+            self.table.setHorizontalHeaderLabels([
+                "ID", "Nom du fichier", "Catégorie", "Taille", "Date ajout",
+                "Date expiration", "Statut", "Ajouté par", "Actions"
+            ])
+
+            self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            self.table.setSelectionMode(QAbstractItemView.SingleSelection)
+            self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            self.table.setAlternatingRowColors(True)
+            self.table.horizontalHeader().setStretchLastSection(True)
+
+            self.table.setColumnWidth(0, 50)
+            self.table.setColumnWidth(1, 250)
+            self.table.setColumnWidth(2, 150)
+            self.table.setColumnWidth(3, 80)
+            self.table.setColumnWidth(4, 120)
+            self.table.setColumnWidth(5, 120)
+            self.table.setColumnWidth(6, 100)
+            self.table.setColumnWidth(7, 120)
+
+            self.table.setContextMenuPolicy(Qt.CustomContextMenu)
+            self.table.customContextMenuRequested.connect(self.show_context_menu)
+            self.table.doubleClicked.connect(self.open_document)
+
+            layout.addWidget(self.table)
+
+        # === Statistiques modernes ===
+        if THEME_AVAILABLE:
+            stats_card = EmacCard()
+            stats_layout = QHBoxLayout()
+
+            self.lbl_total = QLabel("📊 Total : 0")
+            self.lbl_total.setFont(QFont("Segoe UI", 10, QFont.Bold))
+            self.lbl_total.setStyleSheet("color: #3b82f6;")
+            stats_layout.addWidget(self.lbl_total)
+
+            stats_layout.addSpacing(20)
+
+            self.lbl_size = QLabel("💾 Taille : 0 MB")
+            self.lbl_size.setFont(QFont("Segoe UI", 10))
+            self.lbl_size.setStyleSheet("color: #64748b;")
+            stats_layout.addWidget(self.lbl_size)
+
+            stats_layout.addSpacing(20)
+
+            self.lbl_expired = QLabel("⚠️ Expirés : 0")
+            self.lbl_expired.setFont(QFont("Segoe UI", 10))
+            self.lbl_expired.setStyleSheet("color: #dc2626;")
+            stats_layout.addWidget(self.lbl_expired)
+
+            stats_layout.addStretch()
+            stats_card.body.addLayout(stats_layout)
+            layout.addWidget(stats_card)
+        else:
+            # Fallback simple
+            stats_layout = QHBoxLayout()
+
+            self.lbl_total = QLabel("Total : 0")
+            self.lbl_total.setFont(QFont("Arial", 9, QFont.Bold))
+            stats_layout.addWidget(self.lbl_total)
+
+            self.lbl_size = QLabel("Taille : 0 MB")
+            self.lbl_size.setFont(QFont("Arial", 9))
+            stats_layout.addWidget(self.lbl_size)
+
+            self.lbl_expired = QLabel("Expirés : 0")
+            self.lbl_expired.setFont(QFont("Arial", 9))
+            self.lbl_expired.setStyleSheet("color: #dc2626;")
+            stats_layout.addWidget(self.lbl_expired)
+
+            stats_layout.addStretch()
+            layout.addLayout(stats_layout)
 
         main_layout.addWidget(content_widget)
 

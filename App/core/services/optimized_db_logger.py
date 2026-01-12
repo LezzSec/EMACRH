@@ -137,33 +137,28 @@ class OptimizedDBLogger:
                 # Préparer les valeurs
                 values = []
                 for entry in batch:
-                    # Convertir details en JSON si nécessaire
-                    details = entry.get('details')
-                    if details and not isinstance(details, str):
-                        try:
-                            details = json.dumps(details, ensure_ascii=False)
-                        except:
-                            details = str(details)
-
                     values.append((
                         entry.get('action'),
                         entry.get('table_name'),
                         str(entry.get('record_id')) if entry.get('record_id') is not None else None,
                         entry.get('utilisateur'),
-                        entry.get('description'),
-                        details,
-                        entry.get('source')
+                        entry.get('description')
                     ))
 
                 # ✅ INSERT multiple (1 requête pour N logs)
-                placeholders = ', '.join(['(NOW(), %s, %s, %s, %s, %s, %s, %s)'] * len(values))
+                placeholders = ', '.join(['(NOW(), %s, %s, %s, %s, %s)'] * len(values))
                 flat_values = [item for row in values for item in row]
 
                 query = f"""
                     INSERT INTO historique
-                        (date_time, action, table_name, record_id, utilisateur, description, details, source)
+                        (date_time, action, table_name, record_id, utilisateur, description)
                     VALUES {placeholders}
                 """
+
+                # Debug: afficher la requête et les valeurs
+                print(f"[DEBUG] Flush de {len(values)} logs")
+                print(f"[DEBUG] Nombre de placeholders: {placeholders.count('%s')}")
+                print(f"[DEBUG] Nombre de valeurs: {len(flat_values)}")
 
                 cur.execute(query, flat_values)
                 cur.close()
@@ -172,6 +167,10 @@ class OptimizedDBLogger:
             # En cas d'erreur, ne pas casser le flux
             # On pourrait logger l'erreur dans un fichier texte
             print(f"⚠️ Erreur flush batch historique: {e}")
+            print(f"[DEBUG] Query: {query[:200]}...")
+            print(f"[DEBUG] Nombre de valeurs dans le batch: {len(batch)}")
+            import traceback
+            traceback.print_exc()
 
     def log(
         self,

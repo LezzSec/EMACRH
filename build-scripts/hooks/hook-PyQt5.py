@@ -50,4 +50,4 @@ hiddenimports = REQUIRED_PYQT5_MODULES
 # Exclure les modules non utilisés
 excludedimports = EXCLUDED_PYQT5_MODULES
 
-print(f"✅ Hook PyQt5: {len(REQUIRED_PYQT5_MODULES)} modules inclus, {len(EXCLUDED_PYQT5_MODULES)} exclus")
+print(f"[OK] Hook PyQt5: {len(REQUIRED_PYQT5_MODULES)} modules inclus, {len(EXCLUDED_PYQT5_MODULES)} exclus")

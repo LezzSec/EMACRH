@@ -49,20 +49,9 @@ def lazy_import_logger():
     return _module_cache['logger']
 
 
-def lazy_import_excel_exporter():
-    """Import lazy de l'exporteur Excel (lourd)"""
-    if 'excel_exporter' not in _module_cache:
-        from core.exporters import excel_export
-        _module_cache['excel_exporter'] = excel_export
-    return _module_cache['excel_exporter']
-
-
-def lazy_import_pdf_exporter():
-    """Import lazy de l'exporteur PDF"""
-    if 'pdf_exporter' not in _module_cache:
-        from core.exporters import pdf_export
-        _module_cache['pdf_exporter'] = pdf_export
-    return _module_cache['pdf_exporter']
+# REMARQUE: Les fonctions d'export Excel/PDF ont été supprimées car la fonctionnalité
+# est implémentée directement dans les modules GUI (gestion_evaluation.py, liste_et_grilles.py)
+# qui utilisent reportlab et openpyxl directement.
 
 
 def lazy_import_calendar_service():
@@ -221,9 +210,7 @@ def preload_heavy_modules():
     print("🔄 Préchargement des modules lourds...")
 
     try:
-        lazy_import_excel_exporter()
-        lazy_import_pdf_exporter()
-
+        # NOTE: Excel/PDF exporters removed - functionality is in GUI modules directly
         print(f"✅ Modules lourds préchargés (total: {len(_module_cache)})")
 
     except Exception as e:
@@ -290,8 +277,8 @@ __all__ = [
     'lazy_import_db',
     'lazy_import_auth',
     'lazy_import_logger',
-    'lazy_import_excel_exporter',
-    'lazy_import_pdf_exporter',
+    # 'lazy_import_excel_exporter',  # Removed - functionality in GUI modules
+    # 'lazy_import_pdf_exporter',     # Removed - functionality in GUI modules
     'lazy_import_calendar_service',
     'lazy_import_evaluation_service',
     'lazy_import_contract_service',

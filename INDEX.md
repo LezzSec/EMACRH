@@ -8,9 +8,10 @@ Guide de navigation rapide vers tous les documents et ressources du projet.
 
 | Document | Description | Temps |
 |----------|-------------|-------|
-| [DEMARRAGE_RAPIDE.md](DEMARRAGE_RAPIDE.md) | Installation et lancement en 5 minutes | ⚡ 5 min |
+| [docs/DEMARRAGE_RAPIDE.md](docs/DEMARRAGE_RAPIDE.md) | Installation et lancement en 5 minutes | ⚡ 5 min |
 | [README.md](README.md) | Documentation principale complète | 📖 15 min |
-| [STRUCTURE.md](STRUCTURE.md) | Arborescence détaillée du projet | 🗺️ 10 min |
+| [docs/STRUCTURE.md](docs/STRUCTURE.md) | Arborescence détaillée du projet | 🗺️ 10 min |
+| [docs/BIENVENUE.md](docs/BIENVENUE.md) | Guide de bienvenue pour les nouveaux développeurs | 👋 5 min |
 
 ---
 
@@ -33,6 +34,20 @@ Guide de navigation rapide vers tous les documents et ressources du projet.
 | [docs/dev/guide-optimisation-build.md](docs/dev/guide-optimisation-build.md) | Guide de compilation |
 | [docs/dev/exemples-logging.md](docs/dev/exemples-logging.md) | Exemples de logging |
 | [docs/dev/tests-report.md](docs/dev/tests-report.md) | Rapports de tests |
+
+#### 🚀 Optimisations de Performance (2026-01-06 à 2026-01-08)
+
+| Document | Contenu |
+|----------|---------|
+| [docs/dev/optimisation-reports/README.md](docs/dev/optimisation-reports/README.md) | **📊 Vue d'ensemble des optimisations** |
+| [docs/dev/optimisation-database.md](docs/dev/optimisation-database.md) | Guide optimisation DB (pooling, indexes) |
+| [docs/dev/optimisation-ui-threads.md](docs/dev/optimisation-ui-threads.md) | Guide optimisation UI/threading (DbWorker) |
+| [docs/dev/optimisation-cache.md](docs/dev/optimisation-cache.md) | Guide système de cache LRU |
+| [docs/dev/optimisation-packaging.md](docs/dev/optimisation-packaging.md) | Guide optimisation PyInstaller |
+| [docs/dev/optimisation-logs-io.md](docs/dev/optimisation-logs-io.md) | Guide optimisation logs I/O |
+| [docs/dev/monitoring-performance.md](docs/dev/monitoring-performance.md) | Guide monitoring de performance |
+
+**Gains de performance:** Démarrage 75% plus rapide, requêtes DB 10x plus rapides, taille exe -47%
 
 ### Fonctionnalités
 

@@ -29,11 +29,13 @@ except ImportError:
     DOCUMENTS_AVAILABLE = False
 
 try:
-    from core.gui.ui_theme import EmacCard, EmacButton
+    from core.gui.ui_theme import EmacCard, EmacButton, EmacStatusCard
     from core.gui.emac_ui_kit import add_custom_title_bar
     THEME_AVAILABLE = True
-except ImportError:
+    print(f"[CONTRACT_MANAGEMENT] THEME_AVAILABLE = {THEME_AVAILABLE}")
+except ImportError as e:
     THEME_AVAILABLE = False
+    print(f"[CONTRACT_MANAGEMENT] THEME_AVAILABLE = False, erreur: {e}")
 
 
 class ContractFormDialog(QDialog):
@@ -481,18 +483,46 @@ class ContractManagementDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
 
-        # En-tête avec statistiques
-        stats_layout = QHBoxLayout()
+        # === KPI Cards modernes et centrées ===
+        if THEME_AVAILABLE:
+            kpi_layout = QHBoxLayout()
+            kpi_layout.setSpacing(15)
+            kpi_layout.addStretch()  # Ajouter stretch à gauche pour centrer
 
-        self.total_label = QLabel("Total : 0")
-        self.expiring_label = QLabel("À renouveler (30j) : 0")
-        self.expiring_label.setStyleSheet("color: orange; font-weight: bold;")
+            # Card 1: Total contrats (bleu plus foncé)
+            self.total_card = self._create_kpi_card(
+                "📋", "Contrats Actifs", "0", "Total en cours",
+                "#2563eb", "#dbeafe"
+            )
+            kpi_layout.addWidget(self.total_card)
 
-        stats_layout.addWidget(self.total_label)
-        stats_layout.addWidget(self.expiring_label)
-        stats_layout.addStretch()
+            # Card 2: À renouveler (orange plus foncé)
+            self.expiring_card = self._create_kpi_card(
+                "⏰", "À Renouveler", "0", "Dans les 30 jours",
+                "#d97706", "#fed7aa"
+            )
+            kpi_layout.addWidget(self.expiring_card)
 
-        layout.addLayout(stats_layout)
+            # Card 3: Expirés (rouge plus foncé)
+            self.expired_card = self._create_kpi_card(
+                "⚠️", "Expirés", "0", "Contrats terminés",
+                "#b91c1c", "#fecaca"
+            )
+            kpi_layout.addWidget(self.expired_card)
+
+            kpi_layout.addStretch()  # Ajouter stretch à droite pour centrer
+
+            layout.addLayout(kpi_layout)
+        else:
+            # Fallback pour version sans thème
+            stats_layout = QHBoxLayout()
+            self.total_label = QLabel("Total : 0")
+            self.expiring_label = QLabel("À renouveler (30j) : 0")
+            self.expiring_label.setStyleSheet("color: orange; font-weight: bold;")
+            stats_layout.addWidget(self.total_label)
+            stats_layout.addWidget(self.expiring_label)
+            stats_layout.addStretch()
+            layout.addLayout(stats_layout)
 
         # Filtres
         filter_layout = QHBoxLayout()
@@ -522,24 +552,77 @@ class ContractManagementDialog(QDialog):
 
         layout.addLayout(filter_layout)
 
-        # Table
-        self.table = QTableWidget()
-        self.table.setColumnCount(11)
-        self.table.setHorizontalHeaderLabels([
-            "ID", "Opérateur", "Matricule", "Type", "Début", "Fin",
-            "ETP", "Catégorie", "Emploi", "Jours restants", "📄 Docs"
-        ])
+        # === Table moderne avec EmacCard ===
+        if THEME_AVAILABLE:
+            table_card = EmacCard()
+            table_layout = QVBoxLayout()
 
-        header = self.table.horizontalHeader()
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.Stretch)
-        header.setSectionResizeMode(8, QHeaderView.Stretch)
+            self.table = QTableWidget()
+            self.table.setColumnCount(11)
+            self.table.setHorizontalHeaderLabels([
+                "ID", "Opérateur", "Matricule", "Type", "Début", "Fin",
+                "ETP", "Catégorie", "Emploi", "Jours restants", "📄 Docs"
+            ])
 
-        self.table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table.doubleClicked.connect(self.edit_contract)
+            header = self.table.horizontalHeader()
+            header.setSectionResizeMode(1, QHeaderView.Stretch)
+            header.setSectionResizeMode(3, QHeaderView.Stretch)
+            header.setSectionResizeMode(8, QHeaderView.Stretch)
 
-        layout.addWidget(self.table)
+            self.table.setSelectionBehavior(QTableWidget.SelectRows)
+            self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+            self.table.doubleClicked.connect(self.edit_contract)
+            self.table.setAlternatingRowColors(True)
+
+            # Style moderne EMAC
+            self.table.setStyleSheet("""
+                QTableWidget {
+                    background-color: white;
+                    alternate-background-color: #f8fafc;
+                    gridline-color: #e2e8f0;
+                    border: none;
+                    font-size: 11px;
+                }
+                QHeaderView::section {
+                    background: #f1f5f9;
+                    color: #475569;
+                    font-weight: bold;
+                    padding: 10px;
+                    border: none;
+                    border-bottom: 2px solid #cbd5e1;
+                }
+                QTableWidget::item {
+                    padding: 8px;
+                    border-bottom: 1px solid #f1f5f9;
+                }
+                QTableWidget::item:selected {
+                    background: #dbeafe;
+                    color: #1e293b;
+                }
+            """)
+
+            table_layout.addWidget(self.table)
+            table_card.body.addLayout(table_layout)
+            layout.addWidget(table_card)
+        else:
+            # Fallback sans carte
+            self.table = QTableWidget()
+            self.table.setColumnCount(11)
+            self.table.setHorizontalHeaderLabels([
+                "ID", "Opérateur", "Matricule", "Type", "Début", "Fin",
+                "ETP", "Catégorie", "Emploi", "Jours restants", "📄 Docs"
+            ])
+
+            header = self.table.horizontalHeader()
+            header.setSectionResizeMode(1, QHeaderView.Stretch)
+            header.setSectionResizeMode(3, QHeaderView.Stretch)
+            header.setSectionResizeMode(8, QHeaderView.Stretch)
+
+            self.table.setSelectionBehavior(QTableWidget.SelectRows)
+            self.table.setEditTriggers(QTableWidget.NoEditTriggers)
+            self.table.doubleClicked.connect(self.edit_contract)
+
+            layout.addWidget(self.table)
 
         # Boutons d'action
         action_layout = QHBoxLayout()
@@ -699,13 +782,75 @@ class ContractManagementDialog(QDialog):
         except Exception:
             return 0
 
+    def _create_kpi_card(self, icon, title, value, subtitle, color, bg_color):
+        """Crée une KPI card SIMPLE - Rectangle plat avec nombre"""
+        # Container simple
+        container = QWidget()
+        container.setFixedSize(220, 80)
+        container.setStyleSheet(f"""
+            QWidget {{
+                background: {bg_color};
+                border-radius: 8px;
+            }}
+        """)
+
+        # Layout horizontal simple
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(20, 15, 20, 15)
+        layout.setSpacing(15)
+
+        # Valeur à gauche
+        value_label = QLabel(value)
+        value_label.setFont(QFont("Segoe UI", 42, QFont.Bold))
+        value_label.setStyleSheet(f"color: {color};")
+        layout.addWidget(value_label)
+
+        # Texte à droite
+        text_layout = QVBoxLayout()
+        text_layout.setSpacing(2)
+
+        title_label = QLabel(title)
+        title_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        title_label.setStyleSheet("color: #1e293b;")
+        title_label.setWordWrap(True)
+        text_layout.addWidget(title_label)
+
+        if subtitle:
+            subtitle_label = QLabel(subtitle)
+            subtitle_label.setFont(QFont("Segoe UI", 9))
+            subtitle_label.setStyleSheet("color: #64748b;")
+            text_layout.addWidget(subtitle_label)
+
+        layout.addLayout(text_layout)
+        layout.addStretch()
+
+        # Stocker la référence
+        container.value_label = value_label
+        return container
+
     def update_statistics(self):
         """Met à jour les statistiques affichées."""
         total = self.table.rowCount()
-        self.total_label.setText(f"Total : {total}")
-
         expiring = get_expiring_contracts(30)
-        self.expiring_label.setText(f"À renouveler (30j) : {len(expiring)}")
+
+        # Compter les contrats expirés
+        expired_count = 0
+        for row in range(self.table.rowCount()):
+            jours_item = self.table.item(row, 9)
+            if jours_item and jours_item.text().isdigit():
+                jours = int(jours_item.text())
+                if jours < 0:
+                    expired_count += 1
+
+        if THEME_AVAILABLE and hasattr(self, 'total_card'):
+            self.total_card.value_label.setText(str(total))
+            self.expiring_card.value_label.setText(str(len(expiring)))
+            self.expired_card.value_label.setText(str(expired_count))
+        else:
+            # Fallback pour version sans thème
+            if hasattr(self, 'total_label'):
+                self.total_label.setText(f"Total : {total}")
+                self.expiring_label.setText(f"À renouveler (30j) : {len(expiring)}")
 
     def add_contract(self):
         """Ouvre le formulaire pour ajouter un contrat."""
@@ -732,42 +877,118 @@ class ContractManagementDialog(QDialog):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(16)
 
-        # En-tête
-        header_layout = QHBoxLayout()
-        header_layout.addWidget(QLabel("Documents contractuels (Contrats de travail, Avenants)"))
-        header_layout.addStretch()
-
+        # === En-tête moderne ===
         if THEME_AVAILABLE:
-            add_doc_btn = EmacButton("+ Ajouter un document", 'primary')
+            header_card = EmacCard()
+            header_layout = QHBoxLayout()
+
+            title = QLabel("📄 Documents Contractuels")
+            title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+            title.setStyleSheet("color: #1e293b;")
+            header_layout.addWidget(title)
+
+            subtitle = QLabel("Contrats de travail, Avenants, Documents officiels")
+            subtitle.setStyleSheet("color: #64748b; font-size: 11px;")
+            header_layout.addWidget(subtitle)
+
+            header_layout.addStretch()
+
+            add_doc_btn = EmacButton("➕ Ajouter", 'primary')
             refresh_doc_btn = EmacButton("🔄 Actualiser", 'ghost')
+
+            add_doc_btn.clicked.connect(self.add_contract_document)
+            refresh_doc_btn.clicked.connect(self.load_contract_documents)
+
+            header_layout.addWidget(add_doc_btn)
+            header_layout.addWidget(refresh_doc_btn)
+
+            header_card.body.addLayout(header_layout)
+            layout.addWidget(header_card)
         else:
+            # Fallback simple
+            header_layout = QHBoxLayout()
+            header_layout.addWidget(QLabel("Documents contractuels (Contrats de travail, Avenants)"))
+            header_layout.addStretch()
+
             add_doc_btn = QPushButton("+ Ajouter un document")
             refresh_doc_btn = QPushButton("🔄 Actualiser")
 
-        add_doc_btn.clicked.connect(self.add_contract_document)
-        refresh_doc_btn.clicked.connect(self.load_contract_documents)
+            add_doc_btn.clicked.connect(self.add_contract_document)
+            refresh_doc_btn.clicked.connect(self.load_contract_documents)
 
-        header_layout.addWidget(add_doc_btn)
-        header_layout.addWidget(refresh_doc_btn)
-        layout.addLayout(header_layout)
+            header_layout.addWidget(add_doc_btn)
+            header_layout.addWidget(refresh_doc_btn)
+            layout.addLayout(header_layout)
 
-        # Table des documents
-        self.docs_table = QTableWidget()
-        self.docs_table.setColumnCount(8)
-        self.docs_table.setHorizontalHeaderLabels([
-            "ID", "Personnel", "Matricule", "Catégorie", "Nom du fichier",
-            "Date d'ajout", "Date d'expiration", "Statut"
-        ])
+        # === Table moderne avec EmacCard ===
+        if THEME_AVAILABLE:
+            table_card = EmacCard()
+            table_layout = QVBoxLayout()
 
-        header = self.docs_table.horizontalHeader()
-        header.setSectionResizeMode(1, QHeaderView.Stretch)
-        header.setSectionResizeMode(4, QHeaderView.Stretch)
+            self.docs_table = QTableWidget()
+            self.docs_table.setColumnCount(8)
+            self.docs_table.setHorizontalHeaderLabels([
+                "ID", "Personnel", "Matricule", "Catégorie", "Nom du fichier",
+                "Date d'ajout", "Date d'expiration", "Statut"
+            ])
 
-        self.docs_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.docs_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.docs_table.doubleClicked.connect(self.open_document)
+            header = self.docs_table.horizontalHeader()
+            header.setSectionResizeMode(1, QHeaderView.Stretch)
+            header.setSectionResizeMode(4, QHeaderView.Stretch)
 
-        layout.addWidget(self.docs_table)
+            self.docs_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            self.docs_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            self.docs_table.doubleClicked.connect(self.open_document)
+            self.docs_table.setAlternatingRowColors(True)
+
+            # Style moderne EMAC
+            self.docs_table.setStyleSheet("""
+                QTableWidget {
+                    background-color: white;
+                    alternate-background-color: #f8fafc;
+                    gridline-color: #e2e8f0;
+                    border: none;
+                    font-size: 11px;
+                }
+                QHeaderView::section {
+                    background: #f1f5f9;
+                    color: #475569;
+                    font-weight: bold;
+                    padding: 10px;
+                    border: none;
+                    border-bottom: 2px solid #cbd5e1;
+                }
+                QTableWidget::item {
+                    padding: 8px;
+                    border-bottom: 1px solid #f1f5f9;
+                }
+                QTableWidget::item:selected {
+                    background: #dbeafe;
+                    color: #1e293b;
+                }
+            """)
+
+            table_layout.addWidget(self.docs_table)
+            table_card.body.addLayout(table_layout)
+            layout.addWidget(table_card)
+        else:
+            # Fallback sans carte
+            self.docs_table = QTableWidget()
+            self.docs_table.setColumnCount(8)
+            self.docs_table.setHorizontalHeaderLabels([
+                "ID", "Personnel", "Matricule", "Catégorie", "Nom du fichier",
+                "Date d'ajout", "Date d'expiration", "Statut"
+            ])
+
+            header = self.docs_table.horizontalHeader()
+            header.setSectionResizeMode(1, QHeaderView.Stretch)
+            header.setSectionResizeMode(4, QHeaderView.Stretch)
+
+            self.docs_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            self.docs_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            self.docs_table.doubleClicked.connect(self.open_document)
+
+            layout.addWidget(self.docs_table)
 
         # Boutons d'action
         action_layout = QHBoxLayout()

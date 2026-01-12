@@ -12,7 +12,7 @@ EMAC est une application complète de gestion RH conçue pour les ateliers de pr
 - ✅ **Planifier les évaluations** périodiques avec calendrier automatisé
 - ✅ **Gérer les contrats** et renouvellements
 - ✅ **Suivre les absences** et congés
-- ✅ **Gérer les documents RH** (certificats, permis, formations)
+- ✅ **Gérer les documents RH** (certificats, permis, formations) 🆕 **Avec upload de fichiers existants**
 - ✅ **Auditer toutes les modifications** dans un historique complet
 
 ---
@@ -47,7 +47,7 @@ py -m core.gui.main_qt
 ```
 
 **Guides** :
-- ⚡ [DEMARRAGE_RAPIDE.md](DEMARRAGE_RAPIDE.md) - Installation en 5 minutes
+- ⚡ [docs/DEMARRAGE_RAPIDE.md](docs/DEMARRAGE_RAPIDE.md) - Installation en 5 minutes
 - 📖 [App/config/README.md](App/config/README.md) - Configuration détaillée
 - 🌐 [docs/INSTALLATION_CLIENT.md](docs/INSTALLATION_CLIENT.md) - Installation réseau
 - 🗺️ [INDEX.md](INDEX.md) - Navigation complète du projet
@@ -59,6 +59,8 @@ py -m core.gui.main_qt
 ### Pour les utilisateurs
 - 📖 [Guide des absences](docs/user/guide-absences.md)
 - 📖 [Guide de l'interface historique](docs/user/guide-interface-historique.md)
+- 📁 **[Comment uploader des documents](COMMENT_UPLOADER_DOCUMENTS.md)** - Guide ultra-rapide
+- 📄 [Guide détaillé - Upload de documents](docs/user/guide-upload-documents.md)
 
 ### Pour les développeurs
 - 🏗️ [Architecture du projet](docs/dev/architecture.md)
@@ -66,20 +68,25 @@ py -m core.gui.main_qt
 - 🔧 [Optimisation de l'exécutable](docs/dev/build-optimization.md)
 - 🌐 [Déploiement réseau](docs/dev/deploiement-reseau.md) ⚡ **Résout la lenteur au lancement**
 
-#### 🔥 Optimisations Performance (NOUVEAU 2026-01-07)
-- ⚡ **[Optimisations Base de Données](docs/dev/optimisation-database.md)** - Gains 10-100x avec indexes
-- 🧵 **[Optimisations UI/Threads](docs/dev/optimisation-ui-threads.md)** - UI fluide, zero freeze
-- 💾 **[Optimisations Cache](docs/dev/optimisation-cache.md)** - Cache mémoire avec TTL
-- 📦 **[Optimisations Packaging](docs/dev/optimisation-packaging.md)** - PyInstaller démarrage 5x plus rapide
-- 📝 **[Optimisations Logs/IO](docs/dev/optimisation-logs-io.md)** - Logs async, évite micro-lenteurs
+#### 🔥 Optimisations Performance (2026-01-06 à 2026-01-08)
 
-#### Guides rapides des optimisations
-- 📄 [DB - Guide rapide](OPTIMISATIONS_DB_APPLIQUEES.md)
-- 📄 [UI - Guide rapide](OPTIMISATIONS_UI_APPLIQUEES.md)
-- 📄 [Cache - Guide rapide](OPTIMISATIONS_CACHE_APPLIQUEES.md)
-- 📄 [Packaging - Guide rapide](OPTIMISATIONS_PACKAGING_APPLIQUEES.md)
-- 📄 [Logs - Guide rapide](OPTIMISATIONS_LOGS_APPLIQUEES.md)
+**📊 Vue d'ensemble:** [docs/dev/optimisation-reports/README.md](docs/dev/optimisation-reports/README.md)
 
+**Guides techniques par catégorie:**
+- ⚡ **[Optimisations Base de Données](docs/dev/optimisation-database.md)** - Connection pooling, indexes (gains 10-100x)
+- 🧵 **[Optimisations UI/Threads](docs/dev/optimisation-ui-threads.md)** - DbWorker, 2-stage loading (UI fluide, zero freeze)
+- 💾 **[Optimisations Cache](docs/dev/optimisation-cache.md)** - Cache LRU avec TTL (réduction requêtes répétées)
+- 📦 **[Optimisations Packaging](docs/dev/optimisation-packaging.md)** - PyInstaller optimisé (180MB → 95MB, -47%)
+- 📝 **[Optimisations Logs/IO](docs/dev/optimisation-logs-io.md)** - Logs asynchrones (évite micro-lenteurs)
+- 📈 **[Monitoring Performance](docs/dev/monitoring-performance.md)** - Métriques temps réel et détection d'anomalies
+
+**Rapports d'application détaillés:**
+- 📄 [docs/dev/optimisation-reports/db-optimization/](docs/dev/optimisation-reports/db-optimization/) - Détails implémentation DB
+- 📄 [docs/dev/optimisation-reports/ui-optimization/](docs/dev/optimisation-reports/ui-optimization/) - Détails implémentation UI
+- 📄 [docs/dev/optimisation-reports/cache-optimization/](docs/dev/optimisation-reports/cache-optimization/) - Détails cache
+- 📄 [docs/dev/optimisation-reports/RESUME_FINAL.md](docs/dev/optimisation-reports/RESUME_FINAL.md) - Résumé complet avec métriques
+
+**Exemples pratiques:**
 - 📝 [Exemples de logging](docs/dev/exemples-logging.md)
 - 💡 [Exemples de cache](docs/dev/exemples-cache.md)
 

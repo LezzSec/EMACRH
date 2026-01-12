@@ -30,4 +30,4 @@ excludedimports = [
     'reportlab.graphics.barcode',  # Barcodes non utilisés
 ]
 
-print(f"✅ Hook ReportLab: modules essentiels inclus, charts/barcodes exclus")
+print(f"[OK] Hook ReportLab: modules essentiels inclus, charts/barcodes exclus")

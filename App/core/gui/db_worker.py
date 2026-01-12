@@ -174,9 +174,9 @@ class DbThreadPool:
 
     def _initialize(self):
         """Initialise le pool de threads"""
-        self._pool = QThreadPool.globalInstance()
+        DbThreadPool._pool = QThreadPool.globalInstance()
 
-        # ✅ IMPORTANT : Limiter la concurrence en cohérence avec le pool MySQL
+        # IMPORTANT : Limiter la concurrence en cohérence avec le pool MySQL
         # Si pool MySQL = 5, on limite à 5 threads DB maximum
         # Cela évite d'avoir 10 workers qui attendent une connexion
         from core.db.configbd import _get_db_config
@@ -185,12 +185,12 @@ class DbThreadPool:
             pool_size = config.get('pool_size', 5)
             # On met légèrement moins pour laisser de la marge
             max_threads = max(2, pool_size - 1)
-            self._pool.setMaxThreadCount(max_threads)
-            print(f"🔧 DbThreadPool configuré : {max_threads} threads max (pool MySQL: {pool_size})")
+            DbThreadPool._pool.setMaxThreadCount(max_threads)
+            print(f"[OK] DbThreadPool configure : {max_threads} threads max (pool MySQL: {pool_size})")
         except Exception as e:
-            print(f"⚠️  Impossible de configurer DbThreadPool : {e}")
+            print(f"[WARN] Impossible de configurer DbThreadPool : {e}")
             # Par défaut, limiter à 4 threads
-            self._pool.setMaxThreadCount(4)
+            DbThreadPool._pool.setMaxThreadCount(4)
 
     @classmethod
     def get_pool(cls) -> QThreadPool:
@@ -329,11 +329,11 @@ def show_error_placeholder(widget, error_msg: str):
     from PyQt5.QtWidgets import QLabel, QListWidget
 
     if isinstance(widget, QLabel):
-        widget.setText(f"❌ Erreur : {error_msg}")
+        widget.setText(f"[ERREUR] {error_msg}")
         widget.setStyleSheet("color: #d32f2f; font-style: italic;")
     elif isinstance(widget, QListWidget):
         widget.clear()
-        widget.addItem(f"❌ Erreur : {error_msg}")
+        widget.addItem(f"[ERREUR] {error_msg}")
 
 
 # ===========================
@@ -369,7 +369,7 @@ def async_db_operation(on_result: Optional[Callable] = None,
 def print_pool_status():
     """Affiche l'état actuel du pool de threads (debug)"""
     print("="*60)
-    print("📊 DbThreadPool Status")
+    print("[DEBUG] DbThreadPool Status")
     print("="*60)
     print(f"Threads actifs : {DbThreadPool.get_active_thread_count()}")
     print(f"Threads max    : {DbThreadPool.get_max_thread_count()}")

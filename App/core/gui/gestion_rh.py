@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Module de Gestion RH Complète
+Module de Gestion RH Complète - Interface Moderne et Épurée
 Interface combinant calendriers d'évaluation, absences/congés, planning et contrats
 """
 
@@ -9,15 +9,17 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QTabWidget, QWidget,
     QDateEdit, QComboBox, QTextEdit, QMessageBox, QHeaderView,
     QRadioButton, QButtonGroup, QGroupBox, QCalendarWidget,
-    QScrollArea, QFrame, QListWidget, QListWidgetItem, QSplitter
+    QScrollArea, QFrame, QListWidget, QListWidgetItem, QSplitter,
+    QGridLayout, QSpacerItem, QSizePolicy
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal, QTimer
-from PyQt5.QtGui import QFont, QColor
+from PyQt5.QtGui import QFont, QColor, QIcon
 from datetime import datetime, date, timedelta
 
 from core.services import absence_service
 from core.services import evaluation_service, calendrier_service
 from core.db.configbd import get_connection
+from core.gui.ui_theme import EmacCard, EmacButton
 
 
 class GestionRHDialog(QDialog):
@@ -30,64 +32,318 @@ class GestionRHDialog(QDialog):
         self.personnel_id = personnel_id
         self.annee_courante = datetime.now().year
 
-        self.setWindowTitle("Gestion RH")
-        self.setGeometry(100, 100, 1400, 800)
+        self.setWindowTitle("Gestion RH - Interface Moderne")
+        self.setGeometry(100, 100, 1500, 850)
         self.setModal(False)
+
+        # Appliquer un style moderne
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #f8f9fa;
+            }
+            QTabWidget::pane {
+                border: none;
+                background: transparent;
+            }
+            QTabBar::tab {
+                background: white;
+                color: #64748b;
+                padding: 12px 24px;
+                margin-right: 4px;
+                border-top-left-radius: 8px;
+                border-top-right-radius: 8px;
+                font-weight: 600;
+                font-size: 13px;
+            }
+            QTabBar::tab:selected {
+                background: #3b82f6;
+                color: white;
+            }
+            QTabBar::tab:hover:!selected {
+                background: #e2e8f0;
+            }
+        """)
 
         self.init_ui()
         self.load_data()
 
     def init_ui(self):
-        """Initialise l'interface avec onglets"""
+        """Initialise l'interface moderne avec onglets"""
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(16)
 
-        # Titre
-        title = QLabel("Gestion RH")
-        title.setFont(QFont("Arial", 18, QFont.Bold))
-        title.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title)
+        # En-tête moderne avec icône
+        header_layout = QHBoxLayout()
+        header_layout.setSpacing(12)
 
-        # Onglets
+        title = QLabel("🏢 Gestion des Ressources Humaines")
+        title.setFont(QFont("Segoe UI", 22, QFont.Bold))
+        title.setStyleSheet("color: #1e293b; padding: 10px 0;")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+
+        # Bouton d'aide
+        btn_help = QPushButton("?")
+        btn_help.setFixedSize(36, 36)
+        btn_help.setStyleSheet("""
+            QPushButton {
+                background: #3b82f6;
+                color: white;
+                border-radius: 18px;
+                font-weight: bold;
+                font-size: 18px;
+            }
+            QPushButton:hover {
+                background: #2563eb;
+            }
+        """)
+        btn_help.setToolTip("Aide et documentation")
+        header_layout.addWidget(btn_help)
+
+        layout.addLayout(header_layout)
+
+        # Sous-titre avec info utilisateur
+        subtitle = QLabel("Gérez vos évaluations, absences, congés et contrats")
+        subtitle.setStyleSheet("color: #64748b; font-size: 13px; padding-bottom: 10px;")
+        layout.addWidget(subtitle)
+
+        # Onglets modernes
         self.tabs = QTabWidget()
+        self.tabs.setDocumentMode(True)
         layout.addWidget(self.tabs)
 
         # Onglet 1: Vue d'ensemble (Dashboard)
-        self.tab_dashboard = self.create_tab_dashboard()
-        self.tabs.addTab(self.tab_dashboard, "📊 Tableau de bord")
+        self.tab_dashboard = self.create_tab_dashboard_modern()
+        self.tabs.addTab(self.tab_dashboard, "📊  Vue d'ensemble")
 
-        # Onglet 2: Calendrier des évaluations
-        self.tab_eval_calendar = self.create_tab_eval_calendar()
-        self.tabs.addTab(self.tab_eval_calendar, "📅 Calendrier Évaluations")
+        # Onglet 2: Mes Évaluations
+        self.tab_eval_calendar = self.create_tab_evaluations_modern()
+        self.tabs.addTab(self.tab_eval_calendar, "📋  Mes Évaluations")
 
         # Onglet 3: Mes absences/congés
-        self.tab_absences = self.create_tab_absences()
-        self.tabs.addTab(self.tab_absences, "Mes Absences")
+        self.tab_absences = self.create_tab_absences_modern()
+        self.tabs.addTab(self.tab_absences, "🏖️  Absences & Congés")
 
         # Onglet 4: Planning d'équipe
-        self.tab_planning = self.create_tab_planning()
-        self.tabs.addTab(self.tab_planning, "📆 Planning Équipe")
+        self.tab_planning = self.create_tab_planning_modern()
+        self.tabs.addTab(self.tab_planning, "📆  Planning Équipe")
 
         # Onglet 5: Validation (si manager)
-        self.tab_validation = self.create_tab_validation()
-        self.tabs.addTab(self.tab_validation, "✅ Validation")
+        self.tab_validation = self.create_tab_validation_modern()
+        self.tabs.addTab(self.tab_validation, "✅  Validation")
 
-        # Bouton fermer
-        btn_close = QPushButton("Fermer")
+        # Pied de page avec boutons
+        footer_layout = QHBoxLayout()
+        footer_layout.setSpacing(10)
+
+        btn_refresh = EmacButton("🔄 Actualiser", variant='ghost')
+        btn_refresh.clicked.connect(self.load_data)
+        footer_layout.addWidget(btn_refresh)
+
+        footer_layout.addStretch()
+
+        btn_close = EmacButton("Fermer", variant='ghost')
         btn_close.clicked.connect(self.accept)
-        layout.addWidget(btn_close)
+        footer_layout.addWidget(btn_close)
+
+        layout.addLayout(footer_layout)
+
+    def create_tab_dashboard_modern(self):
+        """Onglet tableau de bord moderne avec vue d'ensemble"""
+        widget = QWidget()
+        widget.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(20)
+
+        # Layout en grille pour les KPI cards
+        grid = QGridLayout()
+        grid.setSpacing(15)
+
+        # KPI 1: Évaluations en retard (rouge)
+        retard_card = self._create_kpi_card(
+            "⚠️", "Évaluations en Retard",
+            "0", "À réaliser d'urgence",
+            "#ef4444", "#fef2f2"
+        )
+        self.retard_count_label = retard_card.findChild(QLabel, "value_label")
+        self.retard_list_widget = QListWidget()
+        self.retard_list_widget.setMaximumHeight(120)
+        self.retard_list_widget.setStyleSheet("""
+            QListWidget {
+                background: white;
+                border: 1px solid #fee2e2;
+                border-radius: 6px;
+                padding: 8px;
+                font-size: 11px;
+            }
+            QListWidget::item {
+                padding: 6px;
+                border-bottom: 1px solid #fef2f2;
+            }
+        """)
+        retard_card.body.addWidget(self.retard_list_widget)
+
+        btn_voir_retards = EmacButton("→ Voir tout", variant='ghost')
+        btn_voir_retards.clicked.connect(lambda: self._ouvrir_gestion_evaluations("En retard"))
+        retard_card.body.addWidget(btn_voir_retards)
+
+        grid.addWidget(retard_card, 0, 0)
+
+        # KPI 2: Prochaines évaluations (vert)
+        next_card = self._create_kpi_card(
+            "📅", "Prochaines Évaluations",
+            "0", "30 prochains jours",
+            "#10b981", "#f0fdf4"
+        )
+        self.next_count_label = next_card.findChild(QLabel, "value_label")
+        self.next_eval_list_widget = QListWidget()
+        self.next_eval_list_widget.setMaximumHeight(120)
+        self.next_eval_list_widget.setStyleSheet("""
+            QListWidget {
+                background: white;
+                border: 1px solid #d1fae5;
+                border-radius: 6px;
+                padding: 8px;
+                font-size: 11px;
+            }
+            QListWidget::item {
+                padding: 6px;
+                border-bottom: 1px solid #f0fdf4;
+            }
+        """)
+        next_card.body.addWidget(self.next_eval_list_widget)
+
+        btn_voir_prochaines = EmacButton("→ Voir tout", variant='ghost')
+        btn_voir_prochaines.clicked.connect(lambda: self._ouvrir_gestion_evaluations("À planifier (30j)"))
+        next_card.body.addWidget(btn_voir_prochaines)
+
+        grid.addWidget(next_card, 0, 1)
+
+        # KPI 3: Mes soldes de congés (bleu)
+        solde_card = self._create_kpi_card(
+            "🏖️", "Mes Soldes de Congés",
+            "", f"Année {self.annee_courante}",
+            "#3b82f6", "#eff6ff"
+        )
+
+        solde_grid = QGridLayout()
+        solde_grid.setSpacing(10)
+
+        # CP
+        cp_label = QLabel("Congés Payés")
+        cp_label.setStyleSheet("font-weight: bold; color: #1e40af; font-size: 11px;")
+        self.cp_value = QLabel("0 jours")
+        self.cp_value.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        self.cp_value.setStyleSheet("color: #1e40af;")
+        solde_grid.addWidget(cp_label, 0, 0)
+        solde_grid.addWidget(self.cp_value, 1, 0)
+
+        # RTT
+        rtt_label = QLabel("RTT")
+        rtt_label.setStyleSheet("font-weight: bold; color: #1e40af; font-size: 11px;")
+        self.rtt_value = QLabel("0 jours")
+        self.rtt_value.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        self.rtt_value.setStyleSheet("color: #1e40af;")
+        solde_grid.addWidget(rtt_label, 0, 1)
+        solde_grid.addWidget(self.rtt_value, 1, 1)
+
+        solde_card.body.addLayout(solde_grid)
+        grid.addWidget(solde_card, 1, 0)
+
+        # KPI 4: Mes demandes récentes (violet)
+        demandes_card = self._create_kpi_card(
+            "📝", "Mes Demandes Récentes",
+            "", "Dernières demandes d'absence",
+            "#8b5cf6", "#f5f3ff"
+        )
+
+        self.demandes_list_widget = QListWidget()
+        self.demandes_list_widget.setMaximumHeight(150)
+        self.demandes_list_widget.setStyleSheet("""
+            QListWidget {
+                background: white;
+                border: 1px solid #e9d5ff;
+                border-radius: 6px;
+                padding: 8px;
+                font-size: 11px;
+            }
+            QListWidget::item {
+                padding: 6px;
+                border-bottom: 1px solid #f5f3ff;
+            }
+        """)
+        demandes_card.body.addWidget(self.demandes_list_widget)
+
+        btn_nouvelle = EmacButton("➕ Nouvelle Demande", variant='primary')
+        btn_nouvelle.clicked.connect(lambda: self.tabs.setCurrentIndex(2))
+        demandes_card.body.addWidget(btn_nouvelle)
+
+        grid.addWidget(demandes_card, 1, 1)
+
+        layout.addLayout(grid)
+
+        # Note: on garde les références pour compatibilité
+        self.retard_list = self.retard_list_widget
+        self.next_eval_list = self.next_eval_list_widget
+        self.demandes_list = self.demandes_list_widget
+
+        return widget
+
+    def _create_kpi_card(self, icon, title, value, subtitle, color, bg_color):
+        """Crée une KPI card moderne"""
+        card = EmacCard()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background: {bg_color};
+                border-left: 4px solid {color};
+            }}
+        """)
+
+        # En-tête avec icône
+        header = QHBoxLayout()
+        icon_label = QLabel(icon)
+        icon_label.setFont(QFont("Segoe UI", 24))
+        header.addWidget(icon_label)
+
+        title_layout = QVBoxLayout()
+        title_label = QLabel(title)
+        title_label.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        title_label.setStyleSheet(f"color: {color};")
+        title_layout.addWidget(title_label)
+
+        if subtitle:
+            subtitle_label = QLabel(subtitle)
+            subtitle_label.setStyleSheet("color: #64748b; font-size: 10px;")
+            title_layout.addWidget(subtitle_label)
+
+        header.addLayout(title_layout)
+        header.addStretch()
+        card.body.addLayout(header)
+
+        # Valeur principale
+        if value:
+            value_label = QLabel(value)
+            value_label.setObjectName("value_label")
+            value_label.setFont(QFont("Segoe UI", 32, QFont.Bold))
+            value_label.setStyleSheet(f"color: {color};")
+            value_label.setAlignment(Qt.AlignCenter)
+            card.body.addWidget(value_label)
+
+        return card
 
     def create_tab_dashboard(self):
-        """Onglet tableau de bord avec vue d'ensemble"""
+        """Ancienne méthode - redirige vers la nouvelle"""
+        return self.create_tab_dashboard_modern()
+
+    def create_tab_evaluations_modern(self):
+        """Onglet évaluations moderne et épuré"""
         widget = QWidget()
+        widget.setStyleSheet("background: transparent;")
         layout = QVBoxLayout(widget)
-
-        # Titre
-        title = QLabel("Vue d'ensemble RH")
-        title.setFont(QFont("Arial", 14, QFont.Bold))
-        layout.addWidget(title)
-
-        # Layout principal en 2 colonnes
-        main_layout = QHBoxLayout()
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(15)
 
         # Colonne gauche: Évaluations
         left_col = QVBoxLayout()
@@ -310,36 +566,67 @@ class GestionRHDialog(QDialog):
 
         return frame
 
-    def create_tab_eval_calendar(self):
-        """Onglet calendrier des évaluations"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+        # Titre et filtres dans une card
+        filter_card = EmacCard()
 
-        title = QLabel("Calendrier des Évaluations")
-        title.setFont(QFont("Arial", 14, QFont.Bold))
-        layout.addWidget(title)
+        title_row = QHBoxLayout()
+        title = QLabel("📋 Mes Évaluations")
+        title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        title.setStyleSheet("color: #1e293b;")
+        title_row.addWidget(title)
+        title_row.addStretch()
+        filter_card.body.addLayout(title_row)
 
-        # Filtres
+        # Filtres compacts
         filter_layout = QHBoxLayout()
-        filter_layout.addWidget(QLabel("Filtre poste:"))
+        filter_layout.setSpacing(12)
+
+        # Filtre poste
+        filter_layout.addWidget(QLabel("📍 Poste:"))
         self.eval_poste_filter = QComboBox()
         self.eval_poste_filter.addItem("Tous les postes", "")
         self.eval_poste_filter.currentIndexChanged.connect(self.load_evaluations_calendar)
+        self.eval_poste_filter.setStyleSheet("""
+            QComboBox {
+                padding: 6px 12px;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                background: white;
+                min-width: 150px;
+            }
+        """)
         filter_layout.addWidget(self.eval_poste_filter)
 
-        filter_layout.addWidget(QLabel("Période:"))
+        filter_layout.addSpacing(20)
+
+        # Filtre période
+        filter_layout.addWidget(QLabel("⏰ Période:"))
         self.eval_periode_filter = QComboBox()
-        self.eval_periode_filter.addItem("En retard", "retard")
-        self.eval_periode_filter.addItem("30 prochains jours", "30j")
-        self.eval_periode_filter.addItem("90 prochains jours", "90j")
-        self.eval_periode_filter.addItem("Tous", "all")
+        self.eval_periode_filter.addItem("⚠️ En retard", "retard")
+        self.eval_periode_filter.addItem("📅 30 prochains jours", "30j")
+        self.eval_periode_filter.addItem("📆 90 prochains jours", "90j")
+        self.eval_periode_filter.addItem("📊 Toutes", "all")
         self.eval_periode_filter.currentIndexChanged.connect(self.load_evaluations_calendar)
+        self.eval_periode_filter.setStyleSheet("""
+            QComboBox {
+                padding: 6px 12px;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                background: white;
+                min-width: 180px;
+            }
+        """)
         filter_layout.addWidget(self.eval_periode_filter)
 
         filter_layout.addStretch()
-        layout.addLayout(filter_layout)
+        filter_card.body.addLayout(filter_layout)
 
-        # Table des évaluations
+        layout.addWidget(filter_card)
+
+        # Table moderne des évaluations
+        table_card = EmacCard()
+        table_layout = QVBoxLayout()
+
         self.eval_table = QTableWidget()
         self.eval_table.setColumnCount(7)
         self.eval_table.setHorizontalHeaderLabels([
@@ -348,45 +635,310 @@ class GestionRHDialog(QDialog):
         self.eval_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.eval_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.eval_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        layout.addWidget(self.eval_table)
+        self.eval_table.setAlternatingRowColors(True)
+        self.eval_table.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                alternate-background-color: #f8fafc;
+                gridline-color: #e2e8f0;
+                border: none;
+                font-size: 11px;
+            }
+            QHeaderView::section {
+                background: #f1f5f9;
+                color: #475569;
+                font-weight: bold;
+                padding: 10px;
+                border: none;
+                border-bottom: 2px solid #cbd5e1;
+            }
+            QTableWidget::item {
+                padding: 10px;
+                border-bottom: 1px solid #f1f5f9;
+            }
+            QTableWidget::item:selected {
+                background: #dbeafe;
+                color: #1e293b;
+            }
+        """)
+        table_layout.addWidget(self.eval_table)
 
         # Boutons d'action
         btn_layout = QHBoxLayout()
-        btn_planifier = QPushButton("📅 Planifier Évaluation")
+        btn_planifier = EmacButton("📅 Planifier Évaluation", variant='primary')
         btn_planifier.clicked.connect(self.planifier_evaluation)
         btn_layout.addWidget(btn_planifier)
 
-        btn_export = QPushButton("📤 Exporter")
+        btn_export = EmacButton("📤 Exporter", variant='ghost')
         btn_layout.addWidget(btn_export)
 
         btn_layout.addStretch()
-        layout.addLayout(btn_layout)
+        table_layout.addLayout(btn_layout)
+
+        table_card.body.addLayout(table_layout)
+        layout.addWidget(table_card)
 
         return widget
+
+    def create_tab_eval_calendar(self):
+        """Ancienne méthode - redirige vers la nouvelle"""
+        return self.create_tab_evaluations_modern()
+
+    def create_tab_absences_modern(self):
+        """Onglet absences moderne et simplifié"""
+        widget = QWidget()
+        widget.setStyleSheet("background: transparent;")
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(15)
+
+        # Titre principal
+        header_layout = QHBoxLayout()
+        title = QLabel("🏖️ Absences & Congés")
+        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title.setStyleSheet("color: #1e293b;")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+
+        # Bouton nouvelle demande proéminent
+        btn_nouvelle = EmacButton("➕ Nouvelle Demande", variant='primary')
+        btn_nouvelle.clicked.connect(self._show_nouvelle_demande_dialog)
+        btn_nouvelle.setMinimumHeight(40)
+        header_layout.addWidget(btn_nouvelle)
+
+        layout.addLayout(header_layout)
+
+        # Layout horizontal: Mes soldes à gauche, Mes demandes à droite
+        main_horizontal = QHBoxLayout()
+        main_horizontal.setSpacing(15)
+
+        # === GAUCHE: Mes Soldes ===
+        soldes_card = EmacCard()
+        soldes_layout = QVBoxLayout()
+
+        soldes_title = QLabel("💳 Mes Soldes")
+        soldes_title.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        soldes_title.setStyleSheet("color: #1e293b;")
+        soldes_layout.addWidget(soldes_title)
+
+        # Sélection année
+        annee_layout = QHBoxLayout()
+        annee_layout.addWidget(QLabel("Année:"))
+        self.solde_annee_combo = QComboBox()
+        annee = datetime.now().year
+        for i in range(annee - 2, annee + 2):
+            self.solde_annee_combo.addItem(str(i), i)
+        self.solde_annee_combo.setCurrentText(str(annee))
+        self.solde_annee_combo.currentIndexChanged.connect(self.load_soldes)
+        self.solde_annee_combo.setStyleSheet("""
+            QComboBox {
+                padding: 6px 12px;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                background: white;
+            }
+        """)
+        annee_layout.addWidget(self.solde_annee_combo)
+        annee_layout.addStretch()
+        soldes_layout.addLayout(annee_layout)
+
+        # Cards des soldes (CP et RTT)
+        soldes_grid = QHBoxLayout()
+        soldes_grid.setSpacing(10)
+
+        # CP Card
+        self.cp_card = self._create_solde_mini_card("Congés Payés", "#10b981")
+        soldes_grid.addWidget(self.cp_card)
+
+        # RTT Card
+        self.rtt_card = self._create_solde_mini_card("RTT", "#3b82f6")
+        soldes_grid.addWidget(self.rtt_card)
+
+        soldes_layout.addLayout(soldes_grid)
+
+        # Détails
+        self.solde_details_label = QLabel()
+        self.solde_details_label.setWordWrap(True)
+        self.solde_details_label.setStyleSheet("""
+            QLabel {
+                background: #f8fafc;
+                padding: 12px;
+                border-radius: 6px;
+                font-size: 11px;
+                color: #475569;
+                border: 1px solid #e2e8f0;
+            }
+        """)
+        soldes_layout.addWidget(self.solde_details_label)
+
+        soldes_card.body.addLayout(soldes_layout)
+        main_horizontal.addWidget(soldes_card, 1)
+
+        # === DROITE: Mes Demandes ===
+        demandes_card = EmacCard()
+        demandes_layout = QVBoxLayout()
+
+        demandes_title = QLabel("📝 Mes Demandes")
+        demandes_title.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        demandes_title.setStyleSheet("color: #1e293b;")
+        demandes_layout.addWidget(demandes_title)
+
+        # Filtres
+        filter_row = QHBoxLayout()
+
+        filter_row.addWidget(QLabel("Année:"))
+        self.annee_filter = QComboBox()
+        for i in range(annee - 2, annee + 2):
+            self.annee_filter.addItem(str(i), i)
+        self.annee_filter.setCurrentText(str(annee))
+        self.annee_filter.currentIndexChanged.connect(self.load_mes_demandes)
+        self.annee_filter.setStyleSheet("""
+            QComboBox {
+                padding: 6px 12px;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                background: white;
+            }
+        """)
+        filter_row.addWidget(self.annee_filter)
+
+        filter_row.addSpacing(10)
+
+        filter_row.addWidget(QLabel("Statut:"))
+        self.statut_filter = QComboBox()
+        self.statut_filter.addItem("Tous", None)
+        self.statut_filter.addItem("⏳ En attente", "EN_ATTENTE")
+        self.statut_filter.addItem("✅ Validées", "VALIDEE")
+        self.statut_filter.addItem("❌ Refusées", "REFUSEE")
+        self.statut_filter.currentIndexChanged.connect(self.load_mes_demandes)
+        self.statut_filter.setStyleSheet("""
+            QComboBox {
+                padding: 6px 12px;
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                background: white;
+            }
+        """)
+        filter_row.addWidget(self.statut_filter)
+
+        filter_row.addStretch()
+        demandes_layout.addLayout(filter_row)
+
+        # Table des demandes
+        self.table_demandes = QTableWidget()
+        self.table_demandes.setColumnCount(9)
+        self.table_demandes.setHorizontalHeaderLabels([
+            "ID", "Type", "Début", "Fin", "Nb jours", "Motif", "Statut", "Validateur", "Date valid."
+        ])
+        self.table_demandes.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.table_demandes.setSelectionBehavior(QTableWidget.SelectRows)
+        self.table_demandes.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.table_demandes.setAlternatingRowColors(True)
+        self.table_demandes.setColumnHidden(0, True)  # Cacher l'ID
+        self.table_demandes.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                alternate-background-color: #f8fafc;
+                gridline-color: #e2e8f0;
+                border: none;
+                font-size: 11px;
+            }
+            QHeaderView::section {
+                background: #f1f5f9;
+                color: #475569;
+                font-weight: bold;
+                padding: 10px;
+                border: none;
+                border-bottom: 2px solid #cbd5e1;
+            }
+            QTableWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #f1f5f9;
+            }
+            QTableWidget::item:selected {
+                background: #dbeafe;
+                color: #1e293b;
+            }
+        """)
+        demandes_layout.addWidget(self.table_demandes)
+
+        # Bouton annuler
+        btn_cancel = EmacButton("🗑️ Annuler la demande", variant='ghost')
+        btn_cancel.clicked.connect(self.annuler_demande)
+        demandes_layout.addWidget(btn_cancel)
+
+        demandes_card.body.addLayout(demandes_layout)
+        main_horizontal.addWidget(demandes_card, 2)
+
+        layout.addLayout(main_horizontal)
+
+        return widget
+
+    def _create_solde_mini_card(self, titre, couleur):
+        """Crée une mini card pour afficher un solde"""
+        frame = QFrame()
+        frame.setFrameShape(QFrame.StyledPanel)
+        frame.setStyleSheet(f"""
+            QFrame {{
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 {couleur}, stop:1 {self._darken_color(couleur)});
+                border-radius: 10px;
+                padding: 15px;
+                min-height: 120px;
+            }}
+        """)
+
+        layout = QVBoxLayout(frame)
+
+        title_label = QLabel(titre)
+        title_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        title_label.setStyleSheet("color: white; background: transparent;")
+        layout.addWidget(title_label)
+
+        layout.addStretch()
+
+        value_label = QLabel("0")
+        value_label.setFont(QFont("Segoe UI", 28, QFont.Bold))
+        value_label.setStyleSheet("color: white; background: transparent;")
+        value_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(value_label)
+
+        subtitle_label = QLabel("jours restants")
+        subtitle_label.setStyleSheet("color: rgba(255,255,255,0.9); font-size: 10px; background: transparent;")
+        subtitle_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(subtitle_label)
+
+        # Stocker les labels pour mise à jour
+        if "CP" in titre or "Congés" in titre:
+            self.cp_value_label = value_label
+        else:
+            self.rtt_value_label = value_label
+
+        return frame
+
+    def _darken_color(self, hex_color):
+        """Assombrit une couleur hexadécimale"""
+        color_map = {
+            "#10b981": "#059669",
+            "#3b82f6": "#2563eb",
+            "#ef4444": "#dc2626",
+            "#8b5cf6": "#7c3aed",
+        }
+        return color_map.get(hex_color, hex_color)
+
+    def _show_nouvelle_demande_dialog(self):
+        """Affiche un dialogue pour créer une nouvelle demande"""
+        from core.gui.gestion_absences import NouvelleDemandeDialog
+        dialog = NouvelleDemandeDialog(self.personnel_id, parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_mes_demandes()
+            self.load_soldes()
+            self.load_dashboard_data()
+            self.data_changed.emit()
 
     def create_tab_absences(self):
-        """Onglet gestion de mes absences"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        # Sous-onglets
-        sub_tabs = QTabWidget()
-
-        # Sous-onglet: Mes demandes
-        mes_demandes_tab = self.create_subtab_mes_demandes()
-        sub_tabs.addTab(mes_demandes_tab, "Mes Demandes")
-
-        # Sous-onglet: Nouvelle demande
-        nouvelle_demande_tab = self.create_subtab_nouvelle_demande()
-        sub_tabs.addTab(nouvelle_demande_tab, "Nouvelle Demande")
-
-        # Sous-onglet: Mes soldes
-        mes_soldes_tab = self.create_subtab_mes_soldes()
-        sub_tabs.addTab(mes_soldes_tab, "Mes Soldes")
-
-        layout.addWidget(sub_tabs)
-
-        return widget
+        """Ancienne méthode - redirige vers la nouvelle"""
+        return self.create_tab_absences_modern()
 
     def create_subtab_mes_demandes(self):
         """Sous-onglet listant les demandes du personnel"""
@@ -643,30 +1195,105 @@ class GestionRHDialog(QDialog):
 
         return frame
 
-    def create_tab_planning(self):
-        """Onglet planning d'équipe"""
+    def create_tab_planning_modern(self):
+        """Onglet planning d'équipe moderne"""
         widget = QWidget()
+        widget.setStyleSheet("background: transparent;")
         layout = QVBoxLayout(widget)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(15)
 
-        title = QLabel("Planning d'Équipe")
-        title.setFont(QFont("Arial", 14, QFont.Bold))
+        # Titre
+        title = QLabel("📆 Planning d'Équipe")
+        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title.setStyleSheet("color: #1e293b;")
         layout.addWidget(title)
 
-        # Calendrier
+        # Layout horizontal: Calendrier + Détails
+        main_layout = QHBoxLayout()
+        main_layout.setSpacing(15)
+
+        # Card calendrier
+        calendar_card = EmacCard()
+        calendar_layout = QVBoxLayout()
+
         self.calendar = QCalendarWidget()
         self.calendar.clicked.connect(self.afficher_absences_jour)
-        layout.addWidget(self.calendar)
+        self.calendar.setStyleSheet("""
+            QCalendarWidget {
+                background: white;
+                border-radius: 8px;
+            }
+            QCalendarWidget QWidget {
+                alternate-background-color: #f8fafc;
+            }
+            QCalendarWidget QToolButton {
+                background: #3b82f6;
+                color: white;
+                border-radius: 4px;
+                padding: 6px;
+                font-weight: bold;
+            }
+            QCalendarWidget QToolButton:hover {
+                background: #2563eb;
+            }
+            QCalendarWidget QAbstractItemView:enabled {
+                selection-background-color: #3b82f6;
+                selection-color: white;
+            }
+        """)
+        calendar_layout.addWidget(self.calendar)
+        calendar_card.body.addLayout(calendar_layout)
 
-        # Liste des absences du jour sélectionné
-        layout.addWidget(QLabel("Absences du jour:"))
+        main_layout.addWidget(calendar_card, 2)
+
+        # Card détails du jour
+        details_card = EmacCard()
+        details_layout = QVBoxLayout()
+
+        details_title = QLabel("📋 Absences du jour sélectionné")
+        details_title.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        details_title.setStyleSheet("color: #1e293b;")
+        details_layout.addWidget(details_title)
+
         self.absences_jour_list = QTableWidget()
         self.absences_jour_list.setColumnCount(4)
         self.absences_jour_list.setHorizontalHeaderLabels(["Nom", "Type", "Du", "Au"])
         self.absences_jour_list.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.absences_jour_list.setMaximumHeight(200)
-        layout.addWidget(self.absences_jour_list)
+        self.absences_jour_list.setAlternatingRowColors(True)
+        self.absences_jour_list.setStyleSheet("""
+            QTableWidget {
+                background-color: white;
+                alternate-background-color: #f8fafc;
+                gridline-color: #e2e8f0;
+                border: none;
+                font-size: 11px;
+            }
+            QHeaderView::section {
+                background: #f1f5f9;
+                color: #475569;
+                font-weight: bold;
+                padding: 10px;
+                border: none;
+                border-bottom: 2px solid #cbd5e1;
+            }
+            QTableWidget::item {
+                padding: 8px;
+                border-bottom: 1px solid #f1f5f9;
+            }
+        """)
+        details_layout.addWidget(self.absences_jour_list)
+
+        details_card.body.addLayout(details_layout)
+        main_layout.addWidget(details_card, 3)
+
+        layout.addLayout(main_layout)
 
         return widget
+
+    def create_tab_planning(self):
+        """Ancienne méthode - redirige vers la nouvelle"""
+        return self.create_tab_planning_modern()
 
     def create_tab_validation(self):
         """Onglet de validation des demandes (pour managers)"""

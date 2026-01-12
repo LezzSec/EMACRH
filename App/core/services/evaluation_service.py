@@ -1,13 +1,22 @@
 """
 Service de gestion des evaluations de polyvalence
 Fournit les fonctions pour recuperer les evaluations en retard et a venir
+
+✅ OPTIMISATIONS APPLIQUÉES:
+- Monitoring des requêtes clés (détection régressions)
+- Logs DB optimisés (async, non-bloquant)
 """
 
 from datetime import datetime, date, timedelta
 from typing import List, Dict, Optional
-from core.db.configbd import get_connection
+from core.db.configbd import DatabaseCursor, DatabaseConnection
+
+# ✅ OPTIMISATIONS : Monitoring + Logs optimisés
+from core.utils.performance_monitor import monitor_query
+from core.services.optimized_db_logger import log_hist_async
 
 
+@monitor_query('Get Evaluations En Retard')
 def get_evaluations_en_retard() -> List[Dict]:
     """
     Recupere toutes les evaluations en retard (date passee)
@@ -16,10 +25,7 @@ def get_evaluations_en_retard() -> List[Dict]:
     Returns:
         List[Dict]: Liste des evaluations en retard avec informations employe et poste
     """
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
-
-    try:
+    with DatabaseCursor(dictionary=True) as cur:
         cur.execute("""
             SELECT
                 p.id as polyvalence_id,
@@ -45,11 +51,8 @@ def get_evaluations_en_retard() -> List[Dict]:
 
         return cur.fetchall()
 
-    finally:
-        cur.close()
-        conn.close()
 
-
+@monitor_query('Get Prochaines Evaluations')
 def get_prochaines_evaluations(jours: int = 30) -> List[Dict]:
     """
     Recupere les evaluations a venir dans les N prochains jours
@@ -60,12 +63,9 @@ def get_prochaines_evaluations(jours: int = 30) -> List[Dict]:
     Returns:
         List[Dict]: Liste des evaluations a venir
     """
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
+    date_limite = date.today() + timedelta(days=jours)
 
-    try:
-        date_limite = date.today() + timedelta(days=jours)
-
+    with DatabaseCursor(dictionary=True) as cur:
         cur.execute("""
             SELECT
                 p.id as polyvalence_id,
@@ -91,11 +91,8 @@ def get_prochaines_evaluations(jours: int = 30) -> List[Dict]:
 
         return cur.fetchall()
 
-    finally:
-        cur.close()
-        conn.close()
 
-
+@monitor_query('Get Evaluations Par Operateur')
 def get_evaluations_par_operateur(operateur_id: int) -> List[Dict]:
     """
     Recupere toutes les evaluations d'un operateur
@@ -106,10 +103,7 @@ def get_evaluations_par_operateur(operateur_id: int) -> List[Dict]:
     Returns:
         List[Dict]: Liste des evaluations de l'operateur
     """
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
-
-    try:
+    with DatabaseCursor(dictionary=True) as cur:
         cur.execute("""
             SELECT
                 p.id as polyvalence_id,
@@ -133,10 +127,6 @@ def get_evaluations_par_operateur(operateur_id: int) -> List[Dict]:
 
         return cur.fetchall()
 
-    finally:
-        cur.close()
-        conn.close()
-
 
 def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
                              date_evaluation: date, prochaine_evaluation: date) -> bool:
@@ -155,30 +145,24 @@ def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
     if nouveau_niveau not in [1, 2, 3, 4]:
         return False
 
-    conn = get_connection()
-    cur = conn.cursor()
-
     try:
-        cur.execute("""
-            UPDATE polyvalence
-            SET niveau = %s,
-                date_evaluation = %s,
-                prochaine_evaluation = %s
-            WHERE id = %s
-        """, (nouveau_niveau, date_evaluation, prochaine_evaluation, polyvalence_id))
+        with DatabaseCursor() as cur:
+            cur.execute("""
+                UPDATE polyvalence
+                SET niveau = %s,
+                    date_evaluation = %s,
+                    prochaine_evaluation = %s
+                WHERE id = %s
+            """, (nouveau_niveau, date_evaluation, prochaine_evaluation, polyvalence_id))
 
-        conn.commit()
-        return True
+            return True
 
     except Exception as e:
         print(f"Erreur lors de la mise a jour de l'evaluation : {e}")
         return False
 
-    finally:
-        cur.close()
-        conn.close()
 
-
+@monitor_query('Get Statistiques Evaluations')
 def get_statistiques_evaluations() -> Dict:
     """
     Recupere des statistiques sur les evaluations
@@ -186,12 +170,9 @@ def get_statistiques_evaluations() -> Dict:
     Returns:
         Dict: Dictionnaire contenant les statistiques
     """
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
+    stats = {}
 
-    try:
-        stats = {}
-
+    with DatabaseCursor(dictionary=True) as cur:
         # Total d'evaluations actives
         cur.execute("""
             SELECT COUNT(*) as total
@@ -232,8 +213,4 @@ def get_statistiques_evaluations() -> Dict:
         """)
         stats['par_niveau'] = cur.fetchall()
 
-        return stats
-
-    finally:
-        cur.close()
-        conn.close()
+    return stats

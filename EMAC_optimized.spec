@@ -26,8 +26,8 @@ block_cipher = None
 # Exclusions agressives pour réduire la taille
 EXCLUDES = [
     # Data science (non utilisé)
-    'pandas',
-    'numpy',
+    # 'pandas',  # ✅ UTILISÉ pour exports Excel
+    # 'numpy',   # ✅ Requis par pandas
     'matplotlib',
     'scipy',
     'sklearn',
@@ -182,11 +182,11 @@ coll = COLLECT(
 # ===========================
 
 print("\n" + "="*70)
-print("✅ EMAC.spec optimisé chargé")
+print("[OK] EMAC.spec optimise charge")
 print("="*70)
-print(f"Optimize level: 2 (bytecode optimisé)")
-print(f"UPX: Désactivé (évite antivirus)")
-print(f"Strip: Activé (réduit taille)")
+print(f"Optimize level: 2 (bytecode optimise)")
+print(f"UPX: Desactive (evite antivirus)")
+print(f"Strip: Active (reduit taille)")
 print(f"Mode: One-folder (rapide)")
 print(f"Exclusions: {len(EXCLUDES)} modules")
 print("="*70 + "\n")

@@ -63,7 +63,11 @@
       "Bash(cmd.exe /c buildscriptsbuild_for_network.bat)",
       "Bash(cmd.exe /c VERIFICATION.bat)",
       "Bash(awk:*)",
-      "Bash(cmd.exe /c build.bat)"
+      "Bash(cmd.exe /c build.bat)",
+      "Bash(du:*)",
+      "Bash(cmd //c \"build-scripts\\\\build_optimized.bat\")",
+      "Bash(ping:*)",
+      "Bash(powershell -Command \"Get-ChildItem -Path . -Recurse -Directory -Filter ''__pycache__'' | Remove-Item -Recurse -Force; Write-Host ''Cache supprimé''\")"
     ],
     "deny": [],
     "ask": []

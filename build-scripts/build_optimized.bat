@@ -197,6 +197,7 @@ echo.
 REM Créer script de configuration
 (
 echo @echo off
+echo setlocal enabledelayedexpansion
 echo echo.
 echo echo =========================================
 echo echo  CONFIGURATION EMAC
