@@ -87,12 +87,26 @@ session-reports/
 tests/__pycache__/
 nul
 
+# Artefacts de build PyQt5 (anciens builds dans core/gui/)
+App/core/gui/build/
+App/core/gui/dist/
+
 # Fichiers temporaires de travail à la racine (ne doivent pas être commités)
 # Ces fichiers sont créés pendant les sessions de développement et doivent rester locaux
 SCRIPTS_BUILD_RECREES.txt
 RESUME_REORGANISATION.txt
 BUILD_RAPIDE.txt
 PLAN_REORGANISATION_*.md
+AMELIORATION_*.md
+VERIFICATION_*.md
+COMMENT_*.md
+test_*.py
+launch_*.bat
+TEST_*.bat
+*.cwd
+
+# Exception: Conserver les archives historiques
+!archives/**/*.md
 
 # Anciennes locations de documentation (maintenant dans docs/)
 # Ces patterns évitent de re-créer ces fichiers à la racine
