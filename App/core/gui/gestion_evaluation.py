@@ -1380,20 +1380,24 @@ class GestionEvaluationDialog(QDialog):
         if col in [5, 6]:
             return
 
-        # Récupérer les infos de l'opérateur depuis all_evaluations
-        if row < len(self.all_evaluations):
-            eval_data = self.all_evaluations[row]
-            operateur_id = eval_data.get('personnel_id')
-            nom = eval_data.get('nom')
-            prenom = eval_data.get('prenom')
+        # Récupérer l'ID depuis la colonne cachée (colonne 0)
+        id_item = self.table.item(row, 0)
+        if not id_item:
+            return
 
-            if not operateur_id:
-                return
+        operateur_id = int(id_item.text())
 
-            # Ouvrir le dialogue détaillé avec 2 onglets
-            dialog = DetailOperateurDialog(operateur_id, nom, prenom, self)
-            dialog.exec_()
+        # Récupérer nom et prénom depuis les colonnes visibles
+        nom_item = self.table.item(row, 1)
+        prenom_item = self.table.item(row, 2)
 
-            # Recharger les données après fermeture du dialogue
-            self.load_data()
+        nom = nom_item.text() if nom_item else ""
+        prenom = prenom_item.text() if prenom_item else ""
+
+        # Ouvrir le dialogue détaillé avec 2 onglets
+        dialog = DetailOperateurDialog(operateur_id, nom, prenom, self)
+        dialog.exec_()
+
+        # Recharger les données après fermeture du dialogue
+        self.load_data()
 

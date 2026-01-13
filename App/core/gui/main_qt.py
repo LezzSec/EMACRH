@@ -164,7 +164,7 @@ class MainWindow(QMainWindow):
 
         left.addWidget(self.retard_card)
 
-        self.next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="10 prochaines")
+        self.next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="À planifier (30j)")
         self.next_eval_filter = QComboBox()
         self.next_eval_filter.addItem("Tous les postes", "")
         self.next_eval_filter.currentIndexChanged.connect(self.load_evaluations_async)
@@ -616,7 +616,7 @@ class MainWindow(QMainWindow):
         from core.db.configbd import DatabaseCursor
 
         try:
-            with DatabaseCursor() as cur:
+            with DatabaseCursor(dictionary=True) as cur:
                 query_retard = """
                     SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
                     FROM polyvalence poly
@@ -640,7 +640,7 @@ class MainWindow(QMainWindow):
                     FROM polyvalence poly
                     INNER JOIN personnel p ON p.id = poly.operateur_id
                     LEFT JOIN postes pos ON pos.id = poly.poste_id
-                    WHERE poly.prochaine_evaluation >= CURDATE()
+                    WHERE poly.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
                       AND p.statut = 'ACTIF'
                       {next_filter}
                     ORDER BY poly.prochaine_evaluation ASC
@@ -670,12 +670,20 @@ class MainWindow(QMainWindow):
             print(f"[DEBUG] Retard: {len(retard)} éléments, Prochaines: {len(prochaines)} éléments")
 
             self.retard_list.clear()
-            for nom, prenom, poste, date_ev in retard:
+            for r in retard:
+                nom = r.get('nom', '')
+                prenom = r.get('prenom', '')
+                poste = r.get('poste_code', '')
+                date_ev = r.get('prochaine_evaluation')
                 date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
                 self.retard_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
 
             self.next_eval_list.clear()
-            for nom, prenom, poste, date_ev in prochaines:
+            for r in prochaines:
+                nom = r.get('nom', '')
+                prenom = r.get('prenom', '')
+                poste = r.get('poste_code', '')
+                date_ev = r.get('prochaine_evaluation')
                 date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
                 self.next_eval_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
 
@@ -691,6 +699,20 @@ class MainWindow(QMainWindow):
         # Afficher également dans la console système
         import traceback
         traceback.print_stack()
+
+        # Afficher un message à l'utilisateur si possible
+        try:
+            QMessageBox.warning(
+                self,
+                "Erreur de chargement",
+                "Une erreur s'est produite lors du chargement des données.\n\n"
+                "L'application peut continuer à fonctionner mais certaines données\n"
+                "peuvent être manquantes.\n\n"
+                "Vérifiez les logs pour plus de détails.",
+                QMessageBox.Ok
+            )
+        except:
+            pass  # Si on ne peut même pas afficher le message, tant pis
 
     # ---------------------------
     # Export

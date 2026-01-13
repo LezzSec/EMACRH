@@ -1381,29 +1381,147 @@ class GrillesDialog(QDialog):
 
     # ----------------- Export -----------------
     def export_data(self):
-        """Demande l’état (actuel / complet) puis exporte en Excel ou PDF."""
-        print("Exportation démarrée - Choix de l'état")
+        """Dialogue moderne d'export avec sélection de l'état et du format."""
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QRadioButton, QButtonGroup, QGroupBox
+        from PyQt5.QtCore import Qt
 
-        msg_box = QMessageBox(self)
-        msg_box.setWindowTitle("Exporter les données")
-        msg_box.setText("Voulez-vous exporter :")
-        msg_box.addButton("État Actuel (avec filtres et modifications)", QMessageBox.AcceptRole)
-        msg_box.addButton("Grille Générale (toutes les données)", QMessageBox.RejectRole)
-        msg_box.addButton("Annuler", QMessageBox.NoRole)
+        # Créer un dialogue moderne
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Exporter les données")
+        dialog.setMinimumWidth(500)
 
-        choice = msg_box.exec_()
-        if choice == 2:
+        if THEME_AVAILABLE:
+            ThemeCls = get_current_theme()
+            dialog.setStyleSheet(f"""
+                QDialog {{
+                    background: {ThemeCls.BG};
+                    color: {ThemeCls.TXT};
+                }}
+                QLabel {{
+                    color: {ThemeCls.TXT};
+                }}
+                QGroupBox {{
+                    border: 2px solid {ThemeCls.BDR};
+                    border-radius: 8px;
+                    margin-top: 12px;
+                    padding: 16px;
+                    font-weight: bold;
+                    background: {ThemeCls.BG_CARD};
+                }}
+                QGroupBox::title {{
+                    subcontrol-origin: margin;
+                    subcontrol-position: top left;
+                    padding: 0 8px;
+                    color: {ThemeCls.PRI};
+                }}
+                QRadioButton {{
+                    color: {ThemeCls.TXT};
+                    padding: 8px;
+                    spacing: 8px;
+                }}
+                QRadioButton::indicator {{
+                    width: 18px;
+                    height: 18px;
+                }}
+            """)
+
+        layout = QVBoxLayout(dialog)
+        layout.setSpacing(20)
+        layout.setContentsMargins(24, 24, 24, 24)
+
+        # En-tête avec icône
+        header = QLabel("Exporter la grille de polyvalence")
+        header.setStyleSheet("font-size: 18px; font-weight: bold; padding-bottom: 8px;")
+        layout.addWidget(header)
+
+        desc = QLabel("Choisissez les options d'exportation :")
+        desc.setStyleSheet("font-size: 13px; color: #6b7280; padding-bottom: 12px;")
+        layout.addWidget(desc)
+
+        # Groupe 1 : Choix de l'état
+        state_group = QGroupBox("Données à exporter")
+        state_layout = QVBoxLayout()
+        state_layout.setSpacing(12)
+
+        state_btn_group = QButtonGroup(dialog)
+
+        current_radio = QRadioButton("État actuel (avec filtres et modifications)")
+        current_radio.setChecked(True)
+        current_desc = QLabel("   → Exporte uniquement les lignes et colonnes visibles")
+        current_desc.setStyleSheet("font-size: 11px; color: #6b7280; font-weight: normal; padding-left: 30px;")
+
+        full_radio = QRadioButton("Grille complète (toutes les données)")
+        full_desc = QLabel("   → Exporte l'intégralité de la grille sans filtres")
+        full_desc.setStyleSheet("font-size: 11px; color: #6b7280; font-weight: normal; padding-left: 30px;")
+
+        state_btn_group.addButton(current_radio, 0)
+        state_btn_group.addButton(full_radio, 1)
+
+        state_layout.addWidget(current_radio)
+        state_layout.addWidget(current_desc)
+        state_layout.addSpacing(8)
+        state_layout.addWidget(full_radio)
+        state_layout.addWidget(full_desc)
+        state_group.setLayout(state_layout)
+        layout.addWidget(state_group)
+
+        # Groupe 2 : Choix du format
+        format_group = QGroupBox("Format d'exportation")
+        format_layout = QVBoxLayout()
+        format_layout.setSpacing(12)
+
+        format_btn_group = QButtonGroup(dialog)
+
+        excel_radio = QRadioButton("Excel (.xlsx)")
+        excel_radio.setChecked(True)
+        excel_desc = QLabel("   → Tableau modifiable avec légende des niveaux")
+        excel_desc.setStyleSheet("font-size: 11px; color: #6b7280; font-weight: normal; padding-left: 30px;")
+
+        pdf_radio = QRadioButton("PDF (.pdf)")
+        pdf_desc = QLabel("   → Document imprimable avec résumé par opérateur")
+        pdf_desc.setStyleSheet("font-size: 11px; color: #6b7280; font-weight: normal; padding-left: 30px;")
+
+        format_btn_group.addButton(excel_radio, 0)
+        format_btn_group.addButton(pdf_radio, 1)
+
+        format_layout.addWidget(excel_radio)
+        format_layout.addWidget(excel_desc)
+        format_layout.addSpacing(8)
+        format_layout.addWidget(pdf_radio)
+        format_layout.addWidget(pdf_desc)
+        format_group.setLayout(format_layout)
+        layout.addWidget(format_group)
+
+        # Boutons d'action
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(12)
+        buttons_layout.addStretch()
+
+        if THEME_AVAILABLE:
+            cancel_btn = EmacButton("Annuler", variant='ghost')
+            export_btn = EmacButton("Exporter", variant='primary')
+        else:
+            cancel_btn = QPushButton("Annuler")
+            export_btn = QPushButton("Exporter")
+            export_btn.setStyleSheet("background-color: #2563eb; color: white; padding: 10px 24px; font-weight: bold; border-radius: 6px;")
+            cancel_btn.setStyleSheet("padding: 10px 24px; border-radius: 6px;")
+
+        cancel_btn.clicked.connect(dialog.reject)
+        export_btn.clicked.connect(dialog.accept)
+
+        buttons_layout.addWidget(cancel_btn)
+        buttons_layout.addWidget(export_btn)
+        layout.addLayout(buttons_layout)
+
+        # Afficher le dialogue
+        if dialog.exec_() != QDialog.Accepted:
             return
 
-        export_current_state = (choice == 0)
+        # Récupérer les choix
+        export_current_state = (state_btn_group.checkedId() == 0)
+        format_choice = "Excel" if format_btn_group.checkedId() == 0 else "PDF"
 
-        format_choice, ok = QInputDialog.getItem(
-            self, "Choix du format", "Sélectionnez le format d'exportation :",
-            ["Excel", "PDF"], 0, False
-        )
-        if not ok:
-            return
-
+        # Demander le nom du fichier
         file_extension = {"Excel": "xlsx", "PDF": "pdf"}[format_choice]
         file_name, _ = QFileDialog.getSaveFileName(
             self, "Enregistrer le fichier", "", f"{format_choice} Files (*.{file_extension})"
@@ -1413,6 +1531,7 @@ class GrillesDialog(QDialog):
 
         print(f"Exportation en {format_choice} : {file_name}")
 
+        # Effectuer l'export
         if format_choice == "Excel":
             self.export_to_excel(file_name, export_current_state)
         elif format_choice == "PDF":

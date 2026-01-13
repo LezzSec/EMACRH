@@ -71,7 +71,10 @@
       "Bash(git commit -m \"$\\(cat <<''EOF''\nNettoyage et réorganisation du projet\n\n- Suppression des artefacts de build \\(~365 MB\\)\n  * dist/, build/, temp/\n  * App/core/gui/build/, App/core/gui/dist/\n  \n- Suppression des fichiers vides et obsolètes\n  * App/core/services/liste_et_grilles_service.py\n  * App/core/services/utils_service.py\n  * test_dashboard_direct.py\n  * launch_with_console.bat\n  * TEST_APP.bat\n  \n- Archivage de la documentation obsolète\n  * archives/2026-01-session-reports/\n  * Déplacement des rapports de session vers archives/\n  \n- Mise à jour du .gitignore\n  * Ajout des patterns pour build PyQt5\n  * Ajout des patterns pour fichiers temporaires\n  * Exception pour archives historiques\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
       "Bash(git commit:*)",
       "Bash(git filter-branch:*)",
-      "Bash(git restore:*)"
+      "Bash(git restore:*)",
+      "Bash(powershell -Command \"Get-ChildItem -Path . -Filter ''tmpclaude-*'' -Directory | Remove-Item -Recurse -Force\")",
+      "Bash(powershell -Command:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File cleanup_temp.ps1)"
     ],
     "deny": [],
     "ask": []

@@ -74,7 +74,6 @@ EXCLUDES = [
 
     # ===== TESTS =====
     'pytest',
-    'unittest',
     'nose',
     'coverage',
     'hypothesis',
@@ -85,15 +84,10 @@ EXCLUDES = [
     'docutils',
     'jinja2',
 
-    # ===== IMAGE PROCESSING (NON UTILISÉ) =====
-    'PIL',
-    'Pillow',
+    # ===== IMAGE PROCESSING =====
+    # PIL/Pillow est utilisé par ReportLab pour les PDFs
     'imageio',
     'opencv',
-
-    # ===== ASYNC (NON UTILISÉ) =====
-    'asyncio',
-    'concurrent.futures',
 
     # ===== JUPYTER =====
     'jupyter',
@@ -112,12 +106,11 @@ EXCLUDES = [
     'wheel',
     'distutils',
 
-    # ===== CRYPTO NON UTILISÉ =====
-    'cryptography',
+    # ===== CRYPTO =====
+    # cryptography est maintenant UTILISÉ pour .env.encrypted
     'OpenSSL',
 
     # ===== AUTRES =====
-    'email',
     'ftplib',
     'telnetlib',
     'xmlrpc',
@@ -171,8 +164,11 @@ HIDDEN_IMPORTS = [
     'bcrypt',
     'bcrypt._bcrypt',
 
-    # ===== ENVIRONMENT =====
+    # ===== ENVIRONMENT ET CRYPTO =====
     'dotenv',
+    'cryptography',           # Pour .env.encrypted
+    'cryptography.fernet',    # Chiffrement Fernet
+    'tempfile',               # Pour déchiffrement temporaire
 
     # ===== STANDARD LIB REQUIS =====
     'datetime',
@@ -181,6 +177,17 @@ HIDDEN_IMPORTS = [
     'logging',
     'sqlite3',
     'threading',
+    'traceback',
+    'os',
+    'sys',
+
+    # ===== MODULES CRITIQUES POUR THREADS/ASYNC =====
+    # IMPORTANT: Ne PAS exclure ces modules même s'ils semblent non utilisés
+    'queue',              # Utilisé par threading
+    'concurrent',         # Module parent requis
+    'concurrent.futures', # Utilisé par QThreadPool en interne
+    'email',              # Requis par certains modules standard
+    'unittest',           # Peut être utilisé par des dépendances
 ]
 
 # ============================================================================
@@ -191,6 +198,9 @@ HIDDEN_IMPORTS = [
 DATA_FILES = [
     # Configuration template
     ('App/config/.env.example', 'config'),
+
+    # Configuration chiffrée (ACTIVÉ - .env.encrypted créé avec encrypt_env.py)
+    ('App/.env.encrypted', '.'),  # ✅ Configuration chiffrée incluse
 
     # Schéma de base de données (pour référence)
     ('App/database/schema/bddemac.sql', 'database/schema'),
@@ -242,11 +252,11 @@ exe = EXE(
     [],
     exclude_binaries=True,  # ✅ ONE-FOLDER MODE (rapide)
     name=APP_NAME,
-    debug=False,            # Pas de debug
+    debug=False,            # Pas de debug PyInstaller
     bootloader_ignore_signals=False,
-    strip=True,             # ✅ STRIP SYMBOLS (réduit taille ~20%)
+    strip=True,             # ✅ ACTIVÉ - Optimisation (réduit taille ~20%)
     upx=False,              # ✅ DÉSACTIVÉ (évite antivirus)
-    console=False,          # Application GUI (pas de console)
+    console=False,          # ✅ DÉSACTIVÉ - Application GUI pure
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
@@ -284,7 +294,7 @@ print(f"✅ Mode de build       : One-folder (rapide)")
 print(f"✅ Optimisation Python : Level 2 (bytecode optimisé)")
 print(f"✅ Strip symbols       : Activé (réduit taille)")
 print(f"✅ UPX compression     : Désactivé (évite antivirus)")
-print(f"✅ Console             : Désactivée (GUI uniquement)")
+print(f"✅ Console             : {'Activée (debug)' if exe.console else 'Désactivée (GUI uniquement)'}")
 print(f"✅ Modules exclus      : {len(EXCLUDES)} modules")
 print(f"✅ Imports cachés      : {len(HIDDEN_IMPORTS)} modules")
 print(f"✅ Fichiers données    : {len(DATA_FILES)} fichiers")

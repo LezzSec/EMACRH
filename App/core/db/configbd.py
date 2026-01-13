@@ -20,7 +20,8 @@ _env_loaded = False
 
 
 def _load_env_once() -> None:
-    """Charge un .env si présent (en dev ou en exe PyInstaller)."""
+    """Charge un .env si présent (en dev ou en exe PyInstaller).
+    Supporte également .env.encrypted pour une distribution sécurisée."""
     global _env_loaded
     if _env_loaded:
         return
@@ -28,9 +29,12 @@ def _load_env_once() -> None:
     # Base dir = dossier de l'exe (PyInstaller) ou racine App/ (dev)
     if getattr(sys, "frozen", False):
         base_dir = Path(sys.executable).parent
+        # PyInstaller met les fichiers data dans _internal/
+        internal_dir = base_dir / "_internal"
     else:
         # .../App/core/db/configbd.py -> parents[2] = App/
         base_dir = Path(__file__).resolve().parents[2]
+        internal_dir = base_dir
 
     # Dossier AppData (tu l'utilises déjà ailleurs dans l'app)
     appdata_dir = None
@@ -39,15 +43,46 @@ def _load_env_once() -> None:
         if appdata:
             appdata_dir = Path(appdata) / "EMAC"
 
+    # Candidats: .env.encrypted (priorité) puis .env
     candidates = [
-        base_dir / ".env",
-        base_dir / "config" / ".env",
-        (appdata_dir / ".env") if appdata_dir else None,
+        # Mode production: fichier chiffré inclus dans l'exe
+        (internal_dir / ".env.encrypted", True),
+        (base_dir / ".env.encrypted", True),
+        (base_dir / "config" / ".env.encrypted", True),
+        ((appdata_dir / ".env.encrypted") if appdata_dir else None, True),
+        # Mode dev: fichier .env en clair
+        (internal_dir / ".env", False),
+        (base_dir / ".env", False),
+        (base_dir / "config" / ".env", False),
+        ((appdata_dir / ".env") if appdata_dir else None, False),
     ]
 
-    for p in candidates:
+    for p, is_encrypted in candidates:
         if p and p.exists():
-            load_dotenv(dotenv_path=str(p), override=False)
+            if is_encrypted:
+                # Charger le fichier chiffré
+                try:
+                    from core.utils.config_crypter import decrypt_env_file
+                    import tempfile
+                    # Déchiffrer dans un fichier temporaire
+                    with tempfile.NamedTemporaryFile(mode='w', suffix='.env', delete=False, encoding='utf-8') as tmp:
+                        content = decrypt_env_file(str(p))
+                        tmp.write(content)
+                        tmp_path = tmp.name
+                    # Charger le .env déchiffré
+                    load_dotenv(dotenv_path=tmp_path, override=False)
+                    # Supprimer le fichier temporaire immédiatement
+                    try:
+                        os.unlink(tmp_path)
+                    except:
+                        pass
+                except Exception as e:
+                    # Si le déchiffrement échoue, continuer avec les autres candidats
+                    print(f"[WARNING] Impossible de dechiffrer {p}: {e}")
+                    continue
+            else:
+                # Charger le .env normal
+                load_dotenv(dotenv_path=str(p), override=False)
             break
 
     _env_loaded = True

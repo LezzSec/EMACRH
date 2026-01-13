@@ -50,14 +50,14 @@ def get_entity_name(conn, entity_type: str, entity_id) -> str:
 def get_detailed_action_type(row: dict) -> str:
     action = row.get("action", "")
     desc = row.get("description") or ""
-    
+
     try:
         data = json.loads(desc)
-        
+
         if action.upper() == "INSERT":
             niveau = data.get("niveau", "?")
             return f"Ajout (N{niveau})"
-        
+
         elif action.upper() == "UPDATE":
             changes = data.get("changes", {})
             if "niveau" in changes:
@@ -66,14 +66,14 @@ def get_detailed_action_type(row: dict) -> str:
                 return f"Modification (N{old}→N{new})"
             else:
                 return "Modification"
-        
+
         elif action.upper() == "DELETE":
             niveau = data.get("niveau", "?")
             return f"Suppression (N{niveau})"
-        
-    except:
+
+    except (json.JSONDecodeError, ValueError):
         pass
-    
+
     return fr_action(action)
 
 def make_resume(row: dict, conn=None) -> str:
@@ -81,12 +81,19 @@ def make_resume(row: dict, conn=None) -> str:
     op_id = row.get("operateur_id")
     po_id = row.get("poste_id")
     desc = row.get("description") or ""
-    
+
     op_name = get_entity_name(conn, "operateur", op_id) if conn and op_id else None
     po_name = get_entity_name(conn, "poste", po_id) if conn and po_id else None
-    
+
     try:
         data = json.loads(desc)
+    except (json.JSONDecodeError, ValueError):
+        # Si la description n'est pas du JSON, retourner un résumé simple
+        if desc:
+            return desc[:100] + ("..." if len(desc) > 100 else "")
+        return fr_action(action)
+
+    try:
         
         if "operateur" in data:
             op_name = data["operateur"]
@@ -202,8 +209,8 @@ class DetailDialog(QDialog):
             try:
                 data = json.loads(row.get("description", "{}"))
                 op_name = data.get("operateur", f"#{row.get('operateur_id')}")
-            except:
-                op_name = f"#{row.get('operateur_id')}"
+            except (json.JSONDecodeError, ValueError):
+                op_name = f"#{row.get('operateur_id')}" if row.get('operateur_id') else "#None"
         
         op_label = self._create_info_row("👤 Opérateur :", op_name)
         info_layout.addWidget(op_label)
@@ -214,17 +221,32 @@ class DetailDialog(QDialog):
             try:
                 data = json.loads(row.get("description", "{}"))
                 po_name = data.get("poste", f"#{row.get('poste_id')}")
-            except:
-                po_name = f"#{row.get('poste_id')}"
+            except (json.JSONDecodeError, ValueError):
+                po_name = f"#{row.get('poste_id')}" if row.get('poste_id') else "#None"
         
         po_label = self._create_info_row("📍 Poste :", po_name)
         info_layout.addWidget(po_label)
-        
+
+        # Utilisateur (qui a effectué l'action)
+        utilisateur = row.get("utilisateur")
+        if utilisateur:
+            user_label = self._create_info_row("👨‍💼 Effectué par :", utilisateur)
+            info_layout.addWidget(user_label)
+
         # Détails selon le type d'action
         try:
-            data = json.loads(row.get("description", "{}"))
-            
-            if action == "INSERT":
+            desc_str = row.get("description", "{}")
+            # Tenter de parser en JSON, sinon traiter comme texte simple
+            try:
+                data = json.loads(desc_str)
+            except (json.JSONDecodeError, ValueError):
+                # Si ce n'est pas du JSON, afficher le texte brut
+                if desc_str and desc_str.strip():
+                    desc_label = self._create_info_row("📝 Description :", desc_str)
+                    info_layout.addWidget(desc_label)
+                data = {}
+
+            if action == "INSERT" and data:
                 niveau = data.get("niveau", "?")
                 niveau_label = self._create_info_row("⭐ Niveau attribué :", f"Niveau {niveau}")
                 info_layout.addWidget(niveau_label)
@@ -426,7 +448,14 @@ class ActionCard(QFrame):
         type_label = QLabel(f"• {action_type}")
         type_label.setStyleSheet("color: #757575; font-size: 10px; background: transparent;")
         details_layout.addWidget(type_label)
-        
+
+        # Utilisateur (qui a effectué l'action)
+        utilisateur = row.get("utilisateur")
+        if utilisateur:
+            user_label = QLabel(f"• Par: {utilisateur}")
+            user_label.setStyleSheet("color: #1976d2; font-size: 10px; font-weight: bold; background: transparent;")
+            details_layout.addWidget(user_label)
+
         details_layout.addStretch()
         content_layout.addLayout(details_layout)
         
@@ -671,7 +700,7 @@ class HistoriqueDialog(QDialog):
             # ✅ SÉCURITÉ: Construction sécurisée de la clause WHERE
             where_clause = " AND ".join(where) if where else "1=1"
             sql = (
-                "SELECT id, date_time, action, operateur_id, poste_id, description "
+                "SELECT id, date_time, action, operateur_id, poste_id, description, utilisateur "
                 "FROM historique "
                 f"WHERE {where_clause} "
                 "ORDER BY date_time DESC, id DESC"

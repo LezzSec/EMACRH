@@ -426,8 +426,8 @@ class ManageOperatorsDialog(QDialog):
                 # Insérer avec ou sans matricule et statut
                 if matricule:
                     cursor.execute(
-                        "INSERT INTO personnel (`nom`, `prenom`, `statut`, `matricule`) "
-                        "VALUES (%s, %s, 'ACTIF', %s)",
+                        "INSERT INTO personnel (`nom`, `prenom`, `statut`, `matricule`, `numposte`) "
+                        "VALUES (%s, %s, 'ACTIF', %s, 'Production')",
                         (nom, prenom, matricule)
                     )
                 else:
@@ -469,7 +469,8 @@ class ManageOperatorsDialog(QDialog):
                 }
                 if matricule:
                     log_data["matricule"] = matricule
-                    log_data["details"] += f" (matricule: {matricule})"
+                    log_data["numposte"] = "Production"
+                    log_data["details"] += f" (matricule: {matricule}, poste: Production)"
 
                 log_to_historique(
                     connection, cursor,
@@ -527,6 +528,7 @@ class ManageOperatorsDialog(QDialog):
                     msg = f"Opérateur '{prenom} {nom}' créé avec succès !\n\n"
                     if matricule:
                         msg += f"Matricule : {matricule}\n"
+                        msg += f"Poste : Production\n"
                         msg += f"Cet opérateur apparaîtra dans les Listes et Grilles."
                         if add_polyvalence and poste_id:
                             msg += f"\nPolyvalence ajoutée au poste {poste_name}"
