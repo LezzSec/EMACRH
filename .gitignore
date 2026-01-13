@@ -53,7 +53,7 @@ App/.env
 build/
 dist/
 *.spec.backup
-EMAC.spec
+EMAC_*.spec
 
 # Application specific
 App/logs/
