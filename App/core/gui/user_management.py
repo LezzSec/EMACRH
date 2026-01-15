@@ -12,7 +12,8 @@ from PyQt5.QtCore import Qt
 from core.gui.ui_theme import EmacTheme, EmacButton, EmacCard
 from core.services.auth_service import (
     get_all_users, create_user, update_user_status,
-    change_password, get_roles, is_admin, count_active_admins, is_user_admin
+    change_password, get_roles, is_admin, count_active_admins, is_user_admin,
+    delete_user, get_current_user
 )
 
 
@@ -148,6 +149,23 @@ class UserManagementDialog(QDialog):
             btn_password.clicked.connect(lambda checked, uid=user['id']: self.show_change_password_dialog(uid))
             actions_layout.addWidget(btn_password)
 
+            # Bouton supprimer (désactivé pour le compte actuel et le dernier admin)
+            current_user = get_current_user()
+            is_current_user = current_user and current_user['id'] == user['id']
+
+            btn_delete = QPushButton("Supprimer")
+            if is_current_user or is_last_admin:
+                btn_delete.setEnabled(False)
+                btn_delete.setStyleSheet("background-color: #bdbdbd; color: #757575; padding: 4px 8px; border-radius: 4px;")
+                if is_current_user:
+                    btn_delete.setToolTip("Vous ne pouvez pas supprimer votre propre compte")
+                else:
+                    btn_delete.setToolTip("Impossible de supprimer le dernier administrateur")
+            else:
+                btn_delete.setStyleSheet("background-color: #dc2626; color: white; padding: 4px 8px; border-radius: 4px;")
+                btn_delete.clicked.connect(lambda checked, uid=user['id'], uname=user['username']: self.confirm_delete_user(uid, uname))
+            actions_layout.addWidget(btn_delete)
+
             self.users_table.setCellWidget(row, 6, actions_widget)
 
     def show_add_user_dialog(self):
@@ -180,6 +198,25 @@ class UserManagementDialog(QDialog):
         dialog = ChangePasswordDialog(user_id, self)
         if dialog.exec_() == QDialog.Accepted:
             QMessageBox.information(self, "Succès", "Mot de passe modifié avec succès.")
+
+    def confirm_delete_user(self, user_id: int, username: str):
+        """Demande confirmation avant de supprimer un utilisateur"""
+        reply = QMessageBox.warning(
+            self,
+            "Confirmation de suppression",
+            f"Voulez-vous vraiment supprimer définitivement l'utilisateur '{username}' ?\n\n"
+            "Cette action est irréversible et supprimera également l'historique de connexion de cet utilisateur.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            success, error = delete_user(user_id)
+            if success:
+                QMessageBox.information(self, "Succès", f"L'utilisateur '{username}' a été supprimé.")
+                self.load_users()
+            else:
+                QMessageBox.critical(self, "Erreur", error or "Une erreur est survenue.")
 
 
 class AddUserDialog(QDialog):

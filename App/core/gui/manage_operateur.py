@@ -548,6 +548,10 @@ class ManageOperatorsDialog(QDialog):
             self.add_prenom_input.clear()
             self.data_changed.emit(int(operateur_id))
 
+            # Proposer les documents templates pour le nouvel opérateur
+            if not existing_id:
+                self._proposer_documents_nouvel_operateur(nom, prenom)
+
         except Exception as e:
             try:
                 if connection:
@@ -586,6 +590,42 @@ class ManageOperatorsDialog(QDialog):
                     connection.close()
             except Exception:
                 pass
+
+
+    def _proposer_documents_nouvel_operateur(self, nom: str, prenom: str):
+        """
+        Propose les documents templates à générer pour un nouvel opérateur.
+        """
+        try:
+            from core.services.template_service import check_templates_table_exists
+
+            if not check_templates_table_exists():
+                return
+
+            # Demander à l'utilisateur s'il veut générer les documents
+            reply = QMessageBox.question(
+                self,
+                "Documents d'accueil",
+                f"Voulez-vous générer les documents d'accueil pour {prenom} {nom} ?\n\n"
+                "(Consignes générales, Formation initiale, etc.)",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+
+            if reply == QMessageBox.Yes:
+                from core.gui.gestion_templates import TemplateSelectionDialog
+
+                dialog = TemplateSelectionDialog(
+                    contexte='NOUVEL_OPERATEUR',
+                    operateur_nom=nom,
+                    operateur_prenom=prenom,
+                    parent=self
+                )
+                dialog.exec_()
+
+        except Exception as e:
+            # Ne pas bloquer si le module templates n'est pas disponible
+            print(f"Erreur lors de la proposition des documents: {e}")
 
 
 if __name__ == "__main__":

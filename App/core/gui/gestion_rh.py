@@ -18,6 +18,7 @@ from datetime import datetime, date, timedelta
 
 from core.services import absence_service
 from core.services import evaluation_service, calendrier_service
+from core.services import formation_service
 from core.db.configbd import get_connection
 from core.gui.ui_theme import EmacCard, EmacButton
 
@@ -282,6 +283,37 @@ class GestionRHDialog(QDialog):
 
         grid.addWidget(demandes_card, 1, 1)
 
+        # KPI 5: Formations (cyan)
+        formations_card = self._create_kpi_card(
+            "🎓", "Formations",
+            "0", "En cours cette année",
+            "#06b6d4", "#ecfeff"
+        )
+        self.formations_count_label = formations_card.findChild(QLabel, "value_label")
+
+        self.formations_list_widget = QListWidget()
+        self.formations_list_widget.setMaximumHeight(100)
+        self.formations_list_widget.setStyleSheet("""
+            QListWidget {
+                background: white;
+                border: 1px solid #a5f3fc;
+                border-radius: 6px;
+                padding: 8px;
+                font-size: 11px;
+            }
+            QListWidget::item {
+                padding: 6px;
+                border-bottom: 1px solid #ecfeff;
+            }
+        """)
+        formations_card.body.addWidget(self.formations_list_widget)
+
+        btn_formations = EmacButton("→ Voir tout", variant='ghost')
+        btn_formations.clicked.connect(self._ouvrir_gestion_formations)
+        formations_card.body.addWidget(btn_formations)
+
+        grid.addWidget(formations_card, 2, 0, 1, 2)  # Prend toute la largeur
+
         layout.addLayout(grid)
 
         # Note: on garde les références pour compatibilité
@@ -539,6 +571,16 @@ class GestionRHDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible d'ouvrir la gestion des évaluations :\n{e}")
+
+    def _ouvrir_gestion_formations(self):
+        """Ouvre le dialogue de gestion des formations"""
+        try:
+            from core.gui.gestion_formations import GestionFormationsDialog
+            dialog = GestionFormationsDialog(self)
+            dialog.exec_()
+            self.load_data()
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Impossible d'ouvrir la gestion des formations :\n{e}")
 
     def create_info_card(self, title, color, subtitle=""):
         """Crée une card d'information colorée"""
@@ -1369,6 +1411,7 @@ class GestionRHDialog(QDialog):
         self.load_next_evaluations()
         self.load_soldes_dashboard()
         self.load_demandes_recentes()
+        self.load_formations_dashboard()
 
     def load_retard_evaluations(self):
         """Charge les évaluations en retard"""
@@ -1483,6 +1526,37 @@ class GestionRHDialog(QDialog):
                 self.demandes_list.addItem(item)
         except:
             pass
+
+    def load_formations_dashboard(self):
+        """Charge les formations pour le dashboard"""
+        try:
+            stats = formation_service.get_formations_stats()
+
+            # Mettre à jour le compteur
+            if hasattr(self, 'formations_count_label') and self.formations_count_label:
+                self.formations_count_label.setText(str(stats.get('en_cours', 0)))
+
+            # Charger les formations récentes
+            if hasattr(self, 'formations_list_widget'):
+                self.formations_list_widget.clear()
+                formations = formation_service.get_all_formations(statut='En cours')
+
+                for f in formations[:5]:
+                    item_text = f"{f.get('nom_complet', '')} - {f.get('intitule', '')}"
+                    item = QListWidgetItem(item_text)
+                    item.setForeground(QColor("#06b6d4"))
+                    self.formations_list_widget.addItem(item)
+
+                # Si pas de formations en cours, afficher les planifiées
+                if not formations:
+                    formations = formation_service.get_all_formations(statut='Planifiée')
+                    for f in formations[:3]:
+                        item_text = f"{f.get('nom_complet', '')} - {f.get('intitule', '')} (planifiée)"
+                        item = QListWidgetItem(item_text)
+                        item.setForeground(QColor("#64748b"))
+                        self.formations_list_widget.addItem(item)
+        except Exception as e:
+            print(f"Erreur load_formations_dashboard: {e}")
 
     def load_evaluations_calendar(self):
         """Charge les évaluations dans le calendrier"""

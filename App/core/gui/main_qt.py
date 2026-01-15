@@ -28,14 +28,6 @@ try:
 except Exception:
     export_day = None
 
-# ✅ OPTIMISATION : Monitoring de performance
-try:
-    from core.utils.performance_monitor import print_performance_report, export_performance_stats
-except ImportError:
-    print_performance_report = None
-    export_performance_stats = None
-
-
 # ===========================
 #  Workers (ThreadPool) - ✅ Utilisation du nouveau module db_worker
 # ===========================
@@ -395,12 +387,14 @@ class MainWindow(QMainWindow):
             add_btn("Ajouter du personnel", self.show_manage_operator)
         if perms.get("postes_ecriture"):
             add_btn("Création/Suppression de poste", self.show_poste_form)
-        if perms.get("contrats_ecriture"):
-            add_btn("Gestion des Contrats", self.show_contract_management)
-        if perms.get("documentsrh_lecture"):
-            add_btn("Documents RH", self.show_gestion_documentaire)
+        if perms.get("contrats_ecriture") or perms.get("documentsrh_lecture"):
+            add_btn("Gestion RH (Contrats & Documents)", self.show_contract_management)
+        if perms.get("documentsrh_lecture") or perms.get("formations_lecture"):
+            add_btn("Gestion des Formations", self.show_gestion_formations)
         if perms.get("planning_lecture"):
             add_btn("Planning & Évaluations", self.show_regularisation)
+        if perms.get("documentsrh_lecture") or perms.get("personnel_lecture"):
+            add_btn("Documents Templates", self.show_gestion_templates)
         if perms.get("historique_lecture"):
             add_btn("Historique", self.show_historique)
 
@@ -563,6 +557,14 @@ class MainWindow(QMainWindow):
     def show_gestion_documentaire(self):
         from core.gui.gestion_documentaire import GestionDocumentaireDialog
         GestionDocumentaireDialog(self).exec_()
+
+    def show_gestion_formations(self):
+        from core.gui.gestion_formations import GestionFormationsDialog
+        GestionFormationsDialog(self).exec_()
+
+    def show_gestion_templates(self):
+        from core.gui.gestion_templates import GestionTemplatesDialog
+        GestionTemplatesDialog(parent=self).exec_()
 
     # ---------------------------
     # DB async (filters + evaluations)
@@ -759,26 +761,7 @@ class MainWindow(QMainWindow):
         UserManagementDialog(self).exec_()
 
     def closeEvent(self, event):
-        """
-        Gère la fermeture de l'application.
-        Affiche le rapport de performance et exporte les stats.
-        """
-        # ✅ OPTIMISATION : Rapport de performance en fin de session
-        if print_performance_report:
-            try:
-                print("\n" + "="*80)
-                print("📊 RAPPORT DE PERFORMANCE DE LA SESSION")
-                print("="*80)
-                print_performance_report()
-
-                # Export des stats dans un fichier CSV
-                if export_performance_stats:
-                    timestamp = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
-                    export_performance_stats(f'session_{timestamp}.csv')
-            except Exception as e:
-                print(f"Erreur lors du rapport de performance: {e}")
-
-        # Fermeture normale
+        """Gère la fermeture de l'application."""
         event.accept()
 
 

@@ -491,6 +491,71 @@ def change_password(user_id: int, new_password: str) -> tuple[bool, Optional[str
         conn.close()
 
 
+def delete_user(user_id: int) -> tuple[bool, Optional[str]]:
+    """
+    Supprime définitivement un utilisateur (admin uniquement)
+
+    Args:
+        user_id: ID de l'utilisateur à supprimer
+
+    Returns:
+        tuple: (succès, message d'erreur si échec)
+    """
+    if not is_admin():
+        return False, "Seuls les administrateurs peuvent supprimer des utilisateurs"
+
+    current_user = get_current_user()
+
+    # Empêcher l'auto-suppression
+    if current_user and current_user['id'] == user_id:
+        return False, "Vous ne pouvez pas supprimer votre propre compte"
+
+    # Vérifier si c'est le dernier admin actif
+    if is_user_admin(user_id):
+        active_admins = count_active_admins()
+        if active_admins <= 1:
+            return False, "Impossible de supprimer le dernier administrateur du système"
+
+    conn = get_connection()
+    if not conn:
+        return False, "Erreur de connexion à la base de données"
+
+    cur = conn.cursor(dictionary=True)
+    try:
+        # Récupérer les infos de l'utilisateur avant suppression (pour le log)
+        cur.execute("SELECT username, nom, prenom FROM utilisateurs WHERE id = %s", (user_id,))
+        user_info = cur.fetchone()
+        if not user_info:
+            return False, "Utilisateur introuvable"
+
+        # Supprimer les logs de connexion associés
+        cur.execute("DELETE FROM logs_connexion WHERE utilisateur_id = %s", (user_id,))
+
+        # Supprimer l'utilisateur
+        cur.execute("DELETE FROM utilisateurs WHERE id = %s", (user_id,))
+
+        conn.commit()
+
+        # Log de la suppression
+        log_hist_async(
+            action="SUPPRESSION_UTILISATEUR",
+            table_name="utilisateurs",
+            record_id=user_id,
+            description=f"Suppression de l'utilisateur {user_info['username']} ({user_info['nom']} {user_info['prenom']})",
+            utilisateur=current_user['username'] if current_user else None
+        )
+
+        return True, None
+
+    except Exception as e:
+        print(f"Erreur lors de la suppression de l'utilisateur: {e}")
+        conn.rollback()
+        return False, f"Erreur: {str(e)}"
+    finally:
+        cur.close()
+        conn.close()
+
+
 def get_roles() -> List[Dict]:
     """
     Récupère la liste des rôles disponibles

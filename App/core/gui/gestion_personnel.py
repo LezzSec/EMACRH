@@ -4,7 +4,8 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QGroupBox,
     QMessageBox, QAbstractItemView, QWidget, QTabWidget, QCheckBox,
-    QButtonGroup, QRadioButton, QDateEdit
+    QButtonGroup, QRadioButton, QDateEdit, QScrollArea, QFrame, QGridLayout,
+    QSizePolicy
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
@@ -15,7 +16,7 @@ from core.services.contrat_service import get_all_contracts
 from core.gui.contract_management import ContractFormDialog
 from core.gui.historique_personnel import HistoriquePersonnelTab
 from core.gui.emac_ui_kit import add_custom_title_bar
-from core.services.auth_service import has_permission
+from core.services.auth_service import has_permission, get_current_user
 
 import datetime as dt
 
@@ -120,65 +121,46 @@ class DetailOperateurDialog(QDialog):
         
         tabs.addTab(poly_tab, "Polyvalences")
 
-        # Onglet 2 : Infos Complémentaires
+        # Onglet 2 : Infos Complémentaires (disposition en cartes)
         infos_tab = QWidget()
         infos_layout = QVBoxLayout(infos_tab)
-        infos_layout.setSpacing(15)
-        infos_layout.setContentsMargins(20, 20, 20, 20)
+        infos_layout.setSpacing(0)
+        infos_layout.setContentsMargins(0, 0, 0, 0)
 
-        # En-tête simple (comme Historique)
-        infos_label = QLabel("Informations Complémentaires")
-        infos_label.setFont(QFont("Segoe UI", 13, QFont.Bold))
-        infos_label.setStyleSheet("color: #1e293b; padding: 5px 0px;")
-        infos_layout.addWidget(infos_label)
-
-        infos_subtitle = QLabel("Contrat, formations, validités et autres données")
-        infos_subtitle.setStyleSheet("color: #64748b; font-size: 10px; padding-bottom: 10px;")
-        infos_layout.addWidget(infos_subtitle)
-
-        # Tableau Catégorie / Valeur - Style professionnel
-        self.infos_table = QTableWidget()
-        self.infos_table.setColumnCount(2)
-        self.infos_table.setHorizontalHeaderLabels(["Catégorie", "Valeur"])
-        self.infos_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-        self.infos_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.infos_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.infos_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.infos_table.setSelectionMode(QAbstractItemView.NoSelection)
-        self.infos_table.setAlternatingRowColors(True)
-        self.infos_table.setShowGrid(True)
-
-        # Style simple et épuré (comme Historique)
-        self.infos_table.setStyleSheet("""
-            QTableWidget {
-                background-color: white;
-                alternate-background-color: #f9fafb;
-                gridline-color: #e5e7eb;
-                border: 1px solid #d1d5db;
-                font-size: 11px;
-            }
-            QHeaderView::section {
-                background-color: #f3f4f6;
-                color: #374151;
-                font-weight: 600;
-                font-size: 11px;
-                padding: 8px 12px;
+        # Scroll area pour les cartes
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("""
+            QScrollArea {
+                background-color: #f8fafc;
                 border: none;
-                border-bottom: 1px solid #d1d5db;
-                border-right: 1px solid #e5e7eb;
             }
-            QTableWidget::item {
-                padding: 8px 12px;
-                border: none;
-                color: #111827;
+            QScrollBar:vertical {
+                background: #f1f5f9;
+                width: 8px;
+                border-radius: 4px;
             }
-            QTableWidget::item:selected {
-                background-color: #dbeafe;
-                color: #111827;
+            QScrollBar::handle:vertical {
+                background: #cbd5e1;
+                border-radius: 4px;
+                min-height: 30px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #94a3b8;
             }
         """)
 
-        infos_layout.addWidget(self.infos_table)
+        # Container pour les cartes
+        self.infos_container = QWidget()
+        self.infos_container.setStyleSheet("background-color: #f8fafc;")
+        self.infos_cards_layout = QVBoxLayout(self.infos_container)
+        self.infos_cards_layout.setSpacing(16)
+        self.infos_cards_layout.setContentsMargins(20, 20, 20, 20)
+        self.infos_cards_layout.setAlignment(Qt.AlignTop)
+
+        scroll.setWidget(self.infos_container)
+        infos_layout.addWidget(scroll)
 
         tabs.addTab(infos_tab, "Infos Complémentaires")
 
@@ -403,29 +385,29 @@ class DetailOperateurDialog(QDialog):
     
     
     def load_additional_infos(self):
-        """Charge les infos complémentaires de manière plus lisible (sans sections vides)."""
+        """Charge les infos complémentaires avec une disposition en cartes modernes."""
         try:
-            self.infos_table.setRowCount(0)
+            # Nettoyer les cartes existantes
+            self._clear_infos_cards()
 
-            # -------- Informations personnelles --------
+            # Stocker les données pour l'export
+            self._infos_data = []
+
+            # -------- Carte Informations personnelles --------
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
             cursor.execute("SELECT * FROM personnel_infos WHERE operateur_id = %s", (self.operateur_id,))
             row_data = _rows(cursor, dict_mode)
             cursor.close(); connection.close()
 
+            personal_items = []
             if row_data:
-                self._insert_section("Informations personnelles")
                 data = row_data[0]
-
-                # Afficher d'abord la date d'entrée si elle existe (mise en évidence)
                 if data.get('date_entree'):
                     date_entree_str = data['date_entree'].strftime("%d/%m/%Y") if isinstance(data['date_entree'], dt.date) else str(data['date_entree'])
-                    self._insert_kv("Date d'entrée", date_entree_str)
-
-                # Afficher les autres informations
+                    personal_items.append(("Date d'entrée", date_entree_str))
                 for key, val in data.items():
-                    if key in ("operateur_id", "date_entree"):  # Skip operateur_id et date_entree (déjà affiché)
+                    if key in ("operateur_id", "date_entree"):
                         continue
                     label = self._format_column_name(key)
                     value = (
@@ -433,14 +415,19 @@ class DetailOperateurDialog(QDialog):
                         else (str(val) if val not in (None, "",) else None)
                     )
                     if value is not None:
-                        self._insert_kv(label, value)
-            else:
-                # Si pas de personnel_infos, vérifier quand même s'il y a une date d'entrée
-                self._insert_section("Informations personnelles")
-                self._insert_kv("Information", "Aucune information complémentaire enregistrée")
+                        personal_items.append((label, value))
 
-            # -------- Contrat actuel --------
-            self._insert_section("Contrat actuel")
+            if not personal_items:
+                personal_items.append(("Information", "Aucune information complémentaire enregistrée"))
+
+            self._add_info_card(
+                "Informations Personnelles",
+                personal_items,
+                icon_color="#3b82f6",
+                icon="👤"
+            )
+
+            # -------- Carte Contrat actuel --------
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
             cursor.execute("""
@@ -452,32 +439,33 @@ class DetailOperateurDialog(QDialog):
             contr = _rows(cursor, dict_mode)
             cursor.close(); connection.close()
 
+            contract_items = []
             if contr:
                 c = contr[0]
-                parts = [c.get("type_contrat", "")]
+                if c.get("type_contrat"):
+                    contract_items.append(("Type", c.get("type_contrat")))
                 if c.get("etp") is not None:
-                    parts.append(f"ETP {c['etp']}")
+                    contract_items.append(("ETP", str(c.get("etp"))))
+                if c.get("categorie"):
+                    contract_items.append(("Catégorie", c.get("categorie")))
                 d1, d2 = c.get("date_debut"), c.get("date_fin")
-                if d1 or d2:
+                if d1:
                     deb = d1.strftime("%d/%m/%Y") if isinstance(d1, dt.date) else str(d1)
-                    fin = (
-                        d2.strftime("%d/%m/%Y") if isinstance(d2, dt.date)
-                        else (str(d2) if d2 else "…")
-                    )
-                    parts.append(f"{deb} → {fin}")
-                self._insert_kv("Contrat actif", " — ".join([p for p in parts if p]))
+                    contract_items.append(("Début", deb))
+                if d2:
+                    fin = d2.strftime("%d/%m/%Y") if isinstance(d2, dt.date) else str(d2)
+                    contract_items.append(("Fin", fin))
             else:
-                self._insert_kv("Contrat actif", "Aucun contrat actif pour cet opérateur.")
+                contract_items.append(("Statut", "Aucun contrat actif"))
 
-            # -------- Congés / Absences --------
-            # Les tables compteur_conges et absences_conges ne sont plus utilisées.
-            self._insert_section("Congés / Absences")
-            self._insert_kv(
-                "Information",
-                "Module congés/absences non utilisé dans cette application."
+            self._add_info_card(
+                "Contrat Actuel",
+                contract_items,
+                icon_color="#f59e0b",
+                icon="📋"
             )
 
-            # -------- Formations --------
+            # -------- Carte Formations --------
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
             cursor.execute("""
@@ -489,18 +477,25 @@ class DetailOperateurDialog(QDialog):
             formations = _rows(cursor, dict_mode)
             cursor.close(); connection.close()
 
-            self._insert_section("Formations")
+            formation_items = []
             if formations:
                 for f in formations:
                     d1 = self._format_date(f.get("date_debut"))
                     d2 = self._format_date(f.get("date_fin"))
-                    cert = "Oui" if f.get("certificat_obtenu") else "Non"
-                    texte = f"{d1} → {d2} — {f.get('statut','')} {cert}"
-                    self._insert_kv(f.get("intitule", "(formation)"), texte)
+                    cert = " ✓" if f.get("certificat_obtenu") else ""
+                    intitule = f.get("intitule", "(formation)")
+                    formation_items.append((intitule, f"{d1} → {d2}{cert}"))
             else:
-                self._insert_kv("Formations", "Aucune formation renseignée pour le moment.")
+                formation_items.append(("Aucune formation", "Aucune formation renseignée"))
 
-            # -------- Validités --------
+            self._add_info_card(
+                "Formations",
+                formation_items,
+                icon_color="#10b981",
+                icon="🎓"
+            )
+
+            # -------- Carte Validités --------
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
             cursor.execute("""
@@ -512,24 +507,26 @@ class DetailOperateurDialog(QDialog):
             validites = _rows(cursor, dict_mode)
             cursor.close(); connection.close()
 
-            self._insert_section("Validités")
+            validite_items = []
             if validites:
                 for v in validites:
                     d1 = self._format_date(v.get("date_debut"))
                     d2 = self._format_date(v.get("date_fin")) if v.get("date_fin") else "—"
-                    tc = (
-                        f" ({v['taux_incapacite']}%)"
-                        if v.get("taux_incapacite") is not None
-                        else ""
-                    )
-                    texte = f"{d1} → {d2} — {v.get('periodicite', '')}{tc}"
-                    self._insert_kv(v.get("type_validite", "(type)"), texte)
+                    tc = f" ({v['taux_incapacite']}%)" if v.get("taux_incapacite") is not None else ""
+                    type_val = v.get("type_validite", "(type)")
+                    validite_items.append((type_val, f"{d1} → {d2}{tc}"))
             else:
-                self._insert_kv("Validités", "Aucune validité enregistrée.")
+                validite_items.append(("Aucune validité", "Aucune validité enregistrée"))
 
-            # largeur colonnes
-            self.infos_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
-            self.infos_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+            self._add_info_card(
+                "Validités",
+                validite_items,
+                icon_color="#8b5cf6",
+                icon="✅"
+            )
+
+            # Ajouter un stretch à la fin pour pousser les cartes vers le haut
+            self.infos_cards_layout.addStretch()
 
         except Exception as e:
             QMessageBox.critical(
@@ -538,27 +535,88 @@ class DetailOperateurDialog(QDialog):
                 f"Impossible de charger les infos détaillées :\n{e}"
             )
 
-    def _insert_kv(self, label: str, value: str | None):
-        """Insère une ligne Catégorie / Valeur (texte gris + italique si vide)."""
-        row = self.infos_table.rowCount()
-        self.infos_table.insertRow(row)
+    def _clear_infos_cards(self):
+        """Supprime toutes les cartes existantes du layout."""
+        while self.infos_cards_layout.count():
+            item = self.infos_cards_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
 
-        cat = QTableWidgetItem(label)
-        cat.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        self.infos_table.setItem(row, 0, cat)
+    def _add_info_card(self, title: str, items: list, icon_color: str = "#3b82f6", icon: str = "📄"):
+        """Crée et ajoute une carte d'information au layout."""
+        # Stocker les données pour l'export
+        if hasattr(self, '_infos_data'):
+            self._infos_data.append((title, items))
 
-        if value in (None, "",):
-            display = "Aucune information"
-            val = QTableWidgetItem(display)
-            val.setForeground(QColor("#9ca3af"))
-            f = val.font()
-            f.setItalic(True)
-            val.setFont(f)
-        else:
-            val = QTableWidgetItem(value)
+        card = QFrame()
+        card.setStyleSheet(f"""
+            QFrame {{
+                background-color: white;
+                border-radius: 12px;
+                border: 1px solid #e2e8f0;
+            }}
+            QFrame:hover {{
+                border: 1px solid {icon_color};
+                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            }}
+        """)
 
-        val.setFlags(val.flags() & ~Qt.ItemIsEditable)
-        self.infos_table.setItem(row, 1, val)
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(20, 16, 20, 16)
+        card_layout.setSpacing(12)
+
+        # En-tête de la carte avec icône
+        header = QHBoxLayout()
+        header.setSpacing(10)
+
+        # Icône dans un cercle coloré
+        icon_label = QLabel(icon)
+        icon_label.setFixedSize(36, 36)
+        icon_label.setAlignment(Qt.AlignCenter)
+        icon_label.setStyleSheet(f"""
+            background-color: {icon_color}20;
+            border-radius: 18px;
+            font-size: 16px;
+        """)
+        header.addWidget(icon_label)
+
+        # Titre
+        title_label = QLabel(title)
+        title_label.setFont(QFont("Segoe UI", 12, QFont.Bold))
+        title_label.setStyleSheet(f"color: #1e293b; background: transparent;")
+        header.addWidget(title_label)
+        header.addStretch()
+
+        card_layout.addLayout(header)
+
+        # Séparateur
+        separator = QFrame()
+        separator.setFixedHeight(1)
+        separator.setStyleSheet("background-color: #e2e8f0;")
+        card_layout.addWidget(separator)
+
+        # Contenu : grille de clé-valeur
+        content_layout = QGridLayout()
+        content_layout.setSpacing(8)
+        content_layout.setColumnStretch(1, 1)
+
+        for row, (label, value) in enumerate(items):
+            # Label
+            lbl = QLabel(label)
+            lbl.setFont(QFont("Segoe UI", 10))
+            lbl.setStyleSheet("color: #64748b; background: transparent;")
+            content_layout.addWidget(lbl, row, 0, Qt.AlignTop)
+
+            # Valeur
+            val = QLabel(str(value) if value else "—")
+            val.setFont(QFont("Segoe UI", 10, QFont.DemiBold))
+            val.setStyleSheet("color: #1e293b; background: transparent;")
+            val.setWordWrap(True)
+            content_layout.addWidget(val, row, 1, Qt.AlignTop)
+
+        card_layout.addLayout(content_layout)
+
+        self.infos_cards_layout.addWidget(card)
 
 
     def _format_column_name(self, col_name: str) -> str:
@@ -1034,18 +1092,16 @@ class DetailOperateurDialog(QDialog):
     
             # ---------- Informations complémentaires ----------
             flow.append(Paragraph("Informations Complémentaires", section_style))
-            
+
             infos_data = []
-            if hasattr(self, "infos_table") and self.infos_table.rowCount() > 0:
-                for r in range(self.infos_table.rowCount()):
-                    c0 = self.infos_table.item(r, 0)
-                    c1 = self.infos_table.item(r, 1)
-                    if c0 and c1:
-                        label = c0.text().strip()
-                        value = c1.text().strip()
-                        if label and "Aucune information" not in label:
-                            infos_data.append([label, value])
-            
+            if hasattr(self, "_infos_data") and self._infos_data:
+                for section_title, items in self._infos_data:
+                    # Ajouter le titre de section
+                    infos_data.append([section_title.upper(), ""])
+                    for label, value in items:
+                        if "Aucune" not in label:
+                            infos_data.append([f"  {label}", str(value)])
+
             if infos_data:
                 t_infos = Table(infos_data, colWidths=[6*cm, 11*cm])
                 t_infos.setStyle(TableStyle([
@@ -1264,17 +1320,14 @@ class DetailOperateurDialog(QDialog):
     
             ws2.append(["Catégorie", "Valeur"])
             style_header(ws2[2])
-    
-            if hasattr(self, "infos_table"):
-                for r in range(self.infos_table.rowCount()):
-                    c0 = self.infos_table.item(r, 0)
-                    c1 = self.infos_table.item(r, 1)
-                    if not c0:
-                        continue
-                    label = c0.text().strip()
-                    if label == "Aucune information complémentaire disponible.":
-                        continue
-                    ws2.append([label, (c1.text() if c1 else "")])
+
+            if hasattr(self, "_infos_data") and self._infos_data:
+                for section_title, items in self._infos_data:
+                    # Ajouter le titre de section
+                    ws2.append([section_title.upper(), ""])
+                    for label, value in items:
+                        if "Aucune" not in label:
+                            ws2.append([f"  {label}", str(value)])
     
             style_table(ws2, 3, 1, ws2.max_row, 2, zebra=True)
             for cell in ws2["B"][2:]:
@@ -1349,55 +1402,6 @@ class DetailOperateurDialog(QDialog):
         if hasattr(datetime_val, "strftime"):
             return datetime_val.strftime("%d/%m/%Y %H:%M")
         return str(datetime_val)
-    
-    def _insert_info_row(self, row_index: int, label: str, value: str):
-        """Insère une ligne (Catégorie, Valeur) dans infos_table."""
-        # Sécurité: s'assurer que la table existe
-        if not hasattr(self, "infos_table"):
-            return
-        self.infos_table.insertRow(row_index)
-
-        # Colonne 0 : libellé
-        cat_item = QTableWidgetItem(label)
-        cat_item.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        self.infos_table.setItem(row_index, 0, cat_item)
-
-        # Colonne 1 : valeur
-        val_item = QTableWidgetItem(value if value is not None else "—")
-        val_item.setTextAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        val_item.setFlags(val_item.flags() & ~Qt.ItemIsEditable)
-        self.infos_table.setItem(row_index, 1, val_item)
-
-    def _insert_section(self, title: str):
-        """Insère un séparateur de section simple (ligne pleine largeur)."""
-        row = self.infos_table.rowCount()
-        self.infos_table.insertRow(row)
-
-        # Nettoyer le titre
-        title_clean = title.strip()
-
-        item = QTableWidgetItem(title_clean.upper())
-        item.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        item.setForeground(QColor("#374151"))  # Gris foncé simple
-        item.setBackground(QColor("#f3f4f6"))  # Gris très clair
-        item.setFlags(item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEditable)
-        self.infos_table.setItem(row, 0, item)
-        self.infos_table.setSpan(row, 0, 1, 2)
-
-    def _insert_kv(self, label: str, value: str | None):
-        """Insère une ligne Catégorie/ Valeur (— grisé si vide)."""
-        row = self.infos_table.rowCount()
-        self.infos_table.insertRow(row)
-
-        cat = QTableWidgetItem(label)
-        cat.setFont(QFont("Segoe UI", 10, QFont.Bold))
-        self.infos_table.setItem(row, 0, cat)
-
-        val = QTableWidgetItem(value if value not in (None, "",) else "—")
-        if value in (None, "",):
-            val.setForeground(QColor("#9ca3af"))
-        val.setFlags(val.flags() & ~Qt.ItemIsEditable)
-        self.infos_table.setItem(row, 1, val)
     
     def _calculate_anciennete(self, date_eval):
         """Calcule l'ancienneté."""
@@ -1478,31 +1482,42 @@ class GestionPersonnelDialog(QDialog):
         # Ligne 2 : Statut (Radio buttons)
         statut_layout = QHBoxLayout()
         statut_layout.addWidget(QLabel("Statut :"))
-        
+
         self.radio_tous = QRadioButton("Tous")
         self.radio_actifs = QRadioButton("Actifs")
         self.radio_inactifs = QRadioButton("Inactifs")
-        
+
         self.radio_tous.setChecked(True)
-        
+
         self.radio_tous.toggled.connect(self.filter_table)
         self.radio_actifs.toggled.connect(self.filter_table)
         self.radio_inactifs.toggled.connect(self.filter_table)
-        
+
         statut_layout.addWidget(self.radio_tous)
         statut_layout.addWidget(self.radio_actifs)
         statut_layout.addWidget(self.radio_inactifs)
         statut_layout.addStretch()
-        
+
+        # Checkbox production uniquement (cochée par défaut pour gestion_production)
+        self.production_only_check = QCheckBox("Production uniquement")
+        current_user = get_current_user()
+        is_gestion_production = (
+            current_user and
+            current_user.get('role_nom') == 'gestion_production'
+        )
+        self.production_only_check.setChecked(is_gestion_production)
+        self.production_only_check.toggled.connect(self.filter_table)
+        statut_layout.addWidget(self.production_only_check)
+
         self.show_stats_check = QCheckBox("Afficher les statistiques")
         self.show_stats_check.setChecked(True)
         self.show_stats_check.toggled.connect(self.toggle_stats_columns)
         statut_layout.addWidget(self.show_stats_check)
-        
+
         self.refresh_btn = QPushButton("Actualiser")
         self.refresh_btn.clicked.connect(self.load_data)
         statut_layout.addWidget(self.refresh_btn)
-        
+
         filters_layout.addLayout(statut_layout)
         
         filters_group.setLayout(filters_layout)
@@ -1574,12 +1589,14 @@ class GestionPersonnelDialog(QDialog):
         try:
             connection = get_db_connection()
             cursor, dict_mode = _cursor(connection)
-            
+
+            # Charger tout le personnel avec le matricule pour le filtrage côté client
             query = """
-                SELECT 
+                SELECT
                 o.id,
                 o.nom,
                 o.prenom,
+                o.matricule,
                 UPPER(o.statut) AS statut,
                 COUNT(p.id) AS nb_postes,
                 SUM(CASE WHEN p.niveau = 1 THEN 1 ELSE 0 END) AS n1,
@@ -1588,47 +1605,55 @@ class GestionPersonnelDialog(QDialog):
                 SUM(CASE WHEN p.niveau = 4 THEN 1 ELSE 0 END) AS n4
             FROM personnel o
             LEFT JOIN polyvalence p ON o.id = p.operateur_id
-            GROUP BY o.id, o.nom, o.prenom, o.statut
+            GROUP BY o.id, o.nom, o.prenom, o.matricule, o.statut
             ORDER BY o.nom, o.prenom;
             """
-            
+
             cursor.execute(query)
             self.all_data = _rows(cursor, dict_mode)
-            
+
             cursor.close()
             connection.close()
-            
+
             self.filter_table()
-            
+
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible de charger les données :\n{e}")
     
     def filter_table(self):
         """Filtre et affiche les données dans la table."""
         search_text = self.search_input.text().lower()
-        
+
         # Déterminer le filtre de statut
         statut_filter = None
         if self.radio_actifs.isChecked():
             statut_filter = "ACTIF"
         elif self.radio_inactifs.isChecked():
             statut_filter = "INACTIF"
-        
+
+        # Filtre production uniquement (personnel avec matricule)
+        production_only = self.production_only_check.isChecked()
+
         self.table.setRowCount(0)
-        
+
         count = 0
         count_actifs = 0
         count_inactifs = 0
-        
+
         for data in self.all_data:
             nom = data.get("nom", "").lower()
             prenom = data.get("prenom", "").lower()
             statut = data.get("statut", "").upper()
-            
+            matricule = data.get("matricule") or ""
+
+            # Filtre production uniquement
+            if production_only and not matricule.strip():
+                continue
+
             # Filtre de recherche
             if search_text and search_text not in nom and search_text not in prenom:
                 continue
-            
+
             # Filtre de statut
             if statut_filter and statut != statut_filter:
                 continue
@@ -1728,13 +1753,20 @@ class GestionPersonnelDialog(QDialog):
             from openpyxl.styles import Font, PatternFill, Alignment
             from PyQt5.QtWidgets import QFileDialog
             
-            # Déterminer le nom du fichier selon le filtre
+            # Déterminer le nom du fichier selon les filtres actifs
+            date_str = dt.date.today().strftime('%Y%m%d')
+            parts = ["personnel"]
+
+            if self.production_only_check.isChecked():
+                parts.append("production")
+
             if self.radio_actifs.isChecked():
-                default_name = f"operateurs_actifs_{dt.date.today().strftime('%Y%m%d')}.xlsx"
+                parts.append("actifs")
             elif self.radio_inactifs.isChecked():
-                default_name = f"operateurs_inactifs_{dt.date.today().strftime('%Y%m%d')}.xlsx"
-            else:
-                default_name = f"personnel_complet_{dt.date.today().strftime('%Y%m%d')}.xlsx"
+                parts.append("inactifs")
+
+            parts.append(date_str)
+            default_name = "_".join(parts) + ".xlsx"
             
             file_path, _ = QFileDialog.getSaveFileName(
                 self, "Exporter la liste",
@@ -1769,13 +1801,17 @@ class GestionPersonnelDialog(QDialog):
                 statut_filter = "ACTIF"
             elif self.radio_inactifs.isChecked():
                 statut_filter = "INACTIF"
-            
+            production_only = self.production_only_check.isChecked()
+
             for data in self.all_data:
                 nom = data.get("nom", "").lower()
                 prenom = data.get("prenom", "").lower()
                 statut = data.get("statut", "").upper()
-                
+                matricule = data.get("matricule") or ""
+
                 # Appliquer les mêmes filtres que la table
+                if production_only and not matricule.strip():
+                    continue
                 if search_text and search_text not in nom and search_text not in prenom:
                     continue
                 if statut_filter and statut != statut_filter:

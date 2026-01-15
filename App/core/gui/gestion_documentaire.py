@@ -784,6 +784,7 @@ class AddDocumentDialog(QDialog):
         self.filter_category = filter_category  # Catégorie à filtrer ou présélectionner
         self.doc_service = DocumentService()
         self.selected_file = None
+        self.created_document_id = None  # ID du document créé (pour récupération externe)
 
         self.setWindowTitle("Ajouter un document")
         self.setGeometry(200, 200, 600, 500)
@@ -1023,6 +1024,7 @@ class AddDocumentDialog(QDialog):
         )
 
         if success:
+            self.created_document_id = doc_id  # Exposer l'ID pour récupération
             QMessageBox.information(self, "Succès", message)
             self.accept()
         else:

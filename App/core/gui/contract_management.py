@@ -447,11 +447,11 @@ class ContractFormDialog(QDialog):
 
 
 class ContractManagementDialog(QDialog):
-    """Dialogue de gestion des contrats."""
+    """Dialogue de gestion RH - Contrats et Documents."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Gestion des Contrats")
+        self.setWindowTitle("Gestion RH")
         self.setGeometry(150, 150, 1200, 700)
 
         self.init_ui()
@@ -465,7 +465,7 @@ class ContractManagementDialog(QDialog):
 
         # Barre de titre personnalisée
         if THEME_AVAILABLE:
-            title_bar = add_custom_title_bar(self, "Gestion des Contrats")
+            title_bar = add_custom_title_bar(self, "Gestion RH")
             main_layout.addWidget(title_bar)
 
         # Widget de contenu avec onglets
@@ -871,7 +871,7 @@ class ContractManagementDialog(QDialog):
             self.load_data()
 
     def create_documents_tab(self):
-        """Crée l'onglet pour les documents contractuels."""
+        """Crée l'onglet pour tous les documents RH."""
         tab = QWidget()
         layout = QVBoxLayout(tab)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -882,14 +882,10 @@ class ContractManagementDialog(QDialog):
             header_card = EmacCard()
             header_layout = QHBoxLayout()
 
-            title = QLabel("📄 Documents Contractuels")
+            title = QLabel("📄 Documents RH")
             title.setFont(QFont("Segoe UI", 14, QFont.Bold))
             title.setStyleSheet("color: #1e293b;")
             header_layout.addWidget(title)
-
-            subtitle = QLabel("Contrats de travail, Avenants, Documents officiels")
-            subtitle.setStyleSheet("color: #64748b; font-size: 11px;")
-            header_layout.addWidget(subtitle)
 
             header_layout.addStretch()
 
@@ -904,10 +900,32 @@ class ContractManagementDialog(QDialog):
 
             header_card.body.addLayout(header_layout)
             layout.addWidget(header_card)
+
+            # === Filtres ===
+            filter_card = EmacCard()
+            filter_layout = QHBoxLayout()
+
+            filter_layout.addWidget(QLabel("Catégorie:"))
+            self.doc_categorie_filter = QComboBox()
+            self.doc_categorie_filter.setMinimumWidth(200)
+            self.doc_categorie_filter.currentIndexChanged.connect(self.load_contract_documents)
+            filter_layout.addWidget(self.doc_categorie_filter)
+
+            filter_layout.addSpacing(15)
+
+            filter_layout.addWidget(QLabel("Employé:"))
+            self.doc_employe_filter = QComboBox()
+            self.doc_employe_filter.setMinimumWidth(200)
+            self.doc_employe_filter.currentIndexChanged.connect(self.load_contract_documents)
+            filter_layout.addWidget(self.doc_employe_filter)
+
+            filter_layout.addStretch()
+            filter_card.body.addLayout(filter_layout)
+            layout.addWidget(filter_card)
         else:
             # Fallback simple
             header_layout = QHBoxLayout()
-            header_layout.addWidget(QLabel("Documents contractuels (Contrats de travail, Avenants)"))
+            header_layout.addWidget(QLabel("Documents RH"))
             header_layout.addStretch()
 
             add_doc_btn = QPushButton("+ Ajouter un document")
@@ -919,6 +937,24 @@ class ContractManagementDialog(QDialog):
             header_layout.addWidget(add_doc_btn)
             header_layout.addWidget(refresh_doc_btn)
             layout.addLayout(header_layout)
+
+            # Filtres simples
+            filter_layout = QHBoxLayout()
+            filter_layout.addWidget(QLabel("Catégorie:"))
+            self.doc_categorie_filter = QComboBox()
+            self.doc_categorie_filter.currentIndexChanged.connect(self.load_contract_documents)
+            filter_layout.addWidget(self.doc_categorie_filter)
+
+            filter_layout.addWidget(QLabel("Employé:"))
+            self.doc_employe_filter = QComboBox()
+            self.doc_employe_filter.currentIndexChanged.connect(self.load_contract_documents)
+            filter_layout.addWidget(self.doc_employe_filter)
+
+            filter_layout.addStretch()
+            layout.addLayout(filter_layout)
+
+        # Charger les filtres
+        self._load_document_filters()
 
         # === Table moderne avec EmacCard ===
         if THEME_AVAILABLE:
@@ -1013,8 +1049,42 @@ class ContractManagementDialog(QDialog):
 
         return tab
 
+    def _load_document_filters(self):
+        """Charge les filtres pour les documents."""
+        try:
+            conn = get_db_connection()
+            cur = conn.cursor(dictionary=True, buffered=True)
+
+            # Charger les catégories
+            self.doc_categorie_filter.blockSignals(True)
+            self.doc_categorie_filter.clear()
+            self.doc_categorie_filter.addItem("Toutes les catégories", None)
+
+            cur.execute("SELECT id, nom FROM categories_documents ORDER BY ordre_affichage, nom")
+            for cat in cur.fetchall():
+                self.doc_categorie_filter.addItem(cat['nom'], cat['id'])
+            self.doc_categorie_filter.blockSignals(False)
+
+            # Charger les employés
+            self.doc_employe_filter.blockSignals(True)
+            self.doc_employe_filter.clear()
+            self.doc_employe_filter.addItem("Tous les employés", None)
+
+            cur.execute("""
+                SELECT id, CONCAT(prenom, ' ', nom) as nom_complet, matricule
+                FROM personnel WHERE statut = 'ACTIF' ORDER BY nom, prenom
+            """)
+            for emp in cur.fetchall():
+                self.doc_employe_filter.addItem(f"{emp['nom_complet']} ({emp['matricule']})", emp['id'])
+            self.doc_employe_filter.blockSignals(False)
+
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"Erreur chargement filtres documents: {e}")
+
     def load_contract_documents(self):
-        """Charge les documents contractuels uniquement."""
+        """Charge tous les documents RH avec filtres."""
         if not DOCUMENTS_AVAILABLE:
             return
 
@@ -1022,8 +1092,12 @@ class ContractManagementDialog(QDialog):
             conn = get_db_connection()
             cur = conn.cursor(dictionary=True, buffered=True)
 
-            # Récupérer seulement les documents de catégorie "Contrats de travail"
-            cur.execute("""
+            # Récupérer les filtres
+            categorie_id = self.doc_categorie_filter.currentData() if hasattr(self, 'doc_categorie_filter') else None
+            employe_id = self.doc_employe_filter.currentData() if hasattr(self, 'doc_employe_filter') else None
+
+            # Construire la requête avec filtres
+            query = """
                 SELECT
                     d.id,
                     d.operateur_id,
@@ -1043,9 +1117,21 @@ class ContractManagementDialog(QDialog):
                 FROM documents d
                 INNER JOIN personnel p ON d.operateur_id = p.id
                 INNER JOIN categories_documents c ON d.categorie_id = c.id
-                WHERE c.nom = 'Contrats de travail'
-                ORDER BY d.date_upload DESC
-            """)
+                WHERE 1=1
+            """
+            params = []
+
+            if categorie_id:
+                query += " AND d.categorie_id = %s"
+                params.append(categorie_id)
+
+            if employe_id:
+                query += " AND d.operateur_id = %s"
+                params.append(employe_id)
+
+            query += " ORDER BY d.date_upload DESC"
+
+            cur.execute(query, tuple(params))
 
             documents = cur.fetchall()
             cur.close()
@@ -1110,12 +1196,12 @@ class ContractManagementDialog(QDialog):
             QMessageBox.critical(self, "Erreur", f"Erreur lors du chargement des documents : {e}")
 
     def add_contract_document(self):
-        """Ouvre la fenêtre pour ajouter un document contractuel."""
+        """Ouvre la fenêtre pour ajouter un document RH."""
         try:
             from core.gui.gestion_documentaire import AddDocumentDialog
 
-            # Ouvrir la fenêtre d'ajout de document
-            dialog = AddDocumentDialog(operateur_id=None, parent=self, filter_category="Contrats de travail")
+            # Ouvrir la fenêtre d'ajout de document (sans filtre de catégorie)
+            dialog = AddDocumentDialog(operateur_id=None, parent=self)
             if dialog.exec_() == QDialog.Accepted:
                 self.load_contract_documents()
         except Exception as e:

@@ -608,6 +608,10 @@ class DetailOperateurDialog(QDialog):
                 QMessageBox.information(self, "Succès",
                     f"Niveau mis à jour.\nProchaine évaluation automatiquement calculée : {prochaine_eval.strftime('%d/%m/%Y')}")
 
+                # Si passage au niveau 3, proposer les documents
+                if new_niveau == 3:
+                    self._proposer_documents_niveau_3()
+
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour le niveau :\n{e}")
                 self._load_data()
@@ -694,6 +698,42 @@ class DetailOperateurDialog(QDialog):
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour la date :\n{e}")
                 self._load_data()
+
+    def _proposer_documents_niveau_3(self):
+        """
+        Propose les documents templates lors du passage au niveau 3.
+        """
+        try:
+            from core.services.template_service import check_templates_table_exists
+
+            if not check_templates_table_exists():
+                return
+
+            # Demander à l'utilisateur s'il veut générer les documents
+            reply = QMessageBox.question(
+                self,
+                "Documents niveau 3",
+                f"L'opérateur {self.operateur_prenom} {self.operateur_nom} passe au niveau 3.\n\n"
+                "Voulez-vous générer les documents associés ?\n"
+                "(Questionnaire Qualité EMAC, etc.)",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+
+            if reply == QMessageBox.Yes:
+                from core.gui.gestion_templates import TemplateSelectionDialog
+
+                dialog = TemplateSelectionDialog(
+                    contexte='NIVEAU_3',
+                    operateur_nom=self.operateur_nom,
+                    operateur_prenom=self.operateur_prenom,
+                    parent=self
+                )
+                dialog.exec_()
+
+        except Exception as e:
+            # Ne pas bloquer si le module templates n'est pas disponible
+            print(f"Erreur lors de la proposition des documents niveau 3: {e}")
 
 
 # --- Délégué pour empêcher l'édition ---
