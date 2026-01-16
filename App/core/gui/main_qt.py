@@ -395,10 +395,8 @@ class MainWindow(QMainWindow):
             add_btn("Planning & Évaluations", self.show_regularisation)
         if perms.get("documentsrh_lecture") or perms.get("personnel_lecture"):
             add_btn("Documents Templates", self.show_gestion_templates)
-        if perms.get("historique_lecture"):
-            add_btn("Historique", self.show_historique)
-
         if perms.get("is_admin"):
+            add_btn("Historique", self.show_historique)
             drawer_layout.addSpacing(10)
             sep = QFrame()
             sep.setFrameShape(QFrame.HLine)

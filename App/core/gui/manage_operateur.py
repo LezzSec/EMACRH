@@ -17,13 +17,28 @@ def log_to_historique(connection, cursor, action: str, operateur_id=None, poste_
     Enregistre une action dans la table historique avec le bon format
     """
     try:
-        desc_json = json.dumps(description_data or {}, ensure_ascii=False)
-        
+        # Récupérer l'utilisateur connecté
+        utilisateur = None
+        try:
+            from core.services.auth_service import get_current_user
+            current_user = get_current_user()
+            if current_user:
+                utilisateur = current_user.get('username') or f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip()
+        except Exception:
+            pass
+
+        # Ajouter la source dans les données
+        if description_data is None:
+            description_data = {}
+        description_data['source'] = description_data.get('source', 'Gestion opérateur')
+
+        desc_json = json.dumps(description_data, ensure_ascii=False)
+
         sql = """
-            INSERT INTO historique (date_time, action, operateur_id, poste_id, description)
-            VALUES (NOW(), %s, %s, %s, %s)
+            INSERT INTO historique (date_time, action, operateur_id, poste_id, description, utilisateur)
+            VALUES (NOW(), %s, %s, %s, %s, %s)
         """
-        cursor.execute(sql, (action, operateur_id, poste_id, desc_json))
+        cursor.execute(sql, (action, operateur_id, poste_id, desc_json, utilisateur))
     except Exception as e:
         print(f"Erreur log historique: {e}")
         pass

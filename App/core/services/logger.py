@@ -48,6 +48,8 @@ def log_hist(
     details: Any | None = None,
     source: str | None = None,
     utilisateur: str | None = None,
+    operateur_id: int | None = None,
+    poste_id: int | None = None,
 ) -> None:
     """Insère une ligne dans la table `historique`.
 
@@ -60,6 +62,8 @@ def log_hist(
       - description    (phrase courte)
       - details        (JSON texte ou dict)
       - source         (ex: "GUI/liste_et_grilles")
+      - operateur_id   (ID de l'opérateur concerné)
+      - poste_id       (ID du poste concerné)
     """
     # Si utilisateur non fourni, récupérer l'utilisateur connecté
     if utilisateur is None:
@@ -82,8 +86,8 @@ def log_hist(
         cur.execute(
             """
             INSERT INTO historique
-                (date_time, action, table_name, record_id, utilisateur, description)
-            VALUES (NOW(), %s, %s, %s, %s, %s)
+                (date_time, action, table_name, record_id, utilisateur, description, operateur_id, poste_id)
+            VALUES (NOW(), %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 action,
@@ -91,11 +95,14 @@ def log_hist(
                 str(record_id) if record_id is not None else None,
                 utilisateur,
                 final_description,
+                operateur_id,
+                poste_id,
             ),
         )
         conn.commit()
-    except Exception:
-        # On ne casse jamais le flux métier si le log échoue
+    except Exception as e:
+        # Log l'erreur pour debug mais ne casse pas le flux métier
+        print(f"⚠️ Erreur log_hist: {e}")
         try:
             if conn:
                 conn.rollback()

@@ -203,29 +203,35 @@ class DetailDialog(QDialog):
         info_layout = QVBoxLayout(info_widget)
         info_layout.setSpacing(12)
         
-        # Opérateur
-        op_name = get_entity_name(conn, "operateur", row.get("operateur_id"))
-        if not op_name:
+        # Opérateur (n'afficher que s'il y en a un)
+        op_id = row.get("operateur_id")
+        op_name = get_entity_name(conn, "operateur", op_id) if op_id else ""
+        if not op_name and op_id:
             try:
                 data = json.loads(row.get("description", "{}"))
-                op_name = data.get("operateur", f"#{row.get('operateur_id')}")
+                op_name = data.get("operateur", f"#{op_id}")
             except (json.JSONDecodeError, ValueError):
-                op_name = f"#{row.get('operateur_id')}" if row.get('operateur_id') else "#None"
-        
-        op_label = self._create_info_row("👤 Opérateur :", op_name)
-        info_layout.addWidget(op_label)
-        
-        # Poste
-        po_name = get_entity_name(conn, "poste", row.get("poste_id"))
-        if not po_name:
+                op_name = f"#{op_id}"
+
+        # N'afficher la ligne Opérateur que si on a un nom valide
+        if op_name:
+            op_label = self._create_info_row("👤 Opérateur :", op_name)
+            info_layout.addWidget(op_label)
+
+        # Poste (n'afficher que s'il y en a un)
+        po_id = row.get("poste_id")
+        po_name = get_entity_name(conn, "poste", po_id) if po_id else ""
+        if not po_name and po_id:
             try:
                 data = json.loads(row.get("description", "{}"))
-                po_name = data.get("poste", f"#{row.get('poste_id')}")
+                po_name = data.get("poste", f"#{po_id}")
             except (json.JSONDecodeError, ValueError):
-                po_name = f"#{row.get('poste_id')}" if row.get('poste_id') else "#None"
-        
-        po_label = self._create_info_row("📍 Poste :", po_name)
-        info_layout.addWidget(po_label)
+                po_name = f"#{po_id}"
+
+        # N'afficher la ligne Poste que si on a un nom valide
+        if po_name:
+            po_label = self._create_info_row("📍 Poste :", po_name)
+            info_layout.addWidget(po_label)
 
         # Utilisateur (qui a effectué l'action)
         utilisateur = row.get("utilisateur")
@@ -246,52 +252,102 @@ class DetailDialog(QDialog):
                     info_layout.addWidget(desc_label)
                 data = {}
 
+            # === Informations complémentaires (matricule, atelier, source) ===
+            if data:
+                # Matricule
+                matricule = data.get("matricule")
+                if matricule:
+                    info_layout.addWidget(self._create_info_row("🔢 Matricule :", matricule))
+
+                # Atelier
+                atelier = data.get("atelier")
+                if atelier:
+                    info_layout.addWidget(self._create_info_row("🏭 Atelier :", atelier))
+
+                # Source de la modification
+                source = data.get("source")
+                if source:
+                    info_layout.addWidget(self._create_info_row("📍 Source :", source))
+
+            # === Détails spécifiques selon le type d'action ===
             if action == "INSERT" and data:
                 niveau = data.get("niveau", "?")
                 niveau_label = self._create_info_row("⭐ Niveau attribué :", f"Niveau {niveau}")
                 info_layout.addWidget(niveau_label)
-                
+
+                # Dates d'évaluation
+                date_eval = data.get("date_evaluation")
+                prochaine_eval = data.get("prochaine_evaluation")
+                if date_eval:
+                    info_layout.addWidget(self._create_info_row("📅 Date d'évaluation :", date_eval))
+                if prochaine_eval:
+                    info_layout.addWidget(self._create_info_row("📆 Prochaine évaluation :", prochaine_eval))
+
                 info_text = QLabel("Un nouveau niveau de compétence a été attribué à cet opérateur pour ce poste.")
                 info_text.setWordWrap(True)
                 info_text.setStyleSheet("color: #757575; font-style: italic; padding: 8px; background-color: #f5f5f5; border-radius: 4px;")
                 info_layout.addWidget(info_text)
-            
+
             elif action == "UPDATE":
                 changes = data.get("changes", {})
                 if "niveau" in changes:
                     old = changes["niveau"].get("old", "?")
                     new = changes["niveau"].get("new", "?")
-                    
+
                     change_widget = QWidget()
                     change_layout = QHBoxLayout(change_widget)
                     change_layout.setContentsMargins(0, 0, 0, 0)
-                    
+
                     old_label = QLabel(f"Niveau {old}")
                     old_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #f44336; padding: 8px; background-color: #ffebee; border-radius: 4px;")
                     change_layout.addWidget(old_label)
-                    
+
                     arrow = QLabel("→")
                     arrow.setStyleSheet("font-size: 24px; color: #757575;")
                     change_layout.addWidget(arrow)
-                    
+
                     new_label = QLabel(f"Niveau {new}")
                     new_label.setStyleSheet("font-size: 18px; font-weight: bold; color: #4caf50; padding: 8px; background-color: #e8f5e9; border-radius: 4px;")
                     change_layout.addWidget(new_label)
-                    
+
                     change_layout.addStretch()
                     info_layout.addWidget(change_widget)
-                    
+
                     direction = "augmenté" if new > old else "diminué"
                     info_text = QLabel(f"Le niveau de compétence a été {direction}.")
                     info_text.setWordWrap(True)
                     info_text.setStyleSheet("color: #757575; font-style: italic; padding: 8px; background-color: #f5f5f5; border-radius: 4px;")
                     info_layout.addWidget(info_text)
-            
+
+                # Dates d'évaluation pour UPDATE
+                ancienne_date = data.get("ancienne_date_eval")
+                nouvelle_date = data.get("nouvelle_date_eval")
+                prochaine_eval = data.get("prochaine_evaluation")
+
+                if ancienne_date or nouvelle_date:
+                    dates_text = ""
+                    if ancienne_date and nouvelle_date:
+                        dates_text = f"Date d'évaluation : {ancienne_date} → {nouvelle_date}"
+                    elif nouvelle_date:
+                        dates_text = f"Nouvelle date d'évaluation : {nouvelle_date}"
+                    if dates_text:
+                        dates_label = QLabel(dates_text)
+                        dates_label.setStyleSheet("color: #616161; font-size: 11px; padding: 4px;")
+                        info_layout.addWidget(dates_label)
+
+                if prochaine_eval:
+                    info_layout.addWidget(self._create_info_row("📆 Prochaine évaluation :", prochaine_eval))
+
             elif action == "DELETE":
-                niveau = data.get("niveau", "?")
+                niveau = data.get("niveau") or data.get("niveau_supprime", "?")
                 niveau_label = self._create_info_row("⭐ Niveau supprimé :", f"Niveau {niveau}")
                 info_layout.addWidget(niveau_label)
-                
+
+                # Date d'évaluation supprimée
+                date_supprimee = data.get("date_eval_supprimee")
+                if date_supprimee:
+                    info_layout.addWidget(self._create_info_row("📅 Date d'évaluation (supprimée) :", date_supprimee))
+
                 info_text = QLabel("Cette compétence a été retirée de l'opérateur pour ce poste.")
                 info_text.setWordWrap(True)
                 info_text.setStyleSheet("color: #757575; font-style: italic; padding: 8px; background-color: #f5f5f5; border-radius: 4px;")

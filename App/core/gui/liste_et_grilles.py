@@ -709,39 +709,88 @@ class GrillesDialog(QDialog):
             # ==============================
             try:
                 conn3 = get_db_connection()
-                cur3 = conn3.cursor()
+                cur3 = conn3.cursor(dictionary=True)
 
-                # Construction du JSON
+                # Récupérer des informations supplémentaires
+                # - Matricule de l'opérateur
+                # - Atelier du poste
+                # - Utilisateur connecté
+                matricule = None
+                atelier_nom = None
+                utilisateur = None
+
+                try:
+                    # Matricule de l'opérateur
+                    cur3.execute("SELECT matricule FROM personnel WHERE id = %s", (operateur_id,))
+                    result = cur3.fetchone()
+                    if result:
+                        matricule = result.get('matricule')
+
+                    # Atelier du poste
+                    cur3.execute("""
+                        SELECT a.nom as atelier_nom
+                        FROM postes p
+                        LEFT JOIN atelier a ON p.atelier_id = a.id
+                        WHERE p.id = %s
+                    """, (poste_id,))
+                    result = cur3.fetchone()
+                    if result:
+                        atelier_nom = result.get('atelier_nom')
+
+                    # Utilisateur connecté
+                    from core.services.auth_service import get_current_user
+                    current_user = get_current_user()
+                    if current_user:
+                        utilisateur = current_user.get('username') or f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip()
+                except Exception as e:
+                    print(f"⚠️ Erreur récupération infos supplémentaires: {e}")
+
+                # Construction du JSON enrichi
+                base_info = {
+                    "operateur": operateur_nom,
+                    "matricule": matricule,
+                    "poste": poste_code,
+                    "atelier": atelier_nom,
+                    "source": "Grille de polyvalence"
+                }
+
                 if action == 'DELETE':
                     description = json.dumps({
-                        "operateur": operateur_nom,
-                        "poste": poste_code,
-                        "niveau": old_niveau,
+                        **base_info,
+                        "niveau_supprime": old_niveau,
+                        "date_eval_supprimee": str(old_date_eval) if old_date_eval else None,
                         "type": "suppression"
                     }, ensure_ascii=False)
 
                 elif action == 'INSERT':
                     description = json.dumps({
-                        "operateur": operateur_nom,
-                        "poste": poste_code,
+                        **base_info,
                         "niveau": new_niveau_int,
+                        "date_evaluation": str(date.today()),
+                        "prochaine_evaluation": str(prochaine_eval),
                         "type": "ajout"
                     }, ensure_ascii=False)
 
                 else:  # UPDATE
                     description = json.dumps({
-                        "operateur": operateur_nom,
-                        "poste": poste_code,
+                        **base_info,
                         "changes": {
                             "niveau": {"old": old_niveau, "new": new_niveau_int}
                         },
+                        "ancienne_date_eval": str(old_date_eval) if old_date_eval else None,
+                        "nouvelle_date_eval": str(date.today()),
+                        "prochaine_evaluation": str(prochaine_eval),
                         "type": "modification"
                     }, ensure_ascii=False)
 
+                # Fermer le curseur dictionary et en ouvrir un normal pour l'insert
+                cur3.close()
+                cur3 = conn3.cursor()
+
                 cur3.execute("""
-                    INSERT INTO historique (date_time, action, operateur_id, poste_id, description)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (datetime.now(), action, operateur_id, poste_id, description))
+                    INSERT INTO historique (date_time, action, operateur_id, poste_id, description, utilisateur)
+                    VALUES (%s, %s, %s, %s, %s, %s)
+                """, (datetime.now(), action, operateur_id, poste_id, description, utilisateur))
 
                 conn3.commit()
                 cur3.close()
@@ -1133,10 +1182,20 @@ class GrillesDialog(QDialog):
 
                 # ✅ NOUVEAU : Enregistrer dans l'historique
                 try:
+                    # Récupérer l'utilisateur connecté
+                    utilisateur = None
+                    try:
+                        from core.services.auth_service import get_current_user
+                        current_user = get_current_user()
+                        if current_user:
+                            utilisateur = current_user.get('username') or f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip()
+                    except Exception:
+                        pass
+
                     cursor.execute("""
-                        INSERT INTO historique (date_time, action, operateur_id, poste_id, description)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (datetime.now(), action, operateur_id, poste_id, description))
+                        INSERT INTO historique (date_time, action, operateur_id, poste_id, description, utilisateur)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (datetime.now(), action, operateur_id, poste_id, description, utilisateur))
                     modifications_count += 1
                 except Exception as e:
                     print(f"Erreur logging historique : {e}")

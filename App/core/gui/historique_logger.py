@@ -56,15 +56,25 @@ def log_polyvalence_change(connection, action, operateur_id, poste_id, old_nivea
         else:
             description = None
         
+        # Récupérer l'utilisateur connecté
+        utilisateur = None
+        try:
+            from core.services.auth_service import get_current_user
+            current_user = get_current_user()
+            if current_user:
+                utilisateur = current_user.get('username') or f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip()
+        except Exception:
+            pass
+
         # Enregistrer dans l'historique
         cursor.execute("""
-            INSERT INTO historique (date_time, action, operateur_id, poste_id, description)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (datetime.now(), action, operateur_id, poste_id, description))
-        
+            INSERT INTO historique (date_time, action, operateur_id, poste_id, description, utilisateur)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (datetime.now(), action, operateur_id, poste_id, description, utilisateur))
+
         cursor.close()
         return True
-        
+
     except Exception as e:
         print(f"Erreur logging historique : {e}")
         return False

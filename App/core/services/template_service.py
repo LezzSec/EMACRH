@@ -253,31 +253,44 @@ def _fill_excel_template(
     Returns:
         Tuple (succès, message)
     """
-    try:
-        import openpyxl
+    file_path = Path(file_path)
+    extension = file_path.suffix.lower()
 
-        # Charger le fichier (keep_vba pour les .xlsm)
-        wb = openpyxl.load_workbook(file_path, keep_vba=True)
-        ws = wb.active
+    # Fichiers .xls (ancien format Excel 97-2003)
+    # ⚠️ Le pré-remplissage n'est pas supporté pour les fichiers .xls
+    # Le fichier est copié mais non pré-rempli. Pour le pré-remplissage automatique,
+    # convertissez le template en .xlsx (Excel > Enregistrer sous > .xlsx)
+    if extension == '.xls':
+        # Retourner succès mais avec un message indiquant que le pré-remplissage n'est pas fait
+        return True, "Fichier .xls copié (pré-remplissage non supporté pour ce format - convertir en .xlsx recommandé)"
 
-        # Remplir les cellules si spécifiées
-        if cell_operateur and operateur_nom:
-            ws[cell_operateur] = operateur_nom
+    # Fichiers .xlsx et .xlsm (format moderne)
+    else:
+        try:
+            import openpyxl
 
-        if cell_auditeur and auditeur_nom:
-            ws[cell_auditeur] = auditeur_nom
+            # Charger le fichier (keep_vba pour les .xlsm)
+            wb = openpyxl.load_workbook(file_path, keep_vba=True)
+            ws = wb.active
 
-        if cell_date and date_str:
-            ws[cell_date] = date_str
+            # Remplir les cellules si spécifiées
+            if cell_operateur and operateur_nom:
+                ws[cell_operateur] = operateur_nom
 
-        # Sauvegarder
-        wb.save(file_path)
-        wb.close()
+            if cell_auditeur and auditeur_nom:
+                ws[cell_auditeur] = auditeur_nom
 
-        return True, "Fichier rempli avec succès"
+            if cell_date and date_str:
+                ws[cell_date] = date_str
 
-    except Exception as e:
-        return False, f"Erreur lors du remplissage: {str(e)}"
+            # Sauvegarder
+            wb.save(file_path)
+            wb.close()
+
+            return True, "Fichier rempli avec succès"
+
+        except Exception as e:
+            return False, f"Erreur lors du remplissage: {str(e)}"
 
 
 def open_template_file(file_path: str) -> Tuple[bool, str]:
