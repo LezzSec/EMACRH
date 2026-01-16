@@ -916,12 +916,12 @@ class GrillesDialog(QDialog):
                 polyvalences_dict[key] = pv['niveau']
 
             # Construire la liste des opérateurs
-            self.operateurs = []
+            # ⚠️ IMPORTANT: On ne construit pas encore self.operateurs ici
+            # Elle sera construite plus tard dans l'ordre TRIÉ pour correspondre aux lignes du tableau
             operateurs_dict = {}
             for op in operateurs_rows:
                 nom_complet = f"{op['nom']} {op['prenom']}".strip()
                 operateurs_dict[nom_complet] = {'id': op['id'], 'postes': {}}
-                self.operateurs.append((op['id'], nom_complet))
 
             # Construire la liste des postes
             self.postes = [(p['id'], p['poste_code']) for p in postes_rows]
@@ -956,8 +956,13 @@ class GrillesDialog(QDialog):
                 sorted(operateurs_dict.keys()) + self.SUMMARY_ROWS
             )
 
+            # ✅ CORRECTION BUG DÉCALAGE: Construire self.operateurs dans l'ordre TRIÉ
+            # pour que les index correspondent aux lignes du tableau
+            sorted_operateurs = sorted(operateurs_dict.items())  # Trié par nom_complet
+            self.operateurs = [(data['id'], nom_complet) for nom_complet, data in sorted_operateurs]
+
             # Remplissage des cellules opérateurs
-            for row_idx, (nom_complet, data) in enumerate(sorted(operateurs_dict.items())):
+            for row_idx, (nom_complet, data) in enumerate(sorted_operateurs):
                 for col_idx, (_, poste_code) in enumerate(self.postes):
                     niveau = data['postes'].get(poste_code, '')
                     item = QTableWidgetItem(str(niveau))
