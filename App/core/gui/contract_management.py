@@ -21,6 +21,9 @@ from core.services.contrat_service import (
 )
 from core.db.configbd import get_connection as get_db_connection
 
+# Nouvelle interface RH (widget embeddable)
+from core.gui.gestion_rh import GestionRHWidget
+
 # Import du service documentaire pour les documents contractuels
 try:
     from core.services.document_service import DocumentService
@@ -455,9 +458,36 @@ class ContractManagementDialog(QDialog):
         self.setGeometry(150, 150, 1200, 700)
 
         self.init_ui()
-        self.load_data()
 
     def init_ui(self):
+        """UI unique : affiche uniquement la nouvelle Gestion RH (GestionRHWidget).
+
+        Remarque : le code legacy (onglets Contrats/Documents) est conservé dans init_ui_legacy()
+        pour référence, mais n'est plus utilisé.
+        """
+        # Layout principal avec marges nulles
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Barre de titre personnalisée
+        if THEME_AVAILABLE:
+            title_bar = add_custom_title_bar(self, 'Gestion RH')
+            main_layout.addWidget(title_bar)
+
+        # Contenu : uniquement la nouvelle Gestion RH
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+
+        self.gestion_rh_widget = GestionRHWidget(self)
+        content_layout.addWidget(self.gestion_rh_widget, 1)
+
+        main_layout.addWidget(content_widget, 1)
+
+
+    def init_ui_legacy(self):
         # Layout principal avec marges nulles
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)

@@ -1,1910 +1,2340 @@
 # -*- coding: utf-8 -*-
 """
-Module de Gestion RH Complète - Interface Moderne et Épurée
-Interface combinant calendriers d'évaluation, absences/congés, planning et contrats
+Écran RH Opérateur & Documents
+Permet de consulter et gérer les données RH d'un opérateur par domaine.
+
+Structure:
+- Zone gauche: Recherche et sélection d'opérateur
+- Zone droite: Navigation par domaines RH + résumé + documents
 """
 
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QTableWidget, QTableWidgetItem, QTabWidget, QWidget,
-    QDateEdit, QComboBox, QTextEdit, QMessageBox, QHeaderView,
-    QRadioButton, QButtonGroup, QGroupBox, QCalendarWidget,
-    QScrollArea, QFrame, QListWidget, QListWidgetItem, QSplitter,
-    QGridLayout, QSpacerItem, QSizePolicy
+    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
+    QListWidget, QListWidgetItem, QWidget, QFrame, QScrollArea,
+    QStackedWidget, QSizePolicy, QSpacerItem, QGridLayout,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+    QMessageBox, QFormLayout, QDateEdit, QComboBox, QTextEdit,
+    QDoubleSpinBox, QCheckBox, QGroupBox
 )
-from PyQt5.QtCore import Qt, QDate, pyqtSignal, QTimer
-from PyQt5.QtGui import QFont, QColor, QIcon
-from datetime import datetime, date, timedelta
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QDate
+from PyQt5.QtGui import QFont, QColor
 
-from core.services import absence_service
-from core.services import evaluation_service, calendrier_service
-from core.services import formation_service
-from core.db.configbd import get_connection
-from core.gui.ui_theme import EmacCard, EmacButton
+from core.gui.ui_theme import EmacTheme, EmacCard, EmacButton
+from core.gui.emac_ui_kit import EmacBadge, EmacAlert, EmacChip, add_custom_title_bar
+from core.services.rh_service import (
+    rechercher_operateurs,
+    get_operateur_by_id,
+    get_donnees_domaine,
+    get_documents_domaine,
+    get_resume_operateur,
+    get_domaines_rh,
+    DomaineRH,
+    update_infos_generales,
+    create_contrat, update_contrat, delete_contrat,
+    create_declaration, update_declaration, delete_declaration,
+    create_formation, update_formation, delete_formation,
+    get_types_declaration
+)
+
+
+# ============================================================
+# FORMULAIRES D'ÉDITION
+# ============================================================
+
+class EditInfosGeneralesDialog(QDialog):
+    """Formulaire d'édition des informations générales."""
+
+    def __init__(self, operateur_id: int, donnees: dict, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.donnees = donnees
+        self.setWindowTitle("Modifier les informations générales")
+        self.setMinimumWidth(500)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+        form.setSpacing(12)
+
+        # Sexe
+        self.sexe_combo = QComboBox()
+        self.sexe_combo.addItems(['', 'M', 'F'])
+        if self.donnees.get('sexe'):
+            idx = self.sexe_combo.findText(self.donnees['sexe'])
+            if idx >= 0:
+                self.sexe_combo.setCurrentIndex(idx)
+        form.addRow("Sexe:", self.sexe_combo)
+
+        # Date de naissance
+        self.date_naissance = QDateEdit()
+        self.date_naissance.setCalendarPopup(True)
+        self.date_naissance.setDisplayFormat("dd/MM/yyyy")
+        self.date_naissance.setSpecialValueText("Non renseignée")
+        if self.donnees.get('date_naissance'):
+            d = self.donnees['date_naissance']
+            self.date_naissance.setDate(QDate(d.year, d.month, d.day))
+        form.addRow("Date de naissance:", self.date_naissance)
+
+        # Date d'entrée
+        self.date_entree = QDateEdit()
+        self.date_entree.setCalendarPopup(True)
+        self.date_entree.setDisplayFormat("dd/MM/yyyy")
+        self.date_entree.setSpecialValueText("Non renseignée")
+        if self.donnees.get('date_entree'):
+            d = self.donnees['date_entree']
+            self.date_entree.setDate(QDate(d.year, d.month, d.day))
+        form.addRow("Date d'entrée:", self.date_entree)
+
+        # Nationalité
+        self.nationalite = QLineEdit(self.donnees.get('nationalite') or '')
+        form.addRow("Nationalité:", self.nationalite)
+
+        # Adresse
+        self.adresse1 = QLineEdit(self.donnees.get('adresse1') or '')
+        form.addRow("Adresse:", self.adresse1)
+
+        self.adresse2 = QLineEdit(self.donnees.get('adresse2') or '')
+        form.addRow("Adresse (suite):", self.adresse2)
+
+        # CP + Ville
+        cp_ville = QHBoxLayout()
+        self.cp = QLineEdit(self.donnees.get('cp_adresse') or '')
+        self.cp.setMaximumWidth(80)
+        self.ville = QLineEdit(self.donnees.get('ville_adresse') or '')
+        cp_ville.addWidget(self.cp)
+        cp_ville.addWidget(self.ville)
+        form.addRow("CP / Ville:", cp_ville)
+
+        # Téléphone
+        self.telephone = QLineEdit(self.donnees.get('telephone') or '')
+        form.addRow("Téléphone:", self.telephone)
+
+        # Email
+        self.email = QLineEdit(self.donnees.get('email') or '')
+        form.addRow("Email:", self.email)
+
+        layout.addLayout(form)
+
+        # Boutons
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+
+        btn_cancel = EmacButton("Annuler", variant="ghost")
+        btn_cancel.clicked.connect(self.reject)
+        buttons.addWidget(btn_cancel)
+
+        btn_save = EmacButton("Enregistrer", variant="primary")
+        btn_save.clicked.connect(self._save)
+        buttons.addWidget(btn_save)
+
+        layout.addLayout(buttons)
+
+    def _save(self):
+        data = {
+            'sexe': self.sexe_combo.currentText() or None,
+            'date_naissance': self.date_naissance.date().toPyDate() if self.date_naissance.date().year() > 1900 else None,
+            'date_entree': self.date_entree.date().toPyDate() if self.date_entree.date().year() > 1900 else None,
+            'nationalite': self.nationalite.text().strip(),
+            'adresse1': self.adresse1.text().strip(),
+            'adresse2': self.adresse2.text().strip(),
+            'cp_adresse': self.cp.text().strip(),
+            'ville_adresse': self.ville.text().strip(),
+            'telephone': self.telephone.text().strip(),
+            'email': self.email.text().strip(),
+        }
+
+        success, message = update_infos_generales(self.operateur_id, data)
+        if success:
+            QMessageBox.information(self, "Succès", message)
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
+
+
+class EditContratDialog(QDialog):
+    """Formulaire d'édition/création de contrat."""
+
+    def __init__(self, operateur_id: int, contrat: dict = None, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.contrat = contrat
+        self.is_edit = contrat is not None
+        self.setWindowTitle("Modifier le contrat" if self.is_edit else "Nouveau contrat")
+        self.setMinimumWidth(450)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+        form.setSpacing(12)
+
+        # Type de contrat
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(['CDI', 'CDD', 'Intérimaire', 'Apprentissage', 'Stagiaire'])
+        if self.contrat and self.contrat.get('type_contrat'):
+            idx = self.type_combo.findText(self.contrat['type_contrat'])
+            if idx >= 0:
+                self.type_combo.setCurrentIndex(idx)
+        form.addRow("Type de contrat:", self.type_combo)
+
+        # Date début
+        self.date_debut = QDateEdit()
+        self.date_debut.setCalendarPopup(True)
+        self.date_debut.setDisplayFormat("dd/MM/yyyy")
+        self.date_debut.setDate(QDate.currentDate())
+        if self.contrat and self.contrat.get('date_debut'):
+            d = self.contrat['date_debut']
+            self.date_debut.setDate(QDate(d.year, d.month, d.day))
+        form.addRow("Date de début:", self.date_debut)
+
+        # Date fin
+        self.date_fin = QDateEdit()
+        self.date_fin.setCalendarPopup(True)
+        self.date_fin.setDisplayFormat("dd/MM/yyyy")
+        self.date_fin.setSpecialValueText("Indéterminée (CDI)")
+        self.date_fin.setMinimumDate(QDate(1900, 1, 1))
+        if self.contrat and self.contrat.get('date_fin'):
+            d = self.contrat['date_fin']
+            self.date_fin.setDate(QDate(d.year, d.month, d.day))
+        else:
+            self.date_fin.setDate(QDate(1900, 1, 1))
+        form.addRow("Date de fin:", self.date_fin)
+
+        # ETP
+        self.etp = QDoubleSpinBox()
+        self.etp.setRange(0.01, 1.0)
+        self.etp.setSingleStep(0.1)
+        self.etp.setValue(float(self.contrat.get('etp', 1.0)) if self.contrat else 1.0)
+        form.addRow("ETP:", self.etp)
+
+        # Catégorie
+        self.categorie = QLineEdit(self.contrat.get('categorie', '') if self.contrat else '')
+        form.addRow("Catégorie:", self.categorie)
+
+        # Emploi
+        self.emploi = QLineEdit(self.contrat.get('emploi', '') if self.contrat else '')
+        form.addRow("Emploi:", self.emploi)
+
+        # Salaire
+        self.salaire = QDoubleSpinBox()
+        self.salaire.setRange(0, 999999.99)
+        self.salaire.setSuffix(" €")
+        if self.contrat and self.contrat.get('salaire'):
+            self.salaire.setValue(float(self.contrat['salaire']))
+        form.addRow("Salaire brut:", self.salaire)
+
+        layout.addLayout(form)
+
+        # Boutons
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+
+        btn_cancel = EmacButton("Annuler", variant="ghost")
+        btn_cancel.clicked.connect(self.reject)
+        buttons.addWidget(btn_cancel)
+
+        btn_save = EmacButton("Enregistrer", variant="primary")
+        btn_save.clicked.connect(self._save)
+        buttons.addWidget(btn_save)
+
+        layout.addLayout(buttons)
+
+    def _save(self):
+        date_fin = self.date_fin.date()
+        data = {
+            'type_contrat': self.type_combo.currentText(),
+            'date_debut': self.date_debut.date().toPyDate(),
+            'date_fin': date_fin.toPyDate() if date_fin.year() > 1900 else None,
+            'etp': self.etp.value(),
+            'categorie': self.categorie.text().strip() or None,
+            'emploi': self.emploi.text().strip() or None,
+            'salaire': self.salaire.value() if self.salaire.value() > 0 else None,
+        }
+
+        if self.is_edit:
+            success, message = update_contrat(self.contrat['id'], data)
+        else:
+            success, message, _ = create_contrat(self.operateur_id, data)
+
+        if success:
+            QMessageBox.information(self, "Succès", message)
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
+
+
+class EditDeclarationDialog(QDialog):
+    """Formulaire d'édition/création de déclaration."""
+
+    def __init__(self, operateur_id: int, declaration: dict = None, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.declaration = declaration
+        self.is_edit = declaration is not None
+        self.setWindowTitle("Modifier la déclaration" if self.is_edit else "Nouvelle déclaration")
+        self.setMinimumWidth(400)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+        form.setSpacing(12)
+
+        # Type
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(get_types_declaration())
+        if self.declaration and self.declaration.get('type_declaration'):
+            idx = self.type_combo.findText(self.declaration['type_declaration'])
+            if idx >= 0:
+                self.type_combo.setCurrentIndex(idx)
+        form.addRow("Type:", self.type_combo)
+
+        # Date début
+        self.date_debut = QDateEdit()
+        self.date_debut.setCalendarPopup(True)
+        self.date_debut.setDisplayFormat("dd/MM/yyyy")
+        self.date_debut.setDate(QDate.currentDate())
+        if self.declaration and self.declaration.get('date_debut'):
+            d = self.declaration['date_debut']
+            self.date_debut.setDate(QDate(d.year, d.month, d.day))
+        form.addRow("Date de début:", self.date_debut)
+
+        # Date fin
+        self.date_fin = QDateEdit()
+        self.date_fin.setCalendarPopup(True)
+        self.date_fin.setDisplayFormat("dd/MM/yyyy")
+        self.date_fin.setDate(QDate.currentDate())
+        if self.declaration and self.declaration.get('date_fin'):
+            d = self.declaration['date_fin']
+            self.date_fin.setDate(QDate(d.year, d.month, d.day))
+        form.addRow("Date de fin:", self.date_fin)
+
+        # Motif
+        self.motif = QTextEdit()
+        self.motif.setMaximumHeight(80)
+        if self.declaration and self.declaration.get('motif'):
+            self.motif.setText(self.declaration['motif'])
+        form.addRow("Motif:", self.motif)
+
+        layout.addLayout(form)
+
+        # Boutons
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+
+        btn_cancel = EmacButton("Annuler", variant="ghost")
+        btn_cancel.clicked.connect(self.reject)
+        buttons.addWidget(btn_cancel)
+
+        btn_save = EmacButton("Enregistrer", variant="primary")
+        btn_save.clicked.connect(self._save)
+        buttons.addWidget(btn_save)
+
+        layout.addLayout(buttons)
+
+    def _save(self):
+        data = {
+            'type_declaration': self.type_combo.currentText(),
+            'date_debut': self.date_debut.date().toPyDate(),
+            'date_fin': self.date_fin.date().toPyDate(),
+            'motif': self.motif.toPlainText().strip() or None,
+        }
+
+        if self.is_edit:
+            success, message = update_declaration(self.declaration['id'], data)
+        else:
+            success, message, _ = create_declaration(self.operateur_id, data)
+
+        if success:
+            QMessageBox.information(self, "Succès", message)
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
+
+
+class EditFormationDialog(QDialog):
+    """Formulaire d'édition/création de formation."""
+
+    def __init__(self, operateur_id: int, formation: dict = None, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.formation = formation
+        self.is_edit = formation is not None
+        self.setWindowTitle("Modifier la formation" if self.is_edit else "Nouvelle formation")
+        self.setMinimumWidth(450)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+        form.setSpacing(12)
+
+        # Intitulé
+        self.intitule = QLineEdit(self.formation.get('intitule', '') if self.formation else '')
+        form.addRow("Intitulé:", self.intitule)
+
+        # Organisme
+        self.organisme = QLineEdit(self.formation.get('organisme', '') if self.formation else '')
+        form.addRow("Organisme:", self.organisme)
+
+        # Date début
+        self.date_debut = QDateEdit()
+        self.date_debut.setCalendarPopup(True)
+        self.date_debut.setDisplayFormat("dd/MM/yyyy")
+        self.date_debut.setDate(QDate.currentDate())
+        if self.formation and self.formation.get('date_debut'):
+            d = self.formation['date_debut']
+            self.date_debut.setDate(QDate(d.year, d.month, d.day))
+        form.addRow("Date de début:", self.date_debut)
+
+        # Date fin
+        self.date_fin = QDateEdit()
+        self.date_fin.setCalendarPopup(True)
+        self.date_fin.setDisplayFormat("dd/MM/yyyy")
+        self.date_fin.setSpecialValueText("Non définie")
+        self.date_fin.setMinimumDate(QDate(1900, 1, 1))
+        if self.formation and self.formation.get('date_fin'):
+            d = self.formation['date_fin']
+            self.date_fin.setDate(QDate(d.year, d.month, d.day))
+        else:
+            self.date_fin.setDate(QDate(1900, 1, 1))
+        form.addRow("Date de fin:", self.date_fin)
+
+        # Durée
+        self.duree = QDoubleSpinBox()
+        self.duree.setRange(0, 9999)
+        self.duree.setSuffix(" h")
+        if self.formation and self.formation.get('duree_heures'):
+            self.duree.setValue(float(self.formation['duree_heures']))
+        form.addRow("Durée:", self.duree)
+
+        # Statut
+        self.statut_combo = QComboBox()
+        self.statut_combo.addItems(['Planifiée', 'En cours', 'Terminée', 'Annulée'])
+        if self.formation and self.formation.get('statut'):
+            idx = self.statut_combo.findText(self.formation['statut'])
+            if idx >= 0:
+                self.statut_combo.setCurrentIndex(idx)
+        form.addRow("Statut:", self.statut_combo)
+
+        # Certificat
+        self.certificat = QCheckBox("Certificat obtenu")
+        if self.formation and self.formation.get('certificat_obtenu'):
+            self.certificat.setChecked(True)
+        form.addRow("", self.certificat)
+
+        # Commentaire
+        self.commentaire = QTextEdit()
+        self.commentaire.setMaximumHeight(80)
+        if self.formation and self.formation.get('commentaire'):
+            self.commentaire.setText(self.formation['commentaire'])
+        form.addRow("Commentaire:", self.commentaire)
+
+        layout.addLayout(form)
+
+        # Boutons
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+
+        btn_cancel = EmacButton("Annuler", variant="ghost")
+        btn_cancel.clicked.connect(self.reject)
+        buttons.addWidget(btn_cancel)
+
+        btn_save = EmacButton("Enregistrer", variant="primary")
+        btn_save.clicked.connect(self._save)
+        buttons.addWidget(btn_save)
+
+        layout.addLayout(buttons)
+
+    def _save(self):
+        if not self.intitule.text().strip():
+            QMessageBox.warning(self, "Attention", "L'intitulé est obligatoire")
+            return
+
+        date_fin = self.date_fin.date()
+        data = {
+            'intitule': self.intitule.text().strip(),
+            'organisme': self.organisme.text().strip() or None,
+            'date_debut': self.date_debut.date().toPyDate(),
+            'date_fin': date_fin.toPyDate() if date_fin.year() > 1900 else None,
+            'duree_heures': self.duree.value() if self.duree.value() > 0 else None,
+            'statut': self.statut_combo.currentText(),
+            'certificat_obtenu': self.certificat.isChecked(),
+            'commentaire': self.commentaire.toPlainText().strip() or None,
+        }
+
+        if self.is_edit:
+            success, message = update_formation(self.formation['id'], data)
+        else:
+            success, message, _ = create_formation(self.operateur_id, data)
+
+        if success:
+            QMessageBox.information(self, "Succès", message)
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
 
 
 class GestionRHDialog(QDialog):
-    """Dialogue principal de gestion RH complète"""
+    """
+    Fenêtre principale de gestion RH.
+    Divisée en deux zones: sélection opérateur (gauche) et détails RH (droite).
+    """
 
     data_changed = pyqtSignal()
 
-    def __init__(self, personnel_id=None, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.personnel_id = personnel_id
-        self.annee_courante = datetime.now().year
+        self.setWindowTitle("Gestion RH")
+        self.setMinimumSize(1200, 700)
+        self.resize(1400, 800)
 
-        self.setWindowTitle("Gestion RH - Interface Moderne")
-        self.setGeometry(100, 100, 1500, 850)
-        self.setModal(False)
+        # État
+        self.operateur_selectionne = None
+        self.domaine_actif = DomaineRH.GENERAL
+        self._search_timer = QTimer()
+        self._search_timer.setSingleShot(True)
+        self._search_timer.timeout.connect(self._executer_recherche)
 
-        # Appliquer un style moderne
-        self.setStyleSheet("""
-            QDialog {
-                background-color: #f8f9fa;
-            }
-            QTabWidget::pane {
-                border: none;
-                background: transparent;
-            }
-            QTabBar::tab {
+        self._setup_ui()
+
+    def _setup_ui(self):
+        """Construit l'interface utilisateur."""
+        # Layout principal
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # Barre de titre
+        title_bar = add_custom_title_bar(self, "Gestion RH")
+        main_layout.addWidget(title_bar)
+
+        # Contenu principal
+        content = QWidget()
+        content_layout = QHBoxLayout(content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+
+        # Zone gauche: Sélection opérateur
+        self.zone_gauche = self._creer_zone_selection()
+        content_layout.addWidget(self.zone_gauche)
+
+        # Séparateur vertical
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setStyleSheet("background-color: #e5e7eb;")
+        separator.setFixedWidth(1)
+        content_layout.addWidget(separator)
+
+        # Zone droite: Détails RH
+        self.zone_droite = self._creer_zone_details()
+        content_layout.addWidget(self.zone_droite, 1)
+
+        main_layout.addWidget(content, 1)
+
+        # Boutons de bas de page
+        footer = self._creer_footer()
+        main_layout.addWidget(footer)
+
+    # =========================================================================
+    # ZONE GAUCHE - Sélection opérateur
+    # =========================================================================
+
+    def _creer_zone_selection(self) -> QWidget:
+        """Crée la zone de recherche et sélection d'opérateur."""
+        zone = QWidget()
+        zone.setFixedWidth(320)
+        zone.setStyleSheet("background-color: #f8fafc;")
+
+        layout = QVBoxLayout(zone)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
+
+        # Titre
+        titre = QLabel("Sélection Opérateur")
+        titre.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        titre.setStyleSheet("color: #111827;")
+        layout.addWidget(titre)
+
+        # Champ de recherche
+        search_container = QWidget()
+        search_layout = QVBoxLayout(search_container)
+        search_layout.setContentsMargins(0, 0, 0, 0)
+        search_layout.setSpacing(8)
+
+        # Label
+        search_label = QLabel("Rechercher par nom, prénom ou matricule")
+        search_label.setStyleSheet("color: #6b7280; font-size: 12px;")
+        search_layout.addWidget(search_label)
+
+        # Input de recherche
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Tapez pour rechercher...")
+        self.search_input.setStyleSheet("""
+            QLineEdit {
+                padding: 10px 12px;
+                border: 1px solid #d1d5db;
+                border-radius: 8px;
                 background: white;
-                color: #64748b;
-                padding: 12px 24px;
-                margin-right: 4px;
-                border-top-left-radius: 8px;
-                border-top-right-radius: 8px;
-                font-weight: 600;
-                font-size: 13px;
+                font-size: 14px;
             }
-            QTabBar::tab:selected {
-                background: #3b82f6;
-                color: white;
-            }
-            QTabBar::tab:hover:!selected {
-                background: #e2e8f0;
+            QLineEdit:focus {
+                border-color: #3b82f6;
+                outline: none;
             }
         """)
+        self.search_input.textChanged.connect(self._on_search_changed)
+        search_layout.addWidget(self.search_input)
 
-        self.init_ui()
-        self.load_data()
+        layout.addWidget(search_container)
 
-    def init_ui(self):
-        """Initialise l'interface moderne avec onglets"""
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(16)
+        # Liste des résultats
+        results_label = QLabel("Résultats")
+        results_label.setStyleSheet("color: #374151; font-weight: 600; margin-top: 8px;")
+        layout.addWidget(results_label)
 
-        # En-tête moderne avec icône
-        header_layout = QHBoxLayout()
-        header_layout.setSpacing(12)
-
-        title = QLabel("🏢 Gestion des Ressources Humaines")
-        title.setFont(QFont("Segoe UI", 22, QFont.Bold))
-        title.setStyleSheet("color: #1e293b; padding: 10px 0;")
-        header_layout.addWidget(title)
-        header_layout.addStretch()
-
-        # Bouton d'aide
-        btn_help = QPushButton("?")
-        btn_help.setFixedSize(36, 36)
-        btn_help.setStyleSheet("""
-            QPushButton {
-                background: #3b82f6;
-                color: white;
-                border-radius: 18px;
-                font-weight: bold;
-                font-size: 18px;
+        self.liste_operateurs = QListWidget()
+        self.liste_operateurs.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #e5e7eb;
+                border-radius: 8px;
+                background: white;
             }
-            QPushButton:hover {
-                background: #2563eb;
+            QListWidget::item {
+                padding: 12px;
+                border-bottom: 1px solid #f3f4f6;
+            }
+            QListWidget::item:selected {
+                background-color: #eff6ff;
+                color: #1e40af;
+            }
+            QListWidget::item:hover {
+                background-color: #f9fafb;
             }
         """)
-        btn_help.setToolTip("Aide et documentation")
-        header_layout.addWidget(btn_help)
+        self.liste_operateurs.itemClicked.connect(self._on_operateur_selectionne)
+        layout.addWidget(self.liste_operateurs, 1)
 
-        layout.addLayout(header_layout)
+        # Compteur de résultats
+        self.compteur_resultats = QLabel("0 opérateur(s)")
+        self.compteur_resultats.setStyleSheet("color: #9ca3af; font-size: 12px;")
+        layout.addWidget(self.compteur_resultats)
 
-        # Sous-titre avec info utilisateur
-        subtitle = QLabel("Gérez vos évaluations, absences, congés et contrats")
-        subtitle.setStyleSheet("color: #64748b; font-size: 13px; padding-bottom: 10px;")
-        layout.addWidget(subtitle)
+        # Charger les opérateurs actifs par défaut
+        QTimer.singleShot(100, lambda: self._executer_recherche())
 
-        # Onglets modernes
-        self.tabs = QTabWidget()
-        self.tabs.setDocumentMode(True)
-        layout.addWidget(self.tabs)
+        return zone
 
-        # Onglet 1: Vue d'ensemble (Dashboard)
-        self.tab_dashboard = self.create_tab_dashboard_modern()
-        self.tabs.addTab(self.tab_dashboard, "📊  Vue d'ensemble")
+    def _on_search_changed(self, text: str):
+        """Déclenche une recherche avec délai (debounce)."""
+        self._search_timer.stop()
+        self._search_timer.start(300)  # 300ms de délai
 
-        # Onglet 2: Mes Évaluations
-        self.tab_eval_calendar = self.create_tab_evaluations_modern()
-        self.tabs.addTab(self.tab_eval_calendar, "📋  Mes Évaluations")
+    def _executer_recherche(self):
+        """Exécute la recherche d'opérateurs."""
+        recherche = self.search_input.text().strip()
+        resultats = rechercher_operateurs(recherche=recherche if recherche else None)
 
-        # Onglet 3: Mes absences/congés
-        self.tab_absences = self.create_tab_absences_modern()
-        self.tabs.addTab(self.tab_absences, "🏖️  Absences & Congés")
+        self.liste_operateurs.clear()
+        for op in resultats:
+            item = QListWidgetItem()
+            item.setData(Qt.UserRole, op['id'])
 
-        # Onglet 4: Planning d'équipe
-        self.tab_planning = self.create_tab_planning_modern()
-        self.tabs.addTab(self.tab_planning, "📆  Planning Équipe")
+            # Texte formaté
+            nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
+            matricule = op.get('matricule', '-')
+            statut = op.get('statut', 'ACTIF')
 
-        # Onglet 5: Validation (si manager)
-        self.tab_validation = self.create_tab_validation_modern()
-        self.tabs.addTab(self.tab_validation, "✅  Validation")
+            item.setText(f"{nom_complet}\n{matricule}")
+            item.setToolTip(f"ID: {op['id']} | Statut: {statut}")
 
-        # Pied de page avec boutons
-        footer_layout = QHBoxLayout()
-        footer_layout.setSpacing(10)
+            self.liste_operateurs.addItem(item)
 
-        btn_refresh = EmacButton("🔄 Actualiser", variant='ghost')
-        btn_refresh.clicked.connect(self.load_data)
-        footer_layout.addWidget(btn_refresh)
+        self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
 
-        footer_layout.addStretch()
+    def _on_operateur_selectionne(self, item: QListWidgetItem):
+        """Appelé quand un opérateur est sélectionné dans la liste."""
+        operateur_id = item.data(Qt.UserRole)
+        self.operateur_selectionne = get_operateur_by_id(operateur_id)
 
-        btn_close = EmacButton("Fermer", variant='ghost')
-        btn_close.clicked.connect(self.accept)
-        footer_layout.addWidget(btn_close)
+        if self.operateur_selectionne:
+            self._afficher_details_operateur()
 
-        layout.addLayout(footer_layout)
+    # =========================================================================
+    # ZONE DROITE - Détails RH
+    # =========================================================================
 
-    def create_tab_dashboard_modern(self):
-        """Onglet tableau de bord moderne avec vue d'ensemble"""
+    def _creer_zone_details(self) -> QWidget:
+        """Crée la zone d'affichage des détails RH."""
+        zone = QWidget()
+        layout = QVBoxLayout(zone)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Stack pour basculer entre placeholder et contenu
+        self.stack_details = QStackedWidget()
+
+        # Page 0: Placeholder (aucun opérateur sélectionné)
+        self.placeholder = self._creer_placeholder()
+        self.stack_details.addWidget(self.placeholder)
+
+        # Page 1: Contenu RH
+        self.contenu_rh = self._creer_contenu_rh()
+        self.stack_details.addWidget(self.contenu_rh)
+
+        layout.addWidget(self.stack_details)
+
+        return zone
+
+    def _creer_placeholder(self) -> QWidget:
+        """Crée le placeholder affiché quand aucun opérateur n'est sélectionné."""
         widget = QWidget()
-        widget.setStyleSheet("background: transparent;")
         layout = QVBoxLayout(widget)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(20)
+        layout.setAlignment(Qt.AlignCenter)
 
-        # Layout en grille pour les KPI cards
-        grid = QGridLayout()
-        grid.setSpacing(15)
+        # Icône
+        icon = QLabel("👤")
+        icon.setFont(QFont("Segoe UI", 48))
+        icon.setAlignment(Qt.AlignCenter)
+        layout.addWidget(icon)
 
-        # KPI 1: Évaluations en retard (rouge)
-        retard_card = self._create_kpi_card(
-            "⚠️", "Évaluations en Retard",
-            "0", "À réaliser d'urgence",
-            "#ef4444", "#fef2f2"
-        )
-        self.retard_count_label = retard_card.findChild(QLabel, "value_label")
-        self.retard_list_widget = QListWidget()
-        self.retard_list_widget.setMaximumHeight(120)
-        self.retard_list_widget.setStyleSheet("""
-            QListWidget {
-                background: white;
-                border: 1px solid #fee2e2;
-                border-radius: 6px;
-                padding: 8px;
-                font-size: 11px;
-            }
-            QListWidget::item {
-                padding: 6px;
-                border-bottom: 1px solid #fef2f2;
-            }
-        """)
-        retard_card.body.addWidget(self.retard_list_widget)
+        # Message
+        message = QLabel("Sélectionnez un opérateur")
+        message.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        message.setStyleSheet("color: #6b7280;")
+        message.setAlignment(Qt.AlignCenter)
+        layout.addWidget(message)
 
-        btn_voir_retards = EmacButton("→ Voir tout", variant='ghost')
-        btn_voir_retards.clicked.connect(lambda: self._ouvrir_gestion_evaluations("En retard"))
-        retard_card.body.addWidget(btn_voir_retards)
-
-        grid.addWidget(retard_card, 0, 0)
-
-        # KPI 2: Prochaines évaluations (vert)
-        next_card = self._create_kpi_card(
-            "📅", "Prochaines Évaluations",
-            "0", "30 prochains jours",
-            "#10b981", "#f0fdf4"
-        )
-        self.next_count_label = next_card.findChild(QLabel, "value_label")
-        self.next_eval_list_widget = QListWidget()
-        self.next_eval_list_widget.setMaximumHeight(120)
-        self.next_eval_list_widget.setStyleSheet("""
-            QListWidget {
-                background: white;
-                border: 1px solid #d1fae5;
-                border-radius: 6px;
-                padding: 8px;
-                font-size: 11px;
-            }
-            QListWidget::item {
-                padding: 6px;
-                border-bottom: 1px solid #f0fdf4;
-            }
-        """)
-        next_card.body.addWidget(self.next_eval_list_widget)
-
-        btn_voir_prochaines = EmacButton("→ Voir tout", variant='ghost')
-        btn_voir_prochaines.clicked.connect(lambda: self._ouvrir_gestion_evaluations("À planifier (30j)"))
-        next_card.body.addWidget(btn_voir_prochaines)
-
-        grid.addWidget(next_card, 0, 1)
-
-        # KPI 3: Mes soldes de congés (bleu)
-        solde_card = self._create_kpi_card(
-            "🏖️", "Mes Soldes de Congés",
-            "", f"Année {self.annee_courante}",
-            "#3b82f6", "#eff6ff"
-        )
-
-        solde_grid = QGridLayout()
-        solde_grid.setSpacing(10)
-
-        # CP
-        cp_label = QLabel("Congés Payés")
-        cp_label.setStyleSheet("font-weight: bold; color: #1e40af; font-size: 11px;")
-        self.cp_value = QLabel("0 jours")
-        self.cp_value.setFont(QFont("Segoe UI", 18, QFont.Bold))
-        self.cp_value.setStyleSheet("color: #1e40af;")
-        solde_grid.addWidget(cp_label, 0, 0)
-        solde_grid.addWidget(self.cp_value, 1, 0)
-
-        # RTT
-        rtt_label = QLabel("RTT")
-        rtt_label.setStyleSheet("font-weight: bold; color: #1e40af; font-size: 11px;")
-        self.rtt_value = QLabel("0 jours")
-        self.rtt_value.setFont(QFont("Segoe UI", 18, QFont.Bold))
-        self.rtt_value.setStyleSheet("color: #1e40af;")
-        solde_grid.addWidget(rtt_label, 0, 1)
-        solde_grid.addWidget(self.rtt_value, 1, 1)
-
-        solde_card.body.addLayout(solde_grid)
-        grid.addWidget(solde_card, 1, 0)
-
-        # KPI 4: Mes demandes récentes (violet)
-        demandes_card = self._create_kpi_card(
-            "📝", "Mes Demandes Récentes",
-            "", "Dernières demandes d'absence",
-            "#8b5cf6", "#f5f3ff"
-        )
-
-        self.demandes_list_widget = QListWidget()
-        self.demandes_list_widget.setMaximumHeight(150)
-        self.demandes_list_widget.setStyleSheet("""
-            QListWidget {
-                background: white;
-                border: 1px solid #e9d5ff;
-                border-radius: 6px;
-                padding: 8px;
-                font-size: 11px;
-            }
-            QListWidget::item {
-                padding: 6px;
-                border-bottom: 1px solid #f5f3ff;
-            }
-        """)
-        demandes_card.body.addWidget(self.demandes_list_widget)
-
-        btn_nouvelle = EmacButton("➕ Nouvelle Demande", variant='primary')
-        btn_nouvelle.clicked.connect(lambda: self.tabs.setCurrentIndex(2))
-        demandes_card.body.addWidget(btn_nouvelle)
-
-        grid.addWidget(demandes_card, 1, 1)
-
-        # KPI 5: Formations (cyan)
-        formations_card = self._create_kpi_card(
-            "🎓", "Formations",
-            "0", "En cours cette année",
-            "#06b6d4", "#ecfeff"
-        )
-        self.formations_count_label = formations_card.findChild(QLabel, "value_label")
-
-        self.formations_list_widget = QListWidget()
-        self.formations_list_widget.setMaximumHeight(100)
-        self.formations_list_widget.setStyleSheet("""
-            QListWidget {
-                background: white;
-                border: 1px solid #a5f3fc;
-                border-radius: 6px;
-                padding: 8px;
-                font-size: 11px;
-            }
-            QListWidget::item {
-                padding: 6px;
-                border-bottom: 1px solid #ecfeff;
-            }
-        """)
-        formations_card.body.addWidget(self.formations_list_widget)
-
-        btn_formations = EmacButton("→ Voir tout", variant='ghost')
-        btn_formations.clicked.connect(self._ouvrir_gestion_formations)
-        formations_card.body.addWidget(btn_formations)
-
-        grid.addWidget(formations_card, 2, 0, 1, 2)  # Prend toute la largeur
-
-        layout.addLayout(grid)
-
-        # Note: on garde les références pour compatibilité
-        self.retard_list = self.retard_list_widget
-        self.next_eval_list = self.next_eval_list_widget
-        self.demandes_list = self.demandes_list_widget
+        # Sous-message
+        sous_message = QLabel("Utilisez la zone de recherche à gauche\npour trouver un opérateur")
+        sous_message.setStyleSheet("color: #9ca3af;")
+        sous_message.setAlignment(Qt.AlignCenter)
+        layout.addWidget(sous_message)
 
         return widget
 
-    def _create_kpi_card(self, icon, title, value, subtitle, color, bg_color):
-        """Crée une KPI card moderne"""
-        card = EmacCard()
-        card.setStyleSheet(f"""
-            QFrame {{
-                background: {bg_color};
-                border-left: 4px solid {color};
-            }}
+    def _creer_contenu_rh(self) -> QWidget:
+        """Crée le contenu RH (affiché quand un opérateur est sélectionné)."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(16)
+
+        # En-tête avec infos opérateur
+        self.header_operateur = self._creer_header_operateur()
+        layout.addWidget(self.header_operateur)
+
+        # Barre de navigation des domaines RH
+        self.nav_domaines = self._creer_navigation_domaines()
+        layout.addWidget(self.nav_domaines)
+
+        # Zone de contenu scrollable
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+
+        # Container pour résumé + documents
+        self.container_domaine = QWidget()
+        self.layout_domaine = QVBoxLayout(self.container_domaine)
+        self.layout_domaine.setContentsMargins(0, 0, 0, 0)
+        self.layout_domaine.setSpacing(16)
+
+        # Zone résumé des données
+        self.zone_resume = QWidget()
+        self.layout_resume = QVBoxLayout(self.zone_resume)
+        self.layout_resume.setContentsMargins(0, 0, 0, 0)
+        self.layout_domaine.addWidget(self.zone_resume)
+
+        # Zone documents
+        self.zone_documents = QWidget()
+        self.layout_documents = QVBoxLayout(self.zone_documents)
+        self.layout_documents.setContentsMargins(0, 0, 0, 0)
+        self.layout_domaine.addWidget(self.zone_documents)
+
+        # Spacer
+        self.layout_domaine.addStretch()
+
+        scroll.setWidget(self.container_domaine)
+        layout.addWidget(scroll, 1)
+
+        return widget
+
+    def _creer_header_operateur(self) -> QWidget:
+        """Crée l'en-tête compact avec les infos de l'opérateur sélectionné."""
+        header = QFrame()
+        header.setStyleSheet("""
+            QFrame {
+                background: #1e40af;
+                border-radius: 8px;
+            }
         """)
+        header.setFixedHeight(50)
 
-        # En-tête avec icône
-        header = QHBoxLayout()
-        icon_label = QLabel(icon)
-        icon_label.setFont(QFont("Segoe UI", 24))
-        header.addWidget(icon_label)
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(16, 8, 16, 8)
 
-        title_layout = QVBoxLayout()
-        title_label = QLabel(title)
-        title_label.setFont(QFont("Segoe UI", 13, QFont.Bold))
-        title_label.setStyleSheet(f"color: {color};")
-        title_layout.addWidget(title_label)
+        # Nom
+        self.label_nom_operateur = QLabel("Nom Prénom")
+        self.label_nom_operateur.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        self.label_nom_operateur.setStyleSheet("color: white; background: transparent;")
+        layout.addWidget(self.label_nom_operateur)
 
-        if subtitle:
-            subtitle_label = QLabel(subtitle)
-            subtitle_label.setStyleSheet("color: #64748b; font-size: 10px;")
-            title_layout.addWidget(subtitle_label)
+        # Séparateur
+        sep = QLabel("•")
+        sep.setStyleSheet("color: #93c5fd; background: transparent; margin: 0 8px;")
+        layout.addWidget(sep)
 
-        header.addLayout(title_layout)
-        header.addStretch()
-        card.body.addLayout(header)
+        # Matricule
+        self.label_matricule = QLabel("-")
+        self.label_matricule.setStyleSheet("color: #bfdbfe; background: transparent; font-size: 13px;")
+        layout.addWidget(self.label_matricule)
 
-        # Valeur principale
-        if value:
-            value_label = QLabel(value)
-            value_label.setObjectName("value_label")
-            value_label.setFont(QFont("Segoe UI", 32, QFont.Bold))
-            value_label.setStyleSheet(f"color: {color};")
-            value_label.setAlignment(Qt.AlignCenter)
-            card.body.addWidget(value_label)
+        layout.addStretch()
+
+        # Badge statut
+        self.badge_statut = QLabel("ACTIF")
+        self.badge_statut.setStyleSheet("""
+            background: #10b981;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 11px;
+        """)
+        layout.addWidget(self.badge_statut)
+
+        return header
+
+    def _creer_navigation_domaines(self) -> QWidget:
+        """Crée la barre de navigation entre les domaines RH."""
+        nav = QWidget()
+        layout = QHBoxLayout(nav)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self.boutons_domaines = {}
+        domaines = get_domaines_rh()
+
+        for domaine in domaines:
+            btn = QPushButton(domaine['nom'])
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setProperty('domaine', domaine['code'])
+            btn.setStyleSheet("""
+                QPushButton {
+                    padding: 10px 16px;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    background: white;
+                    color: #374151;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background: #f9fafb;
+                    border-color: #d1d5db;
+                }
+                QPushButton:checked {
+                    background: #1e40af;
+                    color: white;
+                    border-color: #1e40af;
+                }
+            """)
+            btn.clicked.connect(lambda checked, d=domaine['code']: self._on_domaine_change(d))
+            layout.addWidget(btn)
+            self.boutons_domaines[domaine['code']] = btn
+
+        layout.addStretch()
+
+        return nav
+
+    def _on_domaine_change(self, code_domaine: str):
+        """Appelé quand l'utilisateur change de domaine RH."""
+        # Mettre à jour l'état des boutons
+        for code, btn in self.boutons_domaines.items():
+            btn.setChecked(code == code_domaine)
+
+        # Mettre à jour le domaine actif
+        self.domaine_actif = DomaineRH(code_domaine)
+
+        # Recharger le contenu
+        if self.operateur_selectionne:
+            self._charger_contenu_domaine()
+
+    def _afficher_details_operateur(self):
+        """Affiche les détails de l'opérateur sélectionné."""
+        if not self.operateur_selectionne:
+            return
+
+        op = self.operateur_selectionne
+
+        # Mettre à jour l'en-tête
+        nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
+        self.label_nom_operateur.setText(nom_complet)
+        self.label_matricule.setText(op.get('matricule', '-'))
+
+        # Badge statut
+        statut = op.get('statut', 'ACTIF')
+        if statut == 'ACTIF':
+            self.badge_statut.setText("ACTIF")
+            self.badge_statut.setStyleSheet("""
+                background: #10b981;
+                color: white;
+                padding: 6px 12px;
+                border-radius: 16px;
+                font-weight: bold;
+                font-size: 12px;
+            """)
+        else:
+            self.badge_statut.setText("INACTIF")
+            self.badge_statut.setStyleSheet("""
+                background: #6b7280;
+                color: white;
+                padding: 6px 12px;
+                border-radius: 16px;
+                font-weight: bold;
+                font-size: 12px;
+            """)
+
+        # Activer le premier domaine par défaut
+        self.domaine_actif = DomaineRH.GENERAL
+        for code, btn in self.boutons_domaines.items():
+            btn.setChecked(code == DomaineRH.GENERAL.value)
+
+        # Charger le contenu du domaine
+        self._charger_contenu_domaine()
+
+        # Afficher la zone de contenu
+        self.stack_details.setCurrentIndex(1)
+
+    def _charger_contenu_domaine(self):
+        """Charge le contenu du domaine RH actif."""
+        if not self.operateur_selectionne:
+            return
+
+        operateur_id = self.operateur_selectionne['id']
+
+        # Vider les zones
+        self._vider_layout(self.layout_resume)
+        self._vider_layout(self.layout_documents)
+
+        # Charger les données du domaine
+        donnees = get_donnees_domaine(operateur_id, self.domaine_actif)
+
+        # Créer la zone de résumé selon le domaine
+        widget_resume = self._creer_widget_resume(donnees)
+        if widget_resume:
+            self.layout_resume.addWidget(widget_resume)
+
+        # Charger les documents du domaine
+        documents = get_documents_domaine(operateur_id, self.domaine_actif)
+        widget_documents = self._creer_widget_documents(documents)
+        self.layout_documents.addWidget(widget_documents)
+
+    def _creer_widget_resume(self, donnees: dict) -> QWidget:
+        """Crée le widget de résumé selon le domaine actif."""
+        if self.domaine_actif == DomaineRH.GENERAL:
+            return self._creer_resume_general(donnees)
+        elif self.domaine_actif == DomaineRH.CONTRAT:
+            return self._creer_resume_contrat(donnees)
+        elif self.domaine_actif == DomaineRH.DECLARATION:
+            return self._creer_resume_declaration(donnees)
+        elif self.domaine_actif == DomaineRH.COMPETENCES:
+            return self._creer_resume_competences(donnees)
+        elif self.domaine_actif == DomaineRH.FORMATION:
+            return self._creer_resume_formation(donnees)
+        return None
+
+    def _creer_resume_general(self, donnees: dict) -> QWidget:
+        """Crée le résumé des données générales."""
+        self._donnees_generales = donnees  # Stocker pour édition
+
+        card = EmacCard("Informations Générales")
+
+        if donnees.get('error'):
+            card.body.addWidget(QLabel(f"Erreur: {donnees['error']}"))
+            return card
+
+        # Bouton modifier en haut à droite
+        header_layout = QHBoxLayout()
+        header_layout.addStretch()
+        btn_edit = EmacButton("Modifier", variant="ghost")
+        btn_edit.clicked.connect(self._edit_infos_generales)
+        header_layout.addWidget(btn_edit)
+        card.body.addLayout(header_layout)
+
+        # Grille d'informations
+        grid = QGridLayout()
+        grid.setSpacing(12)
+
+        infos = [
+            ("Nom", donnees.get('nom', '-')),
+            ("Prénom", donnees.get('prenom', '-')),
+            ("Matricule", donnees.get('matricule', '-')),
+            ("Statut", donnees.get('statut', '-')),
+            ("Date de naissance", self._format_date(donnees.get('date_naissance'))),
+            ("Âge", f"{donnees.get('age', '-')} ans" if donnees.get('age') else '-'),
+            ("Date d'entrée", self._format_date(donnees.get('date_entree'))),
+            ("Ancienneté", donnees.get('anciennete', '-')),
+            ("Téléphone", donnees.get('telephone', '-')),
+            ("Email", donnees.get('email', '-')),
+            ("Adresse", donnees.get('adresse1', '-')),
+            ("Ville", f"{donnees.get('cp_adresse', '')} {donnees.get('ville_adresse', '')}".strip() or '-'),
+        ]
+
+        for i, (label, valeur) in enumerate(infos):
+            row, col = divmod(i, 2)
+            lbl = QLabel(f"<b>{label}</b><br/>{valeur}")
+            lbl.setStyleSheet("padding: 8px; background: #f9fafb; border-radius: 6px;")
+            grid.addWidget(lbl, row, col)
+
+        card.body.addLayout(grid)
+        return card
+
+    def _edit_infos_generales(self):
+        """Ouvre le formulaire d'édition des infos générales."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditInfosGeneralesDialog(
+            self.operateur_selectionne['id'],
+            self._donnees_generales,
+            self
+        )
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _creer_resume_contrat(self, donnees: dict) -> QWidget:
+        """Crée le résumé du contrat."""
+        self._donnees_contrat = donnees  # Stocker pour édition
+
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        # Boutons d'action
+        actions_layout = QHBoxLayout()
+        actions_layout.addStretch()
+        btn_add = EmacButton("+ Nouveau contrat", variant="primary")
+        btn_add.clicked.connect(self._add_contrat)
+        actions_layout.addWidget(btn_add)
+        layout.addLayout(actions_layout)
+
+        contrat = donnees.get('contrat_actif')
+
+        if contrat:
+            # Alerte si contrat expire bientôt
+            jours = contrat.get('jours_restants')
+            if jours is not None and jours <= 30:
+                if jours < 0:
+                    alert = EmacAlert(f"Contrat expiré depuis {abs(jours)} jour(s) !", variant="error")
+                elif jours == 0:
+                    alert = EmacAlert("Contrat expire aujourd'hui !", variant="error")
+                else:
+                    alert = EmacAlert(f"Contrat expire dans {jours} jour(s)", variant="warning")
+                layout.addWidget(alert)
+
+            # Carte contrat actif
+            card = EmacCard("Contrat Actif")
+
+            # Bouton modifier
+            header = QHBoxLayout()
+            header.addStretch()
+            btn_edit = EmacButton("Modifier", variant="ghost")
+            btn_edit.clicked.connect(lambda: self._edit_contrat(contrat))
+            header.addWidget(btn_edit)
+            card.body.addLayout(header)
+
+            grid = QGridLayout()
+            grid.setSpacing(12)
+
+            infos = [
+                ("Type", contrat.get('type_contrat', '-')),
+                ("Date début", self._format_date(contrat.get('date_debut'))),
+                ("Date fin", self._format_date(contrat.get('date_fin')) or "Indéterminée"),
+                ("Jours restants", str(jours) if jours else "N/A"),
+                ("ETP", str(contrat.get('etp', 1.0))),
+                ("Catégorie", contrat.get('categorie', '-')),
+                ("Emploi", contrat.get('emploi', '-')),
+            ]
+
+            for i, (label, valeur) in enumerate(infos):
+                row, col = divmod(i, 2)
+                lbl = QLabel(f"<b>{label}</b><br/>{valeur}")
+                lbl.setStyleSheet("padding: 8px; background: #f9fafb; border-radius: 6px;")
+                grid.addWidget(lbl, row, col)
+
+            card.body.addLayout(grid)
+            layout.addWidget(card)
+        else:
+            alert = EmacAlert("Aucun contrat actif", variant="info")
+            layout.addWidget(alert)
+
+        # Historique des contrats
+        historique = donnees.get('historique', [])
+        if historique:
+            card_hist = EmacCard(f"Historique ({len(historique)} contrat(s))")
+            card_hist.body.addWidget(QLabel(f"{len(historique)} contrat(s) dans l'historique"))
+            layout.addWidget(card_hist)
+
+        return container
+
+    def _add_contrat(self):
+        """Ouvre le formulaire de création de contrat."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditContratDialog(self.operateur_selectionne['id'], parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_contrat(self, contrat: dict):
+        """Ouvre le formulaire d'édition de contrat."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditContratDialog(self.operateur_selectionne['id'], contrat, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _add_declaration(self):
+        """Ouvre le formulaire d'ajout de déclaration."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditDeclarationDialog(self.operateur_selectionne['id'], parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_declaration(self, declaration: dict):
+        """Ouvre le formulaire d'édition de déclaration."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditDeclarationDialog(self.operateur_selectionne['id'], declaration, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _add_formation(self):
+        """Ouvre le formulaire d'ajout de formation."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditFormationDialog(self.operateur_selectionne['id'], parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_formation(self, formation: dict):
+        """Ouvre le formulaire d'édition de formation."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditFormationDialog(self.operateur_selectionne['id'], formation, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_declaration(self, declaration: dict):
+        """Supprime une déclaration après confirmation."""
+        reply = QMessageBox.question(
+            self, "Confirmation",
+            f"Voulez-vous vraiment supprimer cette déclaration ?\n{declaration.get('type_declaration')} du {self._format_date(declaration.get('date_debut'))}",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, message = delete_declaration(declaration['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.critical(self, "Erreur", message)
+
+    def _delete_formation(self, formation: dict):
+        """Supprime une formation après confirmation."""
+        reply = QMessageBox.question(
+            self, "Confirmation",
+            f"Voulez-vous vraiment supprimer cette formation ?\n{formation.get('intitule', 'N/A')}",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, message = delete_formation(formation['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.critical(self, "Erreur", message)
+
+    def _creer_resume_declaration(self, donnees: dict) -> QWidget:
+        """Crée le résumé des déclarations."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        # Bouton ajouter en haut
+        btn_add = EmacButton("+ Nouvelle déclaration", variant="primary")
+        btn_add.clicked.connect(self._add_declaration)
+        layout.addWidget(btn_add, alignment=Qt.AlignLeft)
+
+        # Déclaration en cours
+        en_cours = donnees.get('en_cours')
+        if en_cours:
+            alert = EmacAlert(
+                f"Déclaration en cours: {en_cours.get('type_declaration')} "
+                f"du {self._format_date(en_cours.get('date_debut'))} "
+                f"au {self._format_date(en_cours.get('date_fin'))}",
+                variant="info"
+            )
+            layout.addWidget(alert)
+
+        # Statistiques
+        stats = donnees.get('statistiques', {})
+        if stats:
+            card = EmacCard("Statistiques des déclarations")
+            stats_layout = QHBoxLayout()
+
+            for type_decl, data in stats.items():
+                chip = EmacChip(f"{type_decl}: {data.get('nombre', 0)}", variant="info")
+                stats_layout.addWidget(chip)
+
+            stats_layout.addStretch()
+            card.body.addLayout(stats_layout)
+            layout.addWidget(card)
+
+        # Liste des déclarations
+        declarations = donnees.get('declarations', [])
+        card = EmacCard(f"Déclarations ({len(declarations)})")
+        if declarations:
+            for decl in declarations:
+                row = QHBoxLayout()
+                info_text = f"{decl.get('type_declaration', 'N/A')} - {self._format_date(decl.get('date_debut'))} au {self._format_date(decl.get('date_fin'))}"
+                row.addWidget(QLabel(info_text))
+                row.addStretch()
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.clicked.connect(lambda checked, d=decl: self._edit_declaration(d))
+                row.addWidget(btn_edit)
+                btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete.clicked.connect(lambda checked, d=decl: self._delete_declaration(d))
+                row.addWidget(btn_delete)
+                card.body.addLayout(row)
+        else:
+            card.body.addWidget(QLabel("Aucune déclaration"))
+        layout.addWidget(card)
+
+        return container
+
+    def _creer_resume_competences(self, donnees: dict) -> QWidget:
+        """Crée le résumé des compétences."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        stats = donnees.get('statistiques', {})
+
+        # Alertes évaluations
+        en_retard = stats.get('evaluations_en_retard', 0)
+        if en_retard > 0:
+            alert = EmacAlert(f"{en_retard} évaluation(s) en retard !", variant="error")
+            layout.addWidget(alert)
+
+        a_venir = stats.get('evaluations_a_venir_30j', 0)
+        if a_venir > 0:
+            alert = EmacAlert(f"{a_venir} évaluation(s) à venir dans les 30 jours", variant="warning")
+            layout.addWidget(alert)
+
+        # Carte statistiques
+        card = EmacCard("Statistiques Compétences")
+        stats_layout = QHBoxLayout()
+
+        niveaux = [
+            ("N1", stats.get('niveau_1', 0)),
+            ("N2", stats.get('niveau_2', 0)),
+            ("N3", stats.get('niveau_3', 0)),
+            ("N4", stats.get('niveau_4', 0)),
+            ("Total", stats.get('total_postes', 0)),
+        ]
+
+        for label, count in niveaux:
+            badge = QLabel(f"{label}: {count}")
+            badge.setStyleSheet("""
+                background: #f1f5f9;
+                color: #475569;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 13px;
+            """)
+            stats_layout.addWidget(badge)
+
+        stats_layout.addStretch()
+        card.body.addLayout(stats_layout)
+        layout.addWidget(card)
+
+        # Liste des compétences
+        competences = donnees.get('competences', [])
+        card_list = EmacCard(f"Postes maîtrisés ({len(competences)})")
+        if competences:
+            card_list.body.addWidget(QLabel(f"{len(competences)} poste(s)"))
+        else:
+            card_list.body.addWidget(QLabel("Aucune compétence enregistrée"))
+        layout.addWidget(card_list)
+
+        return container
+
+    def _creer_resume_formation(self, donnees: dict) -> QWidget:
+        """Crée le résumé des formations."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        # Bouton ajouter en haut
+        btn_add = EmacButton("+ Nouvelle formation", variant="primary")
+        btn_add.clicked.connect(self._add_formation)
+        layout.addWidget(btn_add, alignment=Qt.AlignLeft)
+
+        stats = donnees.get('statistiques', {})
+
+        # Carte statistiques
+        card = EmacCard("Statistiques Formations")
+        stats_layout = QHBoxLayout()
+
+        items = [
+            ("Total", stats.get('total', 0)),
+            ("Terminées", stats.get('terminees', 0)),
+            ("En cours", stats.get('en_cours', 0)),
+            ("Planifiées", stats.get('planifiees', 0)),
+            ("Avec certificat", stats.get('avec_certificat', 0)),
+        ]
+
+        for label, count in items:
+            badge = QLabel(f"{label}: {count}")
+            badge.setStyleSheet("""
+                background: #f1f5f9;
+                color: #475569;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 13px;
+            """)
+            stats_layout.addWidget(badge)
+
+        stats_layout.addStretch()
+        card.body.addLayout(stats_layout)
+        layout.addWidget(card)
+
+        # Liste des formations
+        formations = donnees.get('formations', [])
+        card_list = EmacCard(f"Formations ({len(formations)})")
+        if formations:
+            for form in formations:
+                row = QHBoxLayout()
+                info_text = f"{form.get('intitule', 'N/A')} - {form.get('statut', 'N/A')}"
+                if form.get('date_debut'):
+                    info_text += f" ({self._format_date(form.get('date_debut'))})"
+                row.addWidget(QLabel(info_text))
+                row.addStretch()
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.clicked.connect(lambda checked, f=form: self._edit_formation(f))
+                row.addWidget(btn_edit)
+                btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete.clicked.connect(lambda checked, f=form: self._delete_formation(f))
+                row.addWidget(btn_delete)
+                card_list.body.addLayout(row)
+        else:
+            card_list.body.addWidget(QLabel("Aucune formation enregistrée"))
+        layout.addWidget(card_list)
+
+        return container
+
+    def _creer_widget_documents(self, documents: list) -> QWidget:
+        """Crée le widget affichant les documents du domaine."""
+        card = EmacCard(f"Documents associés ({len(documents)})")
+
+        if not documents:
+            label = QLabel("Aucun document pour ce domaine")
+            label.setStyleSheet("color: #9ca3af; padding: 20px;")
+            label.setAlignment(Qt.AlignCenter)
+            card.body.addWidget(label)
+        else:
+            # Tableau des documents
+            table = QTableWidget()
+            table.setColumnCount(5)
+            table.setHorizontalHeaderLabels(["Nom", "Catégorie", "Date ajout", "Expiration", "Statut"])
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table.setRowCount(len(documents))
+
+            for row, doc in enumerate(documents):
+                table.setItem(row, 0, QTableWidgetItem(doc.get('nom_affichage', '-')))
+                table.setItem(row, 1, QTableWidgetItem(doc.get('categorie_nom', '-')))
+                table.setItem(row, 2, QTableWidgetItem(self._format_date(doc.get('date_upload'))))
+                table.setItem(row, 3, QTableWidgetItem(self._format_date(doc.get('date_expiration')) or '-'))
+
+                # Statut avec couleur
+                statut = doc.get('statut', 'actif')
+                statut_item = QTableWidgetItem(statut.upper())
+                if statut == 'expire':
+                    statut_item.setForeground(QColor("#ef4444"))
+                elif statut == 'archive':
+                    statut_item.setForeground(QColor("#9ca3af"))
+                else:
+                    statut_item.setForeground(QColor("#10b981"))
+                table.setItem(row, 4, statut_item)
+
+            card.body.addWidget(table)
 
         return card
 
-    def create_tab_dashboard(self):
-        """Ancienne méthode - redirige vers la nouvelle"""
-        return self.create_tab_dashboard_modern()
-
-    def create_tab_evaluations_modern(self):
-        """Onglet évaluations moderne et épuré"""
-        widget = QWidget()
-        widget.setStyleSheet("background: transparent;")
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(15)
-
-        # Colonne gauche: Évaluations
-        left_col = QVBoxLayout()
-
-        # Card: Évaluations en retard
-        retard_card = self.create_info_card(
-            "⚠️ Évaluations en Retard",
-            "#e74c3c",
-            "Évaluations devant être réalisées"
-        )
-        self.retard_count_label = QLabel("0")
-        self.retard_count_label.setFont(QFont("Arial", 32, QFont.Bold))
-        self.retard_count_label.setStyleSheet("color: white;")
-        self.retard_count_label.setAlignment(Qt.AlignCenter)
-        retard_card.layout().addWidget(self.retard_count_label)
-
-        self.retard_list = QListWidget()
-        self.retard_list.setMaximumHeight(180)
-        self.retard_list.setStyleSheet("background-color: white;")
-        retard_card.layout().addWidget(self.retard_list)
-
-        # Bouton pour voir le détail des retards
-        btn_voir_retards = QPushButton("→ Voir le récapitulatif complet")
-        btn_voir_retards.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: white;
-                border: none;
-                padding: 5px 10px;
-                text-align: left;
-                font-size: 11px;
-                text-decoration: underline;
-            }
-            QPushButton:hover {
-                color: #fce4e4;
-            }
-        """)
-        btn_voir_retards.setCursor(Qt.PointingHandCursor)
-        btn_voir_retards.clicked.connect(lambda: self._ouvrir_gestion_evaluations("En retard"))
-        retard_card.layout().addWidget(btn_voir_retards)
-
-        left_col.addWidget(retard_card)
-
-        # Card: Prochaines évaluations
-        next_card = self.create_info_card(
-            "📅 Prochaines Évaluations",
-            "#27ae60",
-            "30 prochains jours"
-        )
-        self.next_count_label = QLabel("0")
-        self.next_count_label.setFont(QFont("Arial", 32, QFont.Bold))
-        self.next_count_label.setStyleSheet("color: white;")
-        self.next_count_label.setAlignment(Qt.AlignCenter)
-        next_card.layout().addWidget(self.next_count_label)
-
-        self.next_eval_list = QListWidget()
-        self.next_eval_list.setMaximumHeight(180)
-        self.next_eval_list.setStyleSheet("background-color: white;")
-        next_card.layout().addWidget(self.next_eval_list)
-
-        # Bouton pour voir le détail des prochaines évaluations
-        btn_voir_prochaines = QPushButton("→ Voir le récapitulatif complet")
-        btn_voir_prochaines.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                color: white;
-                border: none;
-                padding: 5px 10px;
-                text-align: left;
-                font-size: 11px;
-                text-decoration: underline;
-            }
-            QPushButton:hover {
-                color: #e8f8f0;
-            }
-        """)
-        btn_voir_prochaines.setCursor(Qt.PointingHandCursor)
-        btn_voir_prochaines.clicked.connect(lambda: self._ouvrir_gestion_evaluations("À planifier (30j)"))
-        next_card.layout().addWidget(btn_voir_prochaines)
-
-        left_col.addWidget(next_card)
-
-        main_layout.addLayout(left_col)
-
-        # Colonne droite: Absences et congés
-        right_col = QVBoxLayout()
-
-        # Card: Mes soldes de congés
-        solde_card = self.create_info_card(
-            "Mes Soldes de Congés",
-            "#3498db",
-            f"Année {self.annee_courante}"
-        )
-
-        solde_layout = QHBoxLayout()
-
-        # CP
-        cp_frame = QFrame()
-        cp_layout = QVBoxLayout(cp_frame)
-        cp_label = QLabel("Congés Payés")
-        cp_label.setStyleSheet("color: white; font-weight: bold;")
-        cp_layout.addWidget(cp_label)
-        self.cp_value = QLabel("0")
-        self.cp_value.setFont(QFont("Arial", 24, QFont.Bold))
-        self.cp_value.setStyleSheet("color: white;")
-        self.cp_value.setAlignment(Qt.AlignCenter)
-        cp_layout.addWidget(self.cp_value)
-        cp_subtitle = QLabel("jours restants")
-        cp_subtitle.setStyleSheet("color: white;")
-        cp_subtitle.setAlignment(Qt.AlignCenter)
-        cp_layout.addWidget(cp_subtitle)
-        solde_layout.addWidget(cp_frame)
-
-        # RTT
-        rtt_frame = QFrame()
-        rtt_layout = QVBoxLayout(rtt_frame)
-        rtt_label = QLabel("RTT")
-        rtt_label.setStyleSheet("color: white; font-weight: bold;")
-        rtt_layout.addWidget(rtt_label)
-        self.rtt_value = QLabel("0")
-        self.rtt_value.setFont(QFont("Arial", 24, QFont.Bold))
-        self.rtt_value.setStyleSheet("color: white;")
-        self.rtt_value.setAlignment(Qt.AlignCenter)
-        rtt_layout.addWidget(self.rtt_value)
-        rtt_subtitle = QLabel("jours restants")
-        rtt_subtitle.setStyleSheet("color: white;")
-        rtt_subtitle.setAlignment(Qt.AlignCenter)
-        rtt_layout.addWidget(rtt_subtitle)
-        solde_layout.addWidget(rtt_frame)
-
-        solde_card.layout().addLayout(solde_layout)
-
-        right_col.addWidget(solde_card)
-
-        # Card: Mes demandes récentes
-        demandes_card = self.create_info_card(
-            "📝 Mes Demandes Récentes",
-            "#9b59b6",
-            "Dernières demandes d'absence"
-        )
-
-        self.demandes_list = QListWidget()
-        self.demandes_list.setMaximumHeight(300)
-        self.demandes_list.setStyleSheet("background-color: white;")
-        demandes_card.layout().addWidget(self.demandes_list)
-
-        btn_nouvelle = QPushButton("➕ Nouvelle Demande")
-        btn_nouvelle.setStyleSheet("""
-            QPushButton {
-                background-color: white;
-                color: #9b59b6;
-                padding: 8px;
-                font-weight: bold;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #f0f0f0;
-            }
-        """)
-        btn_nouvelle.clicked.connect(lambda: self.tabs.setCurrentIndex(2))
-        demandes_card.layout().addWidget(btn_nouvelle)
-
-        right_col.addWidget(demandes_card)
-
-        main_layout.addLayout(right_col)
-
-        layout.addLayout(main_layout)
-
-        # Bouton refresh
-        btn_refresh = QPushButton("🔄 Actualiser")
-        btn_refresh.clicked.connect(self.load_dashboard_data)
-        layout.addWidget(btn_refresh)
-
-        return widget
-
-    def _ouvrir_gestion_evaluations(self, filtre_statut):
-        """Ouvre le dialogue de gestion des évaluations avec un filtre pré-appliqué"""
-        try:
-            from core.gui.gestion_evaluation import GestionEvaluationDialog
-
-            dialog = GestionEvaluationDialog()
-
-            # Appliquer le filtre de statut
-            if hasattr(dialog, 'status_filter'):
-                index = dialog.status_filter.findText(filtre_statut)
-                if index >= 0:
-                    dialog.status_filter.setCurrentIndex(index)
-
-            dialog.exec_()
-
-            # Recharger les données après fermeture
-            self.load_data()
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible d'ouvrir la gestion des évaluations :\n{e}")
-
-    def _ouvrir_gestion_formations(self):
-        """Ouvre le dialogue de gestion des formations"""
-        try:
-            from core.gui.gestion_formations import GestionFormationsDialog
-            dialog = GestionFormationsDialog(self)
-            dialog.exec_()
-            self.load_data()
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible d'ouvrir la gestion des formations :\n{e}")
-
-    def create_info_card(self, title, color, subtitle=""):
-        """Crée une card d'information colorée"""
-        frame = QFrame()
-        frame.setFrameShape(QFrame.StyledPanel)
-        frame.setStyleSheet(f"""
-            QFrame {{
-                background-color: {color};
-                border-radius: 10px;
-                padding: 15px;
-            }}
-        """)
-
-        layout = QVBoxLayout(frame)
-
-        title_label = QLabel(title)
-        title_label.setFont(QFont("Arial", 13, QFont.Bold))
-        title_label.setStyleSheet("color: white;")
-        layout.addWidget(title_label)
-
-        if subtitle:
-            subtitle_label = QLabel(subtitle)
-            subtitle_label.setStyleSheet("color: rgba(255, 255, 255, 0.8);")
-            layout.addWidget(subtitle_label)
-
-        return frame
-
-        # Titre et filtres dans une card
-        filter_card = EmacCard()
-
-        title_row = QHBoxLayout()
-        title = QLabel("📋 Mes Évaluations")
-        title.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        title.setStyleSheet("color: #1e293b;")
-        title_row.addWidget(title)
-        title_row.addStretch()
-        filter_card.body.addLayout(title_row)
-
-        # Filtres compacts
-        filter_layout = QHBoxLayout()
-        filter_layout.setSpacing(12)
-
-        # Filtre poste
-        filter_layout.addWidget(QLabel("📍 Poste:"))
-        self.eval_poste_filter = QComboBox()
-        self.eval_poste_filter.addItem("Tous les postes", "")
-        self.eval_poste_filter.currentIndexChanged.connect(self.load_evaluations_calendar)
-        self.eval_poste_filter.setStyleSheet("""
-            QComboBox {
-                padding: 6px 12px;
-                border: 1px solid #cbd5e1;
-                border-radius: 6px;
-                background: white;
-                min-width: 150px;
-            }
-        """)
-        filter_layout.addWidget(self.eval_poste_filter)
-
-        filter_layout.addSpacing(20)
-
-        # Filtre période
-        filter_layout.addWidget(QLabel("⏰ Période:"))
-        self.eval_periode_filter = QComboBox()
-        self.eval_periode_filter.addItem("⚠️ En retard", "retard")
-        self.eval_periode_filter.addItem("📅 30 prochains jours", "30j")
-        self.eval_periode_filter.addItem("📆 90 prochains jours", "90j")
-        self.eval_periode_filter.addItem("📊 Toutes", "all")
-        self.eval_periode_filter.currentIndexChanged.connect(self.load_evaluations_calendar)
-        self.eval_periode_filter.setStyleSheet("""
-            QComboBox {
-                padding: 6px 12px;
-                border: 1px solid #cbd5e1;
-                border-radius: 6px;
-                background: white;
-                min-width: 180px;
-            }
-        """)
-        filter_layout.addWidget(self.eval_periode_filter)
-
-        filter_layout.addStretch()
-        filter_card.body.addLayout(filter_layout)
-
-        layout.addWidget(filter_card)
-
-        # Table moderne des évaluations
-        table_card = EmacCard()
-        table_layout = QVBoxLayout()
-
-        self.eval_table = QTableWidget()
-        self.eval_table.setColumnCount(7)
-        self.eval_table.setHorizontalHeaderLabels([
-            "Opérateur", "Poste", "Atelier", "Niveau", "Dernière Éval.", "Prochaine Éval.", "Jours Restants"
-        ])
-        self.eval_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.eval_table.setSelectionBehavior(QTableWidget.SelectRows)
-        self.eval_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.eval_table.setAlternatingRowColors(True)
-        self.eval_table.setStyleSheet("""
-            QTableWidget {
-                background-color: white;
-                alternate-background-color: #f8fafc;
-                gridline-color: #e2e8f0;
-                border: none;
-                font-size: 11px;
-            }
-            QHeaderView::section {
-                background: #f1f5f9;
-                color: #475569;
-                font-weight: bold;
-                padding: 10px;
-                border: none;
-                border-bottom: 2px solid #cbd5e1;
-            }
-            QTableWidget::item {
-                padding: 10px;
-                border-bottom: 1px solid #f1f5f9;
-            }
-            QTableWidget::item:selected {
-                background: #dbeafe;
-                color: #1e293b;
-            }
-        """)
-        table_layout.addWidget(self.eval_table)
-
-        # Boutons d'action
-        btn_layout = QHBoxLayout()
-        btn_planifier = EmacButton("📅 Planifier Évaluation", variant='primary')
-        btn_planifier.clicked.connect(self.planifier_evaluation)
-        btn_layout.addWidget(btn_planifier)
-
-        btn_export = EmacButton("📤 Exporter", variant='ghost')
-        btn_layout.addWidget(btn_export)
-
-        btn_layout.addStretch()
-        table_layout.addLayout(btn_layout)
-
-        table_card.body.addLayout(table_layout)
-        layout.addWidget(table_card)
-
-        return widget
-
-    def create_tab_eval_calendar(self):
-        """Ancienne méthode - redirige vers la nouvelle"""
-        return self.create_tab_evaluations_modern()
-
-    def create_tab_absences_modern(self):
-        """Onglet absences moderne et simplifié"""
-        widget = QWidget()
-        widget.setStyleSheet("background: transparent;")
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(15)
-
-        # Titre principal
-        header_layout = QHBoxLayout()
-        title = QLabel("🏖️ Absences & Congés")
-        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        title.setStyleSheet("color: #1e293b;")
-        header_layout.addWidget(title)
-        header_layout.addStretch()
-
-        # Bouton nouvelle demande proéminent
-        btn_nouvelle = EmacButton("➕ Nouvelle Demande", variant='primary')
-        btn_nouvelle.clicked.connect(self._show_nouvelle_demande_dialog)
-        btn_nouvelle.setMinimumHeight(40)
-        header_layout.addWidget(btn_nouvelle)
-
-        layout.addLayout(header_layout)
-
-        # Layout horizontal: Mes soldes à gauche, Mes demandes à droite
-        main_horizontal = QHBoxLayout()
-        main_horizontal.setSpacing(15)
-
-        # === GAUCHE: Mes Soldes ===
-        soldes_card = EmacCard()
-        soldes_layout = QVBoxLayout()
-
-        soldes_title = QLabel("💳 Mes Soldes")
-        soldes_title.setFont(QFont("Segoe UI", 13, QFont.Bold))
-        soldes_title.setStyleSheet("color: #1e293b;")
-        soldes_layout.addWidget(soldes_title)
-
-        # Sélection année
-        annee_layout = QHBoxLayout()
-        annee_layout.addWidget(QLabel("Année:"))
-        self.solde_annee_combo = QComboBox()
-        annee = datetime.now().year
-        for i in range(annee - 2, annee + 2):
-            self.solde_annee_combo.addItem(str(i), i)
-        self.solde_annee_combo.setCurrentText(str(annee))
-        self.solde_annee_combo.currentIndexChanged.connect(self.load_soldes)
-        self.solde_annee_combo.setStyleSheet("""
-            QComboBox {
-                padding: 6px 12px;
-                border: 1px solid #cbd5e1;
-                border-radius: 6px;
-                background: white;
-            }
-        """)
-        annee_layout.addWidget(self.solde_annee_combo)
-        annee_layout.addStretch()
-        soldes_layout.addLayout(annee_layout)
-
-        # Cards des soldes (CP et RTT)
-        soldes_grid = QHBoxLayout()
-        soldes_grid.setSpacing(10)
-
-        # CP Card
-        self.cp_card = self._create_solde_mini_card("Congés Payés", "#10b981")
-        soldes_grid.addWidget(self.cp_card)
-
-        # RTT Card
-        self.rtt_card = self._create_solde_mini_card("RTT", "#3b82f6")
-        soldes_grid.addWidget(self.rtt_card)
-
-        soldes_layout.addLayout(soldes_grid)
-
-        # Détails
-        self.solde_details_label = QLabel()
-        self.solde_details_label.setWordWrap(True)
-        self.solde_details_label.setStyleSheet("""
-            QLabel {
-                background: #f8fafc;
-                padding: 12px;
-                border-radius: 6px;
-                font-size: 11px;
-                color: #475569;
-                border: 1px solid #e2e8f0;
-            }
-        """)
-        soldes_layout.addWidget(self.solde_details_label)
-
-        soldes_card.body.addLayout(soldes_layout)
-        main_horizontal.addWidget(soldes_card, 1)
-
-        # === DROITE: Mes Demandes ===
-        demandes_card = EmacCard()
-        demandes_layout = QVBoxLayout()
-
-        demandes_title = QLabel("📝 Mes Demandes")
-        demandes_title.setFont(QFont("Segoe UI", 13, QFont.Bold))
-        demandes_title.setStyleSheet("color: #1e293b;")
-        demandes_layout.addWidget(demandes_title)
-
-        # Filtres
-        filter_row = QHBoxLayout()
-
-        filter_row.addWidget(QLabel("Année:"))
-        self.annee_filter = QComboBox()
-        for i in range(annee - 2, annee + 2):
-            self.annee_filter.addItem(str(i), i)
-        self.annee_filter.setCurrentText(str(annee))
-        self.annee_filter.currentIndexChanged.connect(self.load_mes_demandes)
-        self.annee_filter.setStyleSheet("""
-            QComboBox {
-                padding: 6px 12px;
-                border: 1px solid #cbd5e1;
-                border-radius: 6px;
-                background: white;
-            }
-        """)
-        filter_row.addWidget(self.annee_filter)
-
-        filter_row.addSpacing(10)
-
-        filter_row.addWidget(QLabel("Statut:"))
-        self.statut_filter = QComboBox()
-        self.statut_filter.addItem("Tous", None)
-        self.statut_filter.addItem("⏳ En attente", "EN_ATTENTE")
-        self.statut_filter.addItem("✅ Validées", "VALIDEE")
-        self.statut_filter.addItem("❌ Refusées", "REFUSEE")
-        self.statut_filter.currentIndexChanged.connect(self.load_mes_demandes)
-        self.statut_filter.setStyleSheet("""
-            QComboBox {
-                padding: 6px 12px;
-                border: 1px solid #cbd5e1;
-                border-radius: 6px;
-                background: white;
-            }
-        """)
-        filter_row.addWidget(self.statut_filter)
-
-        filter_row.addStretch()
-        demandes_layout.addLayout(filter_row)
-
-        # Table des demandes
-        self.table_demandes = QTableWidget()
-        self.table_demandes.setColumnCount(9)
-        self.table_demandes.setHorizontalHeaderLabels([
-            "ID", "Type", "Début", "Fin", "Nb jours", "Motif", "Statut", "Validateur", "Date valid."
-        ])
-        self.table_demandes.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table_demandes.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_demandes.setEditTriggers(QTableWidget.NoEditTriggers)
-        self.table_demandes.setAlternatingRowColors(True)
-        self.table_demandes.setColumnHidden(0, True)  # Cacher l'ID
-        self.table_demandes.setStyleSheet("""
-            QTableWidget {
-                background-color: white;
-                alternate-background-color: #f8fafc;
-                gridline-color: #e2e8f0;
-                border: none;
-                font-size: 11px;
-            }
-            QHeaderView::section {
-                background: #f1f5f9;
-                color: #475569;
-                font-weight: bold;
-                padding: 10px;
-                border: none;
-                border-bottom: 2px solid #cbd5e1;
-            }
-            QTableWidget::item {
-                padding: 8px;
-                border-bottom: 1px solid #f1f5f9;
-            }
-            QTableWidget::item:selected {
-                background: #dbeafe;
-                color: #1e293b;
-            }
-        """)
-        demandes_layout.addWidget(self.table_demandes)
-
-        # Bouton annuler
-        btn_cancel = EmacButton("🗑️ Annuler la demande", variant='ghost')
-        btn_cancel.clicked.connect(self.annuler_demande)
-        demandes_layout.addWidget(btn_cancel)
-
-        demandes_card.body.addLayout(demandes_layout)
-        main_horizontal.addWidget(demandes_card, 2)
-
-        layout.addLayout(main_horizontal)
-
-        return widget
-
-    def _create_solde_mini_card(self, titre, couleur):
-        """Crée une mini card pour afficher un solde"""
-        frame = QFrame()
-        frame.setFrameShape(QFrame.StyledPanel)
-        frame.setStyleSheet(f"""
-            QFrame {{
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 {couleur}, stop:1 {self._darken_color(couleur)});
-                border-radius: 10px;
-                padding: 15px;
-                min-height: 120px;
-            }}
-        """)
-
-        layout = QVBoxLayout(frame)
-
-        title_label = QLabel(titre)
-        title_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
-        title_label.setStyleSheet("color: white; background: transparent;")
-        layout.addWidget(title_label)
+    # =========================================================================
+    # FOOTER
+    # =========================================================================
+
+    def _creer_footer(self) -> QWidget:
+        """Crée le pied de page avec les boutons d'action."""
+        footer = QWidget()
+        footer.setStyleSheet("background: #f9fafb; border-top: 1px solid #e5e7eb;")
+
+        layout = QHBoxLayout(footer)
+        layout.setContentsMargins(20, 12, 20, 12)
 
         layout.addStretch()
 
-        value_label = QLabel("0")
-        value_label.setFont(QFont("Segoe UI", 28, QFont.Bold))
-        value_label.setStyleSheet("color: white; background: transparent;")
-        value_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(value_label)
+        btn_fermer = EmacButton("Fermer", variant="ghost")
+        btn_fermer.clicked.connect(self.close)
+        layout.addWidget(btn_fermer)
 
-        subtitle_label = QLabel("jours restants")
-        subtitle_label.setStyleSheet("color: rgba(255,255,255,0.9); font-size: 10px; background: transparent;")
-        subtitle_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(subtitle_label)
+        return footer
 
-        # Stocker les labels pour mise à jour
-        if "CP" in titre or "Congés" in titre:
-            self.cp_value_label = value_label
-        else:
-            self.rtt_value_label = value_label
+    # =========================================================================
+    # UTILITAIRES
+    # =========================================================================
 
-        return frame
+    def _vider_layout(self, layout):
+        """Supprime tous les widgets d'un layout."""
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                self._vider_layout(item.layout())
 
-    def _darken_color(self, hex_color):
-        """Assombrit une couleur hexadécimale"""
-        color_map = {
-            "#10b981": "#059669",
-            "#3b82f6": "#2563eb",
-            "#ef4444": "#dc2626",
-            "#8b5cf6": "#7c3aed",
-        }
-        return color_map.get(hex_color, hex_color)
+    def _format_date(self, date_val) -> str:
+        """Formate une date pour l'affichage."""
+        if not date_val:
+            return '-'
+        if hasattr(date_val, 'strftime'):
+            return date_val.strftime('%d/%m/%Y')
+        return str(date_val)
 
-    def _show_nouvelle_demande_dialog(self):
-        """Affiche un dialogue pour créer une nouvelle demande"""
-        from core.gui.gestion_absences import NouvelleDemandeDialog
-        dialog = NouvelleDemandeDialog(self.personnel_id, parent=self)
-        if dialog.exec_() == QDialog.Accepted:
-            self.load_mes_demandes()
-            self.load_soldes()
-            self.load_dashboard_data()
-            self.data_changed.emit()
 
-    def create_tab_absences(self):
-        """Ancienne méthode - redirige vers la nouvelle"""
-        return self.create_tab_absences_modern()
+class GestionRHWidget(QWidget):
+    """
+    Widget RH (sans fenêtre) pour intégration dans d'autres dialogues.
+    Version embarquable de GestionRHDialog.
+    """
 
-    def create_subtab_mes_demandes(self):
-        """Sous-onglet listant les demandes du personnel"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
+    data_changed = pyqtSignal()
 
-        # Filtres
-        filter_layout = QHBoxLayout()
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
-        filter_layout.addWidget(QLabel("Année:"))
-        self.annee_filter = QComboBox()
-        annee = datetime.now().year
-        for i in range(annee - 2, annee + 2):
-            self.annee_filter.addItem(str(i), i)
-        self.annee_filter.setCurrentText(str(annee))
-        self.annee_filter.currentIndexChanged.connect(self.load_mes_demandes)
-        filter_layout.addWidget(self.annee_filter)
+        # État
+        self.operateur_selectionne = None
+        self.domaine_actif = DomaineRH.GENERAL
+        self._search_timer = QTimer()
+        self._search_timer.setSingleShot(True)
+        self._search_timer.timeout.connect(self._executer_recherche)
 
-        filter_layout.addWidget(QLabel("Statut:"))
-        self.statut_filter = QComboBox()
-        self.statut_filter.addItem("Tous", None)
-        self.statut_filter.addItem("En attente", "EN_ATTENTE")
-        self.statut_filter.addItem("Validées", "VALIDEE")
-        self.statut_filter.addItem("Refusées", "REFUSEE")
-        self.statut_filter.currentIndexChanged.connect(self.load_mes_demandes)
-        filter_layout.addWidget(self.statut_filter)
+        self._setup_ui()
 
-        filter_layout.addStretch()
+    def _setup_ui(self):
+        """Construit l'interface utilisateur."""
+        # Layout principal
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        btn_refresh = QPushButton("Actualiser")
-        btn_refresh.clicked.connect(self.load_mes_demandes)
-        filter_layout.addWidget(btn_refresh)
+        # Zone gauche: Sélection opérateur
+        self.zone_gauche = self._creer_zone_selection()
+        main_layout.addWidget(self.zone_gauche)
 
-        layout.addLayout(filter_layout)
+        # Séparateur vertical
+        separator = QFrame()
+        separator.setFrameShape(QFrame.VLine)
+        separator.setStyleSheet("background-color: #e5e7eb;")
+        separator.setFixedWidth(1)
+        main_layout.addWidget(separator)
 
-        # Table des demandes
-        self.table_demandes = QTableWidget()
-        self.table_demandes.setColumnCount(9)
-        self.table_demandes.setHorizontalHeaderLabels([
-            "ID", "Type", "Début", "Fin", "Nb jours", "Motif", "Statut", "Validateur", "Date valid."
-        ])
-        self.table_demandes.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table_demandes.setSelectionBehavior(QTableWidget.SelectRows)
-        self.table_demandes.setEditTriggers(QTableWidget.NoEditTriggers)
-        layout.addWidget(self.table_demandes)
+        # Zone droite: Détails RH
+        self.zone_droite = self._creer_zone_details()
+        main_layout.addWidget(self.zone_droite, 1)
 
-        # Boutons d'action
-        btn_layout = QHBoxLayout()
-        btn_cancel = QPushButton("Annuler la demande")
-        btn_cancel.clicked.connect(self.annuler_demande)
-        btn_layout.addWidget(btn_cancel)
-        btn_layout.addStretch()
-        layout.addLayout(btn_layout)
+    # =========================================================================
+    # ZONE GAUCHE - Sélection opérateur
+    # =========================================================================
 
-        return widget
+    def _creer_zone_selection(self) -> QWidget:
+        """Crée la zone de recherche et sélection d'opérateur."""
+        zone = QWidget()
+        zone.setFixedWidth(320)
+        zone.setStyleSheet("background-color: #f8fafc;")
 
-    def create_subtab_nouvelle_demande(self):
-        """Sous-onglet de création d'une nouvelle demande"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        # Formulaire
-        form = QGroupBox("Nouvelle demande d'absence")
-        form_layout = QVBoxLayout()
-
-        # Type d'absence
-        type_layout = QHBoxLayout()
-        type_layout.addWidget(QLabel("Type d'absence:"))
-        self.type_combo = QComboBox()
-        type_layout.addWidget(self.type_combo)
-        type_layout.addStretch()
-        form_layout.addLayout(type_layout)
-
-        # Dates
-        dates_layout = QHBoxLayout()
-
-        # Date début
-        debut_group = QVBoxLayout()
-        debut_group.addWidget(QLabel("Date de début:"))
-        self.date_debut = QDateEdit()
-        self.date_debut.setCalendarPopup(True)
-        self.date_debut.setDate(QDate.currentDate())
-        self.date_debut.setDisplayFormat("dd/MM/yyyy")
-        self.date_debut.dateChanged.connect(self.update_nb_jours)
-        debut_group.addWidget(self.date_debut)
-
-        # Demi-journée début
-        self.demi_debut_group = QButtonGroup()
-        demi_debut_layout = QHBoxLayout()
-        self.demi_debut_journee = QRadioButton("Journée")
-        self.demi_debut_matin = QRadioButton("Matin")
-        self.demi_debut_aprem = QRadioButton("Après-midi")
-        self.demi_debut_journee.setChecked(True)
-        self.demi_debut_group.addButton(self.demi_debut_journee, 0)
-        self.demi_debut_group.addButton(self.demi_debut_matin, 1)
-        self.demi_debut_group.addButton(self.demi_debut_aprem, 2)
-        self.demi_debut_group.buttonClicked.connect(self.update_nb_jours)
-        demi_debut_layout.addWidget(self.demi_debut_journee)
-        demi_debut_layout.addWidget(self.demi_debut_matin)
-        demi_debut_layout.addWidget(self.demi_debut_aprem)
-        debut_group.addLayout(demi_debut_layout)
-
-        dates_layout.addLayout(debut_group)
-
-        # Date fin
-        fin_group = QVBoxLayout()
-        fin_group.addWidget(QLabel("Date de fin:"))
-        self.date_fin = QDateEdit()
-        self.date_fin.setCalendarPopup(True)
-        self.date_fin.setDate(QDate.currentDate())
-        self.date_fin.setDisplayFormat("dd/MM/yyyy")
-        self.date_fin.dateChanged.connect(self.update_nb_jours)
-        fin_group.addWidget(self.date_fin)
-
-        # Demi-journée fin
-        self.demi_fin_group = QButtonGroup()
-        demi_fin_layout = QHBoxLayout()
-        self.demi_fin_journee = QRadioButton("Journée")
-        self.demi_fin_matin = QRadioButton("Matin")
-        self.demi_fin_aprem = QRadioButton("Après-midi")
-        self.demi_fin_journee.setChecked(True)
-        self.demi_fin_group.addButton(self.demi_fin_journee, 0)
-        self.demi_fin_group.addButton(self.demi_fin_matin, 1)
-        self.demi_fin_group.addButton(self.demi_fin_aprem, 2)
-        self.demi_fin_group.buttonClicked.connect(self.update_nb_jours)
-        demi_fin_layout.addWidget(self.demi_fin_journee)
-        demi_fin_layout.addWidget(self.demi_fin_matin)
-        demi_fin_layout.addWidget(self.demi_fin_aprem)
-        fin_group.addLayout(demi_fin_layout)
-
-        dates_layout.addLayout(fin_group)
-
-        form_layout.addLayout(dates_layout)
-
-        # Nombre de jours calculé
-        nb_jours_layout = QHBoxLayout()
-        nb_jours_layout.addWidget(QLabel("Nombre de jours ouvrés:"))
-        self.nb_jours_label = QLabel("0")
-        self.nb_jours_label.setFont(QFont("Arial", 12, QFont.Bold))
-        nb_jours_layout.addWidget(self.nb_jours_label)
-        nb_jours_layout.addStretch()
-        form_layout.addLayout(nb_jours_layout)
-
-        # Motif
-        form_layout.addWidget(QLabel("Motif (optionnel):"))
-        self.motif_text = QTextEdit()
-        self.motif_text.setMaximumHeight(80)
-        form_layout.addWidget(self.motif_text)
-
-        form.setLayout(form_layout)
-        layout.addWidget(form)
-
-        # Bouton soumettre
-        btn_soumettre = QPushButton("Soumettre la demande")
-        btn_soumettre.setStyleSheet("""
-            QPushButton {
-                background-color: #27ae60;
-                color: white;
-                padding: 10px;
-                font-size: 14px;
-                font-weight: bold;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #229954;
-            }
-        """)
-        btn_soumettre.clicked.connect(self.soumettre_demande)
-        layout.addWidget(btn_soumettre)
-
-        layout.addStretch()
-
-        return widget
-
-    def create_subtab_mes_soldes(self):
-        """Sous-onglet affichage des soldes de congés"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-
-        # Sélection année
-        annee_layout = QHBoxLayout()
-        annee_layout.addWidget(QLabel("Année:"))
-        self.solde_annee_combo = QComboBox()
-        annee = datetime.now().year
-        for i in range(annee - 2, annee + 2):
-            self.solde_annee_combo.addItem(str(i), i)
-        self.solde_annee_combo.setCurrentText(str(annee))
-        self.solde_annee_combo.currentIndexChanged.connect(self.load_soldes)
-        annee_layout.addWidget(self.solde_annee_combo)
-        annee_layout.addStretch()
-        layout.addLayout(annee_layout)
-
-        # Cards de soldes
-        soldes_layout = QHBoxLayout()
-
-        # Card CP
-        self.cp_card = self.create_solde_card("Congés Payés", "#27ae60")
-        soldes_layout.addWidget(self.cp_card)
-
-        # Card RTT
-        self.rtt_card = self.create_solde_card("RTT", "#3498db")
-        soldes_layout.addWidget(self.rtt_card)
-
-        layout.addLayout(soldes_layout)
-
-        # Détails
-        details_group = QGroupBox("Détails")
-        details_layout = QVBoxLayout()
-        self.solde_details_label = QLabel()
-        self.solde_details_label.setWordWrap(True)
-        details_layout.addWidget(self.solde_details_label)
-        details_group.setLayout(details_layout)
-        layout.addWidget(details_group)
-
-        layout.addStretch()
-
-        return widget
-
-    def create_solde_card(self, titre, couleur):
-        """Crée une card pour afficher un solde"""
-        frame = QFrame()
-        frame.setFrameShape(QFrame.StyledPanel)
-        frame.setStyleSheet(f"""
-            QFrame {{
-                background-color: {couleur};
-                border-radius: 10px;
-                padding: 15px;
-            }}
-        """)
-
-        layout = QVBoxLayout(frame)
-
-        title_label = QLabel(titre)
-        title_label.setFont(QFont("Arial", 12, QFont.Bold))
-        title_label.setStyleSheet("color: white;")
-        layout.addWidget(title_label)
-
-        value_label = QLabel("0")
-        value_label.setFont(QFont("Arial", 24, QFont.Bold))
-        value_label.setStyleSheet("color: white;")
-        value_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(value_label)
-
-        subtitle_label = QLabel("jours restants")
-        subtitle_label.setStyleSheet("color: white;")
-        subtitle_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(subtitle_label)
-
-        # Stocker les labels pour mise à jour
-        if "CP" in titre or "Congés" in titre:
-            self.cp_value_label = value_label
-        else:
-            self.rtt_value_label = value_label
-
-        return frame
-
-    def create_tab_planning_modern(self):
-        """Onglet planning d'équipe moderne"""
-        widget = QWidget()
-        widget.setStyleSheet("background: transparent;")
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(15, 15, 15, 15)
-        layout.setSpacing(15)
+        layout = QVBoxLayout(zone)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(12)
 
         # Titre
-        title = QLabel("📆 Planning d'Équipe")
-        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        title.setStyleSheet("color: #1e293b;")
-        layout.addWidget(title)
+        titre = QLabel("Sélection Opérateur")
+        titre.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        titre.setStyleSheet("color: #111827;")
+        layout.addWidget(titre)
 
-        # Layout horizontal: Calendrier + Détails
-        main_layout = QHBoxLayout()
-        main_layout.setSpacing(15)
+        # Champ de recherche
+        search_container = QWidget()
+        search_layout = QVBoxLayout(search_container)
+        search_layout.setContentsMargins(0, 0, 0, 0)
+        search_layout.setSpacing(8)
 
-        # Card calendrier
-        calendar_card = EmacCard()
-        calendar_layout = QVBoxLayout()
+        # Label
+        search_label = QLabel("Rechercher par nom, prénom ou matricule")
+        search_label.setStyleSheet("color: #6b7280; font-size: 12px;")
+        search_layout.addWidget(search_label)
 
-        self.calendar = QCalendarWidget()
-        self.calendar.clicked.connect(self.afficher_absences_jour)
-        self.calendar.setStyleSheet("""
-            QCalendarWidget {
-                background: white;
+        # Input de recherche
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Tapez pour rechercher...")
+        self.search_input.setStyleSheet("""
+            QLineEdit {
+                padding: 10px 12px;
+                border: 1px solid #d1d5db;
                 border-radius: 8px;
+                background: white;
+                font-size: 14px;
             }
-            QCalendarWidget QWidget {
-                alternate-background-color: #f8fafc;
-            }
-            QCalendarWidget QToolButton {
-                background: #3b82f6;
-                color: white;
-                border-radius: 4px;
-                padding: 6px;
-                font-weight: bold;
-            }
-            QCalendarWidget QToolButton:hover {
-                background: #2563eb;
-            }
-            QCalendarWidget QAbstractItemView:enabled {
-                selection-background-color: #3b82f6;
-                selection-color: white;
+            QLineEdit:focus {
+                border-color: #3b82f6;
+                outline: none;
             }
         """)
-        calendar_layout.addWidget(self.calendar)
-        calendar_card.body.addLayout(calendar_layout)
+        self.search_input.textChanged.connect(self._on_search_changed)
+        search_layout.addWidget(self.search_input)
 
-        main_layout.addWidget(calendar_card, 2)
+        layout.addWidget(search_container)
 
-        # Card détails du jour
-        details_card = EmacCard()
-        details_layout = QVBoxLayout()
+        # Liste des résultats
+        results_label = QLabel("Résultats")
+        results_label.setStyleSheet("color: #374151; font-weight: 600; margin-top: 8px;")
+        layout.addWidget(results_label)
 
-        details_title = QLabel("📋 Absences du jour sélectionné")
-        details_title.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        details_title.setStyleSheet("color: #1e293b;")
-        details_layout.addWidget(details_title)
-
-        self.absences_jour_list = QTableWidget()
-        self.absences_jour_list.setColumnCount(4)
-        self.absences_jour_list.setHorizontalHeaderLabels(["Nom", "Type", "Du", "Au"])
-        self.absences_jour_list.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.absences_jour_list.setAlternatingRowColors(True)
-        self.absences_jour_list.setStyleSheet("""
-            QTableWidget {
-                background-color: white;
-                alternate-background-color: #f8fafc;
-                gridline-color: #e2e8f0;
-                border: none;
-                font-size: 11px;
+        self.liste_operateurs = QListWidget()
+        self.liste_operateurs.setStyleSheet("""
+            QListWidget {
+                border: 1px solid #e5e7eb;
+                border-radius: 8px;
+                background: white;
             }
-            QHeaderView::section {
-                background: #f1f5f9;
-                color: #475569;
-                font-weight: bold;
-                padding: 10px;
-                border: none;
-                border-bottom: 2px solid #cbd5e1;
+            QListWidget::item {
+                padding: 12px;
+                border-bottom: 1px solid #f3f4f6;
             }
-            QTableWidget::item {
-                padding: 8px;
-                border-bottom: 1px solid #f1f5f9;
+            QListWidget::item:selected {
+                background-color: #eff6ff;
+                color: #1e40af;
+            }
+            QListWidget::item:hover {
+                background-color: #f9fafb;
             }
         """)
-        details_layout.addWidget(self.absences_jour_list)
+        self.liste_operateurs.itemClicked.connect(self._on_operateur_selectionne)
+        layout.addWidget(self.liste_operateurs, 1)
 
-        details_card.body.addLayout(details_layout)
-        main_layout.addWidget(details_card, 3)
+        # Compteur de résultats
+        self.compteur_resultats = QLabel("0 opérateur(s)")
+        self.compteur_resultats.setStyleSheet("color: #9ca3af; font-size: 12px;")
+        layout.addWidget(self.compteur_resultats)
 
-        layout.addLayout(main_layout)
+        # Charger les opérateurs actifs par défaut
+        QTimer.singleShot(100, lambda: self._executer_recherche())
 
-        return widget
+        return zone
 
-    def create_tab_planning(self):
-        """Ancienne méthode - redirige vers la nouvelle"""
-        return self.create_tab_planning_modern()
+    def _on_search_changed(self, text: str):
+        """Déclenche une recherche avec délai (debounce)."""
+        self._search_timer.stop()
+        self._search_timer.start(300)  # 300ms de délai
 
-    def create_tab_validation(self):
-        """Onglet de validation des demandes (pour managers)"""
+    def _executer_recherche(self):
+        """Exécute la recherche d'opérateurs."""
+        recherche = self.search_input.text().strip()
+        resultats = rechercher_operateurs(recherche=recherche if recherche else None)
+
+        self.liste_operateurs.clear()
+        for op in resultats:
+            item = QListWidgetItem()
+            item.setData(Qt.UserRole, op['id'])
+
+            # Texte formaté
+            nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
+            matricule = op.get('matricule', '-')
+            statut = op.get('statut', 'ACTIF')
+
+            item.setText(f"{nom_complet}\n{matricule}")
+            item.setToolTip(f"ID: {op['id']} | Statut: {statut}")
+
+            self.liste_operateurs.addItem(item)
+
+        self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
+
+    def _on_operateur_selectionne(self, item: QListWidgetItem):
+        """Appelé quand un opérateur est sélectionné dans la liste."""
+        operateur_id = item.data(Qt.UserRole)
+        self.operateur_selectionne = get_operateur_by_id(operateur_id)
+
+        if self.operateur_selectionne:
+            self._afficher_details_operateur()
+
+    # =========================================================================
+    # ZONE DROITE - Détails RH
+    # =========================================================================
+
+    def _creer_zone_details(self) -> QWidget:
+        """Crée la zone d'affichage des détails RH."""
+        zone = QWidget()
+        layout = QVBoxLayout(zone)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # Stack pour basculer entre placeholder et contenu
+        self.stack_details = QStackedWidget()
+
+        # Page 0: Placeholder (aucun opérateur sélectionné)
+        self.placeholder = self._creer_placeholder()
+        self.stack_details.addWidget(self.placeholder)
+
+        # Page 1: Contenu RH
+        self.contenu_rh = self._creer_contenu_rh()
+        self.stack_details.addWidget(self.contenu_rh)
+
+        layout.addWidget(self.stack_details)
+
+        return zone
+
+    def _creer_placeholder(self) -> QWidget:
+        """Crée le placeholder affiché quand aucun opérateur n'est sélectionné."""
         widget = QWidget()
         layout = QVBoxLayout(widget)
+        layout.setAlignment(Qt.AlignCenter)
 
-        layout.addWidget(QLabel("Demandes en attente de validation:"))
+        # Icône
+        icon = QLabel("👤")
+        icon.setFont(QFont("Segoe UI", 48))
+        icon.setAlignment(Qt.AlignCenter)
+        layout.addWidget(icon)
 
-        # Table des demandes à valider
-        self.table_validation = QTableWidget()
-        self.table_validation.setColumnCount(7)
-        self.table_validation.setHorizontalHeaderLabels([
-            "ID", "Personnel", "Type", "Du", "Au", "Nb jours", "Motif"
-        ])
-        self.table_validation.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        layout.addWidget(self.table_validation)
+        # Message
+        message = QLabel("Sélectionnez un opérateur")
+        message.setFont(QFont("Segoe UI", 18, QFont.Bold))
+        message.setStyleSheet("color: #6b7280;")
+        message.setAlignment(Qt.AlignCenter)
+        layout.addWidget(message)
 
-        # Boutons de validation
-        btn_layout = QHBoxLayout()
-        btn_valider = QPushButton("Valider")
-        btn_valider.setStyleSheet("background-color: #27ae60; color: white; padding: 8px;")
-        btn_valider.clicked.connect(lambda: self.valider_demande_selectionnee(True))
-        btn_layout.addWidget(btn_valider)
-
-        btn_refuser = QPushButton("Refuser")
-        btn_refuser.setStyleSheet("background-color: #e74c3c; color: white; padding: 8px;")
-        btn_refuser.clicked.connect(lambda: self.valider_demande_selectionnee(False))
-        btn_layout.addWidget(btn_refuser)
-
-        btn_layout.addStretch()
-        layout.addLayout(btn_layout)
+        # Sous-message
+        sous_message = QLabel("Utilisez la zone de recherche à gauche\npour trouver un opérateur")
+        sous_message.setStyleSheet("color: #9ca3af;")
+        sous_message.setAlignment(Qt.AlignCenter)
+        layout.addWidget(sous_message)
 
         return widget
 
-    # Méthodes de chargement des données
-    def load_data(self):
-        """Charge toutes les données"""
-        self.load_postes_filter()
-        self.load_dashboard_data()
-        self.load_types_absence()
-        self.load_mes_demandes()
-        self.load_soldes()
-        self.load_demandes_validation()
+    def _creer_contenu_rh(self) -> QWidget:
+        """Crée le contenu RH (affiché quand un opérateur est sélectionné)."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(16)
 
-    def load_postes_filter(self):
-        """Charge les postes pour le filtre"""
-        conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        # En-tête avec infos opérateur
+        self.header_operateur = self._creer_header_operateur()
+        layout.addWidget(self.header_operateur)
 
-        try:
-            cur.execute("""
-                SELECT DISTINCT p.id, p.poste_code, a.nom as atelier
-                FROM postes p
-                LEFT JOIN atelier a ON p.atelier_id = a.id
-                ORDER BY a.nom, p.poste_code
+        # Barre de navigation des domaines RH
+        self.nav_domaines = self._creer_navigation_domaines()
+        layout.addWidget(self.nav_domaines)
+
+        # Zone de contenu scrollable
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setStyleSheet("QScrollArea { border: none; background: transparent; }")
+
+        # Container pour résumé + documents
+        self.container_domaine = QWidget()
+        self.layout_domaine = QVBoxLayout(self.container_domaine)
+        self.layout_domaine.setContentsMargins(0, 0, 0, 0)
+        self.layout_domaine.setSpacing(16)
+
+        # Zone résumé des données
+        self.zone_resume = QWidget()
+        self.layout_resume = QVBoxLayout(self.zone_resume)
+        self.layout_resume.setContentsMargins(0, 0, 0, 0)
+        self.layout_domaine.addWidget(self.zone_resume)
+
+        # Zone documents
+        self.zone_documents = QWidget()
+        self.layout_documents = QVBoxLayout(self.zone_documents)
+        self.layout_documents.setContentsMargins(0, 0, 0, 0)
+        self.layout_domaine.addWidget(self.zone_documents)
+
+        # Spacer
+        self.layout_domaine.addStretch()
+
+        scroll.setWidget(self.container_domaine)
+        layout.addWidget(scroll, 1)
+
+        return widget
+
+    def _creer_header_operateur(self) -> QWidget:
+        """Crée l'en-tête compact avec les infos de l'opérateur sélectionné."""
+        header = QFrame()
+        header.setStyleSheet("""
+            QFrame {
+                background: #1e40af;
+                border-radius: 8px;
+            }
+        """)
+        header.setFixedHeight(50)
+
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(16, 8, 16, 8)
+
+        # Nom
+        self.label_nom_operateur = QLabel("Nom Prénom")
+        self.label_nom_operateur.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        self.label_nom_operateur.setStyleSheet("color: white; background: transparent;")
+        layout.addWidget(self.label_nom_operateur)
+
+        # Séparateur
+        sep = QLabel("•")
+        sep.setStyleSheet("color: #93c5fd; background: transparent; margin: 0 8px;")
+        layout.addWidget(sep)
+
+        # Matricule
+        self.label_matricule = QLabel("-")
+        self.label_matricule.setStyleSheet("color: #bfdbfe; background: transparent; font-size: 13px;")
+        layout.addWidget(self.label_matricule)
+
+        layout.addStretch()
+
+        # Badge statut
+        self.badge_statut = QLabel("ACTIF")
+        self.badge_statut.setStyleSheet("""
+            background: #10b981;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-weight: bold;
+            font-size: 11px;
+        """)
+        layout.addWidget(self.badge_statut)
+
+        return header
+
+    def _creer_navigation_domaines(self) -> QWidget:
+        """Crée la barre de navigation entre les domaines RH."""
+        nav = QWidget()
+        layout = QHBoxLayout(nav)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+
+        self.boutons_domaines = {}
+        domaines = get_domaines_rh()
+
+        for domaine in domaines:
+            btn = QPushButton(domaine['nom'])
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setProperty('domaine', domaine['code'])
+            btn.setStyleSheet("""
+                QPushButton {
+                    padding: 10px 16px;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    background: white;
+                    color: #374151;
+                    font-weight: 500;
+                }
+                QPushButton:hover {
+                    background: #f9fafb;
+                    border-color: #d1d5db;
+                }
+                QPushButton:checked {
+                    background: #1e40af;
+                    color: white;
+                    border-color: #1e40af;
+                }
             """)
+            btn.clicked.connect(lambda checked, d=domaine['code']: self._on_domaine_change(d))
+            layout.addWidget(btn)
+            self.boutons_domaines[domaine['code']] = btn
 
-            postes = cur.fetchall()
-            self.eval_poste_filter.clear()
-            self.eval_poste_filter.addItem("Tous les postes", "")
+        layout.addStretch()
 
-            for poste in postes:
-                label = f"{poste['poste_code']} - {poste['atelier']}"
-                self.eval_poste_filter.addItem(label, poste['id'])
+        return nav
 
-        finally:
-            cur.close()
-            conn.close()
+    def _on_domaine_change(self, code_domaine: str):
+        """Appelé quand l'utilisateur change de domaine RH."""
+        # Mettre à jour l'état des boutons
+        for code, btn in self.boutons_domaines.items():
+            btn.setChecked(code == code_domaine)
 
-    def load_dashboard_data(self):
-        """Charge les données du tableau de bord"""
-        self.load_retard_evaluations()
-        self.load_next_evaluations()
-        self.load_soldes_dashboard()
-        self.load_demandes_recentes()
-        self.load_formations_dashboard()
+        # Mettre à jour le domaine actif
+        self.domaine_actif = DomaineRH(code_domaine)
 
-    def load_retard_evaluations(self):
-        """Charge les évaluations en retard"""
-        conn = get_connection()
-        cur = conn.cursor(dictionary=True)
+        # Recharger le contenu
+        if self.operateur_selectionne:
+            self._charger_contenu_domaine()
 
-        try:
-            cur.execute("""
-                SELECT
-                    CONCAT(o.prenom, ' ', o.nom) as operateur,
-                    p.poste_code as poste,
-                    a.nom as atelier,
-                    poly.niveau,
-                    poly.prochaine_evaluation,
-                    DATEDIFF(CURDATE(), poly.prochaine_evaluation) as jours_retard
-                FROM polyvalence poly
-                JOIN personnel o ON poly.operateur_id = o.id
-                JOIN postes p ON poly.poste_id = p.id
-                LEFT JOIN atelier a ON p.atelier_id = a.id
-                WHERE o.statut = 'ACTIF'
-                AND poly.prochaine_evaluation < CURDATE()
-                ORDER BY jours_retard DESC
-                LIMIT 10
-            """)
-
-            evaluations = cur.fetchall()
-            self.retard_count_label.setText(str(len(evaluations)))
-            self.retard_list.clear()
-
-            for ev in evaluations:
-                item_text = f"{ev['operateur']} - {ev['poste']} ({ev['atelier']}) - Retard: {ev['jours_retard']} jours"
-                item = QListWidgetItem(item_text)
-                item.setForeground(QColor("#e74c3c"))
-                self.retard_list.addItem(item)
-
-        finally:
-            cur.close()
-            conn.close()
-
-    def load_next_evaluations(self):
-        """Charge les prochaines évaluations"""
-        conn = get_connection()
-        cur = conn.cursor(dictionary=True)
-
-        try:
-            cur.execute("""
-                SELECT
-                    CONCAT(o.prenom, ' ', o.nom) as operateur,
-                    p.poste_code as poste,
-                    a.nom as atelier,
-                    poly.niveau,
-                    poly.prochaine_evaluation,
-                    DATEDIFF(poly.prochaine_evaluation, CURDATE()) as jours_restants
-                FROM polyvalence poly
-                JOIN personnel o ON poly.operateur_id = o.id
-                JOIN postes p ON poly.poste_id = p.id
-                LEFT JOIN atelier a ON p.atelier_id = a.id
-                WHERE o.statut = 'ACTIF'
-                AND poly.prochaine_evaluation >= CURDATE()
-                AND poly.prochaine_evaluation <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                ORDER BY poly.prochaine_evaluation ASC
-                LIMIT 10
-            """)
-
-            evaluations = cur.fetchall()
-            self.next_count_label.setText(str(len(evaluations)))
-            self.next_eval_list.clear()
-
-            for ev in evaluations:
-                item_text = f"{ev['operateur']} - {ev['poste']} ({ev['atelier']}) - Dans {ev['jours_restants']} jours"
-                item = QListWidgetItem(item_text)
-                item.setForeground(QColor("#27ae60"))
-                self.next_eval_list.addItem(item)
-
-        finally:
-            cur.close()
-            conn.close()
-
-    def load_soldes_dashboard(self):
-        """Charge les soldes pour le dashboard"""
-        if not self.personnel_id:
+    def _afficher_details_operateur(self):
+        """Affiche les détails de l'opérateur sélectionné."""
+        if not self.operateur_selectionne:
             return
 
-        try:
-            solde = absence_service.get_solde_conges(self.personnel_id, self.annee_courante)
-            self.cp_value.setText(str(solde['cp_restant']))
-            self.rtt_value.setText(str(solde['rtt_restant']))
-        except:
-            self.cp_value.setText("N/A")
-            self.rtt_value.setText("N/A")
+        op = self.operateur_selectionne
 
-    def load_demandes_recentes(self):
-        """Charge les demandes récentes"""
-        if not self.personnel_id:
-            return
+        # Mettre à jour l'en-tête
+        nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
+        self.label_nom_operateur.setText(nom_complet)
+        self.label_matricule.setText(op.get('matricule', '-'))
 
-        try:
-            demandes = absence_service.get_demandes_personnel(self.personnel_id, self.annee_courante, None)
-            self.demandes_list.clear()
-
-            for demande in demandes[:5]:  # Limiter à 5
-                status_color = {
-                    'EN_ATTENTE': '#f39c12',
-                    'VALIDEE': '#27ae60',
-                    'REFUSEE': '#e74c3c',
-                    'ANNULEE': '#95a5a6'
-                }.get(demande['statut'], '#000000')
-
-                item_text = f"{demande['type_libelle']} - {demande['date_debut'].strftime('%d/%m')} au {demande['date_fin'].strftime('%d/%m')} - {demande['statut']}"
-                item = QListWidgetItem(item_text)
-                item.setForeground(QColor(status_color))
-                self.demandes_list.addItem(item)
-        except:
-            pass
-
-    def load_formations_dashboard(self):
-        """Charge les formations pour le dashboard"""
-        try:
-            stats = formation_service.get_formations_stats()
-
-            # Mettre à jour le compteur
-            if hasattr(self, 'formations_count_label') and self.formations_count_label:
-                self.formations_count_label.setText(str(stats.get('en_cours', 0)))
-
-            # Charger les formations récentes
-            if hasattr(self, 'formations_list_widget'):
-                self.formations_list_widget.clear()
-                formations = formation_service.get_all_formations(statut='En cours')
-
-                for f in formations[:5]:
-                    item_text = f"{f.get('nom_complet', '')} - {f.get('intitule', '')}"
-                    item = QListWidgetItem(item_text)
-                    item.setForeground(QColor("#06b6d4"))
-                    self.formations_list_widget.addItem(item)
-
-                # Si pas de formations en cours, afficher les planifiées
-                if not formations:
-                    formations = formation_service.get_all_formations(statut='Planifiée')
-                    for f in formations[:3]:
-                        item_text = f"{f.get('nom_complet', '')} - {f.get('intitule', '')} (planifiée)"
-                        item = QListWidgetItem(item_text)
-                        item.setForeground(QColor("#64748b"))
-                        self.formations_list_widget.addItem(item)
-        except Exception as e:
-            print(f"Erreur load_formations_dashboard: {e}")
-
-    def load_evaluations_calendar(self):
-        """Charge les évaluations dans le calendrier"""
-        poste_id = self.eval_poste_filter.currentData()
-        periode = self.eval_periode_filter.currentData()
-
-        conn = get_connection()
-        cur = conn.cursor(dictionary=True)
-
-        try:
-            # Construire la requête selon le filtre
-            query = """
-                SELECT
-                    CONCAT(o.prenom, ' ', o.nom) as operateur,
-                    p.poste_code as poste,
-                    a.nom as atelier,
-                    poly.niveau,
-                    poly.date_evaluation,
-                    poly.prochaine_evaluation,
-                    DATEDIFF(poly.prochaine_evaluation, CURDATE()) as jours_restants
-                FROM polyvalence poly
-                JOIN personnel o ON poly.operateur_id = o.id
-                JOIN postes p ON poly.poste_id = p.id
-                LEFT JOIN atelier a ON p.atelier_id = a.id
-                WHERE o.statut = 'ACTIF'
-            """
-
-            params = []
-
-            if poste_id:
-                query += " AND p.id = %s"
-                params.append(poste_id)
-
-            if periode == 'retard':
-                query += " AND poly.prochaine_evaluation < CURDATE()"
-            elif periode == '30j':
-                query += " AND poly.prochaine_evaluation >= CURDATE() AND poly.prochaine_evaluation <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)"
-            elif periode == '90j':
-                query += " AND poly.prochaine_evaluation >= CURDATE() AND poly.prochaine_evaluation <= DATE_ADD(CURDATE(), INTERVAL 90 DAY)"
-
-            query += " ORDER BY poly.prochaine_evaluation ASC"
-
-            cur.execute(query, params)
-            evaluations = cur.fetchall()
-
-            self.eval_table.setRowCount(len(evaluations))
-
-            for row, ev in enumerate(evaluations):
-                self.eval_table.setItem(row, 0, QTableWidgetItem(ev['operateur']))
-                self.eval_table.setItem(row, 1, QTableWidgetItem(ev['poste']))
-                self.eval_table.setItem(row, 2, QTableWidgetItem(ev['atelier'] or ''))
-                self.eval_table.setItem(row, 3, QTableWidgetItem(str(ev['niveau'])))
-                self.eval_table.setItem(row, 4, QTableWidgetItem(ev['date_evaluation'].strftime('%d/%m/%Y') if ev['date_evaluation'] else ''))
-                self.eval_table.setItem(row, 5, QTableWidgetItem(ev['prochaine_evaluation'].strftime('%d/%m/%Y') if ev['prochaine_evaluation'] else ''))
-                self.eval_table.setItem(row, 6, QTableWidgetItem(str(ev['jours_restants'])))
-
-                # Colorer selon le retard
-                if ev['jours_restants'] < 0:
-                    for col in range(7):
-                        self.eval_table.item(row, col).setBackground(QColor(231, 76, 60, 50))
-                elif ev['jours_restants'] <= 30:
-                    for col in range(7):
-                        self.eval_table.item(row, col).setBackground(QColor(243, 156, 18, 50))
-
-        finally:
-            cur.close()
-            conn.close()
-
-    def load_types_absence(self):
-        """Charge les types d'absence"""
-        try:
-            types = absence_service.get_types_absence()
-            self.type_combo.clear()
-            for t in types:
-                self.type_combo.addItem(f"{t['libelle']} ({t['code']})", t['code'])
-        except:
-            pass
-
-    def load_mes_demandes(self):
-        """Charge les demandes du personnel connecté"""
-        if not self.personnel_id:
-            return
-
-        try:
-            annee = self.annee_filter.currentData()
-            statut = self.statut_filter.currentData()
-
-            demandes = absence_service.get_demandes_personnel(self.personnel_id, annee, statut)
-
-            self.table_demandes.setRowCount(len(demandes))
-
-            for row, demande in enumerate(demandes):
-                self.table_demandes.setItem(row, 0, QTableWidgetItem(str(demande['id'])))
-                self.table_demandes.setItem(row, 1, QTableWidgetItem(demande['type_libelle']))
-                self.table_demandes.setItem(row, 2, QTableWidgetItem(demande['date_debut'].strftime('%d/%m/%Y')))
-                self.table_demandes.setItem(row, 3, QTableWidgetItem(demande['date_fin'].strftime('%d/%m/%Y')))
-                self.table_demandes.setItem(row, 4, QTableWidgetItem(str(demande['nb_jours'])))
-                self.table_demandes.setItem(row, 5, QTableWidgetItem(demande['motif'] or ''))
-                self.table_demandes.setItem(row, 6, QTableWidgetItem(demande['statut']))
-                self.table_demandes.setItem(row, 7, QTableWidgetItem(demande['validateur'] or ''))
-                date_val = demande['date_validation'].strftime('%d/%m/%Y %H:%M') if demande['date_validation'] else ''
-                self.table_demandes.setItem(row, 8, QTableWidgetItem(date_val))
-
-                # Colorer selon le statut
-                if demande['statut'] == 'VALIDEE':
-                    for col in range(9):
-                        self.table_demandes.item(row, col).setBackground(QColor(39, 174, 96, 50))
-                elif demande['statut'] == 'REFUSEE':
-                    for col in range(9):
-                        self.table_demandes.item(row, col).setBackground(QColor(231, 76, 60, 50))
-        except Exception as e:
-            print(f"Erreur chargement demandes: {e}")
-
-    def load_soldes(self):
-        """Charge les soldes de congés"""
-        if not self.personnel_id:
-            return
-
-        try:
-            annee = self.solde_annee_combo.currentData()
-            solde = absence_service.get_solde_conges(self.personnel_id, annee)
-
-            # Mettre à jour les cards
-            self.cp_value_label.setText(str(solde['cp_restant']))
-            self.rtt_value_label.setText(str(solde['rtt_restant']))
-
-            # Détails
-            details = f"""
-            <b>Congés Payés:</b><br>
-            - Acquis: {solde['cp_acquis']} jours<br>
-            - Reportés N-1: {solde['cp_n_1']} jours<br>
-            - Pris: {solde['cp_pris']} jours<br>
-            - <b>Restant: {solde['cp_restant']} jours</b><br><br>
-
-            <b>RTT:</b><br>
-            - Acquis: {solde['rtt_acquis']} jours<br>
-            - Pris: {solde['rtt_pris']} jours<br>
-            - <b>Restant: {solde['rtt_restant']} jours</b>
-            """
-            self.solde_details_label.setText(details)
-        except Exception as e:
-            print(f"Erreur chargement soldes: {e}")
-
-    def load_demandes_validation(self):
-        """Charge les demandes en attente de validation"""
-        conn = get_connection()
-        cur = conn.cursor(dictionary=True)
-
-        try:
-            cur.execute("""
-                SELECT
-                    da.id,
-                    CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                    ta.libelle as type_libelle,
-                    da.date_debut,
-                    da.date_fin,
-                    da.nb_jours,
-                    da.motif
-                FROM demande_absence da
-                JOIN personnel p ON da.personnel_id = p.id
-                JOIN type_absence ta ON da.type_absence_id = ta.id
-                WHERE da.statut = 'EN_ATTENTE'
-                AND p.statut = 'ACTIF'
-                ORDER BY da.date_creation ASC
+        # Badge statut
+        statut = op.get('statut', 'ACTIF')
+        if statut == 'ACTIF':
+            self.badge_statut.setText("ACTIF")
+            self.badge_statut.setStyleSheet("""
+                background: #10b981;
+                color: white;
+                padding: 6px 12px;
+                border-radius: 16px;
+                font-weight: bold;
+                font-size: 12px;
             """)
-
-            demandes = cur.fetchall()
-            self.table_validation.setRowCount(len(demandes))
-
-            for row, demande in enumerate(demandes):
-                self.table_validation.setItem(row, 0, QTableWidgetItem(str(demande['id'])))
-                self.table_validation.setItem(row, 1, QTableWidgetItem(demande['nom_complet']))
-                self.table_validation.setItem(row, 2, QTableWidgetItem(demande['type_libelle']))
-                self.table_validation.setItem(row, 3, QTableWidgetItem(demande['date_debut'].strftime('%d/%m/%Y')))
-                self.table_validation.setItem(row, 4, QTableWidgetItem(demande['date_fin'].strftime('%d/%m/%Y')))
-                self.table_validation.setItem(row, 5, QTableWidgetItem(str(demande['nb_jours'])))
-                self.table_validation.setItem(row, 6, QTableWidgetItem(demande['motif'] or ''))
-
-        except Exception as e:
-            print(f"Erreur chargement validation: {e}")
-        finally:
-            cur.close()
-            conn.close()
-
-    # Méthodes d'action
-    def update_nb_jours(self):
-        """Calcule et affiche le nombre de jours ouvrés"""
-        try:
-            date_debut = self.date_debut.date().toPyDate()
-            date_fin = self.date_fin.date().toPyDate()
-
-            # Récupérer les demi-journées
-            demi_debut = self.get_demi_journee(self.demi_debut_group)
-            demi_fin = self.get_demi_journee(self.demi_fin_group)
-
-            nb_jours = absence_service.calculer_jours_ouvres(
-                date_debut, date_fin, demi_debut, demi_fin
-            )
-
-            self.nb_jours_label.setText(str(nb_jours))
-        except:
-            self.nb_jours_label.setText("0")
-
-    def get_demi_journee(self, button_group):
-        """Retourne le type de demi-journée sélectionné"""
-        button_id = button_group.checkedId()
-        if button_id == 0:
-            return 'JOURNEE'
-        elif button_id == 1:
-            return 'MATIN'
         else:
-            return 'APRES_MIDI'
+            self.badge_statut.setText("INACTIF")
+            self.badge_statut.setStyleSheet("""
+                background: #6b7280;
+                color: white;
+                padding: 6px 12px;
+                border-radius: 16px;
+                font-weight: bold;
+                font-size: 12px;
+            """)
 
-    def soumettre_demande(self):
-        """Soumet une nouvelle demande d'absence"""
-        if not self.personnel_id:
-            QMessageBox.warning(self, "Erreur", "Personnel non identifié")
+        # Activer le premier domaine par défaut
+        self.domaine_actif = DomaineRH.GENERAL
+        for code, btn in self.boutons_domaines.items():
+            btn.setChecked(code == DomaineRH.GENERAL.value)
+
+        # Charger le contenu du domaine
+        self._charger_contenu_domaine()
+
+        # Afficher la zone de contenu
+        self.stack_details.setCurrentIndex(1)
+
+    def _charger_contenu_domaine(self):
+        """Charge le contenu du domaine RH actif."""
+        if not self.operateur_selectionne:
             return
 
-        type_code = self.type_combo.currentData()
-        date_debut = self.date_debut.date().toPyDate()
-        date_fin = self.date_fin.date().toPyDate()
-        demi_debut = self.get_demi_journee(self.demi_debut_group)
-        demi_fin = self.get_demi_journee(self.demi_fin_group)
-        motif = self.motif_text.toPlainText()
+        operateur_id = self.operateur_selectionne['id']
 
-        try:
-            demande_id = absence_service.creer_demande_absence(
-                self.personnel_id, type_code, date_debut, date_fin,
-                demi_debut, demi_fin, motif
-            )
+        # Vider les zones
+        self._vider_layout(self.layout_resume)
+        self._vider_layout(self.layout_documents)
 
-            QMessageBox.information(
-                self,
-                "Succès",
-                f"Demande créée avec succès (ID: {demande_id})\n\n"
-                f"Nombre de jours: {self.nb_jours_label.text()}\n"
-                f"Statut: En attente de validation"
-            )
+        # Charger les données du domaine
+        donnees = get_donnees_domaine(operateur_id, self.domaine_actif)
 
-            # Réinitialiser le formulaire
-            self.motif_text.clear()
-            self.load_mes_demandes()
-            self.load_dashboard_data()
+        # Créer la zone de résumé selon le domaine
+        widget_resume = self._creer_widget_resume(donnees)
+        if widget_resume:
+            self.layout_resume.addWidget(widget_resume)
 
-            self.data_changed.emit()
+        # Charger les documents du domaine
+        documents = get_documents_domaine(operateur_id, self.domaine_actif)
+        widget_documents = self._creer_widget_documents(documents)
+        self.layout_documents.addWidget(widget_documents)
 
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de créer la demande:\n{str(e)}")
+    def _creer_widget_resume(self, donnees: dict) -> QWidget:
+        """Crée le widget de résumé selon le domaine actif."""
+        if self.domaine_actif == DomaineRH.GENERAL:
+            return self._creer_resume_general(donnees)
+        elif self.domaine_actif == DomaineRH.CONTRAT:
+            return self._creer_resume_contrat(donnees)
+        elif self.domaine_actif == DomaineRH.DECLARATION:
+            return self._creer_resume_declaration(donnees)
+        elif self.domaine_actif == DomaineRH.COMPETENCES:
+            return self._creer_resume_competences(donnees)
+        elif self.domaine_actif == DomaineRH.FORMATION:
+            return self._creer_resume_formation(donnees)
+        return None
 
-    def annuler_demande(self):
-        """Annule une demande sélectionnée"""
-        selected = self.table_demandes.selectedItems()
-        if not selected:
-            QMessageBox.warning(self, "Attention", "Veuillez sélectionner une demande")
+    def _creer_resume_general(self, donnees: dict) -> QWidget:
+        """Crée le résumé des données générales."""
+        self._donnees_generales = donnees  # Stocker pour édition
+
+        card = EmacCard("Informations Générales")
+
+        if donnees.get('error'):
+            card.body.addWidget(QLabel(f"Erreur: {donnees['error']}"))
+            return card
+
+        # Bouton modifier en haut à droite
+        header_layout = QHBoxLayout()
+        header_layout.addStretch()
+        btn_edit = EmacButton("Modifier", variant="ghost")
+        btn_edit.clicked.connect(self._edit_infos_generales)
+        header_layout.addWidget(btn_edit)
+        card.body.addLayout(header_layout)
+
+        # Grille d'informations
+        grid = QGridLayout()
+        grid.setSpacing(12)
+
+        infos = [
+            ("Nom", donnees.get('nom', '-')),
+            ("Prénom", donnees.get('prenom', '-')),
+            ("Matricule", donnees.get('matricule', '-')),
+            ("Statut", donnees.get('statut', '-')),
+            ("Date de naissance", self._format_date(donnees.get('date_naissance'))),
+            ("Âge", f"{donnees.get('age', '-')} ans" if donnees.get('age') else '-'),
+            ("Date d'entrée", self._format_date(donnees.get('date_entree'))),
+            ("Ancienneté", donnees.get('anciennete', '-')),
+            ("Téléphone", donnees.get('telephone', '-')),
+            ("Email", donnees.get('email', '-')),
+            ("Adresse", donnees.get('adresse1', '-')),
+            ("Ville", f"{donnees.get('cp_adresse', '')} {donnees.get('ville_adresse', '')}".strip() or '-'),
+        ]
+
+        for i, (label, valeur) in enumerate(infos):
+            row, col = divmod(i, 2)
+            lbl = QLabel(f"<b>{label}</b><br/>{valeur}")
+            lbl.setStyleSheet("padding: 8px; background: #f9fafb; border-radius: 6px;")
+            grid.addWidget(lbl, row, col)
+
+        card.body.addLayout(grid)
+        return card
+
+    def _edit_infos_generales(self):
+        """Ouvre le formulaire d'édition des infos générales."""
+        if not self.operateur_selectionne:
             return
+        dialog = EditInfosGeneralesDialog(
+            self.operateur_selectionne['id'],
+            self._donnees_generales,
+            self
+        )
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
 
-        row = selected[0].row()
-        demande_id = int(self.table_demandes.item(row, 0).text())
-        statut = self.table_demandes.item(row, 6).text()
+    def _creer_resume_contrat(self, donnees: dict) -> QWidget:
+        """Crée le résumé du contrat."""
+        self._donnees_contrat = donnees  # Stocker pour édition
 
-        if statut != 'EN_ATTENTE':
-            QMessageBox.warning(self, "Attention", "Seules les demandes en attente peuvent être annulées")
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        # Boutons d'action
+        actions_layout = QHBoxLayout()
+        actions_layout.addStretch()
+        btn_add = EmacButton("+ Nouveau contrat", variant="primary")
+        btn_add.clicked.connect(self._add_contrat)
+        actions_layout.addWidget(btn_add)
+        layout.addLayout(actions_layout)
+
+        contrat = donnees.get('contrat_actif')
+
+        if contrat:
+            # Alerte si contrat expire bientôt
+            jours = contrat.get('jours_restants')
+            if jours is not None and jours <= 30:
+                if jours < 0:
+                    alert = EmacAlert(f"Contrat expiré depuis {abs(jours)} jour(s) !", variant="error")
+                elif jours == 0:
+                    alert = EmacAlert("Contrat expire aujourd'hui !", variant="error")
+                else:
+                    alert = EmacAlert(f"Contrat expire dans {jours} jour(s)", variant="warning")
+                layout.addWidget(alert)
+
+            # Carte contrat actif
+            card = EmacCard("Contrat Actif")
+
+            # Bouton modifier
+            header = QHBoxLayout()
+            header.addStretch()
+            btn_edit = EmacButton("Modifier", variant="ghost")
+            btn_edit.clicked.connect(lambda: self._edit_contrat(contrat))
+            header.addWidget(btn_edit)
+            card.body.addLayout(header)
+
+            grid = QGridLayout()
+            grid.setSpacing(12)
+
+            infos = [
+                ("Type", contrat.get('type_contrat', '-')),
+                ("Date début", self._format_date(contrat.get('date_debut'))),
+                ("Date fin", self._format_date(contrat.get('date_fin')) or "Indéterminée"),
+                ("Jours restants", str(jours) if jours else "N/A"),
+                ("ETP", str(contrat.get('etp', 1.0))),
+                ("Catégorie", contrat.get('categorie', '-')),
+                ("Emploi", contrat.get('emploi', '-')),
+            ]
+
+            for i, (label, valeur) in enumerate(infos):
+                row, col = divmod(i, 2)
+                lbl = QLabel(f"<b>{label}</b><br/>{valeur}")
+                lbl.setStyleSheet("padding: 8px; background: #f9fafb; border-radius: 6px;")
+                grid.addWidget(lbl, row, col)
+
+            card.body.addLayout(grid)
+            layout.addWidget(card)
+        else:
+            alert = EmacAlert("Aucun contrat actif", variant="info")
+            layout.addWidget(alert)
+
+        # Historique des contrats
+        historique = donnees.get('historique', [])
+        if historique:
+            card_hist = EmacCard(f"Historique ({len(historique)} contrat(s))")
+            card_hist.body.addWidget(QLabel(f"{len(historique)} contrat(s) dans l'historique"))
+            layout.addWidget(card_hist)
+
+        return container
+
+    def _add_contrat(self):
+        """Ouvre le formulaire de création de contrat."""
+        if not self.operateur_selectionne:
             return
+        dialog = EditContratDialog(self.operateur_selectionne['id'], parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
 
+    def _edit_contrat(self, contrat: dict):
+        """Ouvre le formulaire d'édition de contrat."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditContratDialog(self.operateur_selectionne['id'], contrat, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _add_declaration(self):
+        """Ouvre le formulaire d'ajout de déclaration."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditDeclarationDialog(self.operateur_selectionne['id'], parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_declaration(self, declaration: dict):
+        """Ouvre le formulaire d'édition de déclaration."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditDeclarationDialog(self.operateur_selectionne['id'], declaration, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _add_formation(self):
+        """Ouvre le formulaire d'ajout de formation."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditFormationDialog(self.operateur_selectionne['id'], parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_formation(self, formation: dict):
+        """Ouvre le formulaire d'édition de formation."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditFormationDialog(self.operateur_selectionne['id'], formation, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_declaration(self, declaration: dict):
+        """Supprime une déclaration après confirmation."""
         reply = QMessageBox.question(
             self, "Confirmation",
-            "Voulez-vous vraiment annuler cette demande ?",
-            QMessageBox.Yes | QMessageBox.No
+            f"Voulez-vous vraiment supprimer cette déclaration ?\n{declaration.get('type_declaration')} du {self._format_date(declaration.get('date_debut'))}",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
-
         if reply == QMessageBox.Yes:
-            try:
-                conn = get_connection()
-                cur = conn.cursor()
-                cur.execute("UPDATE demande_absence SET statut = 'ANNULEE' WHERE id = %s", (demande_id,))
-                conn.commit()
-                cur.close()
-                conn.close()
+            success, message = delete_declaration(declaration['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.critical(self, "Erreur", message)
 
-                QMessageBox.information(self, "Succès", "Demande annulée")
-                self.load_mes_demandes()
-                self.load_dashboard_data()
-                self.data_changed.emit()
-
-            except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
-
-    def valider_demande_selectionnee(self, valide):
-        """Valide ou refuse une demande"""
-        selected = self.table_validation.selectedItems()
-        if not selected:
-            QMessageBox.warning(self, "Attention", "Veuillez sélectionner une demande")
-            return
-
-        row = selected[0].row()
-        demande_id = int(self.table_validation.item(row, 0).text())
-
-        action = "valider" if valide else "refuser"
+    def _delete_formation(self, formation: dict):
+        """Supprime une formation après confirmation."""
         reply = QMessageBox.question(
             self, "Confirmation",
-            f"Voulez-vous vraiment {action} cette demande ?",
-            QMessageBox.Yes | QMessageBox.No
+            f"Voulez-vous vraiment supprimer cette formation ?\n{formation.get('intitule', 'N/A')}",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
-
         if reply == QMessageBox.Yes:
-            try:
-                # TODO: Récupérer l'ID du validateur (personnel connecté)
-                validateur_id = 1  # À remplacer par l'ID réel
+            success, message = delete_formation(formation['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.critical(self, "Erreur", message)
 
-                absence_service.valider_demande(demande_id, validateur_id, valide)
+    def _creer_resume_declaration(self, donnees: dict) -> QWidget:
+        """Crée le résumé des déclarations."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
 
-                msg = "validée" if valide else "refusée"
-                QMessageBox.information(self, "Succès", f"Demande {msg}")
+        # Bouton ajouter en haut
+        btn_add = EmacButton("+ Nouvelle déclaration", variant="primary")
+        btn_add.clicked.connect(self._add_declaration)
+        layout.addWidget(btn_add, alignment=Qt.AlignLeft)
 
-                self.load_demandes_validation()
-                self.data_changed.emit()
+        # Déclaration en cours
+        en_cours = donnees.get('en_cours')
+        if en_cours:
+            alert = EmacAlert(
+                f"Déclaration en cours: {en_cours.get('type_declaration')} "
+                f"du {self._format_date(en_cours.get('date_debut'))} "
+                f"au {self._format_date(en_cours.get('date_fin'))}",
+                variant="info"
+            )
+            layout.addWidget(alert)
 
-            except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+        # Statistiques
+        stats = donnees.get('statistiques', {})
+        if stats:
+            card = EmacCard("Statistiques des déclarations")
+            stats_layout = QHBoxLayout()
 
-    def afficher_absences_jour(self, date):
-        """Affiche les absences pour un jour donné"""
-        # TODO: Implémenter l'affichage des absences du jour
-        pass
+            for type_decl, data in stats.items():
+                chip = EmacChip(f"{type_decl}: {data.get('nombre', 0)}", variant="info")
+                stats_layout.addWidget(chip)
 
-    def planifier_evaluation(self):
-        """Ouvre la gestion des évaluations"""
-        QMessageBox.information(self, "Info", "Ouverture de la gestion des évaluations...")
-        # TODO: Intégrer avec GestionEvaluationDialog
+            stats_layout.addStretch()
+            card.body.addLayout(stats_layout)
+            layout.addWidget(card)
+
+        # Liste des déclarations
+        declarations = donnees.get('declarations', [])
+        card = EmacCard(f"Déclarations ({len(declarations)})")
+        if declarations:
+            for decl in declarations:
+                row = QHBoxLayout()
+                info_text = f"{decl.get('type_declaration', 'N/A')} - {self._format_date(decl.get('date_debut'))} au {self._format_date(decl.get('date_fin'))}"
+                row.addWidget(QLabel(info_text))
+                row.addStretch()
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.clicked.connect(lambda checked, d=decl: self._edit_declaration(d))
+                row.addWidget(btn_edit)
+                btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete.clicked.connect(lambda checked, d=decl: self._delete_declaration(d))
+                row.addWidget(btn_delete)
+                card.body.addLayout(row)
+        else:
+            card.body.addWidget(QLabel("Aucune déclaration"))
+        layout.addWidget(card)
+
+        return container
+
+    def _creer_resume_competences(self, donnees: dict) -> QWidget:
+        """Crée le résumé des compétences."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        stats = donnees.get('statistiques', {})
+
+        # Alertes évaluations
+        en_retard = stats.get('evaluations_en_retard', 0)
+        if en_retard > 0:
+            alert = EmacAlert(f"{en_retard} évaluation(s) en retard !", variant="error")
+            layout.addWidget(alert)
+
+        a_venir = stats.get('evaluations_a_venir_30j', 0)
+        if a_venir > 0:
+            alert = EmacAlert(f"{a_venir} évaluation(s) à venir dans les 30 jours", variant="warning")
+            layout.addWidget(alert)
+
+        # Carte statistiques
+        card = EmacCard("Statistiques Compétences")
+        stats_layout = QHBoxLayout()
+
+        niveaux = [
+            ("N1", stats.get('niveau_1', 0)),
+            ("N2", stats.get('niveau_2', 0)),
+            ("N3", stats.get('niveau_3', 0)),
+            ("N4", stats.get('niveau_4', 0)),
+            ("Total", stats.get('total_postes', 0)),
+        ]
+
+        for label, count in niveaux:
+            badge = QLabel(f"{label}: {count}")
+            badge.setStyleSheet("""
+                background: #f1f5f9;
+                color: #475569;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 13px;
+            """)
+            stats_layout.addWidget(badge)
+
+        stats_layout.addStretch()
+        card.body.addLayout(stats_layout)
+        layout.addWidget(card)
+
+        # Liste des compétences
+        competences = donnees.get('competences', [])
+        card_list = EmacCard(f"Postes maîtrisés ({len(competences)})")
+        if competences:
+            card_list.body.addWidget(QLabel(f"{len(competences)} poste(s)"))
+        else:
+            card_list.body.addWidget(QLabel("Aucune compétence enregistrée"))
+        layout.addWidget(card_list)
+
+        return container
+
+    def _creer_resume_formation(self, donnees: dict) -> QWidget:
+        """Crée le résumé des formations."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        # Bouton ajouter en haut
+        btn_add = EmacButton("+ Nouvelle formation", variant="primary")
+        btn_add.clicked.connect(self._add_formation)
+        layout.addWidget(btn_add, alignment=Qt.AlignLeft)
+
+        stats = donnees.get('statistiques', {})
+
+        # Carte statistiques
+        card = EmacCard("Statistiques Formations")
+        stats_layout = QHBoxLayout()
+
+        items = [
+            ("Total", stats.get('total', 0)),
+            ("Terminées", stats.get('terminees', 0)),
+            ("En cours", stats.get('en_cours', 0)),
+            ("Planifiées", stats.get('planifiees', 0)),
+            ("Avec certificat", stats.get('avec_certificat', 0)),
+        ]
+
+        for label, count in items:
+            badge = QLabel(f"{label}: {count}")
+            badge.setStyleSheet("""
+                background: #f1f5f9;
+                color: #475569;
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 13px;
+            """)
+            stats_layout.addWidget(badge)
+
+        stats_layout.addStretch()
+        card.body.addLayout(stats_layout)
+        layout.addWidget(card)
+
+        # Liste des formations
+        formations = donnees.get('formations', [])
+        card_list = EmacCard(f"Formations ({len(formations)})")
+        if formations:
+            for form in formations:
+                row = QHBoxLayout()
+                info_text = f"{form.get('intitule', 'N/A')} - {form.get('statut', 'N/A')}"
+                if form.get('date_debut'):
+                    info_text += f" ({self._format_date(form.get('date_debut'))})"
+                row.addWidget(QLabel(info_text))
+                row.addStretch()
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.clicked.connect(lambda checked, f=form: self._edit_formation(f))
+                row.addWidget(btn_edit)
+                btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete.clicked.connect(lambda checked, f=form: self._delete_formation(f))
+                row.addWidget(btn_delete)
+                card_list.body.addLayout(row)
+        else:
+            card_list.body.addWidget(QLabel("Aucune formation enregistrée"))
+        layout.addWidget(card_list)
+
+        return container
+
+    def _creer_widget_documents(self, documents: list) -> QWidget:
+        """Crée le widget affichant les documents du domaine."""
+        card = EmacCard(f"Documents associés ({len(documents)})")
+
+        if not documents:
+            label = QLabel("Aucun document pour ce domaine")
+            label.setStyleSheet("color: #9ca3af; padding: 20px;")
+            label.setAlignment(Qt.AlignCenter)
+            card.body.addWidget(label)
+        else:
+            # Tableau des documents
+            table = QTableWidget()
+            table.setColumnCount(5)
+            table.setHorizontalHeaderLabels(["Nom", "Catégorie", "Date ajout", "Expiration", "Statut"])
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table.setRowCount(len(documents))
+
+            for row, doc in enumerate(documents):
+                table.setItem(row, 0, QTableWidgetItem(doc.get('nom_affichage', '-')))
+                table.setItem(row, 1, QTableWidgetItem(doc.get('categorie_nom', '-')))
+                table.setItem(row, 2, QTableWidgetItem(self._format_date(doc.get('date_upload'))))
+                table.setItem(row, 3, QTableWidgetItem(self._format_date(doc.get('date_expiration')) or '-'))
+
+                # Statut avec couleur
+                statut = doc.get('statut', 'actif')
+                statut_item = QTableWidgetItem(statut.upper())
+                if statut == 'expire':
+                    statut_item.setForeground(QColor("#ef4444"))
+                elif statut == 'archive':
+                    statut_item.setForeground(QColor("#9ca3af"))
+                else:
+                    statut_item.setForeground(QColor("#10b981"))
+                table.setItem(row, 4, statut_item)
+
+            card.body.addWidget(table)
+
+        return card
+
+    # =========================================================================
+    # UTILITAIRES
+    # =========================================================================
+
+    def _vider_layout(self, layout):
+        """Supprime tous les widgets d'un layout."""
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+            elif item.layout():
+                self._vider_layout(item.layout())
+
+    def _format_date(self, date_val) -> str:
+        """Formate une date pour l'affichage."""
+        if not date_val:
+            return '-'
+        if hasattr(date_val, 'strftime'):
+            return date_val.strftime('%d/%m/%Y')
+        return str(date_val)
 
 
+# Pour compatibilité avec l'ancien code qui pourrait importer ce module
 if __name__ == "__main__":
     import sys
     from PyQt5.QtWidgets import QApplication
 
     app = QApplication(sys.argv)
-
-    # Test avec le premier personnel actif
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
-    result = cur.fetchone()
-    personnel_id = result[0] if result else None
-    cur.close()
-    conn.close()
-
-    dialog = GestionRHDialog(personnel_id=personnel_id)
+    dialog = GestionRHDialog()
     dialog.show()
-
     sys.exit(app.exec_())
