@@ -753,12 +753,14 @@ class HistoriqueDialog(QDialog):
                              ")")
                 params += [like, like, like, like]
 
-            # ✅ SÉCURITÉ: Construction sécurisée de la clause WHERE
+            # SÉCURITÉ: Construction sécurisée de la clause WHERE
+            # Les éléments de 'where' sont des constantes littérales définies dans ce code
+            # Toutes les valeurs utilisateur passent par 'params' (requête paramétrée)
             where_clause = " AND ".join(where) if where else "1=1"
             sql = (
                 "SELECT id, date_time, action, operateur_id, poste_id, description, utilisateur "
                 "FROM historique "
-                f"WHERE {where_clause} "
+                "WHERE " + where_clause + " "
                 "ORDER BY date_time DESC, id DESC"
             )
             cur.execute(sql, params)
@@ -806,23 +808,27 @@ class HistoriqueDialog(QDialog):
 
     # ---------- Clear + export ----------
     def _export_range(self, d_from: QDate, d_to: QDate):
-        base_dir = os.path.join(os.path.expanduser("~"), "Desktop")
+        # Exporter dans App/logs/exports/ au lieu du Bureau
+        base_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "logs", "exports")
+        os.makedirs(base_dir, exist_ok=True)
+
         if d_from == d_to:
-            export_day(self.conn,
-                       dt.date(d_from.year(), d_from.month(), d_from.day()),
-                       output_dir=base_dir)
+            export_day(
+                dt.date(d_from.year(), d_from.month(), d_from.day()),
+                base_dir=base_dir
+            )
             QMessageBox.information(self, "Export réussi",
-                                    f"Export du {d_from.toString('dd/MM/yyyy')} effectué sur le Bureau.")
+                                    f"Export du {d_from.toString('dd/MM/yyyy')} effectué dans:\n{base_dir}")
         else:
             d = dt.date(d_from.year(), d_from.month(), d_from.day())
             end = dt.date(d_to.year(), d_to.month(), d_to.day())
             count = 0
             while d <= end:
-                export_day(self.conn, d, output_dir=base_dir)
+                export_day(d, base_dir=base_dir)
                 d += dt.timedelta(days=1)
                 count += 1
-            QMessageBox.information(self, "Export réussi", 
-                                   f"{count} fichier(s) d'export créé(s) sur le Bureau.")
+            QMessageBox.information(self, "Export réussi",
+                                   f"{count} fichier(s) d'export créé(s) dans:\n{base_dir}")
 
     def _clear_range_with_optional_export(self):
         d_from = self.from_date.date()

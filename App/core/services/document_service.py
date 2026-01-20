@@ -34,9 +34,11 @@ class DocumentService:
         # Créer le répertoire de base s'il n'existe pas
         self.base_path.mkdir(parents=True, exist_ok=True)
     
-    def _get_operateur_path(self, matricule: str) -> Path:
-        """Retourne le chemin du dossier d'un opérateur"""
-        operateur_dir = self.base_path / "operateurs" / matricule
+    def _get_operateur_path(self, nom_dossier: str) -> Path:
+        """Retourne le chemin du dossier d'un opérateur (Nom Prenom)"""
+        # Nettoyer le nom du dossier pour éviter les caractères problématiques
+        nom_clean = self._sanitize_filename(nom_dossier)
+        operateur_dir = self.base_path / "operateurs" / nom_clean
         operateur_dir.mkdir(parents=True, exist_ok=True)
         return operateur_dir
     
@@ -96,14 +98,15 @@ class DocumentService:
             
             # Récupérer les infos de l'opérateur
             cursor.execute(
-                "SELECT matricule FROM personnel WHERE id = %s",
+                "SELECT nom, prenom FROM personnel WHERE id = %s",
                 (operateur_id,)
             )
             operateur = cursor.fetchone()
             if not operateur:
                 return False, f"Opérateur ID {operateur_id} introuvable", None
-            
-            matricule = operateur['matricule']
+
+            # Créer le nom du dossier: "Nom Prenom"
+            nom_dossier = f"{operateur['nom']} {operateur['prenom']}"
             
             # Récupérer les infos de la catégorie
             cursor.execute(
@@ -127,7 +130,7 @@ class DocumentService:
                 nom_affichage = nom_fichier_original
             
             # Créer le chemin de destination
-            operateur_dir = self._get_operateur_path(matricule)
+            operateur_dir = self._get_operateur_path(nom_dossier)
             categorie_subdir = self._get_categorie_subdir(categorie['nom'])
             dest_dir = operateur_dir / categorie_subdir
             dest_dir.mkdir(parents=True, exist_ok=True)
@@ -370,31 +373,34 @@ class DocumentService:
             conn = get_connection()
             cursor = conn.cursor()
             
+            # SÉCURITÉ: Construction sécurisée - seules les clauses prédéfinies sont utilisées
             updates = []
             params = []
-            
+
             if nom_affichage is not None:
                 updates.append("nom_affichage = %s")
                 params.append(nom_affichage)
-            
+
             if date_expiration is not None:
                 updates.append("date_expiration = %s")
                 params.append(date_expiration)
-            
+
             if notes is not None:
                 updates.append("notes = %s")
                 params.append(notes)
-            
+
             if categorie_id is not None:
                 updates.append("categorie_id = %s")
                 params.append(categorie_id)
-            
+
             if not updates:
                 return False, "Aucune modification à effectuer"
-            
+
             params.append(document_id)
-            sql = f"UPDATE documents SET {', '.join(updates)} WHERE id = %s"
-            
+            # SÉCURITÉ: Les clauses dans 'updates' sont des constantes littérales définies ci-dessus
+            # Pas d'input utilisateur dans la construction SQL
+            sql = "UPDATE documents SET " + ", ".join(updates) + " WHERE id = %s"
+
             cursor.execute(sql, tuple(params))
             conn.commit()
             

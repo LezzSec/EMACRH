@@ -15,8 +15,8 @@ def _query_for_day(cursor, target_day: dt.date):
     try:
         cursor.execute(
             """
-            SELECT id, date_time, utilisateur, action, table_name, record_id,
-                   description, details, source
+            SELECT id, date_time, action, operateur_id, poste_id,
+                   description, utilisateur, table_name, record_id
             FROM historique
             WHERE DATE(date_time) = %s
             ORDER BY date_time
@@ -27,8 +27,8 @@ def _query_for_day(cursor, target_day: dt.date):
     except Exception:
         cursor.execute(
             """
-            SELECT id, date_time, utilisateur, action, table_name, record_id,
-                   description, details, source
+            SELECT id, date_time, action, operateur_id, poste_id,
+                   description, utilisateur, table_name, record_id
             FROM historique
             WHERE CAST(date_time AS DATE) = %s
             ORDER BY date_time
@@ -74,21 +74,14 @@ def export_day(day: dt.date, base_dir: str = None, make_zip: bool = True) -> Dic
             names = [d[0] for d in cur.description]
             rows = [dict(zip(names, r)) for r in rows]
 
-        # écrire CSV
-        fieldnames = ["id","date_time","utilisateur","action","table_name","record_id","description","details","source"]
+        # écrire CSV - colonnes correspondant à la table historique
+        fieldnames = ["id", "date_time", "action", "operateur_id", "poste_id",
+                      "description", "utilisateur", "table_name", "record_id"]
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=fieldnames)
             w.writeheader()
             for r in rows:
                 r = dict(r)
-                # details peut être JSON/texte; on sérialise proprement
-                d = r.get("details")
-                if isinstance(d, (dict, list)):
-                    r["details"] = json.dumps(d, ensure_ascii=False)
-                elif d is None:
-                    r["details"] = ""
-                else:
-                    r["details"] = str(d)
                 # convertir datetime en ISO lisible
                 dtv = r.get("date_time")
                 if hasattr(dtv, "isoformat"):

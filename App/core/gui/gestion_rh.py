@@ -58,6 +58,26 @@ class EditInfosGeneralesDialog(QDialog):
         form = QFormLayout()
         form.setSpacing(12)
 
+        # --- Section Identité ---
+        identite_group = QGroupBox("Identité")
+        identite_layout = QFormLayout(identite_group)
+
+        # Nom
+        self.nom = QLineEdit(self.donnees.get('nom') or '')
+        identite_layout.addRow("Nom:", self.nom)
+
+        # Prénom
+        self.prenom = QLineEdit(self.donnees.get('prenom') or '')
+        identite_layout.addRow("Prénom:", self.prenom)
+
+        # Matricule
+        self.matricule = QLineEdit(self.donnees.get('matricule') or '')
+        self.matricule.setPlaceholderText("Ex: M000001")
+        identite_layout.addRow("Matricule:", self.matricule)
+
+        layout.addWidget(identite_group)
+
+        # --- Section Informations personnelles ---
         # Sexe
         self.sexe_combo = QComboBox()
         self.sexe_combo.addItems(['', 'M', 'F'])
@@ -132,7 +152,36 @@ class EditInfosGeneralesDialog(QDialog):
         layout.addLayout(buttons)
 
     def _save(self):
+        # Validation des champs obligatoires
+        nouveau_nom = self.nom.text().strip()
+        nouveau_prenom = self.prenom.text().strip()
+        nouveau_matricule = self.matricule.text().strip()
+
+        if not nouveau_nom:
+            QMessageBox.warning(self, "Champ obligatoire", "Le nom est obligatoire.")
+            return
+
+        if not nouveau_prenom:
+            QMessageBox.warning(self, "Champ obligatoire", "Le prénom est obligatoire.")
+            return
+
+        # Validation du matricule (unicité)
+        if nouveau_matricule:
+            from core.db.configbd import DatabaseCursor
+            with DatabaseCursor(dictionary=True) as cur:
+                cur.execute(
+                    "SELECT id FROM personnel WHERE matricule = %s AND id != %s",
+                    (nouveau_matricule, self.operateur_id)
+                )
+                if cur.fetchone():
+                    QMessageBox.warning(self, "Matricule existant",
+                        f"Le matricule '{nouveau_matricule}' est déjà utilisé par un autre opérateur.")
+                    return
+
         data = {
+            'nom': nouveau_nom,
+            'prenom': nouveau_prenom,
+            'matricule': nouveau_matricule or None,
             'sexe': self.sexe_combo.currentText() or None,
             'date_naissance': self.date_naissance.date().toPyDate() if self.date_naissance.date().year() > 1900 else None,
             'date_entree': self.date_entree.date().toPyDate() if self.date_entree.date().year() > 1900 else None,
@@ -480,6 +529,184 @@ class EditFormationDialog(QDialog):
             QMessageBox.critical(self, "Erreur", message)
 
 
+class AjouterDocumentDialog(QDialog):
+    """Formulaire pour ajouter un document à un opérateur."""
+
+    def __init__(self, operateur_id: int, domaine: 'DomaineRH' = None, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.domaine = domaine
+        self.fichier_path = None
+        self.setWindowTitle("Ajouter un document")
+        self.setMinimumWidth(500)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(15)
+
+        # Titre
+        title = QLabel("Ajouter un document")
+        title.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        title.setStyleSheet("color: #1e293b;")
+        layout.addWidget(title)
+
+        form = QFormLayout()
+        form.setSpacing(12)
+
+        # Sélection du fichier
+        file_layout = QHBoxLayout()
+        self.file_label = QLineEdit()
+        self.file_label.setReadOnly(True)
+        self.file_label.setPlaceholderText("Aucun fichier sélectionné...")
+        file_layout.addWidget(self.file_label)
+
+        btn_parcourir = QPushButton("Parcourir...")
+        btn_parcourir.clicked.connect(self._parcourir_fichier)
+        file_layout.addWidget(btn_parcourir)
+        form.addRow("Fichier:", file_layout)
+
+        # Nom d'affichage
+        self.nom_affichage = QLineEdit()
+        self.nom_affichage.setPlaceholderText("Nom qui sera affiché (optionnel)")
+        form.addRow("Nom d'affichage:", self.nom_affichage)
+
+        # Catégorie
+        self.categorie_combo = QComboBox()
+        self._charger_categories()
+        form.addRow("Catégorie:", self.categorie_combo)
+
+        # Date d'expiration (optionnel)
+        exp_layout = QHBoxLayout()
+        self.date_expiration = QDateEdit()
+        self.date_expiration.setCalendarPopup(True)
+        self.date_expiration.setDisplayFormat("dd/MM/yyyy")
+        self.date_expiration.setSpecialValueText("Pas d'expiration")
+        self.date_expiration.setMinimumDate(QDate(1900, 1, 1))
+        self.date_expiration.setDate(QDate(1900, 1, 1))
+        exp_layout.addWidget(self.date_expiration)
+
+        self.chk_expiration = QCheckBox("Définir une date d'expiration")
+        self.chk_expiration.toggled.connect(self.date_expiration.setEnabled)
+        self.date_expiration.setEnabled(False)
+        exp_layout.addWidget(self.chk_expiration)
+        form.addRow("Expiration:", exp_layout)
+
+        # Notes
+        self.notes = QTextEdit()
+        self.notes.setMaximumHeight(80)
+        self.notes.setPlaceholderText("Notes ou commentaires (optionnel)")
+        form.addRow("Notes:", self.notes)
+
+        layout.addLayout(form)
+
+        # Boutons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        btn_annuler = QPushButton("Annuler")
+        btn_annuler.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_annuler)
+
+        btn_ajouter = QPushButton("Ajouter")
+        btn_ajouter.setStyleSheet("""
+            QPushButton {
+                background-color: #3b82f6;
+                color: white;
+                font-weight: bold;
+                padding: 8px 20px;
+                border-radius: 6px;
+            }
+            QPushButton:hover {
+                background-color: #2563eb;
+            }
+        """)
+        btn_ajouter.clicked.connect(self._ajouter)
+        btn_layout.addWidget(btn_ajouter)
+
+        layout.addLayout(btn_layout)
+
+    def _charger_categories(self):
+        """Charge les catégories de documents."""
+        from core.services.rh_service import get_categories_documents, CATEGORIE_TO_DOMAINE
+        categories = get_categories_documents()
+
+        self.categorie_combo.clear()
+        for cat in categories:
+            # Si un domaine est spécifié, ne montrer que les catégories liées
+            if self.domaine:
+                cat_domaine = CATEGORIE_TO_DOMAINE.get(cat['nom'], DomaineRH.GENERAL)
+                if cat_domaine != self.domaine:
+                    continue
+            self.categorie_combo.addItem(cat['nom'], cat['id'])
+
+        # Si aucune catégorie pour le domaine, afficher toutes
+        if self.categorie_combo.count() == 0:
+            for cat in categories:
+                self.categorie_combo.addItem(cat['nom'], cat['id'])
+
+    def _parcourir_fichier(self):
+        """Ouvre le dialogue de sélection de fichier."""
+        from PyQt5.QtWidgets import QFileDialog
+        fichier, _ = QFileDialog.getOpenFileName(
+            self,
+            "Sélectionner un document",
+            "",
+            "Tous les fichiers (*);;Documents PDF (*.pdf);;Images (*.png *.jpg *.jpeg);;Documents Word (*.docx *.doc)"
+        )
+        if fichier:
+            self.fichier_path = fichier
+            self.file_label.setText(fichier)
+            # Pré-remplir le nom d'affichage si vide
+            if not self.nom_affichage.text():
+                import os
+                self.nom_affichage.setText(os.path.basename(fichier))
+
+    def _ajouter(self):
+        """Ajoute le document."""
+        if not self.fichier_path:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un fichier")
+            return
+
+        if self.categorie_combo.currentIndex() < 0:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner une catégorie")
+            return
+
+        categorie_id = self.categorie_combo.currentData()
+        nom = self.nom_affichage.text().strip() or None
+
+        # Date d'expiration
+        date_exp = None
+        if self.chk_expiration.isChecked() and self.date_expiration.date().year() > 1900:
+            date_exp = self.date_expiration.date().toPyDate()
+
+        notes = self.notes.toPlainText().strip() or None
+
+        # Ajouter via le service
+        from core.services.document_service import DocumentService
+        from core.services.auth_service import get_current_user
+
+        user = get_current_user()
+        uploaded_by = user.get('nom_complet', 'Utilisateur') if user else 'Utilisateur'
+
+        doc_service = DocumentService()
+        success, message, doc_id = doc_service.add_document(
+            operateur_id=self.operateur_id,
+            categorie_id=categorie_id,
+            fichier_source=self.fichier_path,
+            nom_affichage=nom,
+            date_expiration=date_exp,
+            notes=notes,
+            uploaded_by=uploaded_by
+        )
+
+        if success:
+            QMessageBox.information(self, "Succès", message)
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
+
+
 class GestionRHDialog(QDialog):
     """
     Fenêtre principale de gestion RH.
@@ -665,6 +892,22 @@ class GestionRHDialog(QDialog):
         if self.operateur_selectionne:
             self._afficher_details_operateur()
 
+    def _selectionner_operateur_par_id(self, operateur_id: int):
+        """Sélectionne automatiquement un opérateur par son ID."""
+        # Charger l'opérateur directement
+        self.operateur_selectionne = get_operateur_by_id(operateur_id)
+
+        if self.operateur_selectionne:
+            # Afficher les détails
+            self._afficher_details_operateur()
+
+            # Sélectionner dans la liste si présent
+            for i in range(self.liste_operateurs.count()):
+                item = self.liste_operateurs.item(i)
+                if item.data(Qt.UserRole) == operateur_id:
+                    self.liste_operateurs.setCurrentItem(item)
+                    break
+
     # =========================================================================
     # ZONE DROITE - Détails RH
     # =========================================================================
@@ -932,7 +1175,9 @@ class GestionRHDialog(QDialog):
             self.layout_resume.addWidget(widget_resume)
 
         # Charger les documents du domaine
+        print(f"[DEBUG GUI] Chargement documents pour operateur_id={operateur_id}, domaine={self.domaine_actif}")
         documents = get_documents_domaine(operateur_id, self.domaine_actif)
+        print(f"[DEBUG GUI] Documents trouvés: {len(documents)}")
         widget_documents = self._creer_widget_documents(documents)
         self.layout_documents.addWidget(widget_documents)
 
@@ -1074,13 +1319,6 @@ class GestionRHDialog(QDialog):
         else:
             alert = EmacAlert("Aucun contrat actif", variant="info")
             layout.addWidget(alert)
-
-        # Historique des contrats
-        historique = donnees.get('historique', [])
-        if historique:
-            card_hist = EmacCard(f"Historique ({len(historique)} contrat(s))")
-            card_hist.body.addWidget(QLabel(f"{len(historique)} contrat(s) dans l'historique"))
-            layout.addWidget(card_hist)
 
         return container
 
@@ -1346,41 +1584,146 @@ class GestionRHDialog(QDialog):
         """Crée le widget affichant les documents du domaine."""
         card = EmacCard(f"Documents associés ({len(documents)})")
 
+        # Boutons d'action
+        btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(0, 0, 0, 10)
+
+        btn_ajouter = EmacButton("+ Ajouter un document", variant="primary")
+        btn_ajouter.clicked.connect(self._ajouter_document)
+        btn_layout.addWidget(btn_ajouter)
+
+        btn_layout.addStretch()
+        card.body.addLayout(btn_layout)
+
         if not documents:
             label = QLabel("Aucun document pour ce domaine")
             label.setStyleSheet("color: #9ca3af; padding: 20px;")
             label.setAlignment(Qt.AlignCenter)
             card.body.addWidget(label)
         else:
-            # Tableau des documents
-            table = QTableWidget()
-            table.setColumnCount(5)
-            table.setHorizontalHeaderLabels(["Nom", "Catégorie", "Date ajout", "Expiration", "Statut"])
-            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            table.setSelectionBehavior(QAbstractItemView.SelectRows)
-            table.setRowCount(len(documents))
+            # Stocker les documents pour y accéder après
+            self._documents_list = documents
 
-            for row, doc in enumerate(documents):
-                table.setItem(row, 0, QTableWidgetItem(doc.get('nom_affichage', '-')))
-                table.setItem(row, 1, QTableWidgetItem(doc.get('categorie_nom', '-')))
-                table.setItem(row, 2, QTableWidgetItem(self._format_date(doc.get('date_upload'))))
-                table.setItem(row, 3, QTableWidgetItem(self._format_date(doc.get('date_expiration')) or '-'))
+            # Liste des documents avec bouton Ouvrir sur chaque ligne
+            for doc in documents:
+                doc_widget = QFrame()
+                doc_widget.setStyleSheet("""
+                    QFrame {
+                        background: #f9fafb;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 8px;
+                        padding: 10px;
+                        margin: 2px 0;
+                    }
+                    QFrame:hover {
+                        background: #f3f4f6;
+                        border-color: #3b82f6;
+                    }
+                """)
 
-                # Statut avec couleur
-                statut = doc.get('statut', 'actif')
-                statut_item = QTableWidgetItem(statut.upper())
-                if statut == 'expire':
-                    statut_item.setForeground(QColor("#ef4444"))
-                elif statut == 'archive':
-                    statut_item.setForeground(QColor("#9ca3af"))
-                else:
-                    statut_item.setForeground(QColor("#10b981"))
-                table.setItem(row, 4, statut_item)
+                doc_layout = QHBoxLayout(doc_widget)
+                doc_layout.setContentsMargins(10, 8, 10, 8)
 
-            card.body.addWidget(table)
+                # Infos du document
+                info_layout = QVBoxLayout()
+                info_layout.setSpacing(2)
+
+                nom_label = QLabel(doc.get('nom_affichage', '-'))
+                nom_label.setFont(QFont("Segoe UI", 10, QFont.Bold))
+                nom_label.setStyleSheet("color: #1f2937; background: transparent;")
+                info_layout.addWidget(nom_label)
+
+                details = f"{doc.get('categorie_nom', '-')} • Ajouté le {self._format_date(doc.get('date_upload'))}"
+                if doc.get('date_expiration'):
+                    details += f" • Expire le {self._format_date(doc.get('date_expiration'))}"
+                details_label = QLabel(details)
+                details_label.setStyleSheet("color: #6b7280; font-size: 11px; background: transparent;")
+                info_layout.addWidget(details_label)
+
+                doc_layout.addLayout(info_layout, 1)
+
+                # Bouton Ouvrir
+                btn_ouvrir = QPushButton("📂 Ouvrir")
+                btn_ouvrir.setCursor(Qt.PointingHandCursor)
+                btn_ouvrir.setStyleSheet("""
+                    QPushButton {
+                        background: #3b82f6;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background: #2563eb;
+                    }
+                """)
+                doc_id = doc.get('id')
+                btn_ouvrir.clicked.connect(lambda checked, d=doc_id: self._ouvrir_document_par_id(d))
+                doc_layout.addWidget(btn_ouvrir)
+
+                card.body.addWidget(doc_widget)
 
         return card
+
+    def _ouvrir_document_par_id(self, doc_id: int):
+        """Ouvre un document par son ID."""
+        from core.services.document_service import DocumentService
+        doc_service = DocumentService()
+        doc_path = doc_service.get_document_path(doc_id)
+
+        if doc_path and doc_path.exists():
+            import os
+            if os.name == 'nt':  # Windows
+                os.startfile(str(doc_path))
+            else:  # Linux/Mac
+                import subprocess
+                subprocess.run(['xdg-open', str(doc_path)])
+        else:
+            QMessageBox.warning(self, "Erreur", "Le fichier n'a pas été trouvé sur le disque")
+
+    def _ajouter_document(self):
+        """Ouvre le dialogue pour ajouter un document."""
+        if not self.operateur_selectionne:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un opérateur")
+            return
+
+        dialog = AjouterDocumentDialog(
+            operateur_id=self.operateur_selectionne['id'],
+            domaine=self.domaine_actif,
+            parent=self
+        )
+        if dialog.exec_() == QDialog.Accepted:
+            # Rafraîchir l'affichage
+            self._afficher_details_operateur()
+
+    def _ouvrir_document(self):
+        """Ouvre le document sélectionné."""
+        if not hasattr(self, 'documents_table'):
+            return
+
+        current_row = self.documents_table.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un document")
+            return
+
+        doc_id = int(self.documents_table.item(current_row, 0).text())
+
+        # Récupérer le chemin du document
+        from core.services.document_service import DocumentService
+        doc_service = DocumentService()
+        doc_path = doc_service.get_document_path(doc_id)
+
+        if doc_path and doc_path.exists():
+            import os
+            import subprocess
+            # Ouvrir avec l'application par défaut du système
+            if os.name == 'nt':  # Windows
+                os.startfile(str(doc_path))
+            elif os.name == 'posix':  # Linux/Mac
+                subprocess.run(['xdg-open', str(doc_path)])
+        else:
+            QMessageBox.warning(self, "Erreur", "Le fichier n'a pas été trouvé sur le disque")
 
     # =========================================================================
     # FOOTER
@@ -1432,7 +1775,7 @@ class GestionRHWidget(QWidget):
 
     data_changed = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, operateur_id=None):
         super().__init__(parent)
 
         # État
@@ -1441,8 +1784,13 @@ class GestionRHWidget(QWidget):
         self._search_timer = QTimer()
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._executer_recherche)
+        self._initial_operateur_id = operateur_id
 
         self._setup_ui()
+
+        # Si un operateur_id est fourni, le sélectionner automatiquement après init
+        if operateur_id:
+            QTimer.singleShot(100, lambda: self._selectionner_operateur_par_id(operateur_id))
 
     def _setup_ui(self):
         """Construit l'interface utilisateur."""
@@ -1590,6 +1938,22 @@ class GestionRHWidget(QWidget):
         if self.operateur_selectionne:
             self._afficher_details_operateur()
 
+    def _selectionner_operateur_par_id(self, operateur_id: int):
+        """Sélectionne automatiquement un opérateur par son ID."""
+        # Charger l'opérateur directement
+        self.operateur_selectionne = get_operateur_by_id(operateur_id)
+
+        if self.operateur_selectionne:
+            # Afficher les détails
+            self._afficher_details_operateur()
+
+            # Sélectionner dans la liste si présent
+            for i in range(self.liste_operateurs.count()):
+                item = self.liste_operateurs.item(i)
+                if item.data(Qt.UserRole) == operateur_id:
+                    self.liste_operateurs.setCurrentItem(item)
+                    break
+
     # =========================================================================
     # ZONE DROITE - Détails RH
     # =========================================================================
@@ -1857,7 +2221,9 @@ class GestionRHWidget(QWidget):
             self.layout_resume.addWidget(widget_resume)
 
         # Charger les documents du domaine
+        print(f"[DEBUG GUI] Chargement documents pour operateur_id={operateur_id}, domaine={self.domaine_actif}")
         documents = get_documents_domaine(operateur_id, self.domaine_actif)
+        print(f"[DEBUG GUI] Documents trouvés: {len(documents)}")
         widget_documents = self._creer_widget_documents(documents)
         self.layout_documents.addWidget(widget_documents)
 
@@ -1999,13 +2365,6 @@ class GestionRHWidget(QWidget):
         else:
             alert = EmacAlert("Aucun contrat actif", variant="info")
             layout.addWidget(alert)
-
-        # Historique des contrats
-        historique = donnees.get('historique', [])
-        if historique:
-            card_hist = EmacCard(f"Historique ({len(historique)} contrat(s))")
-            card_hist.body.addWidget(QLabel(f"{len(historique)} contrat(s) dans l'historique"))
-            layout.addWidget(card_hist)
 
         return container
 
@@ -2271,41 +2630,146 @@ class GestionRHWidget(QWidget):
         """Crée le widget affichant les documents du domaine."""
         card = EmacCard(f"Documents associés ({len(documents)})")
 
+        # Boutons d'action
+        btn_layout = QHBoxLayout()
+        btn_layout.setContentsMargins(0, 0, 0, 10)
+
+        btn_ajouter = EmacButton("+ Ajouter un document", variant="primary")
+        btn_ajouter.clicked.connect(self._ajouter_document)
+        btn_layout.addWidget(btn_ajouter)
+
+        btn_layout.addStretch()
+        card.body.addLayout(btn_layout)
+
         if not documents:
             label = QLabel("Aucun document pour ce domaine")
             label.setStyleSheet("color: #9ca3af; padding: 20px;")
             label.setAlignment(Qt.AlignCenter)
             card.body.addWidget(label)
         else:
-            # Tableau des documents
-            table = QTableWidget()
-            table.setColumnCount(5)
-            table.setHorizontalHeaderLabels(["Nom", "Catégorie", "Date ajout", "Expiration", "Statut"])
-            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-            table.setSelectionBehavior(QAbstractItemView.SelectRows)
-            table.setRowCount(len(documents))
+            # Stocker les documents pour y accéder après
+            self._documents_list = documents
 
-            for row, doc in enumerate(documents):
-                table.setItem(row, 0, QTableWidgetItem(doc.get('nom_affichage', '-')))
-                table.setItem(row, 1, QTableWidgetItem(doc.get('categorie_nom', '-')))
-                table.setItem(row, 2, QTableWidgetItem(self._format_date(doc.get('date_upload'))))
-                table.setItem(row, 3, QTableWidgetItem(self._format_date(doc.get('date_expiration')) or '-'))
+            # Liste des documents avec bouton Ouvrir sur chaque ligne
+            for doc in documents:
+                doc_widget = QFrame()
+                doc_widget.setStyleSheet("""
+                    QFrame {
+                        background: #f9fafb;
+                        border: 1px solid #e5e7eb;
+                        border-radius: 8px;
+                        padding: 10px;
+                        margin: 2px 0;
+                    }
+                    QFrame:hover {
+                        background: #f3f4f6;
+                        border-color: #3b82f6;
+                    }
+                """)
 
-                # Statut avec couleur
-                statut = doc.get('statut', 'actif')
-                statut_item = QTableWidgetItem(statut.upper())
-                if statut == 'expire':
-                    statut_item.setForeground(QColor("#ef4444"))
-                elif statut == 'archive':
-                    statut_item.setForeground(QColor("#9ca3af"))
-                else:
-                    statut_item.setForeground(QColor("#10b981"))
-                table.setItem(row, 4, statut_item)
+                doc_layout = QHBoxLayout(doc_widget)
+                doc_layout.setContentsMargins(10, 8, 10, 8)
 
-            card.body.addWidget(table)
+                # Infos du document
+                info_layout = QVBoxLayout()
+                info_layout.setSpacing(2)
+
+                nom_label = QLabel(doc.get('nom_affichage', '-'))
+                nom_label.setFont(QFont("Segoe UI", 10, QFont.Bold))
+                nom_label.setStyleSheet("color: #1f2937; background: transparent;")
+                info_layout.addWidget(nom_label)
+
+                details = f"{doc.get('categorie_nom', '-')} • Ajouté le {self._format_date(doc.get('date_upload'))}"
+                if doc.get('date_expiration'):
+                    details += f" • Expire le {self._format_date(doc.get('date_expiration'))}"
+                details_label = QLabel(details)
+                details_label.setStyleSheet("color: #6b7280; font-size: 11px; background: transparent;")
+                info_layout.addWidget(details_label)
+
+                doc_layout.addLayout(info_layout, 1)
+
+                # Bouton Ouvrir
+                btn_ouvrir = QPushButton("📂 Ouvrir")
+                btn_ouvrir.setCursor(Qt.PointingHandCursor)
+                btn_ouvrir.setStyleSheet("""
+                    QPushButton {
+                        background: #3b82f6;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background: #2563eb;
+                    }
+                """)
+                doc_id = doc.get('id')
+                btn_ouvrir.clicked.connect(lambda checked, d=doc_id: self._ouvrir_document_par_id(d))
+                doc_layout.addWidget(btn_ouvrir)
+
+                card.body.addWidget(doc_widget)
 
         return card
+
+    def _ouvrir_document_par_id(self, doc_id: int):
+        """Ouvre un document par son ID."""
+        from core.services.document_service import DocumentService
+        doc_service = DocumentService()
+        doc_path = doc_service.get_document_path(doc_id)
+
+        if doc_path and doc_path.exists():
+            import os
+            if os.name == 'nt':  # Windows
+                os.startfile(str(doc_path))
+            else:  # Linux/Mac
+                import subprocess
+                subprocess.run(['xdg-open', str(doc_path)])
+        else:
+            QMessageBox.warning(self, "Erreur", "Le fichier n'a pas été trouvé sur le disque")
+
+    def _ajouter_document(self):
+        """Ouvre le dialogue pour ajouter un document."""
+        if not self.operateur_selectionne:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un opérateur")
+            return
+
+        dialog = AjouterDocumentDialog(
+            operateur_id=self.operateur_selectionne['id'],
+            domaine=self.domaine_actif,
+            parent=self
+        )
+        if dialog.exec_() == QDialog.Accepted:
+            # Rafraîchir l'affichage
+            self._afficher_details_operateur()
+
+    def _ouvrir_document(self):
+        """Ouvre le document sélectionné."""
+        if not hasattr(self, 'documents_table'):
+            return
+
+        current_row = self.documents_table.currentRow()
+        if current_row < 0:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un document")
+            return
+
+        doc_id = int(self.documents_table.item(current_row, 0).text())
+
+        # Récupérer le chemin du document
+        from core.services.document_service import DocumentService
+        doc_service = DocumentService()
+        doc_path = doc_service.get_document_path(doc_id)
+
+        if doc_path and doc_path.exists():
+            import os
+            import subprocess
+            # Ouvrir avec l'application par défaut du système
+            if os.name == 'nt':  # Windows
+                os.startfile(str(doc_path))
+            elif os.name == 'posix':  # Linux/Mac
+                subprocess.run(['xdg-open', str(doc_path)])
+        else:
+            QMessageBox.warning(self, "Erreur", "Le fichier n'a pas été trouvé sur le disque")
 
     # =========================================================================
     # UTILITAIRES

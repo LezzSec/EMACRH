@@ -15,6 +15,7 @@ from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from datetime import date, timedelta
 from core.db.configbd import get_connection as get_db_connection
+from core.services.logger import log_hist
 
 # Import du thème moderne
 try:
@@ -592,6 +593,13 @@ class DetailOperateurDialog(QDialog):
                 conn = get_db_connection()
                 cursor = conn.cursor()
 
+                # Récupérer operateur_id et poste_id pour le log
+                cursor.execute("SELECT operateur_id, poste_id, niveau FROM polyvalence WHERE id = %s", (poly_id,))
+                poly_data = cursor.fetchone()
+                operateur_id = poly_data[0] if poly_data else None
+                poste_id = poly_data[1] if poly_data else None
+                ancien_niveau = poly_data[2] if poly_data else None
+
                 cursor.execute("""
                     UPDATE polyvalence
                     SET niveau = %s, date_evaluation = %s, prochaine_evaluation = %s
@@ -601,6 +609,16 @@ class DetailOperateurDialog(QDialog):
                 conn.commit()
                 cursor.close()
                 conn.close()
+
+                # Logger la modification
+                log_hist(
+                    action="UPDATE",
+                    table_name="polyvalence",
+                    record_id=poly_id,
+                    description=f"Niveau modifié: {ancien_niveau} → {new_niveau}, prochaine éval: {prochaine_eval.strftime('%d/%m/%Y')}",
+                    operateur_id=operateur_id,
+                    poste_id=poste_id
+                )
 
                 # Recharger les données pour afficher la nouvelle prochaine évaluation
                 self._load_data()
@@ -655,6 +673,13 @@ class DetailOperateurDialog(QDialog):
                         conn = get_db_connection()
                         cursor = conn.cursor()
 
+                        # Récupérer operateur_id et poste_id pour le log
+                        cursor.execute("SELECT operateur_id, poste_id, date_evaluation FROM polyvalence WHERE id = %s", (poly_id,))
+                        poly_data = cursor.fetchone()
+                        operateur_id = poly_data[0] if poly_data else None
+                        poste_id = poly_data[1] if poly_data else None
+                        ancienne_date = poly_data[2] if poly_data else None
+
                         cursor.execute("""
                             UPDATE polyvalence
                             SET date_evaluation = %s, prochaine_evaluation = %s
@@ -664,6 +689,16 @@ class DetailOperateurDialog(QDialog):
                         conn.commit()
                         cursor.close()
                         conn.close()
+
+                        # Logger la modification
+                        log_hist(
+                            action="UPDATE",
+                            table_name="polyvalence",
+                            record_id=poly_id,
+                            description=f"Date évaluation modifiée: {ancienne_date} → {new_date.strftime('%d/%m/%Y')}, prochaine éval: {prochaine_eval.strftime('%d/%m/%Y')}",
+                            operateur_id=operateur_id,
+                            poste_id=poste_id
+                        )
 
                         # Recharger les données pour mettre à jour le statut
                         self._load_data()
@@ -686,11 +721,28 @@ class DetailOperateurDialog(QDialog):
                 conn = get_db_connection()
                 cursor = conn.cursor()
 
+                # Récupérer operateur_id et poste_id pour le log
+                cursor.execute("SELECT operateur_id, poste_id, date_evaluation FROM polyvalence WHERE id = %s", (poly_id,))
+                poly_data = cursor.fetchone()
+                operateur_id = poly_data[0] if poly_data else None
+                poste_id = poly_data[1] if poly_data else None
+                ancienne_date = poly_data[2] if poly_data else None
+
                 cursor.execute("UPDATE polyvalence SET date_evaluation = %s WHERE id = %s", (new_date, poly_id))
 
                 conn.commit()
                 cursor.close()
                 conn.close()
+
+                # Logger la modification
+                log_hist(
+                    action="UPDATE",
+                    table_name="polyvalence",
+                    record_id=poly_id,
+                    description=f"Date évaluation modifiée: {ancienne_date} → {new_date.strftime('%d/%m/%Y')}",
+                    operateur_id=operateur_id,
+                    poste_id=poste_id
+                )
 
                 self._load_data()
                 QMessageBox.information(self, "Succès", "Date d'évaluation mise à jour.")

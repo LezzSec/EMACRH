@@ -46,11 +46,17 @@ class UserManagementDialog(QDialog):
         title.setProperty('class', 'h1')
         main_layout.addWidget(title)
 
-        # Bouton pour ajouter un utilisateur
+        # Boutons d'action
         btn_layout = QHBoxLayout()
         self.btn_add_user = EmacButton("➕ Nouvel Utilisateur", variant='primary')
         self.btn_add_user.clicked.connect(self.show_add_user_dialog)
         btn_layout.addWidget(self.btn_add_user)
+
+        # Bouton pour gérer les permissions (système puzzle)
+        self.btn_permissions = EmacButton("🔐 Gérer les Permissions", variant='ghost')
+        self.btn_permissions.clicked.connect(self.show_permission_editor)
+        btn_layout.addWidget(self.btn_permissions)
+
         btn_layout.addStretch()
         main_layout.addLayout(btn_layout)
 
@@ -217,6 +223,13 @@ class UserManagementDialog(QDialog):
                 self.load_users()
             else:
                 QMessageBox.critical(self, "Erreur", error or "Une erreur est survenue.")
+
+    def show_permission_editor(self):
+        """Affiche l'éditeur de permissions (système puzzle)"""
+        from core.gui.permission_puzzle import PermissionEditorDialog
+
+        dialog = PermissionEditorDialog(self)
+        dialog.exec_()
 
 
 class AddUserDialog(QDialog):

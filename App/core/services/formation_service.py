@@ -200,14 +200,15 @@ def update_formation(formation_id: int, **kwargs) -> Tuple[bool, str]:
     Returns:
         (succès, message)
     """
-    allowed_fields = {
+    # SÉCURITÉ: Whitelist stricte des colonnes autorisées (frozenset = immutable)
+    ALLOWED_FIELDS = frozenset([
         'operateur_id', 'intitule', 'organisme', 'date_debut', 'date_fin',
         'duree_heures', 'statut', 'certificat_obtenu', 'cout', 'commentaire',
         'document_id'
-    }
+    ])
 
     # Filtrer les champs autorisés
-    updates = {k: v for k, v in kwargs.items() if k in allowed_fields}
+    updates = {k: v for k, v in kwargs.items() if k in ALLOWED_FIELDS}
 
     if not updates:
         return False, "Aucun champ à mettre à jour"
@@ -216,11 +217,17 @@ def update_formation(formation_id: int, **kwargs) -> Tuple[bool, str]:
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
-            set_clauses = [f"{key} = %s" for key in updates.keys()]
-            values = list(updates.values())
+            # SÉCURITÉ: Vérification que chaque clé est bien dans la whitelist
+            set_clauses = []
+            values = []
+            for key in updates.keys():
+                assert key in ALLOWED_FIELDS, f"Colonne non autorisée: {key}"
+                set_clauses.append(f"{key} = %s")
+                values.append(updates[key])
             values.append(formation_id)
 
-            sql = f"UPDATE formation SET {', '.join(set_clauses)} WHERE id = %s"
+            # SÉCURITÉ: Les colonnes proviennent uniquement de ALLOWED_FIELDS (constante)
+            sql = "UPDATE formation SET " + ", ".join(set_clauses) + " WHERE id = %s"
 
             cur.execute(sql, tuple(values))
 

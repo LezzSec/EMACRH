@@ -487,17 +487,27 @@ def get_documents_domaine(
         Liste des documents
     """
     try:
-        # Trouver les catégories correspondant au domaine
-        categories_domaine = [
-            cat for cat, dom in CATEGORIE_TO_DOMAINE.items()
-            if dom == domaine
-        ]
-
-        if not categories_domaine:
-            return []
-
         with DatabaseCursor(dictionary=True) as cur:
-            placeholders = ', '.join(['%s'] * len(categories_domaine))
+            # Récupérer toutes les catégories de la base de données
+            cur.execute("SELECT id, nom FROM categories_documents")
+            all_categories = cur.fetchall()
+
+            # Trouver les IDs des catégories correspondant au domaine
+            categories_ids = []
+            for cat in all_categories:
+                cat_domaine = CATEGORIE_TO_DOMAINE.get(cat['nom'], DomaineRH.GENERAL)
+                if cat_domaine == domaine:
+                    categories_ids.append(cat['id'])
+
+            # DEBUG
+            print(f"[DEBUG] get_documents_domaine: operateur_id={operateur_id}, domaine={domaine}")
+            print(f"[DEBUG] categories trouvées: {[(c['id'], c['nom']) for c in all_categories]}")
+            print(f"[DEBUG] categories_ids pour ce domaine: {categories_ids}")
+
+            if not categories_ids:
+                return []
+
+            placeholders = ', '.join(['%s'] * len(categories_ids))
 
             sql = f"""
                 SELECT
@@ -514,9 +524,6 @@ def get_documents_domaine(
                     d.statut,
                     d.notes,
                     d.uploaded_by,
-                    d.contrat_id,
-                    d.formation_id,
-                    d.declaration_id,
                     c.nom as categorie_nom,
                     c.couleur as categorie_couleur,
                     CASE
@@ -529,13 +536,13 @@ def get_documents_domaine(
                 FROM documents d
                 JOIN categories_documents c ON d.categorie_id = c.id
                 WHERE d.operateur_id = %s
-                  AND c.nom IN ({placeholders})
+                  AND d.categorie_id IN ({placeholders})
             """
 
-            params = [operateur_id] + categories_domaine
+            params = [operateur_id] + categories_ids
 
             if not include_archives:
-                sql += " AND d.statut != 'archive'"
+                sql += " AND (d.statut IS NULL OR d.statut != 'archive')"
 
             sql += " ORDER BY d.date_upload DESC"
 
@@ -544,6 +551,8 @@ def get_documents_domaine(
 
     except Exception as e:
         print(f"Erreur get_documents_domaine: {e}")
+        import traceback
+        traceback.print_exc()
         return []
 
 
@@ -656,13 +665,20 @@ def lier_document_entite(
     if not column:
         return False, f"Type d'entité invalide: {entite_type}"
 
+    # SÉCURITÉ: Validation stricte - la colonne DOIT être dans la whitelist
+    assert column in ('contrat_id', 'formation_id', 'declaration_id'), \
+        f"Colonne non autorisée: {column}"
+
     try:
         with DatabaseConnection() as conn:
             cur = conn.cursor()
-            cur.execute(
-                f"UPDATE documents SET {column} = %s WHERE id = %s",
-                (entite_id, document_id)
-            )
+            # SÉCURITÉ: Utilisation de requêtes distinctes pour chaque colonne valide
+            if column == 'contrat_id':
+                cur.execute("UPDATE documents SET contrat_id = %s WHERE id = %s", (entite_id, document_id))
+            elif column == 'formation_id':
+                cur.execute("UPDATE documents SET formation_id = %s WHERE id = %s", (entite_id, document_id))
+            elif column == 'declaration_id':
+                cur.execute("UPDATE documents SET declaration_id = %s WHERE id = %s", (entite_id, document_id))
 
             if cur.rowcount == 0:
                 return False, "Document introuvable"
@@ -697,13 +713,20 @@ def delier_document_entite(
     if not column:
         return False, f"Type d'entité invalide: {entite_type}"
 
+    # SÉCURITÉ: Validation stricte - la colonne DOIT être dans la whitelist
+    assert column in ('contrat_id', 'formation_id', 'declaration_id'), \
+        f"Colonne non autorisée: {column}"
+
     try:
         with DatabaseConnection() as conn:
             cur = conn.cursor()
-            cur.execute(
-                f"UPDATE documents SET {column} = NULL WHERE id = %s",
-                (document_id,)
-            )
+            # SÉCURITÉ: Utilisation de requêtes distinctes pour chaque colonne valide
+            if column == 'contrat_id':
+                cur.execute("UPDATE documents SET contrat_id = NULL WHERE id = %s", (document_id,))
+            elif column == 'formation_id':
+                cur.execute("UPDATE documents SET formation_id = NULL WHERE id = %s", (document_id,))
+            elif column == 'declaration_id':
+                cur.execute("UPDATE documents SET declaration_id = NULL WHERE id = %s", (document_id,))
 
             if cur.rowcount == 0:
                 return False, "Document introuvable"
@@ -925,6 +948,8 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
     Args:
         operateur_id: ID de l'opérateur
         data: Dictionnaire avec les champs à mettre à jour
+              - 'matricule' est mis à jour dans la table 'personnel'
+              - Les autres champs sont mis à jour dans 'personnel_infos'
 
     Returns:
         (succès, message)
@@ -933,25 +958,79 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
         with DatabaseConnection() as conn:
             cur = conn.cursor(dictionary=True)
 
-            # Vérifier si personnel_infos existe
+            # 1. Mise à jour des champs dans la table personnel (nom, prenom, matricule)
+            personnel_updates = []
+            personnel_values = []
+            log_changes = []
+
+            # Récupérer les anciennes valeurs pour le log
+            cur.execute("SELECT nom, prenom, matricule FROM personnel WHERE id = %s", (operateur_id,))
+            ancien = cur.fetchone()
+
+            if 'nom' in data and data['nom']:
+                ancien_nom = ancien['nom'] if ancien else None
+                if ancien_nom != data['nom']:
+                    personnel_updates.append("nom = %s")
+                    personnel_values.append(data['nom'])
+                    log_changes.append(f"Nom: {ancien_nom} → {data['nom']}")
+
+            if 'prenom' in data and data['prenom']:
+                ancien_prenom = ancien['prenom'] if ancien else None
+                if ancien_prenom != data['prenom']:
+                    personnel_updates.append("prenom = %s")
+                    personnel_values.append(data['prenom'])
+                    log_changes.append(f"Prénom: {ancien_prenom} → {data['prenom']}")
+
+            if 'matricule' in data:
+                ancien_matricule = ancien['matricule'] if ancien else None
+                if ancien_matricule != data['matricule']:
+                    personnel_updates.append("matricule = %s")
+                    personnel_values.append(data['matricule'])
+                    log_changes.append(f"Matricule: {ancien_matricule} → {data['matricule']}")
+
+            # Exécuter la mise à jour de la table personnel si nécessaire
+            if personnel_updates:
+                personnel_values.append(operateur_id)
+                sql = "UPDATE personnel SET " + ", ".join(personnel_updates) + " WHERE id = %s"
+                cur.execute(sql, tuple(personnel_values))
+
+                # Logger les modifications
+                from core.services.logger import log_hist
+                log_hist(
+                    action="UPDATE",
+                    table_name="personnel",
+                    record_id=operateur_id,
+                    description="; ".join(log_changes),
+                    operateur_id=operateur_id
+                )
+
+            # 2. Vérifier si personnel_infos existe
             cur.execute("SELECT id FROM personnel_infos WHERE operateur_id = %s", (operateur_id,))
             exists = cur.fetchone()
+
+            # SÉCURITÉ: Whitelist stricte des colonnes autorisées pour personnel_infos
+            ALLOWED_COLUMNS = frozenset([
+                'sexe', 'date_naissance', 'date_entree', 'nationalite',
+                'adresse1', 'adresse2', 'cp_adresse', 'ville_adresse',
+                'pays_adresse', 'telephone', 'email', 'ville_naissance',
+                'pays_naissance', 'commentaire'
+            ])
 
             if exists:
                 # UPDATE
                 fields = []
                 values = []
-                for key in ['sexe', 'date_naissance', 'date_entree', 'nationalite',
-                           'adresse1', 'adresse2', 'cp_adresse', 'ville_adresse',
-                           'pays_adresse', 'telephone', 'email', 'ville_naissance',
-                           'pays_naissance', 'commentaire']:
+                for key in ALLOWED_COLUMNS:
                     if key in data:
+                        # SÉCURITÉ: Double vérification que la clé est dans la whitelist
+                        assert key in ALLOWED_COLUMNS, f"Colonne non autorisée: {key}"
                         fields.append(f"{key} = %s")
                         values.append(data[key] if data[key] != '' else None)
 
                 if fields:
                     values.append(operateur_id)
-                    sql = f"UPDATE personnel_infos SET {', '.join(fields)} WHERE operateur_id = %s"
+                    # SÉCURITÉ: Les colonnes proviennent uniquement de ALLOWED_COLUMNS (constante)
+                    sql = "UPDATE personnel_infos SET " + ", ".join(fields) + " WHERE operateur_id = %s"
                     cur.execute(sql, tuple(values))
             else:
                 # INSERT
@@ -959,16 +1038,16 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
                 values = [operateur_id]
                 placeholders = ['%s']
 
-                for key in ['sexe', 'date_naissance', 'date_entree', 'nationalite',
-                           'adresse1', 'adresse2', 'cp_adresse', 'ville_adresse',
-                           'pays_adresse', 'telephone', 'email', 'ville_naissance',
-                           'pays_naissance', 'commentaire']:
+                for key in ALLOWED_COLUMNS:
                     if key in data:
+                        # SÉCURITÉ: Double vérification que la clé est dans la whitelist
+                        assert key in ALLOWED_COLUMNS, f"Colonne non autorisée: {key}"
                         columns.append(key)
                         values.append(data[key] if data[key] != '' else None)
                         placeholders.append('%s')
 
-                sql = f"INSERT INTO personnel_infos ({', '.join(columns)}) VALUES ({', '.join(placeholders)})"
+                # SÉCURITÉ: Les colonnes proviennent uniquement de ALLOWED_COLUMNS (constante)
+                sql = "INSERT INTO personnel_infos (" + ", ".join(columns) + ") VALUES (" + ", ".join(placeholders) + ")"
                 cur.execute(sql, tuple(values))
 
             return True, "Informations mises à jour avec succès"

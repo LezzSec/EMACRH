@@ -100,16 +100,20 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
 
     cur = conn.cursor(dictionary=True)
     try:
-        # ✅ OPTIMISATION : Récupérer utilisateur + rôle + permissions en UNE SEULE requête
-        # Au lieu de 2 requêtes séparées (user+role, puis permissions)
+        # ✅ OPTIMISATION : Récupérer utilisateur + rôle + permissions + overrides en UNE SEULE requête
+        # Inclut les overrides utilisateur (système puzzle) avec COALESCE pour fusionner
         cur.execute("""
             SELECT
                 u.id, u.username, u.password_hash, u.nom, u.prenom,
                 u.role_id, u.actif, r.nom as role_nom,
-                p.module, p.lecture, p.ecriture, p.suppression
+                p.module,
+                COALESCE(pu.lecture, p.lecture) as lecture,
+                COALESCE(pu.ecriture, p.ecriture) as ecriture,
+                COALESCE(pu.suppression, p.suppression) as suppression
             FROM utilisateurs u
             JOIN roles r ON u.role_id = r.id
             LEFT JOIN permissions p ON p.role_id = u.role_id
+            LEFT JOIN permissions_utilisateur pu ON pu.utilisateur_id = u.id AND pu.module = p.module
             WHERE u.username = %s
         """, (username,))
 
@@ -128,14 +132,14 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
         if not verify_password(password, user['password_hash']):
             return False, "Nom d'utilisateur ou mot de passe incorrect"
 
-        # ✅ Construire le dictionnaire des permissions depuis les rows
+        # ✅ Construire le dictionnaire des permissions effectives (rôle + overrides)
         permissions = {}
         for row in rows:
             if row['module']:  # Peut être NULL si pas de permissions
                 permissions[row['module']] = {
-                    'lecture': bool(row['lecture']),
-                    'ecriture': bool(row['ecriture']),
-                    'suppression': bool(row['suppression'])
+                    'lecture': bool(row['lecture']) if row['lecture'] is not None else False,
+                    'ecriture': bool(row['ecriture']) if row['ecriture'] is not None else False,
+                    'suppression': bool(row['suppression']) if row['suppression'] is not None else False
                 }
 
         # Créer une session de connexion

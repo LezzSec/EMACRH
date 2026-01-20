@@ -147,6 +147,14 @@ def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
 
     try:
         with DatabaseCursor() as cur:
+            # Récupérer les anciennes valeurs pour le log
+            cur.execute("SELECT operateur_id, poste_id, niveau, date_evaluation FROM polyvalence WHERE id = %s", (polyvalence_id,))
+            ancien = cur.fetchone()
+            operateur_id = ancien[0] if ancien else None
+            poste_id = ancien[1] if ancien else None
+            ancien_niveau = ancien[2] if ancien else None
+            ancienne_date = ancien[3] if ancien else None
+
             cur.execute("""
                 UPDATE polyvalence
                 SET niveau = %s,
@@ -154,6 +162,17 @@ def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
                     prochaine_evaluation = %s
                 WHERE id = %s
             """, (nouveau_niveau, date_evaluation, prochaine_evaluation, polyvalence_id))
+
+            # Logger la modification
+            from core.services.logger import log_hist
+            log_hist(
+                action="UPDATE",
+                table_name="polyvalence",
+                record_id=polyvalence_id,
+                description=f"Évaluation mise à jour: N{ancien_niveau}→N{nouveau_niveau}, date: {ancienne_date}→{date_evaluation}, prochaine: {prochaine_evaluation}",
+                operateur_id=operateur_id,
+                poste_id=poste_id
+            )
 
             return True
 

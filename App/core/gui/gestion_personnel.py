@@ -12,8 +12,6 @@ from PyQt5.QtGui import QFont, QColor
 
 from core.db.configbd import get_connection as get_db_connection
 from core.services.logger import log_hist
-from core.services.contrat_service import get_all_contracts
-from core.gui.contract_management import ContractFormDialog
 from core.gui.historique_personnel import HistoriquePersonnelTab
 from core.gui.emac_ui_kit import add_custom_title_bar
 from core.services.auth_service import has_permission, get_current_user
@@ -164,120 +162,7 @@ class DetailOperateurDialog(QDialog):
 
         tabs.addTab(infos_tab, "Infos Complémentaires")
 
-        # Onglet 4 : Contrats
-        contract_tab = QWidget()
-        contract_layout = QVBoxLayout(contract_tab)
-        contract_layout.setSpacing(15)
-        contract_layout.setContentsMargins(20, 20, 20, 20)
-
-        # En-tête avec design moderne
-        header_contract = QWidget()
-        header_contract.setStyleSheet("""
-            QWidget {
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 #d97706, stop:1 #f59e0b);
-                border-radius: 10px;
-                padding: 15px;
-            }
-        """)
-        header_layout_contract = QVBoxLayout(header_contract)
-
-        contract_label = QLabel("Contrats de Travail")
-        contract_label.setFont(QFont("Segoe UI", 16, QFont.Bold))
-        contract_label.setStyleSheet("color: white; background: transparent;")
-        header_layout_contract.addWidget(contract_label)
-
-        contract_subtitle = QLabel("Historique complet des contrats")
-        contract_subtitle.setStyleSheet("color: #fef3c7; font-size: 11px; background: transparent;")
-        header_layout_contract.addWidget(contract_subtitle)
-
-        contract_layout.addWidget(header_contract)
-
-        # Boutons d'action pour les contrats (seulement si permission d'écriture)
-        if has_permission('contrats', 'ecriture'):
-            contract_actions = QHBoxLayout()
-            self.add_contract_btn = QPushButton("+ Nouveau contrat")
-            self.add_contract_btn.setStyleSheet("""
-                QPushButton {
-                    background: #f59e0b;
-                    color: white;
-                    font-weight: bold;
-                    padding: 8px 16px;
-                    border-radius: 6px;
-                }
-                QPushButton:hover {
-                    background: #d97706;
-                }
-            """)
-            self.add_contract_btn.clicked.connect(self.add_contract)
-            contract_actions.addWidget(self.add_contract_btn)
-
-            self.edit_contract_btn = QPushButton("Modifier")
-            self.edit_contract_btn.setStyleSheet("""
-                QPushButton {
-                    background: #6b7280;
-                    color: white;
-                    padding: 8px 16px;
-                    border-radius: 6px;
-                }
-                QPushButton:hover {
-                    background: #4b5563;
-                }
-            """)
-            self.edit_contract_btn.clicked.connect(self.edit_contract)
-            contract_actions.addWidget(self.edit_contract_btn)
-
-            contract_actions.addStretch()
-            contract_layout.addLayout(contract_actions)
-
-        # Tableau des contrats
-        self.contract_table = QTableWidget()
-        self.contract_table.setColumnCount(7)
-        self.contract_table.setHorizontalHeaderLabels([
-            "ID", "Type", "Début", "Fin", "ETP", "Catégorie", "Actif"
-        ])
-        self.contract_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.contract_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Stretch)
-        self.contract_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.contract_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.contract_table.setColumnHidden(0, True)  # Cacher l'ID
-        self.contract_table.setAlternatingRowColors(True)
-        self.contract_table.setStyleSheet("""
-            QTableWidget {
-                background-color: white;
-                alternate-background-color: #fef3c7;
-                gridline-color: #fde68a;
-                border: 2px solid #e2e8f0;
-                border-radius: 10px;
-                font-size: 11px;
-            }
-            QHeaderView::section {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #f1f5f9, stop:1 #e2e8f0);
-                color: #1e293b;
-                font-weight: bold;
-                font-size: 12px;
-                padding: 12px 15px;
-                border: none;
-                border-bottom: 3px solid #f59e0b;
-            }
-            QTableWidget::item {
-                padding: 12px 15px;
-                border-bottom: 1px solid #f1f5f9;
-            }
-            QTableWidget::item:selected {
-                background-color: #fde68a;
-                color: #92400e;
-            }
-        """)
-        # Double-clic pour modifier seulement si permission d'écriture
-        if has_permission('contrats', 'ecriture'):
-            self.contract_table.doubleClicked.connect(self.edit_contract)
-        contract_layout.addWidget(self.contract_table)
-
-        tabs.addTab(contract_tab, "Contrats")
-
-        # Onglet 5 : Historique des modifications (nouveau widget complet)
+        # Onglet 3 : Historique des modifications (nouveau widget complet)
         self.history_tab = HistoriquePersonnelTab(
             operateur_id=self.operateur_id,
             operateur_nom=nom,
@@ -378,8 +263,7 @@ class DetailOperateurDialog(QDialog):
     def load_data(self):
         """Charge toutes les données de l'opérateur."""
         self.load_polyvalences()
-        self.load_additional_infos() # <--- AJOUT : Chargement des nouvelles infos
-        self.load_contracts()
+        self.load_additional_infos()
         # L'historique se charge automatiquement via le widget HistoriquePersonnelTab
 
     
@@ -462,7 +346,8 @@ class DetailOperateurDialog(QDialog):
                 "Contrat Actuel",
                 contract_items,
                 icon_color="#f59e0b",
-                icon="📋"
+                icon="📋",
+                on_click=self._open_contract_management
             )
 
             # -------- Carte Formations --------
@@ -542,24 +427,44 @@ class DetailOperateurDialog(QDialog):
             if item.widget():
                 item.widget().deleteLater()
 
-    def _add_info_card(self, title: str, items: list, icon_color: str = "#3b82f6", icon: str = "📄"):
-        """Crée et ajoute une carte d'information au layout."""
+    def _add_info_card(self, title: str, items: list, icon_color: str = "#3b82f6", icon: str = "📄", on_click=None):
+        """Crée et ajoute une carte d'information au layout.
+
+        Args:
+            on_click: Fonction callback appelée lors du clic sur la carte (optionnel)
+        """
         # Stocker les données pour l'export
         if hasattr(self, '_infos_data'):
             self._infos_data.append((title, items))
 
         card = QFrame()
-        card.setStyleSheet(f"""
-            QFrame {{
-                background-color: white;
-                border-radius: 12px;
-                border: 1px solid #e2e8f0;
-            }}
-            QFrame:hover {{
-                border: 1px solid {icon_color};
-                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            }}
-        """)
+
+        # Style différent si cliquable
+        if on_click:
+            card.setCursor(Qt.PointingHandCursor)
+            card.setStyleSheet(f"""
+                QFrame {{
+                    background-color: white;
+                    border-radius: 12px;
+                    border: 1px solid #e2e8f0;
+                }}
+                QFrame:hover {{
+                    border: 2px solid {icon_color};
+                    background-color: #fafafa;
+                }}
+            """)
+            card.mousePressEvent = lambda event: on_click()
+        else:
+            card.setStyleSheet(f"""
+                QFrame {{
+                    background-color: white;
+                    border-radius: 12px;
+                    border: 1px solid #e2e8f0;
+                }}
+                QFrame:hover {{
+                    border: 1px solid {icon_color};
+                }}
+            """)
 
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(20, 16, 20, 16)
@@ -616,8 +521,23 @@ class DetailOperateurDialog(QDialog):
 
         card_layout.addLayout(content_layout)
 
+        # Ajouter un indicateur "Voir détails" si cliquable
+        if on_click:
+            link_label = QLabel("Voir détails →")
+            link_label.setFont(QFont("Segoe UI", 9))
+            link_label.setStyleSheet(f"color: {icon_color}; background: transparent;")
+            link_label.setAlignment(Qt.AlignRight)
+            card_layout.addWidget(link_label)
+
         self.infos_cards_layout.addWidget(card)
 
+    def _open_contract_management(self):
+        """Ouvre la fenêtre de gestion RH des contrats pour cet opérateur."""
+        from core.gui.contract_management import ContractManagementDialog
+        dialog = ContractManagementDialog(self, operateur_id=self.operateur_id)
+        dialog.exec_()
+        # Recharger les infos après fermeture (au cas où un contrat a été modifié)
+        self.load_additional_infos()
 
     def _format_column_name(self, col_name: str) -> str:
         """
@@ -814,72 +734,6 @@ class DetailOperateurDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Impossible de modifier le statut :\n{e}")
-
-    def load_contracts(self):
-        """Charge l'historique des contrats de l'opérateur."""
-        try:
-            contracts = get_all_contracts(self.operateur_id, include_inactive=True)
-
-            self.contract_table.setRowCount(0)
-
-            for contract in contracts:
-                row = self.contract_table.rowCount()
-                self.contract_table.insertRow(row)
-
-                # ID (caché)
-                self.contract_table.setItem(row, 0, QTableWidgetItem(str(contract['id'])))
-
-                # Type
-                type_item = QTableWidgetItem(contract['type_contrat'])
-                self.contract_table.setItem(row, 1, type_item)
-
-                # Date début
-                date_debut_str = contract['date_debut'].strftime('%d/%m/%Y') if contract['date_debut'] else ''
-                self.contract_table.setItem(row, 2, QTableWidgetItem(date_debut_str))
-
-                # Date fin
-                date_fin_str = contract['date_fin'].strftime('%d/%m/%Y') if contract['date_fin'] else 'Indéterminée'
-                self.contract_table.setItem(row, 3, QTableWidgetItem(date_fin_str))
-
-                # ETP
-                etp_str = str(contract.get('etp', '1.0'))
-                self.contract_table.setItem(row, 4, QTableWidgetItem(etp_str))
-
-                # Catégorie
-                categorie = contract.get('categorie', '')
-                self.contract_table.setItem(row, 5, QTableWidgetItem(categorie or ''))
-
-                # Actif
-                actif_str = "Actif" if contract.get('actif') else "Inactif"
-                actif_item = QTableWidgetItem(actif_str)
-                if contract.get('actif'):
-                    actif_item.setForeground(QColor("#10b981"))
-                else:
-                    actif_item.setForeground(QColor("#6b7280"))
-                self.contract_table.setItem(row, 6, actif_item)
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les contrats : {e}")
-
-    def add_contract(self):
-        """Ouvre le formulaire pour ajouter un nouveau contrat."""
-        dialog = ContractFormDialog(self, operateur_id=self.operateur_id)
-        if dialog.exec_() == QDialog.Accepted:
-            self.load_contracts()
-            self.load_additional_infos()  # Recharger les infos complémentaires
-
-    def edit_contract(self):
-        """Modifie le contrat sélectionné."""
-        current_row = self.contract_table.currentRow()
-        if current_row < 0:
-            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un contrat")
-            return
-
-        contract_id = int(self.contract_table.item(current_row, 0).text())
-        dialog = ContractFormDialog(self, contract_id=contract_id)
-        if dialog.exec_() == QDialog.Accepted:
-            self.load_contracts()
-            self.load_additional_infos()  # Recharger les infos complémentaires
 
     def export_profile(self):
         """Demande le format d'export puis lance PDF ou Excel."""

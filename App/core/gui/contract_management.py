@@ -452,10 +452,11 @@ class ContractFormDialog(QDialog):
 class ContractManagementDialog(QDialog):
     """Dialogue de gestion RH - Contrats et Documents."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, operateur_id=None):
         super().__init__(parent)
         self.setWindowTitle("Gestion RH")
         self.setGeometry(150, 150, 1200, 700)
+        self._operateur_id = operateur_id
 
         self.init_ui()
 
@@ -481,7 +482,7 @@ class ContractManagementDialog(QDialog):
         content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
 
-        self.gestion_rh_widget = GestionRHWidget(self)
+        self.gestion_rh_widget = GestionRHWidget(self, operateur_id=self._operateur_id)
         content_layout.addWidget(self.gestion_rh_widget, 1)
 
         main_layout.addWidget(content_widget, 1)

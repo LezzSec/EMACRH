@@ -389,8 +389,6 @@ class MainWindow(QMainWindow):
             add_btn("Création/Suppression de poste", self.show_poste_form)
         if perms.get("contrats_ecriture") or perms.get("documentsrh_lecture"):
             add_btn("Gestion RH (Contrats & Documents)", self.show_contract_management)
-        if perms.get("documentsrh_lecture") or perms.get("formations_lecture"):
-            add_btn("Gestion des Formations", self.show_gestion_formations)
         if perms.get("planning_lecture"):
             add_btn("Planning & Évaluations", self.show_regularisation)
         if perms.get("documentsrh_lecture") or perms.get("personnel_lecture"):
@@ -556,9 +554,6 @@ class MainWindow(QMainWindow):
         from core.gui.gestion_documentaire import GestionDocumentaireDialog
         GestionDocumentaireDialog(self).exec_()
 
-    def show_gestion_formations(self):
-        from core.gui.gestion_formations import GestionFormationsDialog
-        GestionFormationsDialog(self).exec_()
 
     def show_gestion_templates(self):
         from core.gui.gestion_templates import GestionTemplatesDialog
