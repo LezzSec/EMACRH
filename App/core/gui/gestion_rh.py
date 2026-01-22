@@ -35,6 +35,19 @@ from core.services.rh_service import (
     create_formation, update_formation, delete_formation,
     get_types_declaration
 )
+from core.services.medical_service import (
+    get_visites, create_visite, update_visite, delete_visite,
+    get_accidents, create_accident, update_accident, delete_accident,
+    get_validites, create_validite, update_validite, delete_validite,
+    get_alertes_medicales
+)
+from core.services.vie_salarie_service import (
+    get_sanctions, create_sanction, update_sanction, delete_sanction,
+    get_controles_alcool, create_controle_alcool, delete_controle_alcool,
+    get_tests_salivaires, create_test_salivaire, delete_test_salivaire,
+    get_entretiens, create_entretien, update_entretien, delete_entretien,
+    get_types_sanction, get_types_entretien, get_managers_liste
+)
 
 
 # ============================================================
@@ -1193,6 +1206,10 @@ class GestionRHDialog(QDialog):
             return self._creer_resume_competences(donnees)
         elif self.domaine_actif == DomaineRH.FORMATION:
             return self._creer_resume_formation(donnees)
+        elif self.domaine_actif == DomaineRH.MEDICAL:
+            return self._creer_resume_medical(donnees)
+        elif self.domaine_actif == DomaineRH.VIE_SALARIE:
+            return self._creer_resume_vie_salarie(donnees)
         return None
 
     def _creer_resume_general(self, donnees: dict) -> QWidget:
@@ -2239,6 +2256,10 @@ class GestionRHWidget(QWidget):
             return self._creer_resume_competences(donnees)
         elif self.domaine_actif == DomaineRH.FORMATION:
             return self._creer_resume_formation(donnees)
+        elif self.domaine_actif == DomaineRH.MEDICAL:
+            return self._creer_resume_medical(donnees)
+        elif self.domaine_actif == DomaineRH.VIE_SALARIE:
+            return self._creer_resume_vie_salarie(donnees)
         return None
 
     def _creer_resume_general(self, donnees: dict) -> QWidget:

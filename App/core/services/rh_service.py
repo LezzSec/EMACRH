@@ -31,17 +31,22 @@ class DomaineRH(Enum):
     DECLARATION = "declaration"
     COMPETENCES = "competences"
     FORMATION = "formation"
+    MEDICAL = "medical"
+    VIE_SALARIE = "vie_salarie"
 
 
 # Mapping catégories de documents → domaines RH
 CATEGORIE_TO_DOMAINE = {
     "Contrats de travail": DomaineRH.CONTRAT,
-    "Certificats médicaux": DomaineRH.DECLARATION,
+    "Certificats médicaux": DomaineRH.MEDICAL,
     "Diplômes et formations": DomaineRH.FORMATION,
     "Autorisations de travail": DomaineRH.CONTRAT,
     "Pièces d'identité": DomaineRH.GENERAL,
     "Attestations diverses": DomaineRH.GENERAL,
     "Documents administratifs": DomaineRH.GENERAL,
+    "Documents médicaux": DomaineRH.MEDICAL,
+    "Sanctions disciplinaires": DomaineRH.VIE_SALARIE,
+    "Entretiens professionnels": DomaineRH.VIE_SALARIE,
     "Autres": DomaineRH.GENERAL,
 }
 
@@ -183,7 +188,7 @@ def get_donnees_domaine(
 
     Args:
         operateur_id: ID de l'opérateur
-        domaine: Domaine RH (GENERAL, CONTRAT, DECLARATION, COMPETENCES, FORMATION)
+        domaine: Domaine RH (GENERAL, CONTRAT, DECLARATION, COMPETENCES, FORMATION, MEDICAL, VIE_SALARIE)
 
     Returns:
         Dictionnaire avec les données du domaine
@@ -194,6 +199,8 @@ def get_donnees_domaine(
         DomaineRH.DECLARATION: _get_donnees_declaration,
         DomaineRH.COMPETENCES: _get_donnees_competences,
         DomaineRH.FORMATION: _get_donnees_formation,
+        DomaineRH.MEDICAL: _get_donnees_medical,
+        DomaineRH.VIE_SALARIE: _get_donnees_vie_salarie,
     }
 
     handler = handlers.get(domaine)
@@ -464,6 +471,26 @@ def _get_donnees_formation(operateur_id: int) -> Dict[str, Any]:
     except Exception as e:
         print(f"Erreur _get_donnees_formation: {e}")
         return {"error": str(e), "formations": [], "statistiques": {}}
+
+
+def _get_donnees_medical(operateur_id: int) -> Dict[str, Any]:
+    """Récupère les données médicales d'un opérateur."""
+    try:
+        from core.services.medical_service import get_donnees_medicales
+        return get_donnees_medicales(operateur_id)
+    except Exception as e:
+        print(f"Erreur _get_donnees_medical: {e}")
+        return {"error": str(e), "medical": None}
+
+
+def _get_donnees_vie_salarie(operateur_id: int) -> Dict[str, Any]:
+    """Récupère les données vie du salarié d'un opérateur."""
+    try:
+        from core.services.vie_salarie_service import get_donnees_vie_salarie
+        return get_donnees_vie_salarie(operateur_id)
+    except Exception as e:
+        print(f"Erreur _get_donnees_vie_salarie: {e}")
+        return {"error": str(e)}
 
 
 # ============================================================
@@ -933,6 +960,18 @@ def get_domaines_rh() -> List[Dict]:
             "nom": "Formation",
             "description": "Formations suivies et planifiées",
             "icone": "chalkboard-teacher"
+        },
+        {
+            "code": DomaineRH.MEDICAL.value,
+            "nom": "Médical",
+            "description": "Visites médicales, RQTH, accidents du travail",
+            "icone": "heartbeat"
+        },
+        {
+            "code": DomaineRH.VIE_SALARIE.value,
+            "nom": "Vie du salarié",
+            "description": "Sanctions, contrôles, entretiens professionnels",
+            "icone": "user-clock"
         },
     ]
 
