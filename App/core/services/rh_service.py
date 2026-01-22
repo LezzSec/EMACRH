@@ -476,21 +476,46 @@ def _get_donnees_formation(operateur_id: int) -> Dict[str, Any]:
 def _get_donnees_medical(operateur_id: int) -> Dict[str, Any]:
     """Récupère les données médicales d'un opérateur."""
     try:
-        from core.services.medical_service import get_donnees_medicales
-        return get_donnees_medicales(operateur_id)
+        from core.services.medical_service import (
+            get_donnees_medicales, get_visites, get_accidents,
+            get_validites, get_alertes_medicales
+        )
+        # Récupérer les données principales
+        donnees = get_donnees_medicales(operateur_id)
+
+        # Ajouter les listes détaillées pour l'UI
+        donnees['visites'] = get_visites(operateur_id)
+        donnees['accidents'] = get_accidents(operateur_id)
+        donnees['validites'] = get_validites(operateur_id)
+        donnees['alertes'] = get_alertes_medicales(operateur_id)
+
+        return donnees
     except Exception as e:
         print(f"Erreur _get_donnees_medical: {e}")
-        return {"error": str(e), "medical": None}
+        return {"error": str(e), "medical": None, "visites": [], "accidents": [], "validites": [], "alertes": []}
 
 
 def _get_donnees_vie_salarie(operateur_id: int) -> Dict[str, Any]:
     """Récupère les données vie du salarié d'un opérateur."""
     try:
-        from core.services.vie_salarie_service import get_donnees_vie_salarie
-        return get_donnees_vie_salarie(operateur_id)
+        from core.services.vie_salarie_service import (
+            get_donnees_vie_salarie, get_sanctions, get_controles_alcool,
+            get_tests_salivaires, get_entretiens, get_alertes_entretiens
+        )
+        # Récupérer les données de base (statistiques)
+        donnees = get_donnees_vie_salarie(operateur_id)
+
+        # Ajouter les listes détaillées pour l'UI
+        donnees['sanctions_liste'] = get_sanctions(operateur_id)
+        donnees['controles_alcool_liste'] = get_controles_alcool(operateur_id)
+        donnees['tests_salivaires_liste'] = get_tests_salivaires(operateur_id)
+        donnees['entretiens_liste'] = get_entretiens(operateur_id)
+        donnees['alertes'] = get_alertes_entretiens(operateur_id)
+
+        return donnees
     except Exception as e:
         print(f"Erreur _get_donnees_vie_salarie: {e}")
-        return {"error": str(e)}
+        return {"error": str(e), "sanctions_liste": [], "controles_alcool_liste": [], "tests_salivaires_liste": [], "entretiens_liste": [], "alertes": []}
 
 
 # ============================================================

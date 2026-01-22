@@ -542,6 +542,607 @@ class EditFormationDialog(QDialog):
             QMessageBox.critical(self, "Erreur", message)
 
 
+# ============================================================
+# FORMULAIRES MEDICAL
+# ============================================================
+
+class EditVisiteDialog(QDialog):
+    """Formulaire pour ajouter/modifier une visite médicale."""
+
+    def __init__(self, operateur_id: int, visite: dict = None, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.visite = visite
+        self.is_edit = visite is not None
+        self.setWindowTitle("Modifier la visite" if self.is_edit else "Nouvelle visite médicale")
+        self.setMinimumWidth(450)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        # Date visite
+        self.date_visite = QDateEdit()
+        self.date_visite.setCalendarPopup(True)
+        self.date_visite.setDisplayFormat("dd/MM/yyyy")
+        if self.is_edit and self.visite.get('date_visite'):
+            d = self.visite['date_visite']
+            self.date_visite.setDate(QDate(d.year, d.month, d.day))
+        else:
+            self.date_visite.setDate(QDate.currentDate())
+        form.addRow("Date de visite:", self.date_visite)
+
+        # Type visite
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(['Embauche', 'Périodique', 'Reprise', 'À la demande', 'Pré-reprise'])
+        if self.is_edit and self.visite.get('type_visite'):
+            idx = self.type_combo.findText(self.visite['type_visite'])
+            if idx >= 0:
+                self.type_combo.setCurrentIndex(idx)
+        form.addRow("Type de visite:", self.type_combo)
+
+        # Résultat
+        self.resultat_combo = QComboBox()
+        self.resultat_combo.addItems(['', 'Apte', 'Apte avec restrictions', 'Inapte temporaire', 'Inapte définitif'])
+        if self.is_edit and self.visite.get('resultat'):
+            idx = self.resultat_combo.findText(self.visite['resultat'])
+            if idx >= 0:
+                self.resultat_combo.setCurrentIndex(idx)
+        form.addRow("Résultat:", self.resultat_combo)
+
+        # Restrictions
+        self.restrictions = QTextEdit()
+        self.restrictions.setMaximumHeight(60)
+        self.restrictions.setPlaceholderText("Détail des restrictions si applicable")
+        if self.is_edit:
+            self.restrictions.setText(self.visite.get('restrictions') or '')
+        form.addRow("Restrictions:", self.restrictions)
+
+        # Médecin
+        self.medecin = QLineEdit()
+        self.medecin.setPlaceholderText("Nom du médecin")
+        if self.is_edit:
+            self.medecin.setText(self.visite.get('medecin') or '')
+        form.addRow("Médecin:", self.medecin)
+
+        # Prochaine visite
+        self.prochaine_visite = QDateEdit()
+        self.prochaine_visite.setCalendarPopup(True)
+        self.prochaine_visite.setDisplayFormat("dd/MM/yyyy")
+        self.prochaine_visite.setSpecialValueText("Non définie")
+        if self.is_edit and self.visite.get('prochaine_visite'):
+            d = self.visite['prochaine_visite']
+            self.prochaine_visite.setDate(QDate(d.year, d.month, d.day))
+        form.addRow("Prochaine visite:", self.prochaine_visite)
+
+        # Commentaire
+        self.commentaire = QTextEdit()
+        self.commentaire.setMaximumHeight(60)
+        if self.is_edit:
+            self.commentaire.setText(self.visite.get('commentaire') or '')
+        form.addRow("Commentaire:", self.commentaire)
+
+        layout.addLayout(form)
+
+        # Boutons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_cancel = EmacButton("Annuler", variant="ghost")
+        btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_cancel)
+        btn_save = EmacButton("Enregistrer", variant="primary")
+        btn_save.clicked.connect(self._save)
+        btn_layout.addWidget(btn_save)
+        layout.addLayout(btn_layout)
+
+    def _save(self):
+        prochaine = self.prochaine_visite.date()
+        data = {
+            'date_visite': self.date_visite.date().toPyDate(),
+            'type_visite': self.type_combo.currentText(),
+            'resultat': self.resultat_combo.currentText() or None,
+            'restrictions': self.restrictions.toPlainText().strip() or None,
+            'medecin': self.medecin.text().strip() or None,
+            'prochaine_visite': prochaine.toPyDate() if prochaine.year() > 1900 else None,
+            'commentaire': self.commentaire.toPlainText().strip() or None,
+        }
+
+        if self.is_edit:
+            success, message = update_visite(self.visite['id'], data)
+        else:
+            success, message, _ = create_visite(self.operateur_id, data)
+
+        if success:
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
+
+
+class EditAccidentDialog(QDialog):
+    """Formulaire pour ajouter/modifier un accident du travail."""
+
+    def __init__(self, operateur_id: int, accident: dict = None, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.accident = accident
+        self.is_edit = accident is not None
+        self.setWindowTitle("Modifier l'accident" if self.is_edit else "Nouvel accident du travail")
+        self.setMinimumWidth(500)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        # Date accident
+        self.date_accident = QDateEdit()
+        self.date_accident.setCalendarPopup(True)
+        self.date_accident.setDisplayFormat("dd/MM/yyyy")
+        if self.is_edit and self.accident.get('date_accident'):
+            d = self.accident['date_accident']
+            self.date_accident.setDate(QDate(d.year, d.month, d.day))
+        else:
+            self.date_accident.setDate(QDate.currentDate())
+        form.addRow("Date de l'accident:", self.date_accident)
+
+        # Avec arrêt
+        self.avec_arret = QCheckBox("Accident avec arrêt de travail")
+        if self.is_edit:
+            self.avec_arret.setChecked(self.accident.get('avec_arret', False))
+        form.addRow("", self.avec_arret)
+
+        # Circonstances
+        self.circonstances = QTextEdit()
+        self.circonstances.setMaximumHeight(80)
+        self.circonstances.setPlaceholderText("Décrivez les circonstances de l'accident")
+        if self.is_edit:
+            self.circonstances.setText(self.accident.get('circonstances') or '')
+        form.addRow("Circonstances:", self.circonstances)
+
+        # Siège des lésions
+        self.siege_lesions = QLineEdit()
+        self.siege_lesions.setPlaceholderText("Ex: Main droite, Dos, Pied gauche")
+        if self.is_edit:
+            self.siege_lesions.setText(self.accident.get('siege_lesions') or '')
+        form.addRow("Siège des lésions:", self.siege_lesions)
+
+        # Nature des lésions
+        self.nature_lesions = QLineEdit()
+        self.nature_lesions.setPlaceholderText("Ex: Fracture, Brûlure, Contusion")
+        if self.is_edit:
+            self.nature_lesions.setText(self.accident.get('nature_lesions') or '')
+        form.addRow("Nature des lésions:", self.nature_lesions)
+
+        # Nombre de jours d'absence
+        self.nb_jours = QDoubleSpinBox()
+        self.nb_jours.setRange(0, 365)
+        self.nb_jours.setDecimals(0)
+        self.nb_jours.setSuffix(" jours")
+        if self.is_edit and self.accident.get('nb_jours_absence'):
+            self.nb_jours.setValue(self.accident['nb_jours_absence'])
+        form.addRow("Jours d'absence:", self.nb_jours)
+
+        # Commentaire
+        self.commentaire = QTextEdit()
+        self.commentaire.setMaximumHeight(60)
+        if self.is_edit:
+            self.commentaire.setText(self.accident.get('commentaire') or '')
+        form.addRow("Commentaire:", self.commentaire)
+
+        layout.addLayout(form)
+
+        # Boutons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_cancel = EmacButton("Annuler", variant="ghost")
+        btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_cancel)
+        btn_save = EmacButton("Enregistrer", variant="primary")
+        btn_save.clicked.connect(self._save)
+        btn_layout.addWidget(btn_save)
+        layout.addLayout(btn_layout)
+
+    def _save(self):
+        data = {
+            'date_accident': self.date_accident.date().toPyDate(),
+            'avec_arret': self.avec_arret.isChecked(),
+            'circonstances': self.circonstances.toPlainText().strip() or None,
+            'siege_lesions': self.siege_lesions.text().strip() or None,
+            'nature_lesions': self.nature_lesions.text().strip() or None,
+            'nb_jours_absence': int(self.nb_jours.value()) if self.nb_jours.value() > 0 else None,
+            'commentaire': self.commentaire.toPlainText().strip() or None,
+        }
+
+        if self.is_edit:
+            success, message = update_accident(self.accident['id'], data)
+        else:
+            success, message, _ = create_accident(self.operateur_id, data)
+
+        if success:
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
+
+
+# ============================================================
+# FORMULAIRES VIE DU SALARIE
+# ============================================================
+
+class EditSanctionDialog(QDialog):
+    """Formulaire pour ajouter/modifier une sanction."""
+
+    def __init__(self, operateur_id: int, sanction: dict = None, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.sanction = sanction
+        self.is_edit = sanction is not None
+        self.setWindowTitle("Modifier la sanction" if self.is_edit else "Nouvelle sanction")
+        self.setMinimumWidth(450)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        # Date sanction
+        self.date_sanction = QDateEdit()
+        self.date_sanction.setCalendarPopup(True)
+        self.date_sanction.setDisplayFormat("dd/MM/yyyy")
+        if self.is_edit and self.sanction.get('date_sanction'):
+            d = self.sanction['date_sanction']
+            self.date_sanction.setDate(QDate(d.year, d.month, d.day))
+        else:
+            self.date_sanction.setDate(QDate.currentDate())
+        form.addRow("Date:", self.date_sanction)
+
+        # Type sanction
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(get_types_sanction())
+        if self.is_edit and self.sanction.get('type_sanction'):
+            idx = self.type_combo.findText(self.sanction['type_sanction'])
+            if idx >= 0:
+                self.type_combo.setCurrentIndex(idx)
+        form.addRow("Type:", self.type_combo)
+
+        # Durée (pour mise à pied)
+        self.duree = QDoubleSpinBox()
+        self.duree.setRange(0, 30)
+        self.duree.setDecimals(0)
+        self.duree.setSuffix(" jours")
+        if self.is_edit and self.sanction.get('duree_jours'):
+            self.duree.setValue(self.sanction['duree_jours'])
+        form.addRow("Durée (mise à pied):", self.duree)
+
+        # Motif
+        self.motif = QTextEdit()
+        self.motif.setMaximumHeight(80)
+        self.motif.setPlaceholderText("Motif de la sanction")
+        if self.is_edit:
+            self.motif.setText(self.sanction.get('motif') or '')
+        form.addRow("Motif:", self.motif)
+
+        # Commentaire
+        self.commentaire = QTextEdit()
+        self.commentaire.setMaximumHeight(60)
+        if self.is_edit:
+            self.commentaire.setText(self.sanction.get('commentaire') or '')
+        form.addRow("Commentaire:", self.commentaire)
+
+        layout.addLayout(form)
+
+        # Boutons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_cancel = EmacButton("Annuler", variant="ghost")
+        btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_cancel)
+        btn_save = EmacButton("Enregistrer", variant="primary")
+        btn_save.clicked.connect(self._save)
+        btn_layout.addWidget(btn_save)
+        layout.addLayout(btn_layout)
+
+    def _save(self):
+        data = {
+            'date_sanction': self.date_sanction.date().toPyDate(),
+            'type_sanction': self.type_combo.currentText(),
+            'duree_jours': int(self.duree.value()) if self.duree.value() > 0 else None,
+            'motif': self.motif.toPlainText().strip() or None,
+            'commentaire': self.commentaire.toPlainText().strip() or None,
+        }
+
+        if self.is_edit:
+            success, message = update_sanction(self.sanction['id'], data)
+        else:
+            success, message, _ = create_sanction(self.operateur_id, data)
+
+        if success:
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
+
+
+class EditControleAlcoolDialog(QDialog):
+    """Formulaire pour ajouter un contrôle d'alcoolémie."""
+
+    def __init__(self, operateur_id: int, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.setWindowTitle("Nouveau contrôle d'alcoolémie")
+        self.setMinimumWidth(400)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        # Date/heure contrôle
+        self.date_controle = QDateEdit()
+        self.date_controle.setCalendarPopup(True)
+        self.date_controle.setDisplayFormat("dd/MM/yyyy")
+        self.date_controle.setDate(QDate.currentDate())
+        form.addRow("Date:", self.date_controle)
+
+        # Résultat
+        self.resultat_combo = QComboBox()
+        self.resultat_combo.addItems(['Négatif', 'Positif'])
+        self.resultat_combo.currentTextChanged.connect(self._on_resultat_change)
+        form.addRow("Résultat:", self.resultat_combo)
+
+        # Taux (si positif)
+        self.taux = QDoubleSpinBox()
+        self.taux.setRange(0, 5)
+        self.taux.setDecimals(2)
+        self.taux.setSuffix(" g/L")
+        self.taux.setEnabled(False)
+        form.addRow("Taux:", self.taux)
+
+        # Type contrôle
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(['Aléatoire', 'Ciblé', 'Accident'])
+        form.addRow("Type de contrôle:", self.type_combo)
+
+        # Commentaire
+        self.commentaire = QTextEdit()
+        self.commentaire.setMaximumHeight(60)
+        form.addRow("Commentaire:", self.commentaire)
+
+        layout.addLayout(form)
+
+        # Boutons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_cancel = EmacButton("Annuler", variant="ghost")
+        btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_cancel)
+        btn_save = EmacButton("Enregistrer", variant="primary")
+        btn_save.clicked.connect(self._save)
+        btn_layout.addWidget(btn_save)
+        layout.addLayout(btn_layout)
+
+    def _on_resultat_change(self, text):
+        self.taux.setEnabled(text == 'Positif')
+
+    def _save(self):
+        from datetime import datetime
+        date_val = self.date_controle.date().toPyDate()
+        data = {
+            'date_controle': datetime.combine(date_val, datetime.now().time()),
+            'resultat': self.resultat_combo.currentText(),
+            'taux': self.taux.value() if self.resultat_combo.currentText() == 'Positif' else None,
+            'type_controle': self.type_combo.currentText(),
+            'commentaire': self.commentaire.toPlainText().strip() or None,
+        }
+
+        success, message, _ = create_controle_alcool(self.operateur_id, data)
+        if success:
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
+
+
+class EditTestSalivaireDialog(QDialog):
+    """Formulaire pour ajouter un test salivaire."""
+
+    def __init__(self, operateur_id: int, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.setWindowTitle("Nouveau test salivaire")
+        self.setMinimumWidth(400)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        # Date test
+        self.date_test = QDateEdit()
+        self.date_test.setCalendarPopup(True)
+        self.date_test.setDisplayFormat("dd/MM/yyyy")
+        self.date_test.setDate(QDate.currentDate())
+        form.addRow("Date:", self.date_test)
+
+        # Résultat
+        self.resultat_combo = QComboBox()
+        self.resultat_combo.addItems(['Négatif', 'Positif', 'Non concluant'])
+        form.addRow("Résultat:", self.resultat_combo)
+
+        # Type contrôle
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(['Aléatoire', 'Ciblé', 'Accident'])
+        form.addRow("Type de contrôle:", self.type_combo)
+
+        # Commentaire
+        self.commentaire = QTextEdit()
+        self.commentaire.setMaximumHeight(60)
+        form.addRow("Commentaire:", self.commentaire)
+
+        layout.addLayout(form)
+
+        # Boutons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_cancel = EmacButton("Annuler", variant="ghost")
+        btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_cancel)
+        btn_save = EmacButton("Enregistrer", variant="primary")
+        btn_save.clicked.connect(self._save)
+        btn_layout.addWidget(btn_save)
+        layout.addLayout(btn_layout)
+
+    def _save(self):
+        from datetime import datetime
+        date_val = self.date_test.date().toPyDate()
+        data = {
+            'date_test': datetime.combine(date_val, datetime.now().time()),
+            'resultat': self.resultat_combo.currentText(),
+            'type_controle': self.type_combo.currentText(),
+            'commentaire': self.commentaire.toPlainText().strip() or None,
+        }
+
+        success, message, _ = create_test_salivaire(self.operateur_id, data)
+        if success:
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
+
+
+class EditEntretienDialog(QDialog):
+    """Formulaire pour ajouter/modifier un entretien professionnel."""
+
+    def __init__(self, operateur_id: int, entretien: dict = None, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.entretien = entretien
+        self.is_edit = entretien is not None
+        self.setWindowTitle("Modifier l'entretien" if self.is_edit else "Nouvel entretien")
+        self.setMinimumWidth(500)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        # Date entretien
+        self.date_entretien = QDateEdit()
+        self.date_entretien.setCalendarPopup(True)
+        self.date_entretien.setDisplayFormat("dd/MM/yyyy")
+        if self.is_edit and self.entretien.get('date_entretien'):
+            d = self.entretien['date_entretien']
+            self.date_entretien.setDate(QDate(d.year, d.month, d.day))
+        else:
+            self.date_entretien.setDate(QDate.currentDate())
+        form.addRow("Date:", self.date_entretien)
+
+        # Type entretien
+        self.type_combo = QComboBox()
+        self.type_combo.addItems(get_types_entretien())
+        if self.is_edit and self.entretien.get('type_entretien'):
+            idx = self.type_combo.findText(self.entretien['type_entretien'])
+            if idx >= 0:
+                self.type_combo.setCurrentIndex(idx)
+        form.addRow("Type:", self.type_combo)
+
+        # Manager
+        self.manager_combo = QComboBox()
+        self.manager_combo.addItem("-- Sélectionner --", None)
+        managers = get_managers_liste()
+        for m in managers:
+            self.manager_combo.addItem(m['nom_complet'], m['id'])
+        if self.is_edit and self.entretien.get('manager_id'):
+            for i in range(self.manager_combo.count()):
+                if self.manager_combo.itemData(i) == self.entretien['manager_id']:
+                    self.manager_combo.setCurrentIndex(i)
+                    break
+        form.addRow("Manager:", self.manager_combo)
+
+        # Objectifs atteints
+        self.objectifs_atteints = QTextEdit()
+        self.objectifs_atteints.setMaximumHeight(60)
+        self.objectifs_atteints.setPlaceholderText("Évaluation des objectifs précédents")
+        if self.is_edit:
+            self.objectifs_atteints.setText(self.entretien.get('objectifs_atteints') or '')
+        form.addRow("Objectifs atteints:", self.objectifs_atteints)
+
+        # Objectifs fixés
+        self.objectifs_fixes = QTextEdit()
+        self.objectifs_fixes.setMaximumHeight(60)
+        self.objectifs_fixes.setPlaceholderText("Objectifs pour la période à venir")
+        if self.is_edit:
+            self.objectifs_fixes.setText(self.entretien.get('objectifs_fixes') or '')
+        form.addRow("Objectifs fixés:", self.objectifs_fixes)
+
+        # Besoins formation
+        self.besoins_formation = QTextEdit()
+        self.besoins_formation.setMaximumHeight(50)
+        if self.is_edit:
+            self.besoins_formation.setText(self.entretien.get('besoins_formation') or '')
+        form.addRow("Besoins formation:", self.besoins_formation)
+
+        # Prochaine date
+        self.prochaine_date = QDateEdit()
+        self.prochaine_date.setCalendarPopup(True)
+        self.prochaine_date.setDisplayFormat("dd/MM/yyyy")
+        self.prochaine_date.setSpecialValueText("Non définie")
+        if self.is_edit and self.entretien.get('prochaine_date'):
+            d = self.entretien['prochaine_date']
+            self.prochaine_date.setDate(QDate(d.year, d.month, d.day))
+        form.addRow("Prochain entretien:", self.prochaine_date)
+
+        layout.addLayout(form)
+
+        # Boutons
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        btn_cancel = EmacButton("Annuler", variant="ghost")
+        btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_cancel)
+        btn_save = EmacButton("Enregistrer", variant="primary")
+        btn_save.clicked.connect(self._save)
+        btn_layout.addWidget(btn_save)
+        layout.addLayout(btn_layout)
+
+    def _save(self):
+        prochaine = self.prochaine_date.date()
+        data = {
+            'date_entretien': self.date_entretien.date().toPyDate(),
+            'type_entretien': self.type_combo.currentText(),
+            'manager_id': self.manager_combo.currentData(),
+            'objectifs_atteints': self.objectifs_atteints.toPlainText().strip() or None,
+            'objectifs_fixes': self.objectifs_fixes.toPlainText().strip() or None,
+            'besoins_formation': self.besoins_formation.toPlainText().strip() or None,
+            'prochaine_date': prochaine.toPyDate() if prochaine.year() > 1900 else None,
+        }
+
+        if self.is_edit:
+            success, message = update_entretien(self.entretien['id'], data)
+        else:
+            success, message, _ = create_entretien(self.operateur_id, data)
+
+        if success:
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
+
+
 class AjouterDocumentDialog(QDialog):
     """Formulaire pour ajouter un document à un opérateur."""
 
@@ -1597,6 +2198,612 @@ class GestionRHDialog(QDialog):
 
         return container
 
+    def _creer_resume_medical(self, donnees: dict) -> QWidget:
+        """Crée le résumé du suivi médical."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        if donnees.get('error'):
+            error_card = EmacCard("Erreur")
+            error_card.body.addWidget(QLabel(f"Erreur: {donnees['error']}"))
+            layout.addWidget(error_card)
+            return container
+
+        medical_info = donnees.get('medical') or {}
+        visites = donnees.get('visites') or []
+        accidents = donnees.get('accidents') or []
+        validites = donnees.get('validites') or []
+        alertes = donnees.get('alertes') or []
+
+        self._donnees_medical = donnees
+
+        # ===== Alertes médicales =====
+        if alertes:
+            alertes_card = EmacCard("Alertes")
+            for alerte in alertes:
+                alert_widget = QFrame()
+                alert_widget.setStyleSheet("""
+                    QFrame {
+                        background: #fef2f2;
+                        border: 1px solid #fecaca;
+                        border-radius: 6px;
+                        padding: 8px 12px;
+                        margin-bottom: 4px;
+                    }
+                """)
+                alert_layout = QHBoxLayout(alert_widget)
+                alert_layout.setContentsMargins(8, 4, 8, 4)
+                lbl = QLabel(alerte.get('message', str(alerte)))
+                lbl.setStyleSheet("color: #dc2626; font-weight: 500;")
+                alert_layout.addWidget(lbl)
+                alertes_card.body.addWidget(alert_widget)
+            layout.addWidget(alertes_card)
+
+        # ===== Suivi médical principal =====
+        card_medical = EmacCard("Suivi Médical")
+        grid = QGridLayout()
+        grid.setSpacing(12)
+
+        type_suivi = medical_info.get('type_suivi_vip') or "Non défini"
+        periodicite = medical_info.get('periodicite_vip_mois') or 24
+
+        infos = [
+            ("Type de suivi VIP", type_suivi),
+            ("Périodicité", f"{periodicite} mois"),
+            ("Maladie professionnelle", "Oui" if medical_info.get('maladie_pro') else "Non"),
+            ("Taux professionnel", f"{medical_info.get('taux_professionnel', 0)}%" if medical_info.get('taux_professionnel') else "-"),
+        ]
+
+        if medical_info.get('besoins_adaptation'):
+            infos.append(("Besoins d'adaptation", medical_info.get('besoins_adaptation')))
+
+        for i, (label, valeur) in enumerate(infos):
+            r, c = divmod(i, 2)
+            lbl = QLabel(f"<b>{label}</b><br/>{valeur}")
+            lbl.setStyleSheet("padding: 8px; background: #f9fafb; border-radius: 6px;")
+            grid.addWidget(lbl, r, c)
+
+        card_medical.body.addLayout(grid)
+        layout.addWidget(card_medical)
+
+        # ===== RQTH / OETH =====
+        from datetime import date as date_class
+        rqth_validites = [v for v in validites if v.get('type_validite') == 'RQTH']
+        oeth_validites = [v for v in validites if v.get('type_validite') == 'OETH']
+
+        card_rqth = EmacCard("RQTH / OETH")
+        rqth_layout = QHBoxLayout()
+
+        rqth_frame = QFrame()
+        rqth_frame.setStyleSheet("padding: 8px; background: #f0fdf4; border-radius: 6px;")
+        rqth_inner = QVBoxLayout(rqth_frame)
+        rqth_inner.addWidget(QLabel("<b>RQTH</b>"))
+        if rqth_validites:
+            latest_rqth = rqth_validites[0]
+            date_fin = latest_rqth.get('date_fin')
+            statut = "Active" if date_fin and date_fin >= date_class.today() else "Expirée"
+            rqth_inner.addWidget(QLabel(f"Statut: {statut}"))
+            rqth_inner.addWidget(QLabel(f"Fin: {self._format_date(date_fin)}"))
+            if latest_rqth.get('taux_incapacite'):
+                rqth_inner.addWidget(QLabel(f"Taux: {latest_rqth.get('taux_incapacite')}%"))
+        else:
+            rqth_inner.addWidget(QLabel("Non applicable"))
+        rqth_layout.addWidget(rqth_frame)
+
+        oeth_frame = QFrame()
+        oeth_frame.setStyleSheet("padding: 8px; background: #eff6ff; border-radius: 6px;")
+        oeth_inner = QVBoxLayout(oeth_frame)
+        oeth_inner.addWidget(QLabel("<b>OETH</b>"))
+        if oeth_validites:
+            latest_oeth = oeth_validites[0]
+            date_fin = latest_oeth.get('date_fin')
+            statut = "Active" if date_fin and date_fin >= date_class.today() else "Expirée"
+            oeth_inner.addWidget(QLabel(f"Statut: {statut}"))
+            oeth_inner.addWidget(QLabel(f"Fin: {self._format_date(date_fin)}"))
+        else:
+            oeth_inner.addWidget(QLabel("Non applicable"))
+        rqth_layout.addWidget(oeth_frame)
+
+        card_rqth.body.addLayout(rqth_layout)
+        layout.addWidget(card_rqth)
+
+        # ===== Visites médicales =====
+        card_visites = EmacCard(f"Visites médicales ({len(visites)})")
+
+        btn_add_visite = EmacButton("+ Nouvelle visite", variant="primary")
+        btn_add_visite.clicked.connect(self._add_visite)
+        card_visites.body.addWidget(btn_add_visite, alignment=Qt.AlignLeft)
+
+        if visites:
+            table = QTableWidget()
+            table.setColumnCount(6)
+            table.setHorizontalHeaderLabels(["Date", "Type", "Résultat", "Médecin", "Prochaine", "Actions"])
+            table.setRowCount(len(visites))
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table.setAlternatingRowColors(True)
+            table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+            for row_idx, visite in enumerate(visites):
+                table.setItem(row_idx, 0, QTableWidgetItem(self._format_date(visite.get('date_visite'))))
+                table.setItem(row_idx, 1, QTableWidgetItem(visite.get('type_visite', '-')))
+                table.setItem(row_idx, 2, QTableWidgetItem(visite.get('resultat', '-')))
+                table.setItem(row_idx, 3, QTableWidgetItem(visite.get('medecin', '-')))
+                table.setItem(row_idx, 4, QTableWidgetItem(self._format_date(visite.get('prochaine_visite'))))
+
+                btn_widget = QWidget()
+                btn_layout_inner = QHBoxLayout(btn_widget)
+                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
+                btn_layout_inner.setSpacing(4)
+
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setFixedHeight(28)
+                btn_edit.clicked.connect(lambda checked, v=visite: self._edit_visite(v))
+                btn_layout_inner.addWidget(btn_edit)
+
+                btn_del = EmacButton("Suppr.", variant="ghost")
+                btn_del.setFixedHeight(28)
+                btn_del.clicked.connect(lambda checked, v=visite: self._delete_visite(v))
+                btn_layout_inner.addWidget(btn_del)
+
+                table.setCellWidget(row_idx, 5, btn_widget)
+
+            table.setMaximumHeight(200)
+            card_visites.body.addWidget(table)
+        else:
+            card_visites.body.addWidget(QLabel("Aucune visite enregistrée"))
+
+        layout.addWidget(card_visites)
+
+        # ===== Accidents du travail =====
+        card_accidents = EmacCard(f"Accidents du travail ({len(accidents)})")
+
+        btn_add_accident = EmacButton("+ Nouvel accident", variant="primary")
+        btn_add_accident.clicked.connect(self._add_accident)
+        card_accidents.body.addWidget(btn_add_accident, alignment=Qt.AlignLeft)
+
+        if accidents:
+            table_acc = QTableWidget()
+            table_acc.setColumnCount(6)
+            table_acc.setHorizontalHeaderLabels(["Date", "Avec arrêt", "Jours absence", "Siège lésions", "Nature", "Actions"])
+            table_acc.setRowCount(len(accidents))
+            table_acc.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table_acc.setAlternatingRowColors(True)
+            table_acc.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table_acc.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+            for row_idx, acc in enumerate(accidents):
+                table_acc.setItem(row_idx, 0, QTableWidgetItem(self._format_date(acc.get('date_accident'))))
+                table_acc.setItem(row_idx, 1, QTableWidgetItem("Oui" if acc.get('avec_arret') else "Non"))
+                table_acc.setItem(row_idx, 2, QTableWidgetItem(str(acc.get('nb_jours_absence', '-'))))
+                table_acc.setItem(row_idx, 3, QTableWidgetItem(acc.get('siege_lesions', '-')))
+                table_acc.setItem(row_idx, 4, QTableWidgetItem(acc.get('nature_lesions', '-')))
+
+                btn_widget = QWidget()
+                btn_layout_inner = QHBoxLayout(btn_widget)
+                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
+                btn_layout_inner.setSpacing(4)
+
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setFixedHeight(28)
+                btn_edit.clicked.connect(lambda checked, a=acc: self._edit_accident(a))
+                btn_layout_inner.addWidget(btn_edit)
+
+                btn_del = EmacButton("Suppr.", variant="ghost")
+                btn_del.setFixedHeight(28)
+                btn_del.clicked.connect(lambda checked, a=acc: self._delete_accident(a))
+                btn_layout_inner.addWidget(btn_del)
+
+                table_acc.setCellWidget(row_idx, 5, btn_widget)
+
+            table_acc.setMaximumHeight(200)
+            card_accidents.body.addWidget(table_acc)
+        else:
+            card_accidents.body.addWidget(QLabel("Aucun accident enregistré"))
+
+        layout.addWidget(card_accidents)
+
+        return container
+
+    def _creer_resume_vie_salarie(self, donnees: dict) -> QWidget:
+        """Crée le résumé de la vie du salarié."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        if donnees.get('error'):
+            error_card = EmacCard("Erreur")
+            error_card.body.addWidget(QLabel(f"Erreur: {donnees['error']}"))
+            layout.addWidget(error_card)
+            return container
+
+        sanctions_data = donnees.get('sanctions', {})
+        alcoolemie_data = donnees.get('alcoolemie', {})
+        salivaire_data = donnees.get('tests_salivaires', {})
+        entretiens_data = donnees.get('entretiens', {})
+        alertes = donnees.get('alertes', [])
+
+        self._donnees_vie_salarie = donnees
+
+        # ===== Alertes =====
+        if alertes:
+            alertes_card = EmacCard("Alertes")
+            for alerte in alertes:
+                alert_widget = QFrame()
+                alert_widget.setStyleSheet("""
+                    QFrame {
+                        background: #fef2f2;
+                        border: 1px solid #fecaca;
+                        border-radius: 6px;
+                        padding: 8px 12px;
+                        margin-bottom: 4px;
+                    }
+                """)
+                alert_layout = QHBoxLayout(alert_widget)
+                alert_layout.setContentsMargins(8, 4, 8, 4)
+                lbl = QLabel(alerte.get('message', str(alerte)))
+                lbl.setStyleSheet("color: #dc2626; font-weight: 500;")
+                alert_layout.addWidget(lbl)
+                alertes_card.body.addWidget(alert_widget)
+            layout.addWidget(alertes_card)
+
+        # ===== Carte récapitulative =====
+        card_recap = EmacCard("Récapitulatif")
+        recap_layout = QHBoxLayout()
+
+        sanctions_frame = QFrame()
+        sanctions_frame.setStyleSheet("padding: 12px; background: #fef3c7; border-radius: 8px;")
+        sanctions_inner = QVBoxLayout(sanctions_frame)
+        sanctions_inner.addWidget(QLabel("<b>Sanctions</b>"))
+        nb_sanctions = sanctions_data.get('total', 0) if isinstance(sanctions_data, dict) else 0
+        sanctions_inner.addWidget(QLabel(f"Total: {nb_sanctions}"))
+        if isinstance(sanctions_data, dict) and sanctions_data.get('derniere_sanction'):
+            sanctions_inner.addWidget(QLabel(f"Dernière: {self._format_date(sanctions_data.get('derniere_sanction'))}"))
+        recap_layout.addWidget(sanctions_frame)
+
+        alcool_frame = QFrame()
+        alcool_frame.setStyleSheet("padding: 12px; background: #dbeafe; border-radius: 8px;")
+        alcool_inner = QVBoxLayout(alcool_frame)
+        alcool_inner.addWidget(QLabel("<b>Contrôles alcool</b>"))
+        nb_alcool = alcoolemie_data.get('total', 0) if isinstance(alcoolemie_data, dict) else 0
+        nb_positifs = alcoolemie_data.get('positifs', 0) if isinstance(alcoolemie_data, dict) else 0
+        alcool_inner.addWidget(QLabel(f"Total: {nb_alcool}"))
+        alcool_inner.addWidget(QLabel(f"Positifs: {nb_positifs}"))
+        recap_layout.addWidget(alcool_frame)
+
+        salivaire_frame = QFrame()
+        salivaire_frame.setStyleSheet("padding: 12px; background: #f3e8ff; border-radius: 8px;")
+        salivaire_inner = QVBoxLayout(salivaire_frame)
+        salivaire_inner.addWidget(QLabel("<b>Tests salivaires</b>"))
+        nb_salivaire = salivaire_data.get('total', 0) if isinstance(salivaire_data, dict) else 0
+        nb_positifs_sal = salivaire_data.get('positifs', 0) if isinstance(salivaire_data, dict) else 0
+        salivaire_inner.addWidget(QLabel(f"Total: {nb_salivaire}"))
+        salivaire_inner.addWidget(QLabel(f"Positifs: {nb_positifs_sal}"))
+        recap_layout.addWidget(salivaire_frame)
+
+        entretiens_frame = QFrame()
+        entretiens_frame.setStyleSheet("padding: 12px; background: #dcfce7; border-radius: 8px;")
+        entretiens_inner = QVBoxLayout(entretiens_frame)
+        entretiens_inner.addWidget(QLabel("<b>Entretiens</b>"))
+        dernier_epp = entretiens_data.get('dernier_epp') if isinstance(entretiens_data, dict) else None
+        dernier_eap = entretiens_data.get('dernier_eap') if isinstance(entretiens_data, dict) else None
+        entretiens_inner.addWidget(QLabel(f"EPP: {self._format_date(dernier_epp) if dernier_epp else '-'}"))
+        entretiens_inner.addWidget(QLabel(f"EAP: {self._format_date(dernier_eap) if dernier_eap else '-'}"))
+        recap_layout.addWidget(entretiens_frame)
+
+        card_recap.body.addLayout(recap_layout)
+        layout.addWidget(card_recap)
+
+        # ===== Sanctions détaillées =====
+        sanctions_list = donnees.get('sanctions_liste', [])
+        card_sanctions = EmacCard(f"Sanctions disciplinaires ({len(sanctions_list)})")
+
+        btn_add_sanction = EmacButton("+ Nouvelle sanction", variant="primary")
+        btn_add_sanction.clicked.connect(self._add_sanction)
+        card_sanctions.body.addWidget(btn_add_sanction, alignment=Qt.AlignLeft)
+
+        if sanctions_list:
+            table_sanctions = QTableWidget()
+            table_sanctions.setColumnCount(5)
+            table_sanctions.setHorizontalHeaderLabels(["Date", "Type", "Durée (jours)", "Motif", "Actions"])
+            table_sanctions.setRowCount(len(sanctions_list))
+            table_sanctions.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table_sanctions.setAlternatingRowColors(True)
+            table_sanctions.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table_sanctions.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+            for row_idx, sanc in enumerate(sanctions_list):
+                table_sanctions.setItem(row_idx, 0, QTableWidgetItem(self._format_date(sanc.get('date_sanction'))))
+                table_sanctions.setItem(row_idx, 1, QTableWidgetItem(sanc.get('type_sanction', '-')))
+                table_sanctions.setItem(row_idx, 2, QTableWidgetItem(str(sanc.get('duree_jours', '-')) if sanc.get('duree_jours') else '-'))
+                motif = sanc.get('motif', '-')
+                if motif and len(motif) > 50:
+                    motif = motif[:50] + "..."
+                table_sanctions.setItem(row_idx, 3, QTableWidgetItem(motif))
+
+                btn_widget = QWidget()
+                btn_layout_inner = QHBoxLayout(btn_widget)
+                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
+                btn_layout_inner.setSpacing(4)
+
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setFixedHeight(28)
+                btn_edit.clicked.connect(lambda checked, s=sanc: self._edit_sanction(s))
+                btn_layout_inner.addWidget(btn_edit)
+
+                btn_del = EmacButton("Suppr.", variant="ghost")
+                btn_del.setFixedHeight(28)
+                btn_del.clicked.connect(lambda checked, s=sanc: self._delete_sanction(s))
+                btn_layout_inner.addWidget(btn_del)
+
+                table_sanctions.setCellWidget(row_idx, 4, btn_widget)
+
+            table_sanctions.setMaximumHeight(180)
+            card_sanctions.body.addWidget(table_sanctions)
+        else:
+            card_sanctions.body.addWidget(QLabel("Aucune sanction enregistrée"))
+
+        layout.addWidget(card_sanctions)
+
+        # ===== Contrôles (Alcool + Salivaire) =====
+        controles_alcool = donnees.get('controles_alcool_liste', [])
+        controles_salivaire = donnees.get('tests_salivaires_liste', [])
+
+        card_controles = EmacCard("Contrôles (Alcool / Salivaire)")
+
+        btn_layout_ctrl = QHBoxLayout()
+        btn_add_alcool = EmacButton("+ Contrôle alcool", variant="primary")
+        btn_add_alcool.clicked.connect(self._add_controle_alcool)
+        btn_layout_ctrl.addWidget(btn_add_alcool)
+
+        btn_add_salivaire = EmacButton("+ Test salivaire", variant="primary")
+        btn_add_salivaire.clicked.connect(self._add_test_salivaire)
+        btn_layout_ctrl.addWidget(btn_add_salivaire)
+        btn_layout_ctrl.addStretch()
+        card_controles.body.addLayout(btn_layout_ctrl)
+
+        tables_layout = QHBoxLayout()
+
+        alcool_container = QVBoxLayout()
+        alcool_container.addWidget(QLabel("<b>Alcoolémie</b>"))
+        if controles_alcool:
+            table_alcool = QTableWidget()
+            table_alcool.setColumnCount(3)
+            table_alcool.setHorizontalHeaderLabels(["Date", "Résultat", "Taux"])
+            table_alcool.setRowCount(min(5, len(controles_alcool)))
+            table_alcool.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            for row_idx, ctrl in enumerate(controles_alcool[:5]):
+                table_alcool.setItem(row_idx, 0, QTableWidgetItem(self._format_datetime(ctrl.get('date_controle'))))
+                table_alcool.setItem(row_idx, 1, QTableWidgetItem(ctrl.get('resultat', '-')))
+                table_alcool.setItem(row_idx, 2, QTableWidgetItem(f"{ctrl.get('taux', '-')} g/L" if ctrl.get('taux') else '-'))
+            table_alcool.setMaximumHeight(150)
+            alcool_container.addWidget(table_alcool)
+        else:
+            alcool_container.addWidget(QLabel("Aucun contrôle"))
+        tables_layout.addLayout(alcool_container)
+
+        salivaire_container = QVBoxLayout()
+        salivaire_container.addWidget(QLabel("<b>Tests salivaires</b>"))
+        if controles_salivaire:
+            table_salivaire = QTableWidget()
+            table_salivaire.setColumnCount(2)
+            table_salivaire.setHorizontalHeaderLabels(["Date", "Résultat"])
+            table_salivaire.setRowCount(min(5, len(controles_salivaire)))
+            table_salivaire.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            for row_idx, test in enumerate(controles_salivaire[:5]):
+                table_salivaire.setItem(row_idx, 0, QTableWidgetItem(self._format_datetime(test.get('date_test'))))
+                table_salivaire.setItem(row_idx, 1, QTableWidgetItem(test.get('resultat', '-')))
+            table_salivaire.setMaximumHeight(150)
+            salivaire_container.addWidget(table_salivaire)
+        else:
+            salivaire_container.addWidget(QLabel("Aucun test"))
+        tables_layout.addLayout(salivaire_container)
+
+        card_controles.body.addLayout(tables_layout)
+        layout.addWidget(card_controles)
+
+        # ===== Entretiens professionnels =====
+        entretiens_liste = donnees.get('entretiens_liste', [])
+        card_entretiens = EmacCard(f"Entretiens professionnels ({len(entretiens_liste)})")
+
+        btn_add_entretien = EmacButton("+ Nouvel entretien", variant="primary")
+        btn_add_entretien.clicked.connect(self._add_entretien)
+        card_entretiens.body.addWidget(btn_add_entretien, alignment=Qt.AlignLeft)
+
+        if entretiens_liste:
+            table_entretiens = QTableWidget()
+            table_entretiens.setColumnCount(5)
+            table_entretiens.setHorizontalHeaderLabels(["Date", "Type", "Manager", "Prochaine", "Actions"])
+            table_entretiens.setRowCount(len(entretiens_liste))
+            table_entretiens.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table_entretiens.setAlternatingRowColors(True)
+            table_entretiens.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table_entretiens.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+            for row_idx, ent in enumerate(entretiens_liste):
+                table_entretiens.setItem(row_idx, 0, QTableWidgetItem(self._format_date(ent.get('date_entretien'))))
+                table_entretiens.setItem(row_idx, 1, QTableWidgetItem(ent.get('type_entretien', '-')))
+                table_entretiens.setItem(row_idx, 2, QTableWidgetItem(ent.get('manager_nom', '-')))
+                table_entretiens.setItem(row_idx, 3, QTableWidgetItem(self._format_date(ent.get('prochaine_date'))))
+
+                btn_widget = QWidget()
+                btn_layout_inner = QHBoxLayout(btn_widget)
+                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
+                btn_layout_inner.setSpacing(4)
+
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setFixedHeight(28)
+                btn_edit.clicked.connect(lambda checked, e=ent: self._edit_entretien(e))
+                btn_layout_inner.addWidget(btn_edit)
+
+                btn_del = EmacButton("Suppr.", variant="ghost")
+                btn_del.setFixedHeight(28)
+                btn_del.clicked.connect(lambda checked, e=ent: self._delete_entretien(e))
+                btn_layout_inner.addWidget(btn_del)
+
+                table_entretiens.setCellWidget(row_idx, 4, btn_widget)
+
+            table_entretiens.setMaximumHeight(180)
+            card_entretiens.body.addWidget(table_entretiens)
+        else:
+            card_entretiens.body.addWidget(QLabel("Aucun entretien enregistré"))
+
+        layout.addWidget(card_entretiens)
+
+        return container
+
+    def _format_datetime(self, dt) -> str:
+        """Formate une datetime pour affichage."""
+        if not dt:
+            return "-"
+        try:
+            if hasattr(dt, 'strftime'):
+                return dt.strftime('%d/%m/%Y %H:%M')
+            return str(dt)
+        except Exception:
+            return str(dt)
+
+    # ===== Handlers Medical =====
+    def _add_visite(self):
+        """Ajoute une nouvelle visite médicale."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditVisiteDialog(self.operateur_selectionne['id'], None, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_visite(self, visite: dict):
+        """Modifie une visite médicale."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditVisiteDialog(self.operateur_selectionne['id'], visite, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_visite(self, visite: dict):
+        """Supprime une visite médicale."""
+        reply = QMessageBox.question(
+            self, "Confirmer la suppression",
+            f"Voulez-vous vraiment supprimer la visite du {self._format_date(visite.get('date_visite'))} ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, msg = delete_visite(visite['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.warning(self, "Erreur", msg)
+
+    def _add_accident(self):
+        """Ajoute un nouvel accident du travail."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditAccidentDialog(self.operateur_selectionne['id'], None, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_accident(self, accident: dict):
+        """Modifie un accident du travail."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditAccidentDialog(self.operateur_selectionne['id'], accident, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_accident(self, accident: dict):
+        """Supprime un accident du travail."""
+        reply = QMessageBox.question(
+            self, "Confirmer la suppression",
+            f"Voulez-vous vraiment supprimer l'accident du {self._format_date(accident.get('date_accident'))} ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, msg = delete_accident(accident['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.warning(self, "Erreur", msg)
+
+    # ===== Handlers Vie du salarié =====
+    def _add_sanction(self):
+        """Ajoute une nouvelle sanction."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditSanctionDialog(self.operateur_selectionne['id'], None, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_sanction(self, sanction: dict):
+        """Modifie une sanction."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditSanctionDialog(self.operateur_selectionne['id'], sanction, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_sanction(self, sanction: dict):
+        """Supprime une sanction."""
+        reply = QMessageBox.question(
+            self, "Confirmer la suppression",
+            f"Voulez-vous vraiment supprimer la sanction du {self._format_date(sanction.get('date_sanction'))} ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, msg = delete_sanction(sanction['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.warning(self, "Erreur", msg)
+
+    def _add_controle_alcool(self):
+        """Ajoute un contrôle d'alcoolémie."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditControleAlcoolDialog(self.operateur_selectionne['id'], self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _add_test_salivaire(self):
+        """Ajoute un test salivaire."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditTestSalivaireDialog(self.operateur_selectionne['id'], self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _add_entretien(self):
+        """Ajoute un entretien professionnel."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditEntretienDialog(self.operateur_selectionne['id'], None, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_entretien(self, entretien: dict):
+        """Modifie un entretien professionnel."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditEntretienDialog(self.operateur_selectionne['id'], entretien, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_entretien(self, entretien: dict):
+        """Supprime un entretien professionnel."""
+        reply = QMessageBox.question(
+            self, "Confirmer la suppression",
+            f"Voulez-vous vraiment supprimer l'entretien du {self._format_date(entretien.get('date_entretien'))} ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, msg = delete_entretien(entretien['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.warning(self, "Erreur", msg)
+
     def _creer_widget_documents(self, documents: list) -> QWidget:
         """Crée le widget affichant les documents du domaine."""
         card = EmacCard(f"Documents associés ({len(documents)})")
@@ -2646,6 +3853,612 @@ class GestionRHWidget(QWidget):
         layout.addWidget(card_list)
 
         return container
+
+    def _creer_resume_medical(self, donnees: dict) -> QWidget:
+        """Crée le résumé du suivi médical."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        if donnees.get('error'):
+            error_card = EmacCard("Erreur")
+            error_card.body.addWidget(QLabel(f"Erreur: {donnees['error']}"))
+            layout.addWidget(error_card)
+            return container
+
+        medical_info = donnees.get('medical') or {}
+        visites = donnees.get('visites') or []
+        accidents = donnees.get('accidents') or []
+        validites = donnees.get('validites') or []
+        alertes = donnees.get('alertes') or []
+
+        self._donnees_medical = donnees
+
+        # ===== Alertes médicales =====
+        if alertes:
+            alertes_card = EmacCard("Alertes")
+            for alerte in alertes:
+                alert_widget = QFrame()
+                alert_widget.setStyleSheet("""
+                    QFrame {
+                        background: #fef2f2;
+                        border: 1px solid #fecaca;
+                        border-radius: 6px;
+                        padding: 8px 12px;
+                        margin-bottom: 4px;
+                    }
+                """)
+                alert_layout = QHBoxLayout(alert_widget)
+                alert_layout.setContentsMargins(8, 4, 8, 4)
+                lbl = QLabel(alerte.get('message', str(alerte)))
+                lbl.setStyleSheet("color: #dc2626; font-weight: 500;")
+                alert_layout.addWidget(lbl)
+                alertes_card.body.addWidget(alert_widget)
+            layout.addWidget(alertes_card)
+
+        # ===== Suivi médical principal =====
+        card_medical = EmacCard("Suivi Médical")
+        grid = QGridLayout()
+        grid.setSpacing(12)
+
+        type_suivi = medical_info.get('type_suivi_vip') or "Non défini"
+        periodicite = medical_info.get('periodicite_vip_mois') or 24
+
+        infos = [
+            ("Type de suivi VIP", type_suivi),
+            ("Périodicité", f"{periodicite} mois"),
+            ("Maladie professionnelle", "Oui" if medical_info.get('maladie_pro') else "Non"),
+            ("Taux professionnel", f"{medical_info.get('taux_professionnel', 0)}%" if medical_info.get('taux_professionnel') else "-"),
+        ]
+
+        if medical_info.get('besoins_adaptation'):
+            infos.append(("Besoins d'adaptation", medical_info.get('besoins_adaptation')))
+
+        for i, (label, valeur) in enumerate(infos):
+            r, c = divmod(i, 2)
+            lbl = QLabel(f"<b>{label}</b><br/>{valeur}")
+            lbl.setStyleSheet("padding: 8px; background: #f9fafb; border-radius: 6px;")
+            grid.addWidget(lbl, r, c)
+
+        card_medical.body.addLayout(grid)
+        layout.addWidget(card_medical)
+
+        # ===== RQTH / OETH =====
+        from datetime import date as date_class
+        rqth_validites = [v for v in validites if v.get('type_validite') == 'RQTH']
+        oeth_validites = [v for v in validites if v.get('type_validite') == 'OETH']
+
+        card_rqth = EmacCard("RQTH / OETH")
+        rqth_layout = QHBoxLayout()
+
+        rqth_frame = QFrame()
+        rqth_frame.setStyleSheet("padding: 8px; background: #f0fdf4; border-radius: 6px;")
+        rqth_inner = QVBoxLayout(rqth_frame)
+        rqth_inner.addWidget(QLabel("<b>RQTH</b>"))
+        if rqth_validites:
+            latest_rqth = rqth_validites[0]
+            date_fin = latest_rqth.get('date_fin')
+            statut = "Active" if date_fin and date_fin >= date_class.today() else "Expirée"
+            rqth_inner.addWidget(QLabel(f"Statut: {statut}"))
+            rqth_inner.addWidget(QLabel(f"Fin: {self._format_date(date_fin)}"))
+            if latest_rqth.get('taux_incapacite'):
+                rqth_inner.addWidget(QLabel(f"Taux: {latest_rqth.get('taux_incapacite')}%"))
+        else:
+            rqth_inner.addWidget(QLabel("Non applicable"))
+        rqth_layout.addWidget(rqth_frame)
+
+        oeth_frame = QFrame()
+        oeth_frame.setStyleSheet("padding: 8px; background: #eff6ff; border-radius: 6px;")
+        oeth_inner = QVBoxLayout(oeth_frame)
+        oeth_inner.addWidget(QLabel("<b>OETH</b>"))
+        if oeth_validites:
+            latest_oeth = oeth_validites[0]
+            date_fin = latest_oeth.get('date_fin')
+            statut = "Active" if date_fin and date_fin >= date_class.today() else "Expirée"
+            oeth_inner.addWidget(QLabel(f"Statut: {statut}"))
+            oeth_inner.addWidget(QLabel(f"Fin: {self._format_date(date_fin)}"))
+        else:
+            oeth_inner.addWidget(QLabel("Non applicable"))
+        rqth_layout.addWidget(oeth_frame)
+
+        card_rqth.body.addLayout(rqth_layout)
+        layout.addWidget(card_rqth)
+
+        # ===== Visites médicales =====
+        card_visites = EmacCard(f"Visites médicales ({len(visites)})")
+
+        btn_add_visite = EmacButton("+ Nouvelle visite", variant="primary")
+        btn_add_visite.clicked.connect(self._add_visite)
+        card_visites.body.addWidget(btn_add_visite, alignment=Qt.AlignLeft)
+
+        if visites:
+            table = QTableWidget()
+            table.setColumnCount(6)
+            table.setHorizontalHeaderLabels(["Date", "Type", "Résultat", "Médecin", "Prochaine", "Actions"])
+            table.setRowCount(len(visites))
+            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table.setAlternatingRowColors(True)
+            table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+            for row_idx, visite in enumerate(visites):
+                table.setItem(row_idx, 0, QTableWidgetItem(self._format_date(visite.get('date_visite'))))
+                table.setItem(row_idx, 1, QTableWidgetItem(visite.get('type_visite', '-')))
+                table.setItem(row_idx, 2, QTableWidgetItem(visite.get('resultat', '-')))
+                table.setItem(row_idx, 3, QTableWidgetItem(visite.get('medecin', '-')))
+                table.setItem(row_idx, 4, QTableWidgetItem(self._format_date(visite.get('prochaine_visite'))))
+
+                btn_widget = QWidget()
+                btn_layout_inner = QHBoxLayout(btn_widget)
+                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
+                btn_layout_inner.setSpacing(4)
+
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setFixedHeight(28)
+                btn_edit.clicked.connect(lambda checked, v=visite: self._edit_visite(v))
+                btn_layout_inner.addWidget(btn_edit)
+
+                btn_del = EmacButton("Suppr.", variant="ghost")
+                btn_del.setFixedHeight(28)
+                btn_del.clicked.connect(lambda checked, v=visite: self._delete_visite(v))
+                btn_layout_inner.addWidget(btn_del)
+
+                table.setCellWidget(row_idx, 5, btn_widget)
+
+            table.setMaximumHeight(200)
+            card_visites.body.addWidget(table)
+        else:
+            card_visites.body.addWidget(QLabel("Aucune visite enregistrée"))
+
+        layout.addWidget(card_visites)
+
+        # ===== Accidents du travail =====
+        card_accidents = EmacCard(f"Accidents du travail ({len(accidents)})")
+
+        btn_add_accident = EmacButton("+ Nouvel accident", variant="primary")
+        btn_add_accident.clicked.connect(self._add_accident)
+        card_accidents.body.addWidget(btn_add_accident, alignment=Qt.AlignLeft)
+
+        if accidents:
+            table_acc = QTableWidget()
+            table_acc.setColumnCount(6)
+            table_acc.setHorizontalHeaderLabels(["Date", "Avec arrêt", "Jours absence", "Siège lésions", "Nature", "Actions"])
+            table_acc.setRowCount(len(accidents))
+            table_acc.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table_acc.setAlternatingRowColors(True)
+            table_acc.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table_acc.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+            for row_idx, acc in enumerate(accidents):
+                table_acc.setItem(row_idx, 0, QTableWidgetItem(self._format_date(acc.get('date_accident'))))
+                table_acc.setItem(row_idx, 1, QTableWidgetItem("Oui" if acc.get('avec_arret') else "Non"))
+                table_acc.setItem(row_idx, 2, QTableWidgetItem(str(acc.get('nb_jours_absence', '-'))))
+                table_acc.setItem(row_idx, 3, QTableWidgetItem(acc.get('siege_lesions', '-')))
+                table_acc.setItem(row_idx, 4, QTableWidgetItem(acc.get('nature_lesions', '-')))
+
+                btn_widget = QWidget()
+                btn_layout_inner = QHBoxLayout(btn_widget)
+                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
+                btn_layout_inner.setSpacing(4)
+
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setFixedHeight(28)
+                btn_edit.clicked.connect(lambda checked, a=acc: self._edit_accident(a))
+                btn_layout_inner.addWidget(btn_edit)
+
+                btn_del = EmacButton("Suppr.", variant="ghost")
+                btn_del.setFixedHeight(28)
+                btn_del.clicked.connect(lambda checked, a=acc: self._delete_accident(a))
+                btn_layout_inner.addWidget(btn_del)
+
+                table_acc.setCellWidget(row_idx, 5, btn_widget)
+
+            table_acc.setMaximumHeight(200)
+            card_accidents.body.addWidget(table_acc)
+        else:
+            card_accidents.body.addWidget(QLabel("Aucun accident enregistré"))
+
+        layout.addWidget(card_accidents)
+
+        return container
+
+    def _creer_resume_vie_salarie(self, donnees: dict) -> QWidget:
+        """Crée le résumé de la vie du salarié."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        if donnees.get('error'):
+            error_card = EmacCard("Erreur")
+            error_card.body.addWidget(QLabel(f"Erreur: {donnees['error']}"))
+            layout.addWidget(error_card)
+            return container
+
+        sanctions_data = donnees.get('sanctions', {})
+        alcoolemie_data = donnees.get('alcoolemie', {})
+        salivaire_data = donnees.get('tests_salivaires', {})
+        entretiens_data = donnees.get('entretiens', {})
+        alertes = donnees.get('alertes', [])
+
+        self._donnees_vie_salarie = donnees
+
+        # ===== Alertes =====
+        if alertes:
+            alertes_card = EmacCard("Alertes")
+            for alerte in alertes:
+                alert_widget = QFrame()
+                alert_widget.setStyleSheet("""
+                    QFrame {
+                        background: #fef2f2;
+                        border: 1px solid #fecaca;
+                        border-radius: 6px;
+                        padding: 8px 12px;
+                        margin-bottom: 4px;
+                    }
+                """)
+                alert_layout = QHBoxLayout(alert_widget)
+                alert_layout.setContentsMargins(8, 4, 8, 4)
+                lbl = QLabel(alerte.get('message', str(alerte)))
+                lbl.setStyleSheet("color: #dc2626; font-weight: 500;")
+                alert_layout.addWidget(lbl)
+                alertes_card.body.addWidget(alert_widget)
+            layout.addWidget(alertes_card)
+
+        # ===== Carte récapitulative =====
+        card_recap = EmacCard("Récapitulatif")
+        recap_layout = QHBoxLayout()
+
+        sanctions_frame = QFrame()
+        sanctions_frame.setStyleSheet("padding: 12px; background: #fef3c7; border-radius: 8px;")
+        sanctions_inner = QVBoxLayout(sanctions_frame)
+        sanctions_inner.addWidget(QLabel("<b>Sanctions</b>"))
+        nb_sanctions = sanctions_data.get('total', 0) if isinstance(sanctions_data, dict) else 0
+        sanctions_inner.addWidget(QLabel(f"Total: {nb_sanctions}"))
+        if isinstance(sanctions_data, dict) and sanctions_data.get('derniere_sanction'):
+            sanctions_inner.addWidget(QLabel(f"Dernière: {self._format_date(sanctions_data.get('derniere_sanction'))}"))
+        recap_layout.addWidget(sanctions_frame)
+
+        alcool_frame = QFrame()
+        alcool_frame.setStyleSheet("padding: 12px; background: #dbeafe; border-radius: 8px;")
+        alcool_inner = QVBoxLayout(alcool_frame)
+        alcool_inner.addWidget(QLabel("<b>Contrôles alcool</b>"))
+        nb_alcool = alcoolemie_data.get('total', 0) if isinstance(alcoolemie_data, dict) else 0
+        nb_positifs = alcoolemie_data.get('positifs', 0) if isinstance(alcoolemie_data, dict) else 0
+        alcool_inner.addWidget(QLabel(f"Total: {nb_alcool}"))
+        alcool_inner.addWidget(QLabel(f"Positifs: {nb_positifs}"))
+        recap_layout.addWidget(alcool_frame)
+
+        salivaire_frame = QFrame()
+        salivaire_frame.setStyleSheet("padding: 12px; background: #f3e8ff; border-radius: 8px;")
+        salivaire_inner = QVBoxLayout(salivaire_frame)
+        salivaire_inner.addWidget(QLabel("<b>Tests salivaires</b>"))
+        nb_salivaire = salivaire_data.get('total', 0) if isinstance(salivaire_data, dict) else 0
+        nb_positifs_sal = salivaire_data.get('positifs', 0) if isinstance(salivaire_data, dict) else 0
+        salivaire_inner.addWidget(QLabel(f"Total: {nb_salivaire}"))
+        salivaire_inner.addWidget(QLabel(f"Positifs: {nb_positifs_sal}"))
+        recap_layout.addWidget(salivaire_frame)
+
+        entretiens_frame = QFrame()
+        entretiens_frame.setStyleSheet("padding: 12px; background: #dcfce7; border-radius: 8px;")
+        entretiens_inner = QVBoxLayout(entretiens_frame)
+        entretiens_inner.addWidget(QLabel("<b>Entretiens</b>"))
+        dernier_epp = entretiens_data.get('dernier_epp') if isinstance(entretiens_data, dict) else None
+        dernier_eap = entretiens_data.get('dernier_eap') if isinstance(entretiens_data, dict) else None
+        entretiens_inner.addWidget(QLabel(f"EPP: {self._format_date(dernier_epp) if dernier_epp else '-'}"))
+        entretiens_inner.addWidget(QLabel(f"EAP: {self._format_date(dernier_eap) if dernier_eap else '-'}"))
+        recap_layout.addWidget(entretiens_frame)
+
+        card_recap.body.addLayout(recap_layout)
+        layout.addWidget(card_recap)
+
+        # ===== Sanctions détaillées =====
+        sanctions_list = donnees.get('sanctions_liste', [])
+        card_sanctions = EmacCard(f"Sanctions disciplinaires ({len(sanctions_list)})")
+
+        btn_add_sanction = EmacButton("+ Nouvelle sanction", variant="primary")
+        btn_add_sanction.clicked.connect(self._add_sanction)
+        card_sanctions.body.addWidget(btn_add_sanction, alignment=Qt.AlignLeft)
+
+        if sanctions_list:
+            table_sanctions = QTableWidget()
+            table_sanctions.setColumnCount(5)
+            table_sanctions.setHorizontalHeaderLabels(["Date", "Type", "Durée (jours)", "Motif", "Actions"])
+            table_sanctions.setRowCount(len(sanctions_list))
+            table_sanctions.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table_sanctions.setAlternatingRowColors(True)
+            table_sanctions.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table_sanctions.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+            for row_idx, sanc in enumerate(sanctions_list):
+                table_sanctions.setItem(row_idx, 0, QTableWidgetItem(self._format_date(sanc.get('date_sanction'))))
+                table_sanctions.setItem(row_idx, 1, QTableWidgetItem(sanc.get('type_sanction', '-')))
+                table_sanctions.setItem(row_idx, 2, QTableWidgetItem(str(sanc.get('duree_jours', '-')) if sanc.get('duree_jours') else '-'))
+                motif = sanc.get('motif', '-')
+                if motif and len(motif) > 50:
+                    motif = motif[:50] + "..."
+                table_sanctions.setItem(row_idx, 3, QTableWidgetItem(motif))
+
+                btn_widget = QWidget()
+                btn_layout_inner = QHBoxLayout(btn_widget)
+                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
+                btn_layout_inner.setSpacing(4)
+
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setFixedHeight(28)
+                btn_edit.clicked.connect(lambda checked, s=sanc: self._edit_sanction(s))
+                btn_layout_inner.addWidget(btn_edit)
+
+                btn_del = EmacButton("Suppr.", variant="ghost")
+                btn_del.setFixedHeight(28)
+                btn_del.clicked.connect(lambda checked, s=sanc: self._delete_sanction(s))
+                btn_layout_inner.addWidget(btn_del)
+
+                table_sanctions.setCellWidget(row_idx, 4, btn_widget)
+
+            table_sanctions.setMaximumHeight(180)
+            card_sanctions.body.addWidget(table_sanctions)
+        else:
+            card_sanctions.body.addWidget(QLabel("Aucune sanction enregistrée"))
+
+        layout.addWidget(card_sanctions)
+
+        # ===== Contrôles (Alcool + Salivaire) =====
+        controles_alcool = donnees.get('controles_alcool_liste', [])
+        controles_salivaire = donnees.get('tests_salivaires_liste', [])
+
+        card_controles = EmacCard("Contrôles (Alcool / Salivaire)")
+
+        btn_layout_ctrl = QHBoxLayout()
+        btn_add_alcool = EmacButton("+ Contrôle alcool", variant="primary")
+        btn_add_alcool.clicked.connect(self._add_controle_alcool)
+        btn_layout_ctrl.addWidget(btn_add_alcool)
+
+        btn_add_salivaire = EmacButton("+ Test salivaire", variant="primary")
+        btn_add_salivaire.clicked.connect(self._add_test_salivaire)
+        btn_layout_ctrl.addWidget(btn_add_salivaire)
+        btn_layout_ctrl.addStretch()
+        card_controles.body.addLayout(btn_layout_ctrl)
+
+        tables_layout = QHBoxLayout()
+
+        alcool_container = QVBoxLayout()
+        alcool_container.addWidget(QLabel("<b>Alcoolémie</b>"))
+        if controles_alcool:
+            table_alcool = QTableWidget()
+            table_alcool.setColumnCount(3)
+            table_alcool.setHorizontalHeaderLabels(["Date", "Résultat", "Taux"])
+            table_alcool.setRowCount(min(5, len(controles_alcool)))
+            table_alcool.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            for row_idx, ctrl in enumerate(controles_alcool[:5]):
+                table_alcool.setItem(row_idx, 0, QTableWidgetItem(self._format_datetime(ctrl.get('date_controle'))))
+                table_alcool.setItem(row_idx, 1, QTableWidgetItem(ctrl.get('resultat', '-')))
+                table_alcool.setItem(row_idx, 2, QTableWidgetItem(f"{ctrl.get('taux', '-')} g/L" if ctrl.get('taux') else '-'))
+            table_alcool.setMaximumHeight(150)
+            alcool_container.addWidget(table_alcool)
+        else:
+            alcool_container.addWidget(QLabel("Aucun contrôle"))
+        tables_layout.addLayout(alcool_container)
+
+        salivaire_container = QVBoxLayout()
+        salivaire_container.addWidget(QLabel("<b>Tests salivaires</b>"))
+        if controles_salivaire:
+            table_salivaire = QTableWidget()
+            table_salivaire.setColumnCount(2)
+            table_salivaire.setHorizontalHeaderLabels(["Date", "Résultat"])
+            table_salivaire.setRowCount(min(5, len(controles_salivaire)))
+            table_salivaire.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            for row_idx, test in enumerate(controles_salivaire[:5]):
+                table_salivaire.setItem(row_idx, 0, QTableWidgetItem(self._format_datetime(test.get('date_test'))))
+                table_salivaire.setItem(row_idx, 1, QTableWidgetItem(test.get('resultat', '-')))
+            table_salivaire.setMaximumHeight(150)
+            salivaire_container.addWidget(table_salivaire)
+        else:
+            salivaire_container.addWidget(QLabel("Aucun test"))
+        tables_layout.addLayout(salivaire_container)
+
+        card_controles.body.addLayout(tables_layout)
+        layout.addWidget(card_controles)
+
+        # ===== Entretiens professionnels =====
+        entretiens_liste = donnees.get('entretiens_liste', [])
+        card_entretiens = EmacCard(f"Entretiens professionnels ({len(entretiens_liste)})")
+
+        btn_add_entretien = EmacButton("+ Nouvel entretien", variant="primary")
+        btn_add_entretien.clicked.connect(self._add_entretien)
+        card_entretiens.body.addWidget(btn_add_entretien, alignment=Qt.AlignLeft)
+
+        if entretiens_liste:
+            table_entretiens = QTableWidget()
+            table_entretiens.setColumnCount(5)
+            table_entretiens.setHorizontalHeaderLabels(["Date", "Type", "Manager", "Prochaine", "Actions"])
+            table_entretiens.setRowCount(len(entretiens_liste))
+            table_entretiens.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            table_entretiens.setAlternatingRowColors(True)
+            table_entretiens.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table_entretiens.setEditTriggers(QAbstractItemView.NoEditTriggers)
+
+            for row_idx, ent in enumerate(entretiens_liste):
+                table_entretiens.setItem(row_idx, 0, QTableWidgetItem(self._format_date(ent.get('date_entretien'))))
+                table_entretiens.setItem(row_idx, 1, QTableWidgetItem(ent.get('type_entretien', '-')))
+                table_entretiens.setItem(row_idx, 2, QTableWidgetItem(ent.get('manager_nom', '-')))
+                table_entretiens.setItem(row_idx, 3, QTableWidgetItem(self._format_date(ent.get('prochaine_date'))))
+
+                btn_widget = QWidget()
+                btn_layout_inner = QHBoxLayout(btn_widget)
+                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
+                btn_layout_inner.setSpacing(4)
+
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setFixedHeight(28)
+                btn_edit.clicked.connect(lambda checked, e=ent: self._edit_entretien(e))
+                btn_layout_inner.addWidget(btn_edit)
+
+                btn_del = EmacButton("Suppr.", variant="ghost")
+                btn_del.setFixedHeight(28)
+                btn_del.clicked.connect(lambda checked, e=ent: self._delete_entretien(e))
+                btn_layout_inner.addWidget(btn_del)
+
+                table_entretiens.setCellWidget(row_idx, 4, btn_widget)
+
+            table_entretiens.setMaximumHeight(180)
+            card_entretiens.body.addWidget(table_entretiens)
+        else:
+            card_entretiens.body.addWidget(QLabel("Aucun entretien enregistré"))
+
+        layout.addWidget(card_entretiens)
+
+        return container
+
+    def _format_datetime(self, dt) -> str:
+        """Formate une datetime pour affichage."""
+        if not dt:
+            return "-"
+        try:
+            if hasattr(dt, 'strftime'):
+                return dt.strftime('%d/%m/%Y %H:%M')
+            return str(dt)
+        except Exception:
+            return str(dt)
+
+    # ===== Handlers Medical =====
+    def _add_visite(self):
+        """Ajoute une nouvelle visite médicale."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditVisiteDialog(self.operateur_selectionne['id'], None, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_visite(self, visite: dict):
+        """Modifie une visite médicale."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditVisiteDialog(self.operateur_selectionne['id'], visite, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_visite(self, visite: dict):
+        """Supprime une visite médicale."""
+        reply = QMessageBox.question(
+            self, "Confirmer la suppression",
+            f"Voulez-vous vraiment supprimer la visite du {self._format_date(visite.get('date_visite'))} ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, msg = delete_visite(visite['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.warning(self, "Erreur", msg)
+
+    def _add_accident(self):
+        """Ajoute un nouvel accident du travail."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditAccidentDialog(self.operateur_selectionne['id'], None, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_accident(self, accident: dict):
+        """Modifie un accident du travail."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditAccidentDialog(self.operateur_selectionne['id'], accident, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_accident(self, accident: dict):
+        """Supprime un accident du travail."""
+        reply = QMessageBox.question(
+            self, "Confirmer la suppression",
+            f"Voulez-vous vraiment supprimer l'accident du {self._format_date(accident.get('date_accident'))} ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, msg = delete_accident(accident['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.warning(self, "Erreur", msg)
+
+    # ===== Handlers Vie du salarié =====
+    def _add_sanction(self):
+        """Ajoute une nouvelle sanction."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditSanctionDialog(self.operateur_selectionne['id'], None, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_sanction(self, sanction: dict):
+        """Modifie une sanction."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditSanctionDialog(self.operateur_selectionne['id'], sanction, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_sanction(self, sanction: dict):
+        """Supprime une sanction."""
+        reply = QMessageBox.question(
+            self, "Confirmer la suppression",
+            f"Voulez-vous vraiment supprimer la sanction du {self._format_date(sanction.get('date_sanction'))} ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, msg = delete_sanction(sanction['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.warning(self, "Erreur", msg)
+
+    def _add_controle_alcool(self):
+        """Ajoute un contrôle d'alcoolémie."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditControleAlcoolDialog(self.operateur_selectionne['id'], self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _add_test_salivaire(self):
+        """Ajoute un test salivaire."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditTestSalivaireDialog(self.operateur_selectionne['id'], self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _add_entretien(self):
+        """Ajoute un entretien professionnel."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditEntretienDialog(self.operateur_selectionne['id'], None, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_entretien(self, entretien: dict):
+        """Modifie un entretien professionnel."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditEntretienDialog(self.operateur_selectionne['id'], entretien, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_entretien(self, entretien: dict):
+        """Supprime un entretien professionnel."""
+        reply = QMessageBox.question(
+            self, "Confirmer la suppression",
+            f"Voulez-vous vraiment supprimer l'entretien du {self._format_date(entretien.get('date_entretien'))} ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, msg = delete_entretien(entretien['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.warning(self, "Erreur", msg)
 
     def _creer_widget_documents(self, documents: list) -> QWidget:
         """Crée le widget affichant les documents du domaine."""
