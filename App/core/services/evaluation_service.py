@@ -7,7 +7,10 @@ Fournit les fonctions pour recuperer les evaluations en retard et a venir
 - Logs DB optimisés (async, non-bloquant)
 """
 
+import logging
 from datetime import datetime, date, timedelta
+
+logger = logging.getLogger(__name__)
 from typing import List, Dict, Optional
 from core.db.configbd import DatabaseCursor, DatabaseConnection
 
@@ -177,7 +180,7 @@ def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
             return True
 
     except Exception as e:
-        print(f"Erreur lors de la mise a jour de l'evaluation : {e}")
+        logger.error(f"Erreur lors de la mise a jour de l'evaluation : {e}")
         return False
 
 

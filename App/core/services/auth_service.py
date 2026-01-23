@@ -14,7 +14,10 @@ Gère la connexion, déconnexion, et vérification des permissions
 
 import bcrypt
 import re
+import logging
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 from typing import Optional, Dict, List, Tuple
 from core.db.configbd import get_connection
 
@@ -238,7 +241,7 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
         return True, None
 
     except Exception as e:
-        print(f"Erreur lors de l'authentification: {e}")
+        logger.error(f"Erreur lors de l'authentification: {e}")
         conn.rollback()
         return False, "Erreur de connexion. Veuillez réessayer ou contacter un administrateur."
     finally:
@@ -280,7 +283,7 @@ def logout_user():
         )
 
     except Exception as e:
-        print(f"Erreur lors de la déconnexion: {e}")
+        logger.error(f"Erreur lors de la déconnexion: {e}")
         conn.rollback()
     finally:
         cur.close()
@@ -351,7 +354,7 @@ def get_all_users() -> List[Dict]:
         """)
         return cur.fetchall()
     except Exception as e:
-        print(f"Erreur lors de la récupération des utilisateurs: {e}")
+        logger.error(f"Erreur lors de la récupération des utilisateurs: {e}")
         return []
     finally:
         cur.close()
@@ -403,7 +406,7 @@ def create_user(username: str, password: str, nom: str, prenom: str, role_id: in
         return True, None
 
     except Exception as e:
-        print(f"Erreur lors de la création de l'utilisateur: {e}")
+        logger.error(f"Erreur lors de la création de l'utilisateur: {e}")
         conn.rollback()
         return False, f"Erreur: {str(e)}"
     finally:
@@ -428,7 +431,7 @@ def count_active_admins() -> int:
         result = cur.fetchone()
         return result[0] if result else 0
     except Exception as e:
-        print(f"Erreur lors du comptage des admins actifs: {e}")
+        logger.error(f"Erreur lors du comptage des admins actifs: {e}")
         return 0
     finally:
         cur.close()
@@ -452,7 +455,7 @@ def is_user_admin(user_id: int) -> bool:
         result = cur.fetchone()
         return result and result['role_nom'] == 'admin'
     except Exception as e:
-        print(f"Erreur lors de la vérification du rôle: {e}")
+        logger.error(f"Erreur lors de la vérification du rôle: {e}")
         return False
     finally:
         cur.close()
@@ -497,7 +500,7 @@ def update_user_status(user_id: int, actif: bool) -> tuple[bool, Optional[str]]:
         return True, None
 
     except Exception as e:
-        print(f"Erreur lors de la modification: {e}")
+        logger.error(f"Erreur lors de la modification: {e}")
         conn.rollback()
         return False, f"Erreur: {str(e)}"
     finally:
@@ -542,7 +545,7 @@ def change_password(user_id: int, new_password: str) -> tuple[bool, Optional[str
         return True, None
 
     except Exception as e:
-        print(f"Erreur lors du changement de mot de passe: {e}")
+        logger.error(f"Erreur lors du changement de mot de passe: {e}")
         conn.rollback()
         return False, f"Erreur: {str(e)}"
     finally:
@@ -607,7 +610,7 @@ def delete_user(user_id: int) -> tuple[bool, Optional[str]]:
         return True, None
 
     except Exception as e:
-        print(f"Erreur lors de la suppression de l'utilisateur: {e}")
+        logger.error(f"Erreur lors de la suppression de l'utilisateur: {e}")
         conn.rollback()
         return False, f"Erreur: {str(e)}"
     finally:

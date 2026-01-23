@@ -5,6 +5,9 @@ Gère le stockage, la récupération et la manipulation des documents des opéra
 
 import os
 import shutil
+import logging
+
+logger = logging.getLogger(__name__)
 from datetime import datetime, date
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
@@ -230,7 +233,7 @@ class DocumentService:
             return documents
             
         except Exception as e:
-            print(f"Erreur lors de la récupération des documents: {e}")
+            logger.error(f"Erreur lors de la récupération des documents: {e}")
             return []
     
     def get_document_path(self, document_id: int) -> Optional[Path]:
@@ -253,7 +256,7 @@ class DocumentService:
             return None
             
         except Exception as e:
-            print(f"Erreur lors de la récupération du chemin: {e}")
+            logger.error(f"Erreur lors de la récupération du chemin: {e}")
             return None
     
     def delete_document(self, document_id: int) -> Tuple[bool, str]:
@@ -336,7 +339,7 @@ class DocumentService:
             return categories
             
         except Exception as e:
-            print(f"Erreur lors de la récupération des catégories: {e}")
+            logger.error(f"Erreur lors de la récupération des catégories: {e}")
             return []
     
     def get_documents_expiring_soon(self, jours: int = 30) -> List[Dict]:
@@ -357,7 +360,7 @@ class DocumentService:
             return documents
             
         except Exception as e:
-            print(f"Erreur lors de la récupération des documents expirant: {e}")
+            logger.error(f"Erreur lors de la récupération des documents expirant: {e}")
             return []
     
     def update_document_info(

@@ -7,7 +7,10 @@ Fournit les opérations CRUD et la logique métier pour la table contrat
 - Logs DB optimisés (async, non-bloquant)
 """
 
+import logging
 from datetime import date, datetime, timedelta
+
+logger = logging.getLogger(__name__)
 from typing import List, Dict, Optional, Tuple
 from core.db.configbd import DatabaseCursor, DatabaseConnection
 
@@ -269,7 +272,7 @@ def get_active_contract(operateur_id: int) -> Optional[dict]:
             return result[0] if result else None
 
     except Exception as e:
-        print(f"Erreur lors de la récupération du contrat actif : {e}")
+        logger.error(f"Erreur lors de la récupération du contrat actif : {e}")
         return None
 
 
@@ -293,7 +296,7 @@ def get_all_contracts(operateur_id: int, include_inactive: bool = False) -> List
             return cursor.fetchall()
 
     except Exception as e:
-        print(f"Erreur lors de la récupération des contrats : {e}")
+        logger.error(f"Erreur lors de la récupération des contrats : {e}")
         return []
 
 
@@ -312,7 +315,7 @@ def get_contract_by_id(contract_id: int) -> Optional[dict]:
             return result[0] if result else None
 
     except Exception as e:
-        print(f"Erreur lors de la récupération du contrat : {e}")
+        logger.error(f"Erreur lors de la récupération du contrat : {e}")
         return None
 
 
@@ -349,7 +352,7 @@ def get_expiring_contracts(days: int = 30) -> List[dict]:
             return cursor.fetchall()
 
     except Exception as e:
-        print(f"Erreur lors de la récupération des contrats expirants : {e}")
+        logger.error(f"Erreur lors de la récupération des contrats expirants : {e}")
         return []
 
 
@@ -374,7 +377,7 @@ def get_all_active_contracts() -> List[dict]:
             return cursor.fetchall()
 
     except Exception as e:
-        print(f"Erreur lors de la récupération des contrats actifs : {e}")
+        logger.error(f"Erreur lors de la récupération des contrats actifs : {e}")
         return []
 
 
@@ -427,7 +430,7 @@ def get_contract_statistics() -> dict:
         return stats
 
     except Exception as e:
-        print(f"Erreur lors du calcul des statistiques : {e}")
+        logger.error(f"Erreur lors du calcul des statistiques : {e}")
         return {}
 
 

@@ -4,6 +4,7 @@ Widget autonome affichant les statistiques globales de gestion documentaire
 """
 
 import sys
+import logging
 from datetime import datetime, date
 
 from PyQt5.QtWidgets import (
@@ -15,6 +16,8 @@ from PyQt5.QtGui import QColor, QFont
 
 from core.db.configbd import get_connection
 from core.services.document_service import DocumentService
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentDashboard(QWidget):
@@ -212,7 +215,7 @@ class DocumentDashboard(QWidget):
             conn.close()
             
         except Exception as e:
-            print(f"Erreur lors du chargement des statistiques: {e}")
+            logger.error(f"Erreur lors du chargement des statistiques: {e}")
     
     def load_alerts(self):
         """Charge les documents expirant bientôt"""
@@ -266,7 +269,7 @@ class DocumentDashboard(QWidget):
                 self.table_alerts.setSpan(0, 0, 1, 5)
             
         except Exception as e:
-            print(f"Erreur lors du chargement des alertes: {e}")
+            logger.error(f"Erreur lors du chargement des alertes: {e}")
     
     def load_categories(self):
         """Charge la répartition par catégorie"""
@@ -316,7 +319,7 @@ class DocumentDashboard(QWidget):
             conn.close()
             
         except Exception as e:
-            print(f"Erreur lors du chargement des catégories: {e}")
+            logger.error(f"Erreur lors du chargement des catégories: {e}")
     
     def load_top_operateurs(self):
         """Charge le top 10 des opérateurs avec le plus de documents"""
@@ -368,7 +371,7 @@ class DocumentDashboard(QWidget):
             conn.close()
             
         except Exception as e:
-            print(f"Erreur lors du chargement des opérateurs: {e}")
+            logger.error(f"Erreur lors du chargement des opérateurs: {e}")
 
 
 # ============================================================================

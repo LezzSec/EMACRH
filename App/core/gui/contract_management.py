@@ -4,7 +4,10 @@ Permet de visualiser, ajouter, modifier et supprimer les contrats
 """
 
 import sys
+import logging
 from datetime import datetime, date
+
+logger = logging.getLogger(__name__)
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
     QTableWidgetItem, QLabel, QMessageBox, QHeaderView, QComboBox, QWidget,
@@ -35,10 +38,8 @@ try:
     from core.gui.ui_theme import EmacCard, EmacButton, EmacStatusCard
     from core.gui.emac_ui_kit import add_custom_title_bar
     THEME_AVAILABLE = True
-    print(f"[CONTRACT_MANAGEMENT] THEME_AVAILABLE = {THEME_AVAILABLE}")
-except ImportError as e:
+except ImportError:
     THEME_AVAILABLE = False
-    print(f"[CONTRACT_MANAGEMENT] THEME_AVAILABLE = False, erreur: {e}")
 
 
 class ContractFormDialog(QDialog):
@@ -1112,7 +1113,7 @@ class ContractManagementDialog(QDialog):
             cur.close()
             conn.close()
         except Exception as e:
-            print(f"Erreur chargement filtres documents: {e}")
+            logger.warning(f"Erreur chargement filtres documents: {e}")
 
     def load_contract_documents(self):
         """Charge tous les documents RH avec filtres."""

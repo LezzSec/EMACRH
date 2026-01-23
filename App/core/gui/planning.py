@@ -1,6 +1,7 @@
 # regularisation.py – Planning & Absences
 # Gestion des absences, congés et planning du personnel
 
+import logging
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QMessageBox, QTableWidget, QTableWidgetItem, QDateEdit, QComboBox,
@@ -12,6 +13,8 @@ from PyQt5.QtGui import QFont, QColor, QTextCharFormat
 from datetime import date, datetime, timedelta
 from core.db.configbd import get_connection as get_db_connection
 from core.services.logger import log_hist
+
+logger = logging.getLogger(__name__)
 from core.gui.emac_ui_kit import add_custom_title_bar
 
 try:
@@ -559,7 +562,7 @@ class RegularisationDialog(QDialog):
                     current += timedelta(days=1)
 
         except Exception as e:
-            print(f"Erreur lors du chargement du calendrier : {e}")
+            logger.error(f"Erreur lors du chargement du calendrier : {e}")
 
     def on_calendar_date_clicked(self, qdate):
         """Affiche les absences du jour sélectionné."""
@@ -707,7 +710,7 @@ class RegularisationDialog(QDialog):
                 self.eval_poste_filter.addItem(r['poste_code'], r['id'])
 
         except Exception as e:
-            print(f"Erreur lors du chargement des postes : {e}")
+            logger.error(f"Erreur lors du chargement des postes : {e}")
 
     def load_eval_calendar_markings(self):
         """Marque les jours avec des évaluations prévues dans le calendrier."""
@@ -752,7 +755,7 @@ class RegularisationDialog(QDialog):
             self._apply_calendar_formats(first_day, last_day)
 
         except Exception as e:
-            print(f"Erreur lors du marquage du calendrier : {e}")
+            logger.error(f"Erreur lors du marquage du calendrier : {e}")
 
 
     def _apply_calendar_formats(self, first_day, last_day):
@@ -795,7 +798,7 @@ class RegularisationDialog(QDialog):
             if hasattr(self, 'eval_dates_cache'):
                 self._apply_calendar_formats(first_day, last_day)
         except Exception as e:
-            print(f"Erreur lors du rafraîchissement du calendrier : {e}")
+            logger.error(f"Erreur lors du rafraîchissement du calendrier : {e}")
 
 
     def on_eval_calendar_date_clicked(self, qdate):

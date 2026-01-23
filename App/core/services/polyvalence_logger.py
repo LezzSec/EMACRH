@@ -4,9 +4,13 @@ Service de logging pour les polyvalences
 Enregistre automatiquement toutes les actions sur les polyvalences dans historique_polyvalence
 """
 
-from core.db.configbd import get_connection
-from datetime import datetime
 import json
+import logging
+from datetime import datetime
+
+from core.db.configbd import get_connection
+
+logger = logging.getLogger(__name__)
 
 
 def log_polyvalence_action(
@@ -119,7 +123,7 @@ def log_polyvalence_action(
 
     except Exception as e:
         conn.rollback()
-        print(f"[ERREUR] Impossible d'enregistrer l'action polyvalence : {e}")
+        logger.error(f"Impossible d'enregistrer l'action polyvalence : {e}")
         raise
     finally:
         cur.close()

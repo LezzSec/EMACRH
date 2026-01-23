@@ -1,6 +1,7 @@
 # gestion_evaluation.py — Gestion moderne des évaluations
 # Interface améliorée avec recherche, filtres intégrés et code couleur
 
+import logging
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QPushButton, QComboBox, QLabel, QFileDialog,
@@ -16,6 +17,8 @@ from reportlab.lib.styles import getSampleStyleSheet
 from datetime import date, timedelta
 from core.db.configbd import get_connection as get_db_connection
 from core.services.logger import log_hist
+
+logger = logging.getLogger(__name__)
 
 # Import du thème moderne
 try:
@@ -785,7 +788,7 @@ class DetailOperateurDialog(QDialog):
 
         except Exception as e:
             # Ne pas bloquer si le module templates n'est pas disponible
-            print(f"Erreur lors de la proposition des documents niveau 3: {e}")
+            logger.error(f"Erreur lors de la proposition des documents niveau 3: {e}")
 
 
 # --- Délégué pour empêcher l'édition ---

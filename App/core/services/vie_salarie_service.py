@@ -11,7 +11,10 @@ Gère:
 Source: Tableau SIRH.xlsx - Feuille "Vie du salarié"
 """
 
+import logging
 from datetime import date, datetime
+
+logger = logging.getLogger(__name__)
 from typing import List, Dict, Optional, Tuple, Any
 from decimal import Decimal
 
@@ -101,7 +104,7 @@ def get_donnees_vie_salarie(operateur_id: int) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        print(f"Erreur get_donnees_vie_salarie: {e}")
+        logger.error(f"Erreur get_donnees_vie_salarie: {e}")
         return {"error": str(e)}
 
 
@@ -122,7 +125,7 @@ def get_sanctions(operateur_id: int) -> List[Dict]:
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_sanctions: {e}")
+        logger.error(f"Erreur get_sanctions: {e}")
         return []
 
 
@@ -152,7 +155,7 @@ def create_sanction(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
             return True, "Sanction enregistrée", sanction_id
 
     except Exception as e:
-        print(f"Erreur create_sanction: {e}")
+        logger.error(f"Erreur create_sanction: {e}")
         return False, f"Erreur: {str(e)}", None
 
 
@@ -218,7 +221,7 @@ def get_controles_alcool(operateur_id: int) -> List[Dict]:
             return result
 
     except Exception as e:
-        print(f"Erreur get_controles_alcool: {e}")
+        logger.error(f"Erreur get_controles_alcool: {e}")
         return []
 
 
@@ -247,7 +250,7 @@ def create_controle_alcool(operateur_id: int, data: Dict) -> Tuple[bool, str, Op
             return True, "Contrôle enregistré", controle_id
 
     except Exception as e:
-        print(f"Erreur create_controle_alcool: {e}")
+        logger.error(f"Erreur create_controle_alcool: {e}")
         return False, f"Erreur: {str(e)}", None
 
 
@@ -280,7 +283,7 @@ def get_tests_salivaires(operateur_id: int) -> List[Dict]:
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_tests_salivaires: {e}")
+        logger.error(f"Erreur get_tests_salivaires: {e}")
         return []
 
 
@@ -308,7 +311,7 @@ def create_test_salivaire(operateur_id: int, data: Dict) -> Tuple[bool, str, Opt
             return True, "Test enregistré", test_id
 
     except Exception as e:
-        print(f"Erreur create_test_salivaire: {e}")
+        logger.error(f"Erreur create_test_salivaire: {e}")
         return False, f"Erreur: {str(e)}", None
 
 
@@ -343,7 +346,7 @@ def get_entretiens(operateur_id: int) -> List[Dict]:
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_entretiens: {e}")
+        logger.error(f"Erreur get_entretiens: {e}")
         return []
 
 
@@ -361,7 +364,7 @@ def get_entretien_detail(entretien_id: int) -> Optional[Dict]:
             return cur.fetchone()
 
     except Exception as e:
-        print(f"Erreur get_entretien_detail: {e}")
+        logger.error(f"Erreur get_entretien_detail: {e}")
         return None
 
 
@@ -398,7 +401,7 @@ def create_entretien(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional
             return True, "Entretien enregistré", entretien_id
 
     except Exception as e:
-        print(f"Erreur create_entretien: {e}")
+        logger.error(f"Erreur create_entretien: {e}")
         return False, f"Erreur: {str(e)}", None
 
 
@@ -478,7 +481,7 @@ def get_alertes_entretiens(operateur_id: int = None) -> List[Dict]:
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_alertes_entretiens: {e}")
+        logger.error(f"Erreur get_alertes_entretiens: {e}")
         return []
 
 
@@ -528,7 +531,7 @@ def get_entretiens_a_planifier(type_entretien: str = None, jours_avance: int = 3
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_entretiens_a_planifier: {e}")
+        logger.error(f"Erreur get_entretiens_a_planifier: {e}")
         return []
 
 
@@ -610,7 +613,7 @@ def get_statistiques_vie_salarie_globales() -> Dict[str, Any]:
             return stats
 
     except Exception as e:
-        print(f"Erreur get_statistiques_vie_salarie_globales: {e}")
+        logger.error(f"Erreur get_statistiques_vie_salarie_globales: {e}")
         return {}
 
 
@@ -654,5 +657,5 @@ def get_managers_liste() -> List[Dict]:
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_managers_liste: {e}")
+        logger.error(f"Erreur get_managers_liste: {e}")
         return []

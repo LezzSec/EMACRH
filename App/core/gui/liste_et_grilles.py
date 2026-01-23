@@ -6,6 +6,9 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont
 import sys
+import logging
+
+logger = logging.getLogger(__name__)
 # ✅ OPTIMISATION : Import paresseux de pandas (uniquement si export Excel nécessaire)
 # import pandas as pd  # Déplacé dans les fonctions qui l'utilisent
 from datetime import datetime, timedelta
@@ -621,7 +624,7 @@ class GrillesDialog(QDialog):
                 conn1.close()
 
             except Exception as e:
-                print(f"❌ Erreur lecture ancienne valeur : {e}")
+                logger.error(f"Erreur lecture ancienne valeur : {e}")
 
             # ==============================
             # 2️⃣ MODIFICATION de la polyvalence
@@ -666,7 +669,7 @@ class GrillesDialog(QDialog):
                                 old_date_eval
                             ))
                         except Exception as arch_err:
-                            print(f"⚠️ Erreur archivage : {arch_err}")
+                            logger.warning(f"Erreur archivage : {arch_err}")
 
                     # Calculer la prochaine évaluation selon le niveau
                     from datetime import date, timedelta
@@ -700,7 +703,7 @@ class GrillesDialog(QDialog):
                 conn2.close()
 
             except Exception as e:
-                print(f"❌ ERREUR MODIFICATION : {e}")
+                logger.error(f"Erreur modification : {e}")
                 QMessageBox.critical(self, "Erreur", f"Erreur modification : {e}")
                 return
 
@@ -743,7 +746,7 @@ class GrillesDialog(QDialog):
                     if current_user:
                         utilisateur = current_user.get('username') or f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip()
                 except Exception as e:
-                    print(f"⚠️ Erreur récupération infos supplémentaires: {e}")
+                    logger.warning(f"Erreur récupération infos supplémentaires: {e}")
 
                 # Construction du JSON enrichi
                 base_info = {
@@ -811,7 +814,7 @@ class GrillesDialog(QDialog):
                         f"{old_niveau} → {new_niveau_int}")
 
             except Exception as e:
-                print(f"⚠️ Erreur logging : {e}")
+                logger.warning(f"Erreur logging : {e}")
                 QMessageBox.warning(self, "Attention",
                     f"Modification OK mais erreur dans l'historique :\n{e}")
 
@@ -850,7 +853,7 @@ class GrillesDialog(QDialog):
             connection.close()
 
         except Exception as e:
-            print(f"Erreur lors du rechargement de la cellule : {e}")
+            logger.error(f"Erreur lors du rechargement de la cellule : {e}")
 
     # ----------------- Statistiques -----------------
     def update_statistics(self):
@@ -908,7 +911,7 @@ class GrillesDialog(QDialog):
             self.main_table.blockSignals(False)
 
         except Exception as e:
-            print(f"Erreur lors de la mise à jour des statistiques : {e}")
+            logger.error(f"Erreur lors de la mise à jour des statistiques : {e}")
             self.main_table.blockSignals(False)
 
     # ----------------- Chargement -----------------
@@ -1198,7 +1201,7 @@ class GrillesDialog(QDialog):
                     """, (datetime.now(), action, operateur_id, poste_id, description, utilisateur))
                     modifications_count += 1
                 except Exception as e:
-                    print(f"Erreur logging historique : {e}")
+                    logger.warning(f"Erreur logging historique : {e}")
                     # On continue même si le log échoue
 
             connection.commit()
@@ -1592,8 +1595,6 @@ class GrillesDialog(QDialog):
         )
         if not file_name:
             return
-
-        print(f"Exportation en {format_choice} : {file_name}")
 
         # Effectuer l'export
         if format_choice == "Excel":

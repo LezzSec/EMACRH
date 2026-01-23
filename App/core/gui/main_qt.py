@@ -1,5 +1,7 @@
-import sys, os, datetime as dt, time, traceback
+import sys, os, datetime as dt, time, traceback, logging
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 # Ajouter le répertoire App au PYTHONPATH pour cx_Freeze
 if getattr(sys, 'frozen', False):
@@ -18,7 +20,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import (
     Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent,
-    qInstallMessageHandler, QtMsgType, QObject, pyqtSignal, QRunnable, QThreadPool
+    qInstallMessageHandler, QObject, pyqtSignal, QRunnable, QThreadPool
 )
 from PyQt5.QtGui import QDesktopServices
 
@@ -40,8 +42,6 @@ try:
     )
     # Initialiser le pool avec la bonne configuration
     _thread_pool = DbThreadPool.get_pool()
-    if _thread_pool:
-        print(f"[OK] DbThreadPool initialise : {_thread_pool.maxThreadCount()} threads max")
 except ImportError:
     # Fallback si le module n'existe pas encore
     class WorkerSignals(QObject):
@@ -414,7 +414,7 @@ class MainWindow(QMainWindow):
         if self.drawer is None:
             self.create_drawer()
         if self.drawer is None:
-            print("[ERREUR] Impossible de creer le drawer")
+            logger.error("Impossible de créer le drawer")
             return
 
         self.is_drawer_open = not self.is_drawer_open
@@ -477,8 +477,7 @@ class MainWindow(QMainWindow):
             error_msg += f"Type: {type(e).__name__}\n\n"
             error_msg += "Stack trace:\n" + traceback.format_exc()
             QMessageBox.critical(self, "Erreur - Gestion Évaluations", error_msg)
-            print(f"[ERREUR] show_gestion_evaluations: {e}")
-            traceback.print_exc()
+            logger.error(f"show_gestion_evaluations: {e}", exc_info=True)
 
     def ouvrir_gestion_evaluations(self, filtre_statut):
         try:
@@ -582,7 +581,7 @@ class MainWindow(QMainWindow):
                 if self.next_eval_filter.findData(poste) == -1:
                     self.next_eval_filter.addItem(poste, poste)
         except Exception as e:
-            print(f"[WARN] Erreur apply filtres: {e}")
+            logger.warning(f"Erreur apply filtres: {e}")
 
     def load_evaluations_async(self):
         poste_retard = self.retard_filter.currentData()
@@ -634,9 +633,7 @@ class MainWindow(QMainWindow):
 
                 return {"retard": retard, "prochaines": prochaines}
         except Exception as e:
-            print(f"[ERROR] Erreur dans _fetch_evaluations: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Erreur dans _fetch_evaluations: {e}", exc_info=True)
             raise
 
     def _apply_evaluations_to_ui(self, payload):
@@ -662,16 +659,11 @@ class MainWindow(QMainWindow):
                 date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
                 self.next_eval_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
         except Exception as e:
-            print(f"[ERROR] Erreur dans _apply_evaluations_to_ui: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.error(f"Erreur dans _apply_evaluations_to_ui: {e}", exc_info=True)
 
     def _on_bg_error(self, tb):
         # Ne bloque pas l'app au démarrage
-        print("[ERROR] Erreur background:\n", tb)
-        # Afficher également dans la console système
-        import traceback
-        traceback.print_stack()
+        logger.error(f"Erreur background:\n{tb}")
 
         # Afficher un message à l'utilisateur si possible
         try:
@@ -737,26 +729,12 @@ class MainWindow(QMainWindow):
 
 
 # ===========================
-#  Qt message handler
-# ===========================
-
-def qt_message_handler(msg_type, context, message):
-    if "Unknown property" in message:
-        return
-    if msg_type == QtMsgType.QtWarningMsg:
-        print(f"Qt Warning: {message}")
-    elif msg_type == QtMsgType.QtCriticalMsg:
-        print(f"Qt Critical: {message}")
-    elif msg_type == QtMsgType.QtFatalMsg:
-        print(f"Qt Fatal: {message}")
-
-
-# ===========================
 #  Entry point
 # ===========================
 
 if __name__ == "__main__":
-    qInstallMessageHandler(qt_message_handler)
+    # Handler silencieux pour les messages Qt
+    qInstallMessageHandler(lambda *_: None)
 
     app = QApplication(sys.argv)
 

@@ -12,7 +12,10 @@ Gère:
 Source: Tableau SIRH.xlsx - Feuille "Medical"
 """
 
+import logging
 from datetime import date, datetime
+
+logger = logging.getLogger(__name__)
 from typing import List, Dict, Optional, Tuple, Any
 from decimal import Decimal
 
@@ -128,7 +131,7 @@ def get_donnees_medicales(operateur_id: int) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        print(f"Erreur get_donnees_medicales: {e}")
+        logger.error(f"Erreur get_donnees_medicales: {e}")
         return {"error": str(e), "medical": None}
 
 
@@ -161,7 +164,7 @@ def get_ou_creer_medical(operateur_id: int) -> Optional[Dict]:
             return medical
 
     except Exception as e:
-        print(f"Erreur get_ou_creer_medical: {e}")
+        logger.error(f"Erreur get_ou_creer_medical: {e}")
         return None
 
 
@@ -223,7 +226,7 @@ def update_donnees_medicales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
             return True, "Données médicales mises à jour"
 
     except Exception as e:
-        print(f"Erreur update_donnees_medicales: {e}")
+        logger.error(f"Erreur update_donnees_medicales: {e}")
         return False, f"Erreur: {str(e)}"
 
 
@@ -244,7 +247,7 @@ def get_visites(operateur_id: int) -> List[Dict]:
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_visites: {e}")
+        logger.error(f"Erreur get_visites: {e}")
         return []
 
 
@@ -275,7 +278,7 @@ def create_visite(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[in
             return True, "Visite enregistrée", visite_id
 
     except Exception as e:
-        print(f"Erreur create_visite: {e}")
+        logger.error(f"Erreur create_visite: {e}")
         return False, f"Erreur: {str(e)}", None
 
 
@@ -340,7 +343,7 @@ def get_accidents(operateur_id: int) -> List[Dict]:
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_accidents: {e}")
+        logger.error(f"Erreur get_accidents: {e}")
         return []
 
 
@@ -362,7 +365,7 @@ def get_accident_detail(accident_id: int) -> Optional[Dict]:
             return accident
 
     except Exception as e:
-        print(f"Erreur get_accident_detail: {e}")
+        logger.error(f"Erreur get_accident_detail: {e}")
         return None
 
 
@@ -405,7 +408,7 @@ def create_accident(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
             return True, "Accident enregistré", accident_id
 
     except Exception as e:
-        print(f"Erreur create_accident: {e}")
+        logger.error(f"Erreur create_accident: {e}")
         return False, f"Erreur: {str(e)}", None
 
 
@@ -500,7 +503,7 @@ def ajouter_prolongation(accident_id: int, data: Dict) -> Tuple[bool, str, Optio
             return True, f"Prolongation #{next_num} ajoutée", prolongation_id
 
     except Exception as e:
-        print(f"Erreur ajouter_prolongation: {e}")
+        logger.error(f"Erreur ajouter_prolongation: {e}")
         return False, f"Erreur: {str(e)}", None
 
 
@@ -543,7 +546,7 @@ def get_maladies_pro(operateur_id: int) -> List[Dict]:
             return result
 
     except Exception as e:
-        print(f"Erreur get_maladies_pro: {e}")
+        logger.error(f"Erreur get_maladies_pro: {e}")
         return []
 
 
@@ -579,7 +582,7 @@ def create_maladie_pro(operateur_id: int, data: Dict) -> Tuple[bool, str, Option
             return True, "Maladie professionnelle enregistrée", mp_id
 
     except Exception as e:
-        print(f"Erreur create_maladie_pro: {e}")
+        logger.error(f"Erreur create_maladie_pro: {e}")
         return False, f"Erreur: {str(e)}", None
 
 
@@ -639,7 +642,7 @@ def get_alertes_medicales(operateur_id: int = None) -> List[Dict]:
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_alertes_medicales: {e}")
+        logger.error(f"Erreur get_alertes_medicales: {e}")
         return []
 
 
@@ -676,7 +679,7 @@ def get_visites_a_planifier(jours_avance: int = 30) -> List[Dict]:
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_visites_a_planifier: {e}")
+        logger.error(f"Erreur get_visites_a_planifier: {e}")
         return []
 
 
@@ -714,7 +717,7 @@ def get_rqth_expirant(jours_avance: int = 90) -> List[Dict]:
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_rqth_expirant: {e}")
+        logger.error(f"Erreur get_rqth_expirant: {e}")
         return []
 
 
@@ -796,7 +799,7 @@ def get_statistiques_medicales_globales() -> Dict[str, Any]:
             return stats
 
     except Exception as e:
-        print(f"Erreur get_statistiques_medicales_globales: {e}")
+        logger.error(f"Erreur get_statistiques_medicales_globales: {e}")
         return {}
 
 
@@ -840,7 +843,7 @@ def get_validites(operateur_id: int, type_validite: str = None) -> List[Dict]:
             return result
 
     except Exception as e:
-        print(f"Erreur get_validites: {e}")
+        logger.error(f"Erreur get_validites: {e}")
         return []
 
 
@@ -880,7 +883,7 @@ def create_validite(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
             return True, f"{data.get('type_validite')} enregistré", validite_id
 
     except Exception as e:
-        print(f"Erreur create_validite: {e}")
+        logger.error(f"Erreur create_validite: {e}")
         return False, f"Erreur: {str(e)}", None
 
 

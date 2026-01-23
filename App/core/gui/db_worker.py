@@ -10,8 +10,11 @@ Permet d'exécuter des requêtes DB en background sans bloquer l'UI.
 """
 
 import traceback
+import logging
 from typing import Callable, Any, Optional
 from PyQt5.QtCore import QObject, pyqtSignal, QRunnable, QThreadPool
+
+logger = logging.getLogger(__name__)
 
 
 # ===========================
@@ -186,9 +189,9 @@ class DbThreadPool:
             # On met légèrement moins pour laisser de la marge
             max_threads = max(2, pool_size - 1)
             DbThreadPool._pool.setMaxThreadCount(max_threads)
-            print(f"[OK] DbThreadPool configure : {max_threads} threads max (pool MySQL: {pool_size})")
+            logger.debug(f"DbThreadPool configuré : {max_threads} threads max (pool MySQL: {pool_size})")
         except Exception as e:
-            print(f"[WARN] Impossible de configurer DbThreadPool : {e}")
+            logger.warning(f"Impossible de configurer DbThreadPool : {e}")
             # Par défaut, limiter à 4 threads
             DbThreadPool._pool.setMaxThreadCount(4)
 
@@ -366,11 +369,9 @@ def async_db_operation(on_result: Optional[Callable] = None,
 # Debug / Monitoring
 # ===========================
 
-def print_pool_status():
-    """Affiche l'état actuel du pool de threads (debug)"""
-    print("="*60)
-    print("[DEBUG] DbThreadPool Status")
-    print("="*60)
-    print(f"Threads actifs : {DbThreadPool.get_active_thread_count()}")
-    print(f"Threads max    : {DbThreadPool.get_max_thread_count()}")
-    print("="*60)
+def get_pool_status() -> dict:
+    """Retourne l'état actuel du pool de threads (debug)"""
+    return {
+        "active_threads": DbThreadPool.get_active_thread_count(),
+        "max_threads": DbThreadPool.get_max_thread_count()
+    }

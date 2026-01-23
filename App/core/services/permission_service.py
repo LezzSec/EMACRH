@@ -9,7 +9,10 @@ Architecture:
 - Permission effective = override si défini, sinon permission du rôle
 """
 
+import logging
 from typing import Optional, Dict, List
+
+logger = logging.getLogger(__name__)
 from core.db.configbd import get_connection, DatabaseCursor
 from core.services.auth_service import get_current_user, is_admin
 from core.services.optimized_db_logger import log_hist_async
@@ -40,7 +43,7 @@ def get_all_roles() -> List[Dict]:
             cur.execute("SELECT id, nom, description FROM roles ORDER BY nom")
             return cur.fetchall()
     except Exception as e:
-        print(f"Erreur get_all_roles: {e}")
+        logger.error(f"Erreur get_all_roles: {e}")
         return []
 
 
@@ -68,7 +71,7 @@ def get_role_permissions(role_id: int) -> Dict[str, Dict[str, bool]]:
                 }
             return permissions
     except Exception as e:
-        print(f"Erreur get_role_permissions: {e}")
+        logger.error(f"Erreur get_role_permissions: {e}")
         return {}
 
 
@@ -97,7 +100,7 @@ def get_user_permission_overrides(user_id: int) -> Dict[str, Dict[str, Optional[
                 }
             return overrides
     except Exception as e:
-        print(f"Erreur get_user_permission_overrides: {e}")
+        logger.error(f"Erreur get_user_permission_overrides: {e}")
         return {}
 
 
@@ -158,7 +161,7 @@ def get_user_with_role(user_id: int) -> Optional[Dict]:
             """, (user_id,))
             return cur.fetchone()
     except Exception as e:
-        print(f"Erreur get_user_with_role: {e}")
+        logger.error(f"Erreur get_user_with_role: {e}")
         return None
 
 
@@ -232,7 +235,7 @@ def save_role_permissions(role_id: int, permissions: Dict[str, Dict[str, bool]])
         return True, None
 
     except Exception as e:
-        print(f"Erreur save_role_permissions: {e}")
+        logger.error(f"Erreur save_role_permissions: {e}")
         conn.rollback()
         return False, str(e)
     finally:
@@ -312,7 +315,7 @@ def save_user_permission_overrides(user_id: int, overrides: Dict[str, Dict[str, 
         return True, None
 
     except Exception as e:
-        print(f"Erreur save_user_permission_overrides: {e}")
+        logger.error(f"Erreur save_user_permission_overrides: {e}")
         conn.rollback()
         return False, str(e)
     finally:
@@ -359,7 +362,7 @@ def reset_user_permissions(user_id: int) -> tuple[bool, Optional[str]]:
         return True, None
 
     except Exception as e:
-        print(f"Erreur reset_user_permissions: {e}")
+        logger.error(f"Erreur reset_user_permissions: {e}")
         conn.rollback()
         return False, str(e)
     finally:
@@ -378,5 +381,5 @@ def has_user_overrides(user_id: int) -> bool:
             result = cur.fetchone()
             return result[0] > 0 if result else False
     except Exception as e:
-        print(f"Erreur has_user_overrides: {e}")
+        logger.error(f"Erreur has_user_overrides: {e}")
         return False

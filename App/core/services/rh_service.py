@@ -13,7 +13,10 @@ Domaines gérés:
 L'interface graphique ne doit jamais contenir de logique SQL.
 """
 
+import logging
 from datetime import date, datetime
+
+logger = logging.getLogger(__name__)
 from typing import List, Dict, Optional, Tuple, Any
 from enum import Enum
 
@@ -108,7 +111,7 @@ def rechercher_operateurs(
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur rechercher_operateurs: {e}")
+        logger.error(f"Erreur rechercher_operateurs: {e}")
         return []
 
 
@@ -140,7 +143,7 @@ def get_operateur_by_id(operateur_id: int) -> Optional[Dict]:
             return cur.fetchone()
 
     except Exception as e:
-        print(f"Erreur get_operateur_by_id: {e}")
+        logger.error(f"Erreur get_operateur_by_id: {e}")
         return None
 
 
@@ -171,7 +174,7 @@ def get_operateur_by_matricule(matricule: str) -> Optional[Dict]:
             return cur.fetchone()
 
     except Exception as e:
-        print(f"Erreur get_operateur_by_matricule: {e}")
+        logger.error(f"Erreur get_operateur_by_matricule: {e}")
         return None
 
 
@@ -274,7 +277,7 @@ def _get_donnees_generales(operateur_id: int) -> Dict[str, Any]:
             return donnees
 
     except Exception as e:
-        print(f"Erreur _get_donnees_generales: {e}")
+        logger.error(f"Erreur _get_donnees_generales: {e}")
         return {"error": str(e)}
 
 
@@ -326,7 +329,7 @@ def _get_donnees_contrat(operateur_id: int) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        print(f"Erreur _get_donnees_contrat: {e}")
+        logger.error(f"Erreur _get_donnees_contrat: {e}")
         return {"error": str(e), "contrat_actif": None, "historique": [], "nb_contrats": 0}
 
 
@@ -380,7 +383,7 @@ def _get_donnees_declaration(operateur_id: int) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        print(f"Erreur _get_donnees_declaration: {e}")
+        logger.error(f"Erreur _get_donnees_declaration: {e}")
         return {"error": str(e), "declarations": [], "statistiques": {}, "en_cours": None, "nb_declarations": 0}
 
 
@@ -425,7 +428,7 @@ def _get_donnees_competences(operateur_id: int) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        print(f"Erreur _get_donnees_competences: {e}")
+        logger.error(f"Erreur _get_donnees_competences: {e}")
         return {"error": str(e), "competences": [], "statistiques": {}}
 
 
@@ -469,7 +472,7 @@ def _get_donnees_formation(operateur_id: int) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        print(f"Erreur _get_donnees_formation: {e}")
+        logger.error(f"Erreur _get_donnees_formation: {e}")
         return {"error": str(e), "formations": [], "statistiques": {}}
 
 
@@ -491,7 +494,7 @@ def _get_donnees_medical(operateur_id: int) -> Dict[str, Any]:
 
         return donnees
     except Exception as e:
-        print(f"Erreur _get_donnees_medical: {e}")
+        logger.error(f"Erreur _get_donnees_medical: {e}")
         return {"error": str(e), "medical": None, "visites": [], "accidents": [], "validites": [], "alertes": []}
 
 
@@ -514,7 +517,7 @@ def _get_donnees_vie_salarie(operateur_id: int) -> Dict[str, Any]:
 
         return donnees
     except Exception as e:
-        print(f"Erreur _get_donnees_vie_salarie: {e}")
+        logger.error(f"Erreur _get_donnees_vie_salarie: {e}")
         return {"error": str(e), "sanctions_liste": [], "controles_alcool_liste": [], "tests_salivaires_liste": [], "entretiens_liste": [], "alertes": []}
 
 
@@ -597,7 +600,7 @@ def get_documents_domaine(
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_documents_domaine: {e}")
+        logger.error(f"Erreur get_documents_domaine: {e}")
         import traceback
         traceback.print_exc()
         return []
@@ -643,7 +646,7 @@ def get_documents_entite(
             return cur.fetchall()
 
     except Exception as e:
-        print(f"Erreur get_documents_entite: {e}")
+        logger.error(f"Erreur get_documents_entite: {e}")
         return []
 
 
@@ -889,7 +892,7 @@ def get_resume_operateur(operateur_id: int) -> Dict[str, Any]:
             }
 
     except Exception as e:
-        print(f"Erreur get_resume_operateur: {e}")
+        logger.error(f"Erreur get_resume_operateur: {e}")
         resume["error"] = str(e)
 
     return resume
@@ -922,7 +925,7 @@ def get_categories_documents() -> List[Dict]:
             return categories
 
     except Exception as e:
-        print(f"Erreur get_categories_documents: {e}")
+        logger.error(f"Erreur get_categories_documents: {e}")
         return []
 
 
@@ -1112,7 +1115,7 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
             return True, "Informations mises à jour avec succès"
 
     except Exception as e:
-        print(f"Erreur update_infos_generales: {e}")
+        logger.error(f"Erreur update_infos_generales: {e}")
         return False, f"Erreur: {str(e)}"
 
 
@@ -1148,7 +1151,7 @@ def create_contrat(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[i
             return True, "Contrat créé avec succès", contrat_id
 
     except Exception as e:
-        print(f"Erreur create_contrat: {e}")
+        logger.error(f"Erreur create_contrat: {e}")
         return False, f"Erreur: {str(e)}", None
 
 
@@ -1180,7 +1183,7 @@ def update_contrat(contrat_id: int, data: Dict) -> Tuple[bool, str]:
             return True, "Contrat mis à jour avec succès"
 
     except Exception as e:
-        print(f"Erreur update_contrat: {e}")
+        logger.error(f"Erreur update_contrat: {e}")
         return False, f"Erreur: {str(e)}"
 
 
@@ -1223,7 +1226,7 @@ def create_declaration(operateur_id: int, data: Dict) -> Tuple[bool, str, Option
             return True, "Déclaration créée avec succès", declaration_id
 
     except Exception as e:
-        print(f"Erreur create_declaration: {e}")
+        logger.error(f"Erreur create_declaration: {e}")
         return False, f"Erreur: {str(e)}", None
 
 
@@ -1296,7 +1299,7 @@ def create_formation(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional
             return True, "Formation créée avec succès", formation_id
 
     except Exception as e:
-        print(f"Erreur create_formation: {e}")
+        logger.error(f"Erreur create_formation: {e}")
         return False, f"Erreur: {str(e)}", None
 
 

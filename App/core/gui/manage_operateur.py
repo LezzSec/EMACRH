@@ -1,3 +1,7 @@
+import json
+import datetime
+import logging
+
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox,
     QHBoxLayout, QFormLayout, QDateEdit, QComboBox, QApplication, QInputDialog
@@ -8,8 +12,8 @@ from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from core.gui.historique import HistoriqueDialog
 from core.db.configbd import get_connection as get_db_connection
 from core.services.matricule_service import generer_prochain_matricule
-import json
-import datetime
+
+logger = logging.getLogger(__name__)
 
 # -------- Logger compatible avec votre historique --------
 def log_to_historique(connection, cursor, action: str, operateur_id=None, poste_id=None, description_data: dict = None):
@@ -40,7 +44,7 @@ def log_to_historique(connection, cursor, action: str, operateur_id=None, poste_
         """
         cursor.execute(sql, (action, operateur_id, poste_id, desc_json, utilisateur))
     except Exception as e:
-        print(f"Erreur log historique: {e}")
+        logger.error(f"Erreur log historique: {e}")
         pass
 
 # -------- Helpers DB (compat mysql-connector / psycopg) --------
@@ -640,7 +644,7 @@ class ManageOperatorsDialog(QDialog):
 
         except Exception as e:
             # Ne pas bloquer si le module templates n'est pas disponible
-            print(f"Erreur lors de la proposition des documents: {e}")
+            logger.error(f"Erreur lors de la proposition des documents: {e}")
 
 
 if __name__ == "__main__":

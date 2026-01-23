@@ -4,24 +4,26 @@ Interface de gestion documentaire RH
 Permet d'ajouter, visualiser, télécharger et supprimer des documents RH
 """
 
+import os
+import sys
+import logging
+from datetime import datetime, date
+from pathlib import Path
+
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QFileDialog,
     QMessageBox, QWidget, QTabWidget, QTextEdit, QDateEdit, QGroupBox,
     QAbstractItemView, QMenu, QCheckBox, QGridLayout
 )
-from PyQt5.QtCore import Qt, QDate, pyqtSignal
+from PyQt5.QtCore import Qt, QDate, pyqtSignal, QUrl
 from PyQt5.QtGui import QFont, QColor, QIcon, QDesktopServices
-from PyQt5.QtCore import QUrl
-
-import os
-import sys
-from datetime import datetime, date
-from pathlib import Path
 
 from core.db.configbd import get_connection
 from core.services.document_service import DocumentService
 from core.services.logger import log_hist
+
+logger = logging.getLogger(__name__)
 from core.gui.emac_ui_kit import add_custom_title_bar
 
 # Import des composants modernes EMAC
@@ -426,7 +428,7 @@ class GestionDocumentaireDialog(QDialog):
 
             return cat_exists and doc_exists
         except Exception as e:
-            print(f"Erreur lors de la vérification des tables: {e}")
+            logger.error(f"Erreur lors de la vérification des tables: {e}")
             return False
         finally:
             if cur:
@@ -497,7 +499,7 @@ class GestionDocumentaireDialog(QDialog):
             # En cas d'erreur (table n'existe pas), continuer sans catégories
             self.categorie_filter.clear()
             self.categorie_filter.addItem("Toutes les catégories", None)
-            print(f"Avertissement: Impossible de charger les catégories: {e}")
+            logger.warning(f" Impossible de charger les catégories: {e}")
 
     def load_documents(self):
         """Charge les documents dans le tableau"""

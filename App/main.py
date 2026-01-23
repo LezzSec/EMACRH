@@ -23,45 +23,28 @@ if application_path not in sys.path:
 if __name__ == "__main__":
     import traceback
     from PyQt5.QtWidgets import QApplication, QMessageBox
-    from PyQt5.QtCore import qInstallMessageHandler, QtMsgType
+    from PyQt5.QtCore import qInstallMessageHandler
 
     try:
-        # Handler de messages Qt (copié depuis main_qt.py)
-        def qt_message_handler(msg_type, context, message):
-            if msg_type == QtMsgType.QtDebugMsg:
-                print(f"Qt Debug: {message}")
-            elif msg_type == QtMsgType.QtWarningMsg:
-                print(f"Qt Warning: {message}")
-            elif msg_type == QtMsgType.QtCriticalMsg:
-                print(f"Qt Critical: {message}")
-            elif msg_type == QtMsgType.QtFatalMsg:
-                print(f"Qt Fatal: {message}")
-
-        qInstallMessageHandler(qt_message_handler)
+        # Handler silencieux pour les messages Qt (supprime le spam console)
+        qInstallMessageHandler(lambda *_: None)
 
         app = QApplication(sys.argv)
 
         # Charger et appliquer le thème
-        print("Chargement du thème...")
         from core.gui.ui_theme import EmacTheme
         EmacTheme.apply(app)
-        print("Thème appliqué avec succès")
 
         # Login
-        print("Affichage de la fenêtre de login...")
         from core.gui.login_dialog import LoginDialog
         login_dialog = LoginDialog()
 
         if login_dialog.exec_() == LoginDialog.Accepted:
-            print("Login accepté, chargement de la fenêtre principale...")
             from core.gui.main_qt import MainWindow
             win = MainWindow()
-            print("Fenêtre principale créée, affichage...")
             win.show()
-            print("Fenêtre affichée, lancement de la boucle d'événements...")
             sys.exit(app.exec_())
         else:
-            print("Login annulé")
             sys.exit(0)
 
     except Exception as e:

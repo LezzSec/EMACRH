@@ -4,7 +4,10 @@
 
 from __future__ import annotations
 import json
+import logging
 from typing import Any
+
+_logger = logging.getLogger(__name__)
 
 from core.db.configbd import get_connection as get_db_connection
 
@@ -102,7 +105,7 @@ def log_hist(
         conn.commit()
     except Exception as e:
         # Log l'erreur pour debug mais ne casse pas le flux métier
-        print(f"⚠️ Erreur log_hist: {e}")
+        _logger.warning(f"Erreur log_hist: {e}")
         try:
             if conn:
                 conn.rollback()

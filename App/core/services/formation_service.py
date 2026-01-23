@@ -4,7 +4,10 @@ Service de gestion des formations
 CRUD pour la table `formation` existante
 """
 
+import logging
 from datetime import date, datetime
+
+logger = logging.getLogger(__name__)
 from decimal import Decimal
 from typing import Optional, List, Dict, Tuple, Any
 
@@ -67,7 +70,7 @@ def get_all_formations(
 
             return formations
     except Exception as e:
-        print(f"Erreur get_all_formations: {e}")
+        logger.error(f"Erreur get_all_formations: {e}")
         return []
 
 
@@ -122,7 +125,7 @@ def get_formation_by_id(formation_id: int) -> Optional[Dict]:
 
             return formation
     except Exception as e:
-        print(f"Erreur get_formation_by_id: {e}")
+        logger.error(f"Erreur get_formation_by_id: {e}")
         return None
 
 
@@ -328,7 +331,7 @@ def get_formations_stats() -> Dict[str, Any]:
             return stats
 
     except Exception as e:
-        print(f"Erreur get_formations_stats: {e}")
+        logger.error(f"Erreur get_formations_stats: {e}")
         return {
             'total': 0,
             'par_statut': {},
@@ -356,5 +359,5 @@ def get_personnel_list() -> List[Dict]:
             """)
             return cur.fetchall()
     except Exception as e:
-        print(f"Erreur get_personnel_list: {e}")
+        logger.error(f"Erreur get_personnel_list: {e}")
         return []

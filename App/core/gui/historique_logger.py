@@ -1,5 +1,8 @@
-from datetime import datetime
 import json
+import logging
+from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 def log_polyvalence_change(connection, action, operateur_id, poste_id, old_niveau=None, new_niveau=None):
     """
@@ -76,5 +79,5 @@ def log_polyvalence_change(connection, action, operateur_id, poste_id, old_nivea
         return True
 
     except Exception as e:
-        print(f"Erreur logging historique : {e}")
+        logger.error(f"Erreur logging historique : {e}")
         return False

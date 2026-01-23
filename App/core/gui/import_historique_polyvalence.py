@@ -4,6 +4,11 @@ Interface d'import manuel de données historiques de polyvalence
 Permet d'ajouter des anciennes actions pour lesquelles il n'y avait pas de traçabilité
 """
 
+import csv
+import uuid
+import logging
+from datetime import datetime
+
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QDateEdit, QComboBox, QSpinBox, QTextEdit,
@@ -14,9 +19,8 @@ from PyQt5.QtGui import QFont, QColor
 
 from core.db.configbd import get_connection
 from core.services.polyvalence_logger import log_polyvalence_action
-from datetime import datetime
-import csv
-import uuid
+
+logger = logging.getLogger(__name__)
 
 
 class ImportHistoriquePolyvalenceDialog(QDialog):
@@ -502,7 +506,7 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
 
             except Exception as e:
                 error_count += 1
-                print(f"[ERREUR] Ligne {row + 1} : {e}")
+                logger.error(f"Ligne {row + 1} : {e}")
 
         # Message de confirmation
         if error_count == 0:
