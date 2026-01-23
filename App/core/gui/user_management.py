@@ -13,7 +13,7 @@ from core.gui.ui_theme import EmacTheme, EmacButton, EmacCard
 from core.services.auth_service import (
     get_all_users, create_user, update_user_status,
     change_password, get_roles, is_admin, count_active_admins, is_user_admin,
-    delete_user, get_current_user
+    delete_user, get_current_user, validate_password, get_password_requirements
 )
 
 
@@ -279,9 +279,10 @@ class AddUserDialog(QDialog):
         form_layout.addWidget(label2)
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setPlaceholderText("Minimum 6 caractères")
+        self.password_input.setPlaceholderText("8+ caractères, majuscule, chiffre, spécial")
         self.password_input.setMinimumHeight(38)
         self.password_input.setStyleSheet("font-size: 14px; padding: 6px;")
+        self.password_input.setToolTip(get_password_requirements())
         form_layout.addWidget(self.password_input)
 
         form_layout.addSpacing(8)
@@ -371,8 +372,10 @@ class AddUserDialog(QDialog):
             QMessageBox.warning(self, "Champs requis", "Tous les champs sont obligatoires.")
             return
 
-        if len(password) < 6:
-            QMessageBox.warning(self, "Mot de passe", "Le mot de passe doit contenir au moins 6 caractères.")
+        # 🔒 Validation renforcée du mot de passe
+        is_valid, error_msg = validate_password(password)
+        if not is_valid:
+            QMessageBox.warning(self, "Mot de passe invalide", error_msg)
             return
 
         if password != password_confirm:
@@ -426,9 +429,10 @@ class ChangePasswordDialog(QDialog):
 
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setPlaceholderText("Minimum 6 caractères")
+        self.password_input.setPlaceholderText("8+ caractères, majuscule, chiffre, spécial")
         self.password_input.setMinimumHeight(40)
         self.password_input.setStyleSheet("font-size: 14px; padding: 8px;")
+        self.password_input.setToolTip(get_password_requirements())
         form_layout.addWidget(self.password_input)
 
         form_layout.addSpacing(10)
@@ -475,8 +479,10 @@ class ChangePasswordDialog(QDialog):
             QMessageBox.warning(self, "Champ requis", "Veuillez saisir un mot de passe.")
             return
 
-        if len(password) < 6:
-            QMessageBox.warning(self, "Mot de passe", "Le mot de passe doit contenir au moins 6 caractères.")
+        # 🔒 Validation renforcée du mot de passe
+        is_valid, error_msg = validate_password(password)
+        if not is_valid:
+            QMessageBox.warning(self, "Mot de passe invalide", error_msg)
             return
 
         if password != password_confirm:

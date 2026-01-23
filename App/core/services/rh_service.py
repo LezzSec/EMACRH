@@ -551,11 +551,6 @@ def get_documents_domaine(
                 if cat_domaine == domaine:
                     categories_ids.append(cat['id'])
 
-            # DEBUG
-            print(f"[DEBUG] get_documents_domaine: operateur_id={operateur_id}, domaine={domaine}")
-            print(f"[DEBUG] categories trouvées: {[(c['id'], c['nom']) for c in all_categories]}")
-            print(f"[DEBUG] categories_ids pour ce domaine: {categories_ids}")
-
             if not categories_ids:
                 return []
 

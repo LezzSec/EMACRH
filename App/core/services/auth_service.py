@@ -7,17 +7,72 @@ Gère la connexion, déconnexion, et vérification des permissions
 - Monitoring du temps de login (détection régressions)
 - Cache pour get_roles() (1000x plus rapide)
 - Logs DB optimisés (async, non-bloquant)
+
+🔒 SÉCURITÉ:
+- Politique de mot de passe renforcée (8 chars, complexité)
 """
 
 import bcrypt
+import re
 from datetime import datetime
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Tuple
 from core.db.configbd import get_connection
 
 # ✅ OPTIMISATIONS : Monitoring + Cache + Logs optimisés
 from core.utils.performance_monitor import monitor_login_time, monitor_query
 from core.utils.emac_cache import get_cached_roles, invalidate_user_cache
 from core.services.optimized_db_logger import log_hist_async
+
+
+# =============================================================================
+# 🔒 VALIDATION MOT DE PASSE
+# =============================================================================
+
+def validate_password(password: str) -> Tuple[bool, str]:
+    """
+    Valide la complexité d'un mot de passe.
+
+    Règles:
+    - Minimum 8 caractères
+    - Au moins une majuscule
+    - Au moins une minuscule
+    - Au moins un chiffre
+    - Au moins un caractère spécial
+
+    Args:
+        password: Mot de passe à valider
+
+    Returns:
+        (is_valid, error_message)
+    """
+    if len(password) < 8:
+        return False, "Le mot de passe doit contenir au moins 8 caractères."
+
+    if not re.search(r'[A-Z]', password):
+        return False, "Le mot de passe doit contenir au moins une majuscule."
+
+    if not re.search(r'[a-z]', password):
+        return False, "Le mot de passe doit contenir au moins une minuscule."
+
+    if not re.search(r'\d', password):
+        return False, "Le mot de passe doit contenir au moins un chiffre."
+
+    if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;\'`~]', password):
+        return False, "Le mot de passe doit contenir au moins un caractère spécial (!@#$%^&*...)."
+
+    return True, ""
+
+
+def get_password_requirements() -> str:
+    """Retourne les exigences de mot de passe pour affichage UI"""
+    return (
+        "Le mot de passe doit contenir:\n"
+        "• Au moins 8 caractères\n"
+        "• Une lettre majuscule\n"
+        "• Une lettre minuscule\n"
+        "• Un chiffre\n"
+        "• Un caractère spécial (!@#$%...)"
+    )
 
 
 class UserSession:
@@ -77,15 +132,15 @@ def verify_password(password: str, password_hash: str) -> bool:
     """Vérifie un mot de passe contre son hash"""
     try:
         return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
-    except Exception as e:
-        print(f"Erreur lors de la vérification du mot de passe: {e}")
+    except Exception:
+        # Erreur silencieuse pour ne pas révéler d'informations
         return False
 
 
 @monitor_login_time
 def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]]:
     """
-    Authentifie un utilisateur
+    Authentifie un utilisateur.
 
     Args:
         username: Nom d'utilisateur

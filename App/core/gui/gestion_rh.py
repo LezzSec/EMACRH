@@ -1789,9 +1789,7 @@ class GestionRHDialog(QDialog):
             self.layout_resume.addWidget(widget_resume)
 
         # Charger les documents du domaine
-        print(f"[DEBUG GUI] Chargement documents pour operateur_id={operateur_id}, domaine={self.domaine_actif}")
         documents = get_documents_domaine(operateur_id, self.domaine_actif)
-        print(f"[DEBUG GUI] Documents trouvés: {len(documents)}")
         widget_documents = self._creer_widget_documents(documents)
         self.layout_documents.addWidget(widget_documents)
 
@@ -3445,9 +3443,7 @@ class GestionRHWidget(QWidget):
             self.layout_resume.addWidget(widget_resume)
 
         # Charger les documents du domaine
-        print(f"[DEBUG GUI] Chargement documents pour operateur_id={operateur_id}, domaine={self.domaine_actif}")
         documents = get_documents_domaine(operateur_id, self.domaine_actif)
-        print(f"[DEBUG GUI] Documents trouvés: {len(documents)}")
         widget_documents = self._creer_widget_documents(documents)
         self.layout_documents.addWidget(widget_documents)
 

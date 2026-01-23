@@ -155,22 +155,12 @@ class OptimizedDBLogger:
                     VALUES {placeholders}
                 """
 
-                # Debug: afficher la requête et les valeurs
-                print(f"[DEBUG] Flush de {len(values)} logs")
-                print(f"[DEBUG] Nombre de placeholders: {placeholders.count('%s')}")
-                print(f"[DEBUG] Nombre de valeurs: {len(flat_values)}")
-
                 cur.execute(query, flat_values)
                 cur.close()
 
-        except Exception as e:
-            # En cas d'erreur, ne pas casser le flux
-            # On pourrait logger l'erreur dans un fichier texte
-            print(f"⚠️ Erreur flush batch historique: {e}")
-            print(f"[DEBUG] Query: {query[:200]}...")
-            print(f"[DEBUG] Nombre de valeurs dans le batch: {len(batch)}")
-            import traceback
-            traceback.print_exc()
+        except Exception:
+            # En cas d'erreur, ne pas casser le flux - erreur silencieuse
+            pass
 
     def log(
         self,

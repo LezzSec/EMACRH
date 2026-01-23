@@ -238,11 +238,9 @@ class MainWindow(QMainWindow):
 
     def bootstrap_async(self):
         """Charge user + permissions + filtres + evals sans bloquer l'UI."""
-        print("[DEBUG] bootstrap_async démarré")
         self.load_user_and_permissions_async()
         self.populate_filters_async()
         self.load_evaluations_async()
-        print("[DEBUG] bootstrap_async terminé (tâches lancées)")
 
     def load_user_and_permissions_async(self):
         w = DbWorker(self._fetch_user_and_perms)
@@ -251,10 +249,8 @@ class MainWindow(QMainWindow):
         self.pool.start(w)
 
     def _fetch_user_and_perms(self, progress_callback=None):
-        print("[DEBUG] _fetch_user_and_perms appelée")
         auth = _lazy_auth()
         current_user = auth.get_current_user()
-        print(f"[DEBUG] Utilisateur récupéré: {current_user}")
 
         # Permissions (⚠️ selon ton implémentation, ça peut être DB → ok en thread)
         perms = {
@@ -268,24 +264,18 @@ class MainWindow(QMainWindow):
             "historique_lecture": auth.has_permission('historique', 'lecture'),
             "is_admin": auth.is_admin(),
         }
-        print(f"[DEBUG] Permissions calculées: {sum(1 for v in perms.values() if v)} actives")
         return {"user": current_user, "perms": perms}
 
     def _apply_user_and_perms(self, payload):
-        print(f"[DEBUG] _apply_user_and_perms appelée avec payload: {type(payload)}")
         user = payload.get("user")
         perms = payload.get("perms", {})
-        print(f"[DEBUG] User: {user}")
-        print(f"[DEBUG] Perms: {perms}")
 
         # User label
         if user:
             user_text = f"👤 {user.get('prenom','')} {user.get('nom','')} - {user.get('role_nom','')}"
             self.user_info.setText(user_text)
-            print(f"[DEBUG] Label utilisateur mis à jour: {user_text}")
         else:
             self.user_info.setText("👤 Non connecté")
-            print("[DEBUG] Aucun utilisateur connecté")
 
         # Charger EmacButton
         theme = get_theme_components()
@@ -595,19 +585,15 @@ class MainWindow(QMainWindow):
             print(f"[WARN] Erreur apply filtres: {e}")
 
     def load_evaluations_async(self):
-        print("[DEBUG] load_evaluations_async appelée")
         poste_retard = self.retard_filter.currentData()
         poste_next = self.next_eval_filter.currentData()
-        print(f"[DEBUG] Filtres: retard={poste_retard}, next={poste_next}")
 
         w = DbWorker(self._fetch_evaluations, poste_retard, poste_next)
         w.signals.result.connect(self._apply_evaluations_to_ui)
         w.signals.error.connect(self._on_bg_error)
         self.pool.start(w)
-        print("[DEBUG] Worker lancé pour charger les évaluations")
 
     def _fetch_evaluations(self, poste_retard, poste_next, progress_callback=None):
-        print(f"[DEBUG] _fetch_evaluations appelée avec retard={poste_retard}, next={poste_next}")
         from core.db.configbd import DatabaseCursor
 
         try:
@@ -628,7 +614,6 @@ class MainWindow(QMainWindow):
                 params_retard = (poste_retard,) if poste_retard else ()
                 cur.execute(query_retard, params_retard)
                 retard = cur.fetchall()
-                print(f"[DEBUG] Requête retard: {len(retard)} résultats")
 
                 query_next = """
                     SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
@@ -646,11 +631,8 @@ class MainWindow(QMainWindow):
                 params_next = (poste_next,) if poste_next else ()
                 cur.execute(query_next, params_next)
                 prochaines = cur.fetchall()
-                print(f"[DEBUG] Requête prochaines: {len(prochaines)} résultats")
 
-                result = {"retard": retard, "prochaines": prochaines}
-                print(f"[DEBUG] _fetch_evaluations retourne: {len(retard)} retards, {len(prochaines)} prochaines")
-                return result
+                return {"retard": retard, "prochaines": prochaines}
         except Exception as e:
             print(f"[ERROR] Erreur dans _fetch_evaluations: {e}")
             import traceback
@@ -659,10 +641,8 @@ class MainWindow(QMainWindow):
 
     def _apply_evaluations_to_ui(self, payload):
         try:
-            print(f"[DEBUG] _apply_evaluations_to_ui appelée avec payload: {type(payload)}")
             retard = payload.get("retard", [])
             prochaines = payload.get("prochaines", [])
-            print(f"[DEBUG] Retard: {len(retard)} éléments, Prochaines: {len(prochaines)} éléments")
 
             self.retard_list.clear()
             for r in retard:
@@ -681,8 +661,6 @@ class MainWindow(QMainWindow):
                 date_ev = r.get('prochaine_evaluation')
                 date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
                 self.next_eval_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
-
-            print(f"[DEBUG] UI mise à jour avec succès: {self.retard_list.count()} en retard, {self.next_eval_list.count()} à venir")
         except Exception as e:
             print(f"[ERROR] Erreur dans _apply_evaluations_to_ui: {e}")
             import traceback
