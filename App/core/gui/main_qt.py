@@ -111,9 +111,6 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Gestion du Personnel")
         self.setGeometry(80, 80, 1180, 720)
 
-        # ThreadPool global pour éviter les freezes UI
-        self.pool = QThreadPool.globalInstance()
-
         # Drawer
         self.drawer = None
         self.is_drawer_open = False
@@ -246,7 +243,7 @@ class MainWindow(QMainWindow):
         w = DbWorker(self._fetch_user_and_perms)
         w.signals.result.connect(self._apply_user_and_perms)
         w.signals.error.connect(self._on_bg_error)
-        self.pool.start(w)
+        DbThreadPool.start(w)
 
     def _fetch_user_and_perms(self, progress_callback=None):
         auth = _lazy_auth()
@@ -512,7 +509,7 @@ class MainWindow(QMainWindow):
         w = DbWorker(self._fetch_one_actif_personnel_id)
         w.signals.result.connect(self._open_regularisation)
         w.signals.error.connect(self._on_bg_error)
-        self.pool.start(w)
+        DbThreadPool.start(w)
 
     def _fetch_one_actif_personnel_id(self, progress_callback=None):
         from core.db.configbd import DatabaseCursor
@@ -556,7 +553,7 @@ class MainWindow(QMainWindow):
         w = DbWorker(self._fetch_postes_cached)
         w.signals.result.connect(self._apply_postes_to_filters)
         w.signals.error.connect(self._on_bg_error)
-        self.pool.start(w)
+        DbThreadPool.start(w)
 
     def _fetch_postes_cached(self, progress_callback=None):
         # Cache 5 minutes
@@ -590,7 +587,7 @@ class MainWindow(QMainWindow):
         w = DbWorker(self._fetch_evaluations, poste_retard, poste_next)
         w.signals.result.connect(self._apply_evaluations_to_ui)
         w.signals.error.connect(self._on_bg_error)
-        self.pool.start(w)
+        DbThreadPool.start(w)
 
     def _fetch_evaluations(self, poste_retard, poste_next, progress_callback=None):
         from core.db.configbd import DatabaseCursor

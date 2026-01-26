@@ -4,10 +4,11 @@ Module de gestion des chemins de fichiers pour EMAC.
 Gère automatiquement les chemins en mode développement et en mode .exe (PyInstaller).
 
 Utilisation:
-    from core.utils.app_paths import get_logs_dir, get_documents_dir
+    from core.utils.app_paths import get_logs_dir, get_documents_dir, get_exports_dir
 
     logs_dir = get_logs_dir()  # Retourne Path vers logs/
     docs_dir = get_documents_dir()  # Retourne Path vers documents/
+    exports_dir = get_exports_dir(create=True)  # Retourne Path vers exports/ (crée si demandé)
 """
 
 import sys
@@ -116,6 +117,36 @@ def get_documents_dir():
     return docs_dir
 
 
+def get_exports_dir(create: bool = False):
+    """
+    Retourne le répertoire des exports de l'application.
+
+    En mode développement : App/exports/
+    En mode .exe : %APPDATA%\\EMAC\\exports\\
+
+    IMPORTANT: Le dossier n'est PAS créé automatiquement par défaut.
+    Utiliser create=True uniquement lors d'un export explicite.
+
+    Args:
+        create (bool): Si True, crée le dossier s'il n'existe pas
+
+    Returns:
+        Path: Chemin absolu vers le répertoire des exports
+    """
+    if is_frozen():
+        # Mode .exe : exports dans %APPDATA%
+        exports_dir = get_data_dir() / 'exports'
+    else:
+        # Mode développement : exports dans App/exports/
+        exports_dir = get_base_dir() / 'exports'
+
+    # Créer seulement si demandé explicitement
+    if create:
+        exports_dir.mkdir(parents=True, exist_ok=True)
+
+    return exports_dir
+
+
 def get_temp_dir():
     """
     Retourne le répertoire temporaire de PyInstaller (en mode .exe uniquement).
@@ -179,6 +210,7 @@ def get_paths_info():
         'data_dir': str(get_data_dir()),
         'logs_dir': str(get_logs_dir()),
         'documents_dir': str(get_documents_dir()),
+        'exports_dir': str(get_exports_dir()),
         'temp_dir': str(get_temp_dir()) if get_temp_dir() else 'N/A (dev mode)',
     }
 

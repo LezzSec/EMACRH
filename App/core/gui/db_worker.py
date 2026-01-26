@@ -7,14 +7,25 @@ Permet d'exécuter des requêtes DB en background sans bloquer l'UI.
     - Toutes les requêtes DB doivent passer par DbWorker
     - Jamais de DB dans le thread principal (UI)
     - Limiter la concurrence avec QThreadPool configuré
+
+✅ Fonctionnalités :
+    - Cancellation logique (ignore résultats si widget détruit)
+    - Timeout configurable pour opérations longues
+    - Tracking des workers actifs
 """
 
 import traceback
 import logging
-from typing import Callable, Any, Optional
+import threading
+import time
+from typing import Callable, Any, Optional, Set
 from PyQt5.QtCore import QObject, pyqtSignal, QRunnable, QThreadPool
+from weakref import WeakSet
 
 logger = logging.getLogger(__name__)
+
+# Timeout par défaut pour les opérations DB (30 secondes)
+DEFAULT_OPERATION_TIMEOUT = 30.0
 
 
 # ===========================
@@ -40,6 +51,12 @@ class WorkerSignals(QObject):
     # Émis à la fin (succès ou échec)
     finished = pyqtSignal()
 
+    # Émis en cas de timeout
+    timeout = pyqtSignal()
+
+    # Émis si annulé
+    cancelled = pyqtSignal()
+
 
 # ===========================
 # Worker DB générique
@@ -53,7 +70,20 @@ class DbWorker(QRunnable):
         worker = DbWorker(ma_fonction_db, arg1, arg2, kwarg1=val1)
         worker.signals.result.connect(on_success)
         worker.signals.error.connect(on_error)
-        QThreadPool.globalInstance().start(worker)
+        DbThreadPool.start(worker)
+
+    ✅ Avec cancellation (ignore résultat si widget détruit) :
+        worker = DbWorker(ma_fonction_db)
+        worker.signals.result.connect(on_success)
+        DbThreadPool.start(worker)
+
+        # Plus tard, si l'utilisateur change d'onglet :
+        worker.cancel()  # Le résultat sera ignoré
+
+    ✅ Avec timeout :
+        worker = DbWorker(ma_fonction_db, timeout=10.0)  # 10 secondes max
+        worker.signals.timeout.connect(on_timeout)
+        DbThreadPool.start(worker)
 
     ✅ Avec progress :
         def ma_fonction(progress_callback=None):
@@ -65,14 +95,19 @@ class DbWorker(QRunnable):
         worker = DbWorker(ma_fonction)
         worker.signals.progress.connect(on_progress)
         worker.signals.result.connect(on_success)
-        QThreadPool.globalInstance().start(worker)
+        DbThreadPool.start(worker)
     """
 
-    def __init__(self, fn: Callable, *args, **kwargs):
+    # Tracking des workers actifs (pour debug/monitoring)
+    _active_workers: WeakSet = WeakSet()
+    _workers_lock = threading.Lock()
+
+    def __init__(self, fn: Callable, *args, timeout: Optional[float] = None, **kwargs):
         """
         Args:
             fn: Fonction à exécuter (doit retourner un résultat)
             *args: Arguments positionnels
+            timeout: Timeout en secondes (None = pas de timeout)
             **kwargs: Arguments nommés
         """
         super().__init__()
@@ -80,22 +115,86 @@ class DbWorker(QRunnable):
         self.args = args
         self.kwargs = kwargs
         self.signals = WorkerSignals()
+        self.timeout = timeout
+
+        # Support de cancellation
+        self._cancelled = False
+        self._cancel_lock = threading.Lock()
 
         # Injecter le signal progress dans kwargs si la fonction l'accepte
         if 'progress_callback' not in self.kwargs:
             self.kwargs['progress_callback'] = self.signals.progress
 
+        # Tracking
+        with DbWorker._workers_lock:
+            DbWorker._active_workers.add(self)
+
+    def cancel(self):
+        """
+        Annule le worker (logiquement).
+        Le résultat sera ignoré, mais l'opération peut continuer en background.
+        Utile quand l'utilisateur change d'onglet / ferme un dialog.
+        """
+        with self._cancel_lock:
+            self._cancelled = True
+        logger.debug(f"Worker cancelled: {self.fn.__name__ if hasattr(self.fn, '__name__') else 'anonymous'}")
+
+    def is_cancelled(self) -> bool:
+        """Vérifie si le worker a été annulé"""
+        with self._cancel_lock:
+            return self._cancelled
+
     def run(self):
         """Exécute la fonction en background"""
+        start_time = time.time()
+
         try:
             self.signals.started.emit()
+
+            # Exécuter la fonction
             result = self.fn(*self.args, **self.kwargs)
-            self.signals.result.emit(result)
+
+            # Vérifier timeout
+            elapsed = time.time() - start_time
+            if self.timeout and elapsed > self.timeout:
+                logger.warning(f"Worker timeout: {elapsed:.1f}s > {self.timeout}s")
+                if not self.is_cancelled():
+                    self.signals.timeout.emit()
+                return
+
+            # Émettre le résultat seulement si non annulé
+            if not self.is_cancelled():
+                self.signals.result.emit(result)
+            else:
+                self.signals.cancelled.emit()
+                logger.debug("Worker result ignored (cancelled)")
+
         except Exception as e:
-            error_msg = f"{str(e)}\n\n{traceback.format_exc()}"
-            self.signals.error.emit(error_msg)
+            if not self.is_cancelled():
+                error_msg = f"{str(e)}\n\n{traceback.format_exc()}"
+                self.signals.error.emit(error_msg)
+            else:
+                logger.debug(f"Worker error ignored (cancelled): {e}")
+
         finally:
             self.signals.finished.emit()
+            # Cleanup tracking
+            with DbWorker._workers_lock:
+                DbWorker._active_workers.discard(self)
+
+    @classmethod
+    def get_active_count(cls) -> int:
+        """Retourne le nombre de workers actifs"""
+        with cls._workers_lock:
+            return len(cls._active_workers)
+
+    @classmethod
+    def cancel_all(cls):
+        """Annule tous les workers actifs (utile à la fermeture de l'app)"""
+        with cls._workers_lock:
+            for worker in list(cls._active_workers):
+                worker.cancel()
+        logger.info("All active workers cancelled")
 
 
 # ===========================
@@ -112,6 +211,8 @@ class SimpleDbWorker(QRunnable):
             print(f"Résultat : {result}")
 
         SimpleDbWorker(ma_fonction_db, on_success, arg1, arg2)
+
+    ⚠️ Note: Pour les cas nécessitant cancellation/timeout, utiliser DbWorker.
     """
 
     def __init__(self, fn: Callable, on_result: Optional[Callable] = None,
@@ -138,8 +239,8 @@ class SimpleDbWorker(QRunnable):
         if on_error:
             self.signals.error.connect(on_error)
 
-        # Auto-start dans le pool global
-        QThreadPool.globalInstance().start(self)
+        # Auto-start via DbThreadPool (utilise le pool configuré)
+        DbThreadPool.start(self)
 
     def run(self):
         """Exécute la fonction en background"""
@@ -215,7 +316,10 @@ class DbThreadPool:
 
     @classmethod
     def run_async(cls, fn: Callable, on_result: Optional[Callable] = None,
-                  on_error: Optional[Callable] = None, *args, **kwargs) -> DbWorker:
+                  on_error: Optional[Callable] = None,
+                  on_timeout: Optional[Callable] = None,
+                  timeout: Optional[float] = None,
+                  *args, **kwargs) -> DbWorker:
         """
         Helper pour lancer une fonction DB en async.
 
@@ -223,10 +327,12 @@ class DbThreadPool:
             fn: Fonction à exécuter
             on_result: Callback pour le résultat
             on_error: Callback pour les erreurs
+            on_timeout: Callback si timeout dépassé
+            timeout: Timeout en secondes (None = pas de timeout)
             *args, **kwargs: Arguments pour fn
 
         Returns:
-            Le worker créé (utile pour connecter plus de signaux si besoin)
+            Le worker créé (utile pour annuler si besoin)
 
         Example:
             def fetch_personnel():
@@ -238,14 +344,23 @@ class DbThreadPool:
             def on_success(results):
                 print(f"Chargé {len(results)} personnes")
 
-            DbThreadPool.run_async(fetch_personnel, on_success)
+            # Avec timeout de 5 secondes
+            worker = DbThreadPool.run_async(
+                fetch_personnel, on_success,
+                timeout=5.0, on_timeout=lambda: print("Trop lent!")
+            )
+
+            # Plus tard, pour annuler :
+            worker.cancel()
         """
-        worker = DbWorker(fn, *args, **kwargs)
+        worker = DbWorker(fn, *args, timeout=timeout, **kwargs)
 
         if on_result:
             worker.signals.result.connect(on_result)
         if on_error:
             worker.signals.error.connect(on_error)
+        if on_timeout:
+            worker.signals.timeout.connect(on_timeout)
 
         cls.start(worker)
         return worker
@@ -282,7 +397,10 @@ class DbThreadPool:
 # ===========================
 
 def run_in_background(fn: Callable, on_result: Optional[Callable] = None,
-                      on_error: Optional[Callable] = None, *args, **kwargs) -> DbWorker:
+                      on_error: Optional[Callable] = None,
+                      on_timeout: Optional[Callable] = None,
+                      timeout: Optional[float] = None,
+                      *args, **kwargs) -> DbWorker:
     """
     Fonction helper pour lancer une opération DB en background.
 
@@ -298,9 +416,16 @@ def run_in_background(fn: Callable, on_result: Optional[Callable] = None,
         def on_success(results):
             print(f"Reçu {len(results)} résultats")
 
+        # Simple
         run_in_background(fetch_data, on_success)
+
+        # Avec timeout
+        worker = run_in_background(fetch_data, on_success, timeout=5.0)
+
+        # Annuler si l'utilisateur ferme le dialog
+        worker.cancel()
     """
-    return DbThreadPool.run_async(fn, on_result, on_error, *args, **kwargs)
+    return DbThreadPool.run_async(fn, on_result, on_error, on_timeout, timeout, *args, **kwargs)
 
 
 def show_loading_placeholder(widget, text: str = "Chargement..."):
@@ -373,5 +498,11 @@ def get_pool_status() -> dict:
     """Retourne l'état actuel du pool de threads (debug)"""
     return {
         "active_threads": DbThreadPool.get_active_thread_count(),
-        "max_threads": DbThreadPool.get_max_thread_count()
+        "max_threads": DbThreadPool.get_max_thread_count(),
+        "active_workers": DbWorker.get_active_count()
     }
+
+
+def cancel_all_workers():
+    """Annule tous les workers actifs (utile à la fermeture de l'app)"""
+    DbWorker.cancel_all()

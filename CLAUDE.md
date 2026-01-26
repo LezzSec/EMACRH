@@ -142,6 +142,60 @@ Database schema is located in [App/database/schema/bddemac.sql](App/database/sch
 
 **Full documentation**: [docs/dev/optimisation-ui-threads.md](docs/dev/optimisation-ui-threads.md)
 
+### ⚡ Lazy Loading & Pagination (2026-01-26)
+
+**IMPORTANT**: Startup and list performance optimizations:
+
+1. **Lazy Tab Loading** ([App/core/gui/lazy_loading.py](App/core/gui/lazy_loading.py))
+   - `LazyTabWidget` - Tabs are only created when first clicked
+   - Reduces startup time significantly for dialogs with many tabs
+   - Usage:
+   ```python
+   from core.gui.lazy_loading import LazyTabWidget
+
+   tabs = LazyTabWidget()
+   tabs.add_lazy_tab("Personnel", lambda: PersonnelTab())
+   tabs.add_lazy_tab("Contrats", lambda: ContratsTab())
+   # Tabs are created on-demand, not at startup
+   ```
+
+2. **Paginated Tables** ([App/core/gui/lazy_loading.py](App/core/gui/lazy_loading.py))
+   - `PaginatedTableWidget` - Load data by pages instead of all at once
+   - Built-in pagination controls (first, prev, next, last)
+   - Server-side filtering support
+   - Usage:
+   ```python
+   from core.gui.lazy_loading import PaginatedTableWidget
+
+   def fetch_data(offset, limit, filters):
+       return PersonnelRepository.get_paginated(offset, limit, filters)
+
+   table = PaginatedTableWidget(
+       fetch_fn=fetch_data,
+       columns=["Nom", "Prénom", "Statut"],
+       page_size=50
+   )
+   table.set_filters({"statut": "ACTIF"})
+   ```
+
+3. **Repository Pagination** ([App/core/repositories/](App/core/repositories/))
+   - All repositories support `get_paginated()` method
+   - Returns (rows, total_count) for proper pagination
+   - Example:
+   ```python
+   from core.repositories import PersonnelRepository
+
+   rows, total = PersonnelRepository.get_paginated(
+       offset=0, limit=50,
+       filters={"statut": "ACTIF", "search": "Dupont"}
+   )
+   ```
+
+4. **SELECT Optimization**
+   - ❌ Avoid `SELECT *` on large tables
+   - ✅ Use specific columns: `SELECT id, nom, prenom FROM personnel`
+   - Repositories now use `cls.COLUMNS` for explicit column lists
+
 ## Key Database Tables
 
 - `personnel` / `operateurs`: Employee records with status (ACTIF/INACTIF)
@@ -194,10 +248,21 @@ EMAC/
 │   │   │   ├── liste_et_grilles_service.py # Grid generation
 │   │   │   ├── logger.py                   # Historique table logging
 │   │   │   └── log_exporter.py             # Export logs to files
+│   │   ├── repositories/                   # Data access layer (Repository pattern)
+│   │   │   ├── base.py                     # BaseRepository, SafeQueryBuilder
+│   │   │   ├── personnel_repo.py           # Personnel CRUD + pagination
+│   │   │   ├── contrat_repo.py             # Contract operations
+│   │   │   ├── polyvalence_repo.py         # Skills/evaluations
+│   │   │   ├── poste_repo.py               # Workstations + Ateliers
+│   │   │   └── absence_repo.py             # Absence management
+│   │   ├── models.py                       # DTOs/Dataclasses (Personnel, Contrat, etc.)
 │   │   ├── gui/                            # PyQt5 UI layer
 │   │   │   ├── main_qt.py                  # Main application window
 │   │   │   ├── ui_theme.py                 # Theme system (EmacTheme, EmacDarkTheme)
 │   │   │   ├── emac_ui_kit.py              # Reusable UI components
+│   │   │   ├── db_worker.py                # Background DB workers (DbWorker, DbThreadPool)
+│   │   │   ├── lazy_loading.py             # LazyTabWidget, PaginatedTableWidget
+│   │   │   ├── loading_components.py       # Loading placeholders & progress widgets
 │   │   │   ├── gestion_evaluation.py       # Evaluation management dialog
 │   │   │   ├── gestion_personnel.py        # Personnel details & management
 │   │   │   ├── gestion_absences.py         # Absence management dialog

@@ -1,0 +1,283 @@
+# -*- coding: utf-8 -*-
+"""
+Repository pour la table Contrat.
+
+Centralise toutes les requêtes SQL liées aux contrats de travail.
+
+Usage:
+    from core.repositories import ContratRepository
+
+    # Lecture
+    contrat = ContratRepository.get_by_id(123)
+    actifs = ContratRepository.get_all_actifs()
+    expirants = ContratRepository.get_expirant_dans(30)
+
+    # Écriture
+    ContratRepository.create(data)
+    ContratRepository.prolonger(123, nouvelle_date_fin)
+"""
+
+import logging
+from typing import List, Dict, Any, Optional, Tuple
+from datetime import date, timedelta
+
+from core.db.configbd import DatabaseCursor, DatabaseConnection
+from core.models import Contrat, StatistiquesContrats
+from core.repositories.base import BaseRepository
+from core.utils.performance_monitor import monitor_query
+
+logger = logging.getLogger(__name__)
+
+
+class ContratRepository(BaseRepository[Contrat]):
+    """Repository pour les opérations sur la table contrat."""
+
+    TABLE = "contrat"
+    MODEL = Contrat
+    COLUMNS = [
+        "id", "operateur_id", "type_contrat", "date_debut", "date_fin",
+        "etp", "categorie", "coefficient", "actif", "commentaire"
+    ]
+
+    # ===========================
+    # Requêtes de lecture
+    # ===========================
+
+    @classmethod
+    @monitor_query('ContratRepo.get_all_actifs')
+    def get_all_actifs(cls, limit: int = 500) -> List[Contrat]:
+        """Récupère tous les contrats actifs avec info personnel."""
+        query = """
+            SELECT c.*, p.nom as personnel_nom, p.prenom as personnel_prenom
+            FROM contrat c
+            JOIN personnel p ON c.operateur_id = p.id
+            WHERE c.actif = 1
+            ORDER BY c.date_fin ASC
+            LIMIT %s
+        """
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query, (limit,))
+            return cls._rows_to_models(cur.fetchall())
+
+    @classmethod
+    def get_by_operateur(cls, operateur_id: int, include_inactifs: bool = False) -> List[Contrat]:
+        """Récupère tous les contrats d'un employé."""
+        columns = ", ".join(cls.COLUMNS)
+        query = f"""
+            SELECT {columns} FROM contrat
+            WHERE operateur_id = %s
+        """
+        params = [operateur_id]
+
+        if not include_inactifs:
+            query += " AND actif = 1"
+
+        query += " ORDER BY date_debut DESC"
+
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query, tuple(params))
+            return cls._rows_to_models(cur.fetchall())
+
+    @classmethod
+    def get_actif_by_operateur(cls, operateur_id: int) -> Optional[Contrat]:
+        """Récupère le contrat actif d'un employé."""
+        columns = ", ".join(cls.COLUMNS)
+        query = f"""
+            SELECT {columns} FROM contrat
+            WHERE operateur_id = %s AND actif = 1
+            ORDER BY date_debut DESC
+            LIMIT 1
+        """
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query, (operateur_id,))
+            row = cur.fetchone()
+            return cls._row_to_model(row)
+
+    @classmethod
+    @monitor_query('ContratRepo.get_expirant_dans')
+    def get_expirant_dans(cls, jours: int = 30) -> List[Contrat]:
+        """
+        Récupère les contrats expirant dans les N prochains jours.
+
+        Args:
+            jours: Nombre de jours à regarder
+
+        Returns:
+            Liste de contrats triés par urgence
+        """
+        date_limite = date.today() + timedelta(days=jours)
+
+        query = """
+            SELECT c.*, p.nom as personnel_nom, p.prenom as personnel_prenom,
+                   DATEDIFF(c.date_fin, CURDATE()) as jours_restants
+            FROM contrat c
+            JOIN personnel p ON c.operateur_id = p.id
+            WHERE c.actif = 1
+              AND c.date_fin IS NOT NULL
+              AND c.date_fin BETWEEN CURDATE() AND %s
+              AND p.statut = 'ACTIF'
+            ORDER BY c.date_fin ASC
+        """
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query, (date_limite,))
+            return cls._rows_to_models(cur.fetchall())
+
+    @classmethod
+    def get_expires(cls) -> List[Contrat]:
+        """Récupère les contrats déjà expirés mais encore actifs."""
+        query = """
+            SELECT c.*, p.nom as personnel_nom, p.prenom as personnel_prenom
+            FROM contrat c
+            JOIN personnel p ON c.operateur_id = p.id
+            WHERE c.actif = 1
+              AND c.date_fin IS NOT NULL
+              AND c.date_fin < CURDATE()
+            ORDER BY c.date_fin ASC
+        """
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query)
+            return cls._rows_to_models(cur.fetchall())
+
+    @classmethod
+    def get_cdi(cls) -> List[Contrat]:
+        """Récupère tous les CDI actifs."""
+        query = """
+            SELECT c.*, p.nom as personnel_nom, p.prenom as personnel_prenom
+            FROM contrat c
+            JOIN personnel p ON c.operateur_id = p.id
+            WHERE c.actif = 1 AND c.type_contrat = 'CDI'
+            ORDER BY p.nom
+        """
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query)
+            return cls._rows_to_models(cur.fetchall())
+
+    # ===========================
+    # Statistiques
+    # ===========================
+
+    @classmethod
+    @monitor_query('ContratRepo.get_statistiques')
+    def get_statistiques(cls) -> StatistiquesContrats:
+        """Calcule les statistiques des contrats."""
+        stats = StatistiquesContrats()
+
+        with DatabaseCursor(dictionary=True) as cur:
+            # Total actifs
+            cur.execute("SELECT COUNT(*) as total FROM contrat WHERE actif = 1")
+            stats.total = cur.fetchone()['total']
+
+            # Par type
+            cur.execute("""
+                SELECT type_contrat, COUNT(*) as count
+                FROM contrat WHERE actif = 1
+                GROUP BY type_contrat
+            """)
+            for row in cur.fetchall():
+                if row['type_contrat'] == 'CDI':
+                    stats.cdi = row['count']
+                elif row['type_contrat'] == 'CDD':
+                    stats.cdd = row['count']
+                elif row['type_contrat'] == 'INTERIM':
+                    stats.interim = row['count']
+
+            # Expirant 7j
+            cur.execute("""
+                SELECT COUNT(*) as count FROM contrat
+                WHERE actif = 1 AND date_fin IS NOT NULL
+                AND date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+            """)
+            stats.expirant_7j = cur.fetchone()['count']
+
+            # Expirant 30j
+            cur.execute("""
+                SELECT COUNT(*) as count FROM contrat
+                WHERE actif = 1 AND date_fin IS NOT NULL
+                AND date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+            """)
+            stats.expirant_30j = cur.fetchone()['count']
+
+        return stats
+
+    # ===========================
+    # Opérations d'écriture
+    # ===========================
+
+    @classmethod
+    def create(cls, data: Dict[str, Any]) -> Tuple[bool, str, Optional[int]]:
+        """Crée un nouveau contrat."""
+        required = ["operateur_id", "type_contrat", "date_debut"]
+        for field in required:
+            if not data.get(field):
+                return False, f"Le champ '{field}' est obligatoire", None
+
+        allowed = ["operateur_id", "type_contrat", "date_debut", "date_fin",
+                   "etp", "categorie", "coefficient", "actif", "commentaire"]
+
+        insert_data = {k: v for k, v in data.items() if k in allowed and v is not None}
+        insert_data.setdefault("actif", True)
+
+        columns = list(insert_data.keys())
+        placeholders = ", ".join(["%s"] * len(columns))
+        columns_str = ", ".join(columns)
+
+        query = f"INSERT INTO contrat ({columns_str}) VALUES ({placeholders})"
+
+        try:
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+                cur.execute(query, tuple(insert_data.values()))
+                new_id = cur.lastrowid
+                conn.commit()
+
+                from core.services.logger import log_hist
+                log_hist("CREATE", "contrat", new_id,
+                        f"Contrat {data.get('type_contrat')} créé pour operateur {data.get('operateur_id')}")
+
+                return True, "Contrat créé avec succès", new_id
+
+        except Exception as e:
+            logger.error(f"Erreur création contrat: {e}")
+            return False, f"Erreur: {str(e)}", None
+
+    @classmethod
+    def update(cls, id: int, data: Dict[str, Any]) -> Tuple[bool, str]:
+        """Met à jour un contrat."""
+        if not cls.exists(id):
+            return False, "Contrat non trouvé"
+
+        allowed = ["type_contrat", "date_debut", "date_fin", "etp",
+                   "categorie", "coefficient", "actif", "commentaire"]
+
+        update_data = {k: v for k, v in data.items() if k in allowed}
+
+        if not update_data:
+            return False, "Aucun champ valide à mettre à jour"
+
+        set_clauses = [f"{col} = %s" for col in update_data.keys()]
+        query = f"UPDATE contrat SET {', '.join(set_clauses)} WHERE id = %s"
+
+        try:
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+                cur.execute(query, tuple(list(update_data.values()) + [id]))
+                conn.commit()
+
+                from core.services.logger import log_hist
+                log_hist("UPDATE", "contrat", id, f"Mise à jour: {list(update_data.keys())}")
+
+                return True, "Contrat mis à jour"
+
+        except Exception as e:
+            logger.error(f"Erreur mise à jour contrat: {e}")
+            return False, f"Erreur: {str(e)}"
+
+    @classmethod
+    def prolonger(cls, id: int, nouvelle_date_fin: date) -> Tuple[bool, str]:
+        """Prolonge un contrat en modifiant sa date de fin."""
+        return cls.update(id, {"date_fin": nouvelle_date_fin})
+
+    @classmethod
+    def terminer(cls, id: int) -> Tuple[bool, str]:
+        """Termine un contrat (actif = False)."""
+        return cls.update(id, {"actif": False})

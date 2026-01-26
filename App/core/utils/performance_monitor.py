@@ -461,13 +461,12 @@ def export_performance_stats(filename: str = 'performance_stats.csv'):
         filename: Nom du fichier de sortie
     """
     import csv
-    from pathlib import Path
+    from core.utils.app_paths import get_exports_dir
 
     stats = _monitor.get_stats()
 
-    # Dossier exports
-    exports_dir = Path('exports')
-    exports_dir.mkdir(exist_ok=True)
+    # Dossier exports (créé uniquement lors de l'export explicite)
+    exports_dir = get_exports_dir(create=True)
 
     filepath = exports_dir / filename
 

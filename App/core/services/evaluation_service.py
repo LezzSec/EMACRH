@@ -5,6 +5,7 @@ Fournit les fonctions pour recuperer les evaluations en retard et a venir
 ✅ OPTIMISATIONS APPLIQUÉES:
 - Monitoring des requêtes clés (détection régressions)
 - Logs DB optimisés (async, non-bloquant)
+- DTOs typés pour robustesse (EvaluationResume, Polyvalence)
 """
 
 import logging
@@ -17,6 +18,9 @@ from core.db.configbd import DatabaseCursor, DatabaseConnection
 # ✅ OPTIMISATIONS : Monitoring + Logs optimisés
 from core.utils.performance_monitor import monitor_query
 from core.services.optimized_db_logger import log_hist_async
+
+# ✅ DTOs typés pour robustesse
+from core.models import EvaluationResume, Polyvalence, StatistiquesEvaluations
 
 
 @monitor_query('Get Evaluations En Retard')
@@ -236,3 +240,85 @@ def get_statistiques_evaluations() -> Dict:
         stats['par_niveau'] = cur.fetchall()
 
     return stats
+
+
+# ===========================
+# ✅ MÉTHODES TYPÉES (DTOs)
+# ===========================
+# Ces méthodes retournent des dataclasses au lieu de dicts bruts
+# Avantages : typage fort, autocomplétion IDE, validation
+
+@monitor_query('Get Evaluations En Retard (Typed)')
+def get_evaluations_en_retard_typed() -> List[EvaluationResume]:
+    """
+    Version typée de get_evaluations_en_retard().
+    Retourne des objets EvaluationResume au lieu de dicts.
+
+    Returns:
+        List[EvaluationResume]: Liste typée des évaluations en retard
+
+    Example:
+        evaluations = get_evaluations_en_retard_typed()
+        for eval in evaluations:
+            print(f"{eval.operateur_nom_complet} - {eval.label_poste}")
+            if eval.est_en_retard:
+                print(f"  ⚠️ {eval.jours_retard} jours de retard")
+    """
+    rows = get_evaluations_en_retard()
+    return [
+        EvaluationResume(
+            polyvalence_id=row['polyvalence_id'],
+            operateur_id=row['operateur_id'],
+            operateur_nom=row['nom'],
+            operateur_prenom=row['prenom'],
+            poste_code=row['poste_code'],
+            poste_nom=row.get('nom_atelier'),
+            niveau=row['niveau'],
+            prochaine_evaluation=row['prochaine_evaluation'],
+            jours_retard=row.get('jours_retard', 0)
+        )
+        for row in rows
+    ]
+
+
+@monitor_query('Get Prochaines Evaluations (Typed)')
+def get_prochaines_evaluations_typed(jours: int = 30) -> List[EvaluationResume]:
+    """
+    Version typée de get_prochaines_evaluations().
+
+    Args:
+        jours: Nombre de jours à regarder en avant
+
+    Returns:
+        List[EvaluationResume]: Liste typée des évaluations à venir
+    """
+    rows = get_prochaines_evaluations(jours)
+    return [
+        EvaluationResume(
+            polyvalence_id=row['polyvalence_id'],
+            operateur_id=row['operateur_id'],
+            operateur_nom=row['nom'],
+            operateur_prenom=row['prenom'],
+            poste_code=row['poste_code'],
+            poste_nom=row.get('nom_atelier'),
+            niveau=row['niveau'],
+            prochaine_evaluation=row['prochaine_evaluation'],
+            jours_retard=-row.get('jours_restants', 0)  # Négatif = à venir
+        )
+        for row in rows
+    ]
+
+
+def get_statistiques_evaluations_typed() -> StatistiquesEvaluations:
+    """
+    Version typée de get_statistiques_evaluations().
+
+    Returns:
+        StatistiquesEvaluations: Objet typé avec les statistiques
+    """
+    stats = get_statistiques_evaluations()
+    return StatistiquesEvaluations(
+        total=stats.get('total', 0),
+        en_retard=stats.get('en_retard', 0),
+        a_venir_30j=stats.get('a_venir_30j', 0)
+    )

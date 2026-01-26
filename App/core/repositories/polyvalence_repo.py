@@ -1,0 +1,372 @@
+# -*- coding: utf-8 -*-
+"""
+Repository pour la table Polyvalence (compétences/évaluations).
+
+Centralise toutes les requêtes SQL liées aux compétences des opérateurs.
+
+Usage:
+    from core.repositories import PolyvalenceRepository
+
+    # Lecture
+    skills = PolyvalenceRepository.get_by_operateur(123)
+    retards = PolyvalenceRepository.get_en_retard()
+    matrix = PolyvalenceRepository.get_matrice_atelier(1)
+
+    # Écriture
+    PolyvalenceRepository.update_niveau(poly_id, 3, date_eval, prochaine)
+"""
+
+import logging
+from typing import List, Dict, Any, Optional, Tuple
+from datetime import date, timedelta
+
+from core.db.configbd import DatabaseCursor, DatabaseConnection
+from core.models import Polyvalence, EvaluationResume, StatistiquesEvaluations
+from core.repositories.base import BaseRepository
+from core.utils.performance_monitor import monitor_query
+
+logger = logging.getLogger(__name__)
+
+
+class PolyvalenceRepository(BaseRepository[Polyvalence]):
+    """Repository pour les opérations sur la table polyvalence."""
+
+    TABLE = "polyvalence"
+    MODEL = Polyvalence
+    COLUMNS = [
+        "id", "operateur_id", "poste_id", "niveau",
+        "date_evaluation", "prochaine_evaluation"
+    ]
+
+    # ===========================
+    # Requêtes de lecture
+    # ===========================
+
+    @classmethod
+    @monitor_query('PolyvalenceRepo.get_by_operateur')
+    def get_by_operateur(cls, operateur_id: int) -> List[Polyvalence]:
+        """Récupère toutes les compétences d'un opérateur."""
+        query = """
+            SELECT p.*, pos.poste_code, pos.nom as poste_nom
+            FROM polyvalence p
+            JOIN postes pos ON p.poste_id = pos.id
+            WHERE p.operateur_id = %s
+            ORDER BY pos.poste_code
+        """
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query, (operateur_id,))
+            return cls._rows_to_models(cur.fetchall())
+
+    @classmethod
+    @monitor_query('PolyvalenceRepo.get_by_poste')
+    def get_by_poste(cls, poste_id: int, actifs_only: bool = True) -> List[Polyvalence]:
+        """Récupère tous les opérateurs compétents sur un poste."""
+        query = """
+            SELECT p.*, pers.nom as operateur_nom, pers.prenom as operateur_prenom
+            FROM polyvalence p
+            JOIN personnel pers ON p.operateur_id = pers.id
+            WHERE p.poste_id = %s
+        """
+        params = [poste_id]
+
+        if actifs_only:
+            query += " AND pers.statut = 'ACTIF'"
+
+        query += " ORDER BY p.niveau DESC, pers.nom"
+
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query, tuple(params))
+            return cls._rows_to_models(cur.fetchall())
+
+    @classmethod
+    @monitor_query('PolyvalenceRepo.get_en_retard')
+    def get_en_retard(cls, limit: int = 100) -> List[EvaluationResume]:
+        """Récupère les évaluations en retard."""
+        query = """
+            SELECT
+                p.id as polyvalence_id,
+                p.operateur_id,
+                pers.nom as operateur_nom,
+                pers.prenom as operateur_prenom,
+                pos.poste_code,
+                pos.nom as poste_nom,
+                p.niveau,
+                p.prochaine_evaluation,
+                DATEDIFF(CURDATE(), p.prochaine_evaluation) as jours_retard
+            FROM polyvalence p
+            JOIN personnel pers ON p.operateur_id = pers.id
+            JOIN postes pos ON p.poste_id = pos.id
+            WHERE pers.statut = 'ACTIF'
+              AND p.prochaine_evaluation < CURDATE()
+            ORDER BY jours_retard DESC
+            LIMIT %s
+        """
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query, (limit,))
+            return [
+                EvaluationResume(
+                    polyvalence_id=row['polyvalence_id'],
+                    operateur_id=row['operateur_id'],
+                    operateur_nom=row['operateur_nom'],
+                    operateur_prenom=row['operateur_prenom'],
+                    poste_code=row['poste_code'],
+                    poste_nom=row['poste_nom'],
+                    niveau=row['niveau'],
+                    prochaine_evaluation=row['prochaine_evaluation'],
+                    jours_retard=row['jours_retard']
+                )
+                for row in cur.fetchall()
+            ]
+
+    @classmethod
+    @monitor_query('PolyvalenceRepo.get_a_venir')
+    def get_a_venir(cls, jours: int = 30, limit: int = 100) -> List[EvaluationResume]:
+        """Récupère les évaluations à venir dans les N prochains jours."""
+        date_limite = date.today() + timedelta(days=jours)
+
+        query = """
+            SELECT
+                p.id as polyvalence_id,
+                p.operateur_id,
+                pers.nom as operateur_nom,
+                pers.prenom as operateur_prenom,
+                pos.poste_code,
+                pos.nom as poste_nom,
+                p.niveau,
+                p.prochaine_evaluation,
+                DATEDIFF(p.prochaine_evaluation, CURDATE()) as jours_restants
+            FROM polyvalence p
+            JOIN personnel pers ON p.operateur_id = pers.id
+            JOIN postes pos ON p.poste_id = pos.id
+            WHERE pers.statut = 'ACTIF'
+              AND p.prochaine_evaluation BETWEEN CURDATE() AND %s
+            ORDER BY p.prochaine_evaluation ASC
+            LIMIT %s
+        """
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query, (date_limite, limit))
+            return [
+                EvaluationResume(
+                    polyvalence_id=row['polyvalence_id'],
+                    operateur_id=row['operateur_id'],
+                    operateur_nom=row['operateur_nom'],
+                    operateur_prenom=row['operateur_prenom'],
+                    poste_code=row['poste_code'],
+                    poste_nom=row['poste_nom'],
+                    niveau=row['niveau'],
+                    prochaine_evaluation=row['prochaine_evaluation'],
+                    jours_retard=-row['jours_restants']  # Négatif = à venir
+                )
+                for row in cur.fetchall()
+            ]
+
+    @classmethod
+    def get_matrice_poste(cls, poste_id: int) -> List[Dict]:
+        """
+        Récupère la matrice de compétences pour un poste.
+        Retourne tous les opérateurs avec leur niveau sur ce poste.
+        """
+        query = """
+            SELECT
+                pers.id as operateur_id,
+                pers.nom,
+                pers.prenom,
+                pers.matricule,
+                COALESCE(p.niveau, 0) as niveau,
+                p.date_evaluation,
+                p.prochaine_evaluation
+            FROM personnel pers
+            LEFT JOIN polyvalence p ON pers.id = p.operateur_id AND p.poste_id = %s
+            WHERE pers.statut = 'ACTIF'
+            ORDER BY pers.nom, pers.prenom
+        """
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query, (poste_id,))
+            return cur.fetchall()
+
+    @classmethod
+    def get_matrice_operateur(cls, operateur_id: int) -> List[Dict]:
+        """
+        Récupère la matrice de compétences pour un opérateur.
+        Retourne tous les postes visibles avec le niveau de l'opérateur.
+        """
+        query = """
+            SELECT
+                pos.id as poste_id,
+                pos.poste_code,
+                pos.nom as poste_nom,
+                a.nom as atelier_nom,
+                COALESCE(p.niveau, 0) as niveau,
+                p.date_evaluation,
+                p.prochaine_evaluation
+            FROM postes pos
+            LEFT JOIN atelier a ON pos.atelier_id = a.id
+            LEFT JOIN polyvalence p ON pos.id = p.poste_id AND p.operateur_id = %s
+            WHERE pos.visible = 1
+            ORDER BY a.nom, pos.poste_code
+        """
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query, (operateur_id,))
+            return cur.fetchall()
+
+    # ===========================
+    # Statistiques
+    # ===========================
+
+    @classmethod
+    @monitor_query('PolyvalenceRepo.get_statistiques')
+    def get_statistiques(cls) -> StatistiquesEvaluations:
+        """Calcule les statistiques des évaluations."""
+        stats = StatistiquesEvaluations()
+
+        with DatabaseCursor(dictionary=True) as cur:
+            # Total
+            cur.execute("""
+                SELECT COUNT(*) as total FROM polyvalence p
+                JOIN personnel pers ON p.operateur_id = pers.id
+                WHERE pers.statut = 'ACTIF'
+            """)
+            stats.total = cur.fetchone()['total']
+
+            # En retard
+            cur.execute("""
+                SELECT COUNT(*) as total FROM polyvalence p
+                JOIN personnel pers ON p.operateur_id = pers.id
+                WHERE pers.statut = 'ACTIF' AND p.prochaine_evaluation < CURDATE()
+            """)
+            stats.en_retard = cur.fetchone()['total']
+
+            # À venir 7j
+            cur.execute("""
+                SELECT COUNT(*) as total FROM polyvalence p
+                JOIN personnel pers ON p.operateur_id = pers.id
+                WHERE pers.statut = 'ACTIF'
+                AND p.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+            """)
+            stats.a_venir_7j = cur.fetchone()['total']
+
+            # À venir 30j
+            cur.execute("""
+                SELECT COUNT(*) as total FROM polyvalence p
+                JOIN personnel pers ON p.operateur_id = pers.id
+                WHERE pers.statut = 'ACTIF'
+                AND p.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+            """)
+            stats.a_venir_30j = cur.fetchone()['total']
+
+        return stats
+
+    @classmethod
+    def count_par_niveau(cls) -> Dict[int, int]:
+        """Compte les compétences par niveau."""
+        query = """
+            SELECT niveau, COUNT(*) as count
+            FROM polyvalence p
+            JOIN personnel pers ON p.operateur_id = pers.id
+            WHERE pers.statut = 'ACTIF'
+            GROUP BY niveau
+            ORDER BY niveau
+        """
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query)
+            return {row['niveau']: row['count'] for row in cur.fetchall()}
+
+    # ===========================
+    # Opérations d'écriture
+    # ===========================
+
+    @classmethod
+    def create(cls, operateur_id: int, poste_id: int, niveau: int = 1,
+               date_evaluation: Optional[date] = None,
+               prochaine_evaluation: Optional[date] = None) -> Tuple[bool, str, Optional[int]]:
+        """Crée une nouvelle compétence."""
+        if niveau not in [1, 2, 3, 4]:
+            return False, "Le niveau doit être entre 1 et 4", None
+
+        # Vérifier si existe déjà
+        query_check = "SELECT id FROM polyvalence WHERE operateur_id = %s AND poste_id = %s"
+        with DatabaseCursor() as cur:
+            cur.execute(query_check, (operateur_id, poste_id))
+            if cur.fetchone():
+                return False, "Cette compétence existe déjà", None
+
+        query = """
+            INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
+            VALUES (%s, %s, %s, %s, %s)
+        """
+        try:
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+                cur.execute(query, (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation))
+                new_id = cur.lastrowid
+                conn.commit()
+
+                from core.services.logger import log_hist
+                log_hist("CREATE", "polyvalence", new_id,
+                        f"Compétence N{niveau} créée", operateur_id=operateur_id, poste_id=poste_id)
+
+                return True, "Compétence créée", new_id
+
+        except Exception as e:
+            logger.error(f"Erreur création polyvalence: {e}")
+            return False, f"Erreur: {str(e)}", None
+
+    @classmethod
+    def update_niveau(cls, id: int, nouveau_niveau: int,
+                      date_evaluation: date, prochaine_evaluation: date) -> Tuple[bool, str]:
+        """Met à jour le niveau d'une compétence après évaluation."""
+        if nouveau_niveau not in [1, 2, 3, 4]:
+            return False, "Le niveau doit être entre 1 et 4"
+
+        # Récupérer l'ancien niveau pour le log
+        query_old = "SELECT operateur_id, poste_id, niveau FROM polyvalence WHERE id = %s"
+        with DatabaseCursor() as cur:
+            cur.execute(query_old, (id,))
+            old = cur.fetchone()
+            if not old:
+                return False, "Compétence non trouvée"
+
+        query = """
+            UPDATE polyvalence
+            SET niveau = %s, date_evaluation = %s, prochaine_evaluation = %s
+            WHERE id = %s
+        """
+        try:
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+                cur.execute(query, (nouveau_niveau, date_evaluation, prochaine_evaluation, id))
+                conn.commit()
+
+                from core.services.logger import log_hist
+                log_hist("UPDATE", "polyvalence", id,
+                        f"Évaluation: N{old[2]}→N{nouveau_niveau}",
+                        operateur_id=old[0], poste_id=old[1])
+
+                return True, "Évaluation enregistrée"
+
+        except Exception as e:
+            logger.error(f"Erreur mise à jour polyvalence: {e}")
+            return False, f"Erreur: {str(e)}"
+
+    @classmethod
+    def delete_competence(cls, operateur_id: int, poste_id: int) -> Tuple[bool, str]:
+        """Supprime une compétence."""
+        query = "DELETE FROM polyvalence WHERE operateur_id = %s AND poste_id = %s"
+
+        try:
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+                cur.execute(query, (operateur_id, poste_id))
+                deleted = cur.rowcount > 0
+                conn.commit()
+
+                if deleted:
+                    from core.services.logger import log_hist
+                    log_hist("DELETE", "polyvalence", None,
+                            f"Compétence supprimée", operateur_id=operateur_id, poste_id=poste_id)
+
+                return deleted, "Compétence supprimée" if deleted else "Compétence non trouvée"
+
+        except Exception as e:
+            logger.error(f"Erreur suppression polyvalence: {e}")
+            return False, f"Erreur: {str(e)}"
