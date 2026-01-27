@@ -7,6 +7,7 @@ Centralise toute la logique de connexion à la base de données.
 
 import os
 import sys
+import logging
 from pathlib import Path
 from typing import Optional
 
@@ -14,6 +15,8 @@ import mysql.connector
 from mysql.connector import pooling, Error as MySQLError
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 _connection_pool = None
 _env_loaded = False
@@ -78,7 +81,7 @@ def _load_env_once() -> None:
                         pass
                 except Exception as e:
                     # Si le déchiffrement échoue, continuer avec les autres candidats
-                    print(f"[WARNING] Impossible de dechiffrer {p}: {e}")
+                    logger.warning(f"Impossible de déchiffrer {p}: {e}")
                     continue
             else:
                 # Charger le .env normal

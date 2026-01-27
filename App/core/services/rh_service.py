@@ -600,9 +600,7 @@ def get_documents_domaine(
             return cur.fetchall()
 
     except Exception as e:
-        logger.error(f"Erreur get_documents_domaine: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception(f"Erreur get_documents_domaine: {e}")
         return []
 
 

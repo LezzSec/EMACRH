@@ -1,7 +1,14 @@
-import sys, os, datetime as dt, time, traceback, logging
+import sys, os, datetime as dt, time, traceback
 from dataclasses import dataclass
 
-logger = logging.getLogger(__name__)
+# Configuration centralisée du logging (doit être en premier)
+from core.utils.logging_config import setup_logging, get_logger, set_log_context, clear_log_context
+
+# Déterminer le mode (production si variable d'environnement définie)
+_production_mode = os.getenv('EMAC_ENV', '').lower() == 'production'
+setup_logging(production_mode=_production_mode)
+
+logger = get_logger(__name__)
 
 # Ajouter le répertoire App au PYTHONPATH pour cx_Freeze
 if getattr(sys, 'frozen', False):
@@ -238,6 +245,7 @@ class MainWindow(QMainWindow):
         self.load_user_and_permissions_async()
         self.populate_filters_async()
         self.load_evaluations_async()
+        self._init_document_trigger_service()
 
     def load_user_and_permissions_async(self):
         w = DbWorker(self._fetch_user_and_perms)
@@ -296,6 +304,62 @@ class MainWindow(QMainWindow):
 
         # Drawer : on le construit au premier clic, mais on garde les perms en mémoire
         self._perms_cache = perms
+
+    # ---------------------------
+    # Document Trigger Service
+    # ---------------------------
+
+    def _init_document_trigger_service(self):
+        """Initialise le service de déclenchement de documents et connecte les signaux."""
+        try:
+            from core.services.document_trigger_service import DocumentTriggerService
+            from core.services.event_bus import EventBus
+
+            # Initialiser le service (singleton)
+            self._doc_trigger = DocumentTriggerService()
+
+            # Connecter le signal Qt pour afficher les dialogs de proposition
+            EventBus.get_qt_signals().event_emitted.connect(self._on_event_for_documents)
+
+            logger.info("DocumentTriggerService initialisé dans MainWindow")
+        except Exception as e:
+            logger.warning(f"DocumentTriggerService non initialisé: {e}")
+
+    def _on_event_for_documents(self, event_name: str, event_data: dict):
+        """
+        Appelé lors de chaque événement pour vérifier s'il y a des documents à proposer.
+        Ce handler est connecté au signal Qt, donc exécuté dans le thread principal.
+        """
+        # Ne traiter que les événements qui peuvent générer des documents
+        if not event_name.startswith(('personnel.', 'contrat.', 'polyvalence.')):
+            return
+
+        # Vérifier s'il y a des documents en attente après un court délai
+        # (pour laisser le temps au DocumentTriggerService de traiter l'événement)
+        operateur_id = event_data.get('operateur_id')
+        if operateur_id:
+            QTimer.singleShot(200, lambda: self._check_pending_documents(
+                operateur_id,
+                event_data.get('nom', ''),
+                event_data.get('prenom', '')
+            ))
+
+    def _check_pending_documents(self, operateur_id: int, nom: str, prenom: str):
+        """Affiche le dialog de proposition si des documents sont en attente."""
+        try:
+            from core.services.document_trigger_service import DocumentTriggerService
+
+            if DocumentTriggerService.has_pending_documents(operateur_id):
+                from core.gui.document_proposal_dialog import DocumentProposalDialog
+                dialog = DocumentProposalDialog(
+                    operateur_id=operateur_id,
+                    operateur_nom=nom,
+                    operateur_prenom=prenom,
+                    parent=self
+                )
+                dialog.exec_()
+        except Exception as e:
+            logger.warning(f"Erreur vérification documents en attente: {e}")
 
     # ---------------------------
     # Event filter
@@ -704,11 +768,19 @@ class MainWindow(QMainWindow):
         if reply == QMessageBox.Yes:
             auth = _lazy_auth()
             auth.logout_user()
+            clear_log_context()  # Réinitialiser le contexte de logging
             self.close()
 
             from core.gui.login_dialog import LoginDialog
             login_dialog = LoginDialog()
             if login_dialog.exec_() == QDialog.Accepted:
+                # Définir le nouveau contexte de logging
+                try:
+                    user = auth.get_current_user()
+                    if user:
+                        set_log_context(user_id=user.get('username') or user.get('nom'), screen='MainWindow')
+                except Exception:
+                    pass
                 new_window = MainWindow()
                 new_window.show()
 
@@ -745,6 +817,15 @@ if __name__ == "__main__":
     login_dialog = LoginDialog()
 
     if login_dialog.exec_() == LoginDialog.Accepted:
+        # Définir le contexte de logging avec l'utilisateur connecté
+        try:
+            from core.services.auth_service import get_current_user
+            user = get_current_user()
+            if user:
+                set_log_context(user_id=user.get('username') or user.get('nom'), screen='MainWindow')
+        except Exception:
+            pass
+
         win = MainWindow()
         win.show()
         sys.exit(app.exec_())

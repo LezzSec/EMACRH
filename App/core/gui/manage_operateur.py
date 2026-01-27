@@ -567,9 +567,20 @@ class ManageOperatorsDialog(QDialog):
             self.add_prenom_input.clear()
             self.data_changed.emit(int(operateur_id))
 
-            # Proposer les documents templates pour le nouvel opérateur
+            # Émettre l'événement pour le système de déclenchement de documents
+            # (remplace l'ancien code _proposer_documents_nouvel_operateur)
             if not existing_id:
-                self._proposer_documents_nouvel_operateur(nom, prenom)
+                try:
+                    from core.services.event_bus import EventBus
+                    EventBus.emit('personnel.created', {
+                        'operateur_id': operateur_id,
+                        'nom': nom,
+                        'prenom': prenom,
+                        'matricule': matricule if is_production else None,
+                        'is_production': is_production
+                    }, source='ManageOperatorsDialog.add_operator')
+                except Exception as evt_err:
+                    logger.warning(f"Erreur émission événement personnel.created: {evt_err}")
 
         except Exception as e:
             try:
@@ -611,40 +622,9 @@ class ManageOperatorsDialog(QDialog):
                 pass
 
 
-    def _proposer_documents_nouvel_operateur(self, nom: str, prenom: str):
-        """
-        Propose les documents templates à générer pour un nouvel opérateur.
-        """
-        try:
-            from core.services.template_service import check_templates_table_exists
-
-            if not check_templates_table_exists():
-                return
-
-            # Demander à l'utilisateur s'il veut générer les documents
-            reply = QMessageBox.question(
-                self,
-                "Documents d'accueil",
-                f"Voulez-vous générer les documents d'accueil pour {prenom} {nom} ?\n\n"
-                "(Consignes générales, Formation initiale, etc.)",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes
-            )
-
-            if reply == QMessageBox.Yes:
-                from core.gui.gestion_templates import TemplateSelectionDialog
-
-                dialog = TemplateSelectionDialog(
-                    contexte='NOUVEL_OPERATEUR',
-                    operateur_nom=nom,
-                    operateur_prenom=prenom,
-                    parent=self
-                )
-                dialog.exec_()
-
-        except Exception as e:
-            # Ne pas bloquer si le module templates n'est pas disponible
-            logger.error(f"Erreur lors de la proposition des documents: {e}")
+    # NOTE: L'ancienne méthode _proposer_documents_nouvel_operateur a été supprimée.
+    # Le déclenchement des documents est maintenant géré automatiquement via EventBus
+    # et le service DocumentTriggerService.
 
 
 if __name__ == "__main__":

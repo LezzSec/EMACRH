@@ -1,0 +1,397 @@
+# -*- coding: utf-8 -*-
+"""
+Service de déclenchement automatique des documents.
+
+Ce service écoute les événements métier via l'EventBus et génère
+ou propose les documents selon les règles configurées.
+
+Modes d'exécution:
+    - AUTO: Génère et ouvre automatiquement le document
+    - PROPOSED: Ajoute à la liste des documents en attente (dialog)
+    - SILENT: Log seulement (pour audit sans action)
+
+Usage:
+    # Initialisation au démarrage de l'application
+    from core.services.document_trigger_service import DocumentTriggerService
+    trigger_service = DocumentTriggerService()  # S'abonne automatiquement
+
+    # Les événements sont traités automatiquement
+    EventBus.emit('personnel.created', {'operateur_id': 1, 'nom': 'Dupont', ...})
+
+    # Récupérer les documents en attente
+    pending = DocumentTriggerService.get_pending_documents(operateur_id=1)
+
+    # Générer un document en attente
+    success, msg, path = DocumentTriggerService.generate_pending(pending[0])
+"""
+
+import logging
+from typing import Dict, Any, List, Optional, Tuple
+from dataclasses import dataclass, field
+from datetime import datetime
+from threading import Lock
+
+from core.services.event_bus import EventBus, DomainEvent
+from core.services.event_rule_service import get_matching_templates
+from core.services.template_service import generate_filled_template, open_template_file
+from core.services.logger import log_hist
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class PendingDocument:
+    """
+    Document en attente de génération/validation par l'utilisateur.
+
+    Attributes:
+        template_id: ID du template
+        template_nom: Nom affiché du template
+        execution_mode: Mode d'exécution original
+        operateur_id: ID de l'opérateur concerné
+        operateur_nom: Nom de l'opérateur
+        operateur_prenom: Prénom de l'opérateur
+        event_name: Événement déclencheur
+        rule_id: ID de la règle ayant déclenché
+        timestamp: Date/heure de création
+    """
+    template_id: int
+    template_nom: str
+    execution_mode: str
+    operateur_id: int
+    operateur_nom: str
+    operateur_prenom: str
+    event_name: str
+    rule_id: int = 0
+    timestamp: datetime = field(default_factory=datetime.now)
+
+    def __repr__(self) -> str:
+        return f"PendingDocument({self.template_nom} pour {self.operateur_prenom} {self.operateur_nom})"
+
+
+class DocumentTriggerService:
+    """
+    Service de déclenchement de documents (Singleton).
+
+    S'abonne aux événements métier et:
+    - Mode AUTO: génère automatiquement en background
+    - Mode PROPOSED: stocke pour affichage dans un dialog
+    - Mode SILENT: log seulement sans action
+
+    Thread-safe grâce à un lock sur les opérations de liste.
+    """
+
+    _instance = None
+    _lock = Lock()
+
+    def __new__(cls):
+        """Implémentation Singleton thread-safe."""
+        if cls._instance is None:
+            with cls._lock:
+                if cls._instance is None:
+                    cls._instance = super().__new__(cls)
+                    cls._instance._initialize()
+        return cls._instance
+
+    def _initialize(self):
+        """Initialise les souscriptions aux événements."""
+        self._pending_documents: List[PendingDocument] = []
+        self._pending_lock = Lock()
+        self._enabled = True
+
+        # S'abonner à tous les événements pertinents via wildcards
+        EventBus.subscribe('personnel.*', self._handle_event)
+        EventBus.subscribe('contrat.*', self._handle_event)
+        EventBus.subscribe('polyvalence.*', self._handle_event)
+        EventBus.subscribe('evaluation.*', self._handle_event)
+
+        logger.info("DocumentTriggerService initialisé et abonné aux événements")
+
+    def _handle_event(self, event: DomainEvent):
+        """
+        Gestionnaire central des événements.
+
+        Récupère les templates correspondants et les traite selon leur mode.
+
+        Args:
+            event: L'événement reçu
+        """
+        if not self._enabled:
+            logger.debug(f"DocumentTrigger désactivé, événement ignoré: {event.name}")
+            return
+
+        logger.debug(f"DocumentTrigger: traitement de '{event.name}'")
+
+        # Récupérer les templates correspondants (avec évaluation des conditions)
+        templates = get_matching_templates(event.name, event.data)
+
+        if not templates:
+            logger.debug(f"Aucun template configuré pour '{event.name}'")
+            return
+
+        logger.info(f"DocumentTrigger: {len(templates)} template(s) pour '{event.name}'")
+
+        # Extraire les infos opérateur depuis les données de l'événement
+        operateur_id = event.data.get('operateur_id')
+        operateur_nom = event.data.get('nom', '')
+        operateur_prenom = event.data.get('prenom', '')
+
+        # Traiter chaque template selon son mode
+        for tpl in templates:
+            mode = tpl['execution_mode']
+
+            if mode == 'AUTO':
+                self._generate_auto(
+                    tpl, operateur_id, operateur_nom, operateur_prenom, event.name
+                )
+
+            elif mode == 'PROPOSED':
+                self._add_pending(
+                    tpl, operateur_id, operateur_nom, operateur_prenom, event.name
+                )
+
+            else:  # SILENT
+                self._log_silent(tpl, operateur_id, event.name)
+
+    def _generate_auto(
+        self,
+        template: Dict,
+        op_id: int,
+        nom: str,
+        prenom: str,
+        event_name: str
+    ):
+        """
+        Génère automatiquement un document et l'ouvre.
+
+        Exécuté en mode synchrone (peut être amélioré avec DbWorker si besoin).
+
+        Args:
+            template: Infos du template
+            op_id: ID opérateur
+            nom: Nom opérateur
+            prenom: Prénom opérateur
+            event_name: Nom de l'événement déclencheur
+        """
+        try:
+            success, msg, path = generate_filled_template(
+                template_id=template['template_id'],
+                operateur_nom=nom,
+                operateur_prenom=prenom
+            )
+
+            if success and path:
+                open_template_file(path)
+                log_hist(
+                    "DOCUMENT_AUTO_GENERATED",
+                    "documents_templates",
+                    template['template_id'],
+                    f"Document '{template['template_nom']}' généré automatiquement "
+                    f"pour {prenom} {nom} (événement: {event_name})",
+                    operateur_id=op_id
+                )
+                logger.info(f"Document AUTO généré: {template['template_nom']} -> {path}")
+            else:
+                logger.error(f"Échec génération AUTO: {msg}")
+
+        except Exception as e:
+            logger.error(f"Erreur génération AUTO '{template['template_nom']}': {e}", exc_info=True)
+
+    def _add_pending(
+        self,
+        template: Dict,
+        op_id: int,
+        nom: str,
+        prenom: str,
+        event_name: str
+    ):
+        """
+        Ajoute un document à la liste des documents en attente.
+
+        Args:
+            template: Infos du template
+            op_id: ID opérateur
+            nom: Nom opérateur
+            prenom: Prénom opérateur
+            event_name: Nom de l'événement déclencheur
+        """
+        pending = PendingDocument(
+            template_id=template['template_id'],
+            template_nom=template['template_nom'],
+            execution_mode=template['execution_mode'],
+            operateur_id=op_id,
+            operateur_nom=nom,
+            operateur_prenom=prenom,
+            event_name=event_name,
+            rule_id=template.get('rule_id', 0)
+        )
+
+        with self._pending_lock:
+            # Éviter les doublons
+            exists = any(
+                p.template_id == pending.template_id and p.operateur_id == pending.operateur_id
+                for p in self._pending_documents
+            )
+            if not exists:
+                self._pending_documents.append(pending)
+                logger.debug(f"Document en attente ajouté: {template['template_nom']}")
+
+    def _log_silent(self, template: Dict, op_id: int, event_name: str):
+        """
+        Log un événement SILENT (pas de génération).
+
+        Args:
+            template: Infos du template
+            op_id: ID opérateur
+            event_name: Nom de l'événement
+        """
+        log_hist(
+            "DOCUMENT_SILENT_TRIGGER",
+            "documents_templates",
+            template['template_id'],
+            f"Document '{template['template_nom']}' déclenché en mode silencieux "
+            f"(événement: {event_name})",
+            operateur_id=op_id
+        )
+        logger.debug(f"Document SILENT logué: {template['template_nom']}")
+
+    # =========================================================================
+    # API publique (méthodes de classe)
+    # =========================================================================
+
+    @classmethod
+    def get_pending_documents(cls, operateur_id: int = None) -> List[PendingDocument]:
+        """
+        Récupère les documents en attente.
+
+        Args:
+            operateur_id: Filtrer par opérateur (optionnel)
+
+        Returns:
+            Liste des PendingDocument
+        """
+        instance = cls()
+        with instance._pending_lock:
+            if operateur_id is not None:
+                return [p for p in instance._pending_documents if p.operateur_id == operateur_id]
+            return instance._pending_documents.copy()
+
+    @classmethod
+    def get_pending_count(cls, operateur_id: int = None) -> int:
+        """
+        Retourne le nombre de documents en attente.
+
+        Args:
+            operateur_id: Filtrer par opérateur (optionnel)
+
+        Returns:
+            Nombre de documents en attente
+        """
+        return len(cls.get_pending_documents(operateur_id))
+
+    @classmethod
+    def has_pending_documents(cls, operateur_id: int = None) -> bool:
+        """
+        Vérifie s'il y a des documents en attente.
+
+        Args:
+            operateur_id: Filtrer par opérateur (optionnel)
+
+        Returns:
+            True s'il y a des documents en attente
+        """
+        return cls.get_pending_count(operateur_id) > 0
+
+    @classmethod
+    def clear_pending(cls, operateur_id: int = None):
+        """
+        Efface les documents en attente.
+
+        Args:
+            operateur_id: Effacer uniquement pour cet opérateur (optionnel)
+        """
+        instance = cls()
+        with instance._pending_lock:
+            if operateur_id is not None:
+                instance._pending_documents = [
+                    p for p in instance._pending_documents
+                    if p.operateur_id != operateur_id
+                ]
+                logger.debug(f"Documents en attente effacés pour opérateur {operateur_id}")
+            else:
+                instance._pending_documents.clear()
+                logger.debug("Tous les documents en attente effacés")
+
+    @classmethod
+    def remove_pending(cls, pending: PendingDocument):
+        """
+        Retire un document spécifique de la liste d'attente.
+
+        Args:
+            pending: Le document à retirer
+        """
+        instance = cls()
+        with instance._pending_lock:
+            try:
+                instance._pending_documents.remove(pending)
+            except ValueError:
+                pass  # Pas dans la liste
+
+    @classmethod
+    def generate_pending(
+        cls,
+        pending: PendingDocument,
+        auditeur_nom: str = ""
+    ) -> Tuple[bool, str, Optional[str]]:
+        """
+        Génère un document en attente.
+
+        Args:
+            pending: Le document à générer
+            auditeur_nom: Nom de l'auditeur (optionnel)
+
+        Returns:
+            Tuple (success, message, file_path)
+        """
+        try:
+            success, msg, path = generate_filled_template(
+                template_id=pending.template_id,
+                operateur_nom=pending.operateur_nom,
+                operateur_prenom=pending.operateur_prenom,
+                auditeur_nom=auditeur_nom
+            )
+
+            if success:
+                log_hist(
+                    "DOCUMENT_PROPOSED_GENERATED",
+                    "documents_templates",
+                    pending.template_id,
+                    f"Document '{pending.template_nom}' généré pour "
+                    f"{pending.operateur_prenom} {pending.operateur_nom}",
+                    operateur_id=pending.operateur_id
+                )
+                # Retirer de la liste d'attente
+                cls.remove_pending(pending)
+
+            return success, msg, path
+
+        except Exception as e:
+            logger.error(f"Erreur génération pending: {e}", exc_info=True)
+            return False, str(e), None
+
+    @classmethod
+    def set_enabled(cls, enabled: bool):
+        """
+        Active ou désactive le service.
+
+        Args:
+            enabled: True pour activer, False pour désactiver
+        """
+        instance = cls()
+        instance._enabled = enabled
+        logger.info(f"DocumentTriggerService {'activé' if enabled else 'désactivé'}")
+
+    @classmethod
+    def is_enabled(cls) -> bool:
+        """Retourne True si le service est activé."""
+        return cls()._enabled

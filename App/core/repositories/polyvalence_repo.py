@@ -305,6 +305,23 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 log_hist("CREATE", "polyvalence", new_id,
                         f"Compétence N{niveau} créée", operateur_id=operateur_id, poste_id=poste_id)
 
+                # Émettre l'événement pour déclencher les documents
+                from core.services.event_bus import EventBus
+                from core.repositories.personnel_repo import PersonnelRepository
+                from core.repositories.poste_repo import PosteRepository
+                personnel = PersonnelRepository.get_by_id(operateur_id)
+                poste = PosteRepository.get_by_id(poste_id)
+                if personnel and poste:
+                    EventBus.emit('polyvalence.created', {
+                        'polyvalence_id': new_id,
+                        'operateur_id': operateur_id,
+                        'nom': personnel.nom,
+                        'prenom': personnel.prenom,
+                        'poste_id': poste_id,
+                        'code_poste': poste.poste_code if hasattr(poste, 'poste_code') else str(poste_id),
+                        'niveau': niveau
+                    }, source='PolyvalenceRepository.create')
+
                 return True, "Compétence créée", new_id
 
         except Exception as e:
@@ -341,6 +358,37 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 log_hist("UPDATE", "polyvalence", id,
                         f"Évaluation: N{old[2]}→N{nouveau_niveau}",
                         operateur_id=old[0], poste_id=old[1])
+
+                # Émettre les événements si le niveau a changé
+                old_niveau = old[2]
+                if old_niveau != nouveau_niveau:
+                    from core.services.event_bus import EventBus
+                    from core.repositories.personnel_repo import PersonnelRepository
+                    from core.repositories.poste_repo import PosteRepository
+                    personnel = PersonnelRepository.get_by_id(old[0])
+                    poste = PosteRepository.get_by_id(old[1])
+
+                    if personnel and poste:
+                        event_data = {
+                            'polyvalence_id': id,
+                            'operateur_id': old[0],
+                            'nom': personnel.nom,
+                            'prenom': personnel.prenom,
+                            'poste_id': old[1],
+                            'code_poste': poste.poste_code if hasattr(poste, 'poste_code') else str(old[1]),
+                            'old_niveau': old_niveau,
+                            'new_niveau': nouveau_niveau
+                        }
+
+                        EventBus.emit('polyvalence.niveau_changed', event_data,
+                                     source='PolyvalenceRepository.update_niveau')
+
+                        # Événement spécial pour le passage au niveau 3
+                        if nouveau_niveau == 3 and old_niveau < 3:
+                            EventBus.emit('polyvalence.niveau_3_reached', {
+                                **event_data,
+                                'niveau': 3
+                            }, source='PolyvalenceRepository.update_niveau')
 
                 return True, "Évaluation enregistrée"
 

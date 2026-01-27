@@ -196,6 +196,54 @@ Database schema is located in [App/database/schema/bddemac.sql](App/database/sch
    - ✅ Use specific columns: `SELECT id, nom, prenom FROM personnel`
    - Repositories now use `cls.COLUMNS` for explicit column lists
 
+### 📝 Logging System (2026-01-27)
+
+**IMPORTANT**: Centralized logging configuration for production-ready logs:
+
+1. **Configuration** ([App/core/utils/logging_config.py](App/core/utils/logging_config.py))
+   - Centralized setup with `RotatingFileHandler` → `logs/emac.log`
+   - 10 MB max file size, 5 backup files
+   - Context includes: user_id, screen/action, timestamp
+   - ❌ **NEVER use** `print()` for debugging in services/GUI
+   - ❌ **NEVER use** `traceback.print_exc()` - use `logger.exception()` instead
+
+2. **Modes**
+   - **Development** (default): DEBUG level, logs to console + file
+   - **Production** (`EMAC_ENV=production`): WARNING level, logs to file only
+
+3. **Usage**
+   ```python
+   from core.utils.logging_config import get_logger, set_log_context
+
+   logger = get_logger(__name__)
+
+   # Basic logging
+   logger.debug("Debug message (dev only)")
+   logger.info("Info message")
+   logger.warning("Warning message")
+   logger.error("Error message")
+
+   # With exception traceback (in except block)
+   try:
+       something()
+   except Exception as e:
+       logger.exception(f"Error in something: {e}")  # Includes full traceback
+
+   # Set context (user_id, screen) after login
+   set_log_context(user_id="jdupont", screen="GestionEvaluation")
+   ```
+
+4. **Log Format**
+   ```
+   2026-01-27 14:30:00 | INFO     | core.gui.main_qt | [jdupont] [MainWindow] | Application started
+   ```
+
+5. **Initialization** (already done in `main_qt.py`)
+   ```python
+   from core.utils.logging_config import setup_logging
+   setup_logging(production_mode=os.getenv('EMAC_ENV') == 'production')
+   ```
+
 ## Key Database Tables
 
 - `personnel` / `operateurs`: Employee records with status (ACTIF/INACTIF)

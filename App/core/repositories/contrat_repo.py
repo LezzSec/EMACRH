@@ -234,6 +234,22 @@ class ContratRepository(BaseRepository[Contrat]):
                 log_hist("CREATE", "contrat", new_id,
                         f"Contrat {data.get('type_contrat')} créé pour operateur {data.get('operateur_id')}")
 
+                # Émettre l'événement pour déclencher les documents
+                from core.services.event_bus import EventBus
+                # Récupérer les infos de l'opérateur pour l'événement
+                from core.repositories.personnel_repo import PersonnelRepository
+                personnel = PersonnelRepository.get_by_id(data.get('operateur_id'))
+                if personnel:
+                    EventBus.emit('contrat.created', {
+                        'contrat_id': new_id,
+                        'operateur_id': data.get('operateur_id'),
+                        'nom': personnel.nom,
+                        'prenom': personnel.prenom,
+                        'type_contrat': data.get('type_contrat'),
+                        'date_debut': str(data.get('date_debut')),
+                        'date_fin': str(data.get('date_fin')) if data.get('date_fin') else None
+                    }, source='ContratRepository.create')
+
                 return True, "Contrat créé avec succès", new_id
 
         except Exception as e:
@@ -275,7 +291,28 @@ class ContratRepository(BaseRepository[Contrat]):
     @classmethod
     def prolonger(cls, id: int, nouvelle_date_fin: date) -> Tuple[bool, str]:
         """Prolonge un contrat en modifiant sa date de fin."""
-        return cls.update(id, {"date_fin": nouvelle_date_fin})
+        # Récupérer l'ancien contrat avant la mise à jour
+        old_contrat = cls.get_by_id(id)
+
+        success, msg = cls.update(id, {"date_fin": nouvelle_date_fin})
+
+        # Émettre l'événement si la prolongation a réussi
+        if success and old_contrat:
+            from core.services.event_bus import EventBus
+            from core.repositories.personnel_repo import PersonnelRepository
+            personnel = PersonnelRepository.get_by_id(old_contrat.operateur_id)
+            if personnel:
+                EventBus.emit('contrat.renewed', {
+                    'contrat_id': id,
+                    'operateur_id': old_contrat.operateur_id,
+                    'nom': personnel.nom,
+                    'prenom': personnel.prenom,
+                    'type_contrat': old_contrat.type_contrat,
+                    'old_date_fin': str(old_contrat.date_fin) if old_contrat.date_fin else None,
+                    'new_date_fin': str(nouvelle_date_fin)
+                }, source='ContratRepository.prolonger')
+
+        return success, msg
 
     @classmethod
     def terminer(cls, id: int) -> Tuple[bool, str]:

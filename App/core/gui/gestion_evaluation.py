@@ -629,9 +629,36 @@ class DetailOperateurDialog(QDialog):
                 QMessageBox.information(self, "Succès",
                     f"Niveau mis à jour.\nProchaine évaluation automatiquement calculée : {prochaine_eval.strftime('%d/%m/%Y')}")
 
-                # Si passage au niveau 3, proposer les documents
-                if new_niveau == 3:
-                    self._proposer_documents_niveau_3()
+                # Émettre l'événement pour le système de déclenchement de documents
+                # (remplace l'ancien code _proposer_documents_niveau_3)
+                if ancien_niveau != new_niveau:
+                    try:
+                        from core.services.event_bus import EventBus
+                        from core.repositories.poste_repo import PosteRepository
+                        poste = PosteRepository.get_by_id(poste_id) if poste_id else None
+
+                        event_data = {
+                            'polyvalence_id': poly_id,
+                            'operateur_id': operateur_id,
+                            'nom': self.operateur_nom,
+                            'prenom': self.operateur_prenom,
+                            'poste_id': poste_id,
+                            'code_poste': poste.poste_code if poste and hasattr(poste, 'poste_code') else str(poste_id),
+                            'old_niveau': ancien_niveau,
+                            'new_niveau': new_niveau
+                        }
+
+                        EventBus.emit('polyvalence.niveau_changed', event_data,
+                                     source='GestionEvaluationDialog.on_cell_changed')
+
+                        # Événement spécial pour le passage au niveau 3
+                        if new_niveau == 3 and (ancien_niveau is None or ancien_niveau < 3):
+                            EventBus.emit('polyvalence.niveau_3_reached', {
+                                **event_data,
+                                'niveau': 3
+                            }, source='GestionEvaluationDialog.on_cell_changed')
+                    except Exception as evt_err:
+                        logger.warning(f"Erreur émission événement polyvalence: {evt_err}")
 
             except Exception as e:
                 QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour le niveau :\n{e}")
@@ -754,41 +781,9 @@ class DetailOperateurDialog(QDialog):
                 QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour la date :\n{e}")
                 self._load_data()
 
-    def _proposer_documents_niveau_3(self):
-        """
-        Propose les documents templates lors du passage au niveau 3.
-        """
-        try:
-            from core.services.template_service import check_templates_table_exists
-
-            if not check_templates_table_exists():
-                return
-
-            # Demander à l'utilisateur s'il veut générer les documents
-            reply = QMessageBox.question(
-                self,
-                "Documents niveau 3",
-                f"L'opérateur {self.operateur_prenom} {self.operateur_nom} passe au niveau 3.\n\n"
-                "Voulez-vous générer les documents associés ?\n"
-                "(Questionnaire Qualité EMAC, etc.)",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes
-            )
-
-            if reply == QMessageBox.Yes:
-                from core.gui.gestion_templates import TemplateSelectionDialog
-
-                dialog = TemplateSelectionDialog(
-                    contexte='NIVEAU_3',
-                    operateur_nom=self.operateur_nom,
-                    operateur_prenom=self.operateur_prenom,
-                    parent=self
-                )
-                dialog.exec_()
-
-        except Exception as e:
-            # Ne pas bloquer si le module templates n'est pas disponible
-            logger.error(f"Erreur lors de la proposition des documents niveau 3: {e}")
+    # NOTE: L'ancienne méthode _proposer_documents_niveau_3 a été supprimée.
+    # Le déclenchement des documents est maintenant géré automatiquement via EventBus
+    # et le service DocumentTriggerService.
 
 
 # --- Délégué pour empêcher l'édition ---

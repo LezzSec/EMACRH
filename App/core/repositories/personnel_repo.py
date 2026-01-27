@@ -266,6 +266,16 @@ class PersonnelRepository(BaseRepository[Personnel]):
                 log_hist("CREATE", "personnel", new_id,
                         f"Création: {data.get('nom')} {data.get('prenom')}")
 
+                # Émettre l'événement pour déclencher les documents
+                from core.services.event_bus import EventBus
+                EventBus.emit('personnel.created', {
+                    'operateur_id': new_id,
+                    'nom': data.get('nom', ''),
+                    'prenom': data.get('prenom', ''),
+                    'matricule': data.get('matricule'),
+                    'is_production': bool(data.get('matricule'))
+                }, source='PersonnelRepository.create')
+
                 return True, "Employé créé avec succès", new_id
 
         except Exception as e:
@@ -336,7 +346,28 @@ class PersonnelRepository(BaseRepository[Personnel]):
         if statut not in ("ACTIF", "INACTIF"):
             return False, "Statut invalide (ACTIF ou INACTIF)"
 
-        return cls.update(id, {"statut": statut})
+        # Récupérer l'ancien statut et les infos
+        personnel = cls.get_by_id(id)
+        if not personnel:
+            return False, "Employé non trouvé"
+
+        old_statut = personnel.statut
+
+        success, msg = cls.update(id, {"statut": statut})
+
+        # Émettre l'événement si le statut a changé
+        if success and old_statut != statut:
+            from core.services.event_bus import EventBus
+            event_name = 'personnel.deactivated' if statut == 'INACTIF' else 'personnel.reactivated'
+            EventBus.emit(event_name, {
+                'operateur_id': id,
+                'nom': personnel.nom,
+                'prenom': personnel.prenom,
+                'old_statut': old_statut,
+                'new_statut': statut
+            }, source='PersonnelRepository.set_statut')
+
+        return success, msg
 
     @classmethod
     def desactiver(cls, id: int) -> Tuple[bool, str]:

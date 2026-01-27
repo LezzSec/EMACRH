@@ -1903,8 +1903,7 @@ class GrillesDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur lors de l'export PDF : {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"Erreur export PDF: {e}")
 
 
 
