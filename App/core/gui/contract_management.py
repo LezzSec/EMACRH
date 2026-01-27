@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
     QDateEdit, QLineEdit, QDoubleSpinBox, QTextEdit, QFormLayout, QGroupBox,
     QScrollArea, QTabWidget, QFileDialog, QAbstractItemView
 )
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QColor, QFont
 
 from core.services.contrat_service import (
@@ -453,6 +453,8 @@ class ContractFormDialog(QDialog):
 class ContractManagementDialog(QDialog):
     """Dialogue de gestion RH - Contrats et Documents."""
 
+    data_changed = pyqtSignal()  # Signal émis quand des données sont modifiées
+
     def __init__(self, parent=None, operateur_id=None):
         super().__init__(parent)
         self.setWindowTitle("Gestion RH")
@@ -484,6 +486,9 @@ class ContractManagementDialog(QDialog):
         content_layout.setSpacing(0)
 
         self.gestion_rh_widget = GestionRHWidget(self, operateur_id=self._operateur_id)
+        # Propager le signal data_changed du widget RH
+        if hasattr(self.gestion_rh_widget, 'data_changed'):
+            self.gestion_rh_widget.data_changed.connect(self.data_changed.emit)
         content_layout.addWidget(self.gestion_rh_widget, 1)
 
         main_layout.addWidget(content_widget, 1)

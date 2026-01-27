@@ -1793,6 +1793,9 @@ class GestionRHDialog(QDialog):
         widget_documents = self._creer_widget_documents(documents)
         self.layout_documents.addWidget(widget_documents)
 
+        # Émettre le signal de changement de données
+        self.data_changed.emit()
+
     def _creer_widget_resume(self, donnees: dict) -> QWidget:
         """Crée le widget de résumé selon le domaine actif."""
         if self.domaine_actif == DomaineRH.GENERAL:
@@ -3446,6 +3449,9 @@ class GestionRHWidget(QWidget):
         documents = get_documents_domaine(operateur_id, self.domaine_actif)
         widget_documents = self._creer_widget_documents(documents)
         self.layout_documents.addWidget(widget_documents)
+
+        # Émettre le signal de changement de données
+        self.data_changed.emit()
 
     def _creer_widget_resume(self, donnees: dict) -> QWidget:
         """Crée le widget de résumé selon le domaine actif."""

@@ -244,6 +244,64 @@ Database schema is located in [App/database/schema/bddemac.sql](App/database/sch
    setup_logging(production_mode=os.getenv('EMAC_ENV') == 'production')
    ```
 
+### 🔐 Permission System "Features" (2026-01-27)
+
+**IMPORTANT**: New granular permission system based on "features":
+
+1. **Architecture**
+   - **Tables**: `features` (catalogue), `role_features`, `user_features` (overrides)
+   - **PermissionManager**: Singleton with `perm.can("rh.personnel.edit")`
+   - **Compatibility**: `has_permission()` maps to new features automatically
+   - Migration: [010_add_features_system.sql](App/database/migrations/010_add_features_system.sql)
+
+2. **Feature Naming Convention**
+   - Format: `module.submodule.action`
+   - Examples: `rh.personnel.edit`, `production.evaluations.view`, `admin.permissions`
+   - Modules: RH, Production, Planning, Admin
+
+3. **Usage in Code**
+   ```python
+   from core.services.permission_manager import perm, can, require
+
+   # Simple check
+   if perm.can("rh.personnel.edit"):
+       btn_edit.setVisible(True)
+
+   # Shortcut function
+   if can("production.grilles.export"):
+       do_export()
+
+   # Raise exception if not allowed
+   require("admin.permissions")  # Raises PermissionError
+
+   # Multiple features
+   if perm.can_any("rh.view", "production.view"):
+       show_dashboard()
+
+   if perm.can_all("rh.contrats.edit", "rh.documents.edit"):
+       allow_full_rh_access()
+   ```
+
+4. **Resolution Rules**
+   - User override (TRUE/FALSE) → **wins**
+   - Role feature → if no override, inherits from role
+   - Default → denied
+
+5. **UI Components**
+   - **FeaturePuzzleWidget**: Grid by modules with OUI/NON/AUTO toggles
+   - Access via: Gestion Utilisateurs → "🔐 Gérer les Features"
+   - File: [feature_puzzle.py](App/core/gui/feature_puzzle.py)
+
+6. **Security: Service-level checks**
+   ```python
+   # In services, always verify permissions
+   def delete_personnel(personnel_id):
+       require("rh.personnel.delete")  # Raises if not allowed
+       # ... proceed with deletion
+   ```
+
+**Full list of features**: See [010_add_features_system.sql](App/database/migrations/010_add_features_system.sql)
+
 ## Key Database Tables
 
 - `personnel` / `operateurs`: Employee records with status (ACTIF/INACTIF)

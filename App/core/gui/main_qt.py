@@ -305,6 +305,11 @@ class MainWindow(QMainWindow):
         # Drawer : on le construit au premier clic, mais on garde les perms en mémoire
         self._perms_cache = perms
 
+        # Forcer la recréation du drawer si les permissions ont changé
+        if self.drawer is not None:
+            self.drawer.deleteLater()
+            self.drawer = None
+
     # ---------------------------
     # Document Trigger Service
     # ---------------------------
@@ -519,11 +524,15 @@ class MainWindow(QMainWindow):
 
     def show_liste_personnel(self):
         from core.gui.gestion_personnel import GestionPersonnelDialog
-        GestionPersonnelDialog(self).exec_()
+        dialog = GestionPersonnelDialog(self)
+        dialog.operateur_status_changed.connect(lambda _: self.load_evaluations_async())
+        dialog.exec_()
 
     def show_manage_operator(self):
         from core.gui.manage_operateur import ManageOperatorsDialog
-        ManageOperatorsDialog().exec_()
+        dialog = ManageOperatorsDialog()
+        dialog.data_changed.connect(lambda _: self.load_evaluations_async())
+        dialog.exec_()
 
     def show_gestion_evaluations(self):
         """Ouvre le dialogue de gestion des évaluations"""
@@ -588,7 +597,9 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Erreur", "Aucun personnel actif trouvé")
             return
         from core.gui.planning_absences import PlanningAbsencesDialog
-        PlanningAbsencesDialog(personnel_id=personnel_id, parent=self).exec_()
+        dialog = PlanningAbsencesDialog(personnel_id=personnel_id, parent=self)
+        dialog.data_changed.connect(self.load_evaluations_async)
+        dialog.exec_()
 
     def show_contract_management(self):
         # Forcer le rechargement du module pour voir les modifications
@@ -598,11 +609,15 @@ class MainWindow(QMainWindow):
             importlib.reload(sys.modules['core.gui.contract_management'])
 
         from core.gui.contract_management import ContractManagementDialog
-        ContractManagementDialog(self).exec_()
+        dialog = ContractManagementDialog(self)
+        dialog.data_changed.connect(self.load_evaluations_async)
+        dialog.exec_()
 
     def show_gestion_documentaire(self):
         from core.gui.gestion_documentaire import GestionDocumentaireDialog
-        GestionDocumentaireDialog(self).exec_()
+        dialog = GestionDocumentaireDialog(self)
+        dialog.document_added.connect(self.load_evaluations_async)
+        dialog.exec_()
 
 
     def show_gestion_templates(self):

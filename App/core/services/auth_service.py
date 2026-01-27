@@ -191,6 +191,7 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
             return False, "Nom d'utilisateur ou mot de passe incorrect"
 
         # ✅ Construire le dictionnaire des permissions effectives (rôle + overrides)
+        # (Ancien système conservé pour compatibilité)
         permissions = {}
         for row in rows:
             if row['module']:  # Peut être NULL si pas de permissions
@@ -228,6 +229,15 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
         }
 
         UserSession.set_user(user_data, permissions, session_id)
+
+        # ✅ NOUVEAU: Charger les features dans le PermissionManager
+        try:
+            from core.services.permission_manager import load_user_permissions
+            load_user_permissions(user['id'], user['role_id'])
+            logger.debug(f"Features chargées pour l'utilisateur {username}")
+        except Exception as e:
+            # Ne pas bloquer le login si le nouveau système échoue
+            logger.warning(f"Impossible de charger les features: {e}")
 
         # Log dans l'historique (async + batched)
         log_hist_async(
@@ -292,6 +302,13 @@ def logout_user():
         # Effacer la session
         UserSession.clear()
 
+        # ✅ NOUVEAU: Reset le PermissionManager
+        try:
+            from core.services.permission_manager import PermissionManager
+            PermissionManager.reset()
+        except Exception:
+            pass
+
 
 def has_permission(module: str, action: str = 'lecture') -> bool:
     """
@@ -308,6 +325,18 @@ def has_permission(module: str, action: str = 'lecture') -> bool:
     if not session.is_authenticated():
         return False
 
+    # ✅ NOUVEAU: Essayer d'abord le système features
+    try:
+        from core.services.permission_manager import perm
+        if perm.is_loaded():
+            # Mapping ancien système → features
+            feature_key = _map_to_feature(module, action)
+            if feature_key:
+                return perm.can(feature_key)
+    except Exception:
+        pass  # Fallback vers l'ancien système
+
+    # Ancien système (compatibilité)
     permissions = session.get_permissions()
     if not permissions:
         return False
@@ -318,13 +347,82 @@ def has_permission(module: str, action: str = 'lecture') -> bool:
     return permissions[module].get(action, False)
 
 
+# Mapping ancien système → nouveau système features
+_PERMISSION_TO_FEATURE_MAP = {
+    # Personnel
+    ('personnel', 'lecture'): 'rh.personnel.view',
+    ('personnel', 'ecriture'): 'rh.personnel.edit',
+    ('personnel', 'suppression'): 'rh.personnel.delete',
+    # Évaluations
+    ('evaluations', 'lecture'): 'production.evaluations.view',
+    ('evaluations', 'ecriture'): 'production.evaluations.edit',
+    ('evaluations', 'suppression'): 'production.evaluations.edit',
+    # Polyvalence
+    ('polyvalence', 'lecture'): 'production.polyvalence.view',
+    ('polyvalence', 'ecriture'): 'production.polyvalence.edit',
+    ('polyvalence', 'suppression'): 'production.polyvalence.edit',
+    # Contrats
+    ('contrats', 'lecture'): 'rh.contrats.view',
+    ('contrats', 'ecriture'): 'rh.contrats.edit',
+    ('contrats', 'suppression'): 'rh.contrats.delete',
+    # Documents RH
+    ('documents_rh', 'lecture'): 'rh.documents.view',
+    ('documents_rh', 'ecriture'): 'rh.documents.edit',
+    ('documents_rh', 'suppression'): 'rh.documents.edit',
+    # Planning
+    ('planning', 'lecture'): 'planning.view',
+    ('planning', 'ecriture'): 'planning.absences.edit',
+    ('planning', 'suppression'): 'planning.absences.edit',
+    # Postes
+    ('postes', 'lecture'): 'production.postes.view',
+    ('postes', 'ecriture'): 'production.postes.edit',
+    ('postes', 'suppression'): 'production.postes.edit',
+    # Historique
+    ('historique', 'lecture'): 'admin.historique.view',
+    ('historique', 'ecriture'): 'admin.historique.export',
+    ('historique', 'suppression'): 'admin.historique.export',
+    # Grilles
+    ('grilles', 'lecture'): 'production.grilles.view',
+    ('grilles', 'ecriture'): 'production.grilles.export',
+    ('grilles', 'suppression'): 'production.grilles.export',
+    # Gestion utilisateurs
+    ('gestion_utilisateurs', 'lecture'): 'admin.users.view',
+    ('gestion_utilisateurs', 'ecriture'): 'admin.users.edit',
+    ('gestion_utilisateurs', 'suppression'): 'admin.users.delete',
+}
+
+
+def _map_to_feature(module: str, action: str) -> Optional[str]:
+    """Convertit un couple (module, action) vers une feature_key"""
+    return _PERMISSION_TO_FEATURE_MAP.get((module, action))
+
+
 def is_admin() -> bool:
-    """Vérifie si l'utilisateur connecté est un administrateur"""
+    """
+    Vérifie si l'utilisateur connecté est un administrateur.
+
+    Un utilisateur est admin si:
+    - Son rôle est 'admin' OU
+    - Il a la feature 'admin.permissions' (nouveau système)
+    """
     session = UserSession()
     user = session.get_user()
     if not user:
         return False
-    return user['role_nom'] == 'admin'
+
+    # Vérification par rôle (ancien système)
+    if user['role_nom'] == 'admin':
+        return True
+
+    # ✅ NOUVEAU: Vérification par feature
+    try:
+        from core.services.permission_manager import perm
+        if perm.is_loaded() and perm.can('admin.permissions'):
+            return True
+    except Exception:
+        pass
+
+    return False
 
 
 def get_current_user() -> Optional[Dict]:
