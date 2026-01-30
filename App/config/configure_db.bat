@@ -33,10 +33,12 @@ echo ============================================
 echo   Configuration du mot de passe MySQL
 echo ============================================
 echo.
-set /p db_password="Entrez le mot de passe MySQL (défaut: emacViodos$13): "
+:ask_password
+set /p db_password="Entrez le mot de passe MySQL (obligatoire): "
 
 if "%db_password%"=="" (
-    set db_password=emacViodos$13
+    echo [ERREUR] Le mot de passe est obligatoire !
+    goto ask_password
 )
 
 echo.

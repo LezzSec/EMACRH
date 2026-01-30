@@ -257,16 +257,18 @@ class MainWindow(QMainWindow):
         auth = _lazy_auth()
         current_user = auth.get_current_user()
 
-        # Permissions (⚠️ selon ton implémentation, ça peut être DB → ok en thread)
+        # ✅ Nouveau système de permissions par features
+        from core.services.permission_manager import can
         perms = {
-            "grilles_lecture": auth.has_permission('grilles', 'lecture'),
-            "evaluations_lecture": auth.has_permission('evaluations', 'lecture'),
-            "personnel_ecriture": auth.has_permission('personnel', 'ecriture'),
-            "postes_ecriture": auth.has_permission('postes', 'ecriture'),
-            "contrats_ecriture": auth.has_permission('contrats', 'ecriture'),
-            "documentsrh_lecture": auth.has_permission('documents_rh', 'lecture'),
-            "planning_lecture": auth.has_permission('planning', 'lecture'),
-            "historique_lecture": auth.has_permission('historique', 'lecture'),
+            "grilles_lecture": can('production.grilles.view'),
+            "evaluations_lecture": can('production.evaluations.view'),
+            "personnel_ecriture": can('rh.personnel.edit'),
+            "personnel_lecture": can('rh.personnel.view'),
+            "postes_ecriture": can('production.postes.edit'),
+            "contrats_ecriture": can('rh.contrats.edit'),
+            "documentsrh_lecture": can('rh.documents.view'),
+            "planning_lecture": can('planning.view'),
+            "historique_lecture": can('admin.historique.view'),
             "is_admin": auth.is_admin(),
         }
         return {"user": current_user, "perms": perms}
@@ -525,7 +527,7 @@ class MainWindow(QMainWindow):
     def show_liste_personnel(self):
         from core.gui.gestion_personnel import GestionPersonnelDialog
         dialog = GestionPersonnelDialog(self)
-        dialog.operateur_status_changed.connect(lambda _: self.load_evaluations_async())
+        dialog.data_changed.connect(self.load_evaluations_async)
         dialog.exec_()
 
     def show_manage_operator(self):

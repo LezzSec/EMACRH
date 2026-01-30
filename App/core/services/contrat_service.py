@@ -18,6 +18,9 @@ from core.db.configbd import DatabaseCursor, DatabaseConnection
 from core.utils.performance_monitor import monitor_query
 from core.services.optimized_db_logger import log_hist_async
 
+# ✅ Permissions
+from core.services.permission_manager import require, PermissionError
+
 
 # ========================= VALIDATION =========================
 
@@ -85,7 +88,12 @@ def create_contract(data: dict) -> Tuple[bool, str, Optional[int]]:
 
     Returns:
         Tuple (success, message, contract_id)
+
+    Raises:
+        PermissionError: Si l'utilisateur n'a pas la permission rh.contrats.edit
     """
+    require('rh.contrats.edit')
+
     # Validation
     valid, msg = validate_contract_data(data)
     if not valid:
@@ -161,7 +169,12 @@ def update_contract(contract_id: int, data: dict) -> Tuple[bool, str]:
 
     Returns:
         Tuple (success, message)
+
+    Raises:
+        PermissionError: Si l'utilisateur n'a pas la permission rh.contrats.edit
     """
+    require('rh.contrats.edit')
+
     # Validation
     valid, msg = validate_contract_data(data)
     if not valid:
@@ -237,7 +250,12 @@ def delete_contract(contract_id: int) -> Tuple[bool, str]:
 
     Returns:
         Tuple (success, message)
+
+    Raises:
+        PermissionError: Si l'utilisateur n'a pas la permission rh.contrats.delete
     """
+    require('rh.contrats.delete')
+
     try:
         with DatabaseCursor() as cursor:
             # Soft delete : on désactive plutôt que de supprimer

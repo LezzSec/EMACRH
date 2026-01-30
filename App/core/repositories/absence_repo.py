@@ -288,11 +288,17 @@ class AbsenceRepository(BaseRepository[Absence]):
             if cls.check_chevauchement(existing.operateur_id, date_debut, date_fin, exclude_id=id):
                 return False, "Cette période chevauche une absence existante", None
 
-        allowed = ["type_absence", "date_debut", "date_fin", "statut", "commentaire", "justificatif"]
-        update_data = {k: v for k, v in data.items() if k in allowed}
+        # SÉCURITÉ: Whitelist stricte des colonnes autorisées (frozenset immuable)
+        ALLOWED_COLUMNS = frozenset(["type_absence", "date_debut", "date_fin", "statut", "commentaire", "justificatif"])
+        update_data = {k: v for k, v in data.items() if k in ALLOWED_COLUMNS}
 
         if not update_data:
             return False, "Aucun champ valide à mettre à jour"
+
+        # SÉCURITÉ: Double validation - chaque colonne DOIT être dans la whitelist
+        for col in update_data.keys():
+            if col not in ALLOWED_COLUMNS:
+                raise ValueError(f"Colonne non autorisée: {col}")
 
         set_clauses = [f"{col} = %s" for col in update_data.keys()]
         query = f"UPDATE absences SET {', '.join(set_clauses)} WHERE id = %s"

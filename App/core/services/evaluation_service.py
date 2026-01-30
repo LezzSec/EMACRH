@@ -19,6 +19,9 @@ from core.db.configbd import DatabaseCursor, DatabaseConnection
 from core.utils.performance_monitor import monitor_query
 from core.services.optimized_db_logger import log_hist_async
 
+# ✅ Permissions
+from core.services.permission_manager import require, PermissionError
+
 # ✅ DTOs typés pour robustesse
 from core.models import EvaluationResume, Polyvalence, StatistiquesEvaluations
 
@@ -148,7 +151,12 @@ def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
 
     Returns:
         bool: True si succes, False sinon
+
+    Raises:
+        PermissionError: Si l'utilisateur n'a pas la permission production.evaluations.edit
     """
+    require('production.evaluations.edit')
+
     if nouveau_niveau not in [1, 2, 3, 4]:
         return False
 

@@ -14,7 +14,7 @@ from core.db.configbd import get_connection as get_db_connection
 from core.services.logger import log_hist
 from core.gui.historique_personnel import HistoriquePersonnelTab
 from core.gui.emac_ui_kit import add_custom_title_bar
-from core.services.auth_service import has_permission, get_current_user
+from core.services.auth_service import get_current_user
 
 import datetime as dt
 
@@ -47,6 +47,7 @@ class DetailOperateurDialog(QDialog):
         super().__init__(parent)
         self.operateur_id = operateur_id
         self.current_statut = statut.upper()
+        self.date_entree = self._load_date_entree()  # Charger la date d'entrée
         self.setWindowTitle(f"Détails - {nom} {prenom}")
         self.setGeometry(200, 150, 900, 600)
 
@@ -628,8 +629,8 @@ class DetailOperateurDialog(QDialog):
                 self.poly_table.setItem(row, 2, QTableWidgetItem(self._format_date(date_eval)))
                 self.poly_table.setItem(row, 3, QTableWidgetItem(self._format_date(date_next)))
                 
-                # Ancienneté
-                anciennete = self._calculate_anciennete(date_eval)
+                # Ancienneté (basée sur la date d'entrée)
+                anciennete = self._calculate_anciennete()
                 self.poly_table.setItem(row, 4, QTableWidgetItem(anciennete))
                 
                 # Statut (À jour / En retard)
@@ -1256,23 +1257,42 @@ class DetailOperateurDialog(QDialog):
         if hasattr(datetime_val, "strftime"):
             return datetime_val.strftime("%d/%m/%Y %H:%M")
         return str(datetime_val)
-    
-    def _calculate_anciennete(self, date_eval):
-        """Calcule l'ancienneté."""
-        if date_eval is None:
+
+    def _load_date_entree(self):
+        """Charge la date d'entrée de l'opérateur depuis personnel_infos."""
+        try:
+            connection = get_db_connection()
+            cursor, dict_mode = _cursor(connection)
+            cursor.execute(
+                "SELECT date_entree FROM personnel_infos WHERE operateur_id = %s",
+                (self.operateur_id,)
+            )
+            row = _rows(cursor, dict_mode)
+            cursor.close()
+            connection.close()
+
+            if row and row[0].get('date_entree'):
+                return row[0]['date_entree']
+            return None
+        except Exception:
+            return None
+
+    def _calculate_anciennete(self):
+        """Calcule l'ancienneté basée sur la date d'entrée de l'opérateur."""
+        if self.date_entree is None:
             return "N/A"
         try:
-            if isinstance(date_eval, str):
-                date_obj = dt.datetime.strptime(date_eval, "%Y-%m-%d").date()
-            elif hasattr(date_eval, "date"):
-                date_obj = date_eval.date()
+            if isinstance(self.date_entree, str):
+                date_obj = dt.datetime.strptime(self.date_entree, "%Y-%m-%d").date()
+            elif hasattr(self.date_entree, "date"):
+                date_obj = self.date_entree.date()
             else:
-                date_obj = date_eval
-            
+                date_obj = self.date_entree
+
             delta = dt.date.today() - date_obj
             years = delta.days // 365
             months = (delta.days % 365) // 30
-            
+
             if years > 0:
                 return f"{years} an(s) {months} mois"
             elif months > 0:
@@ -1288,7 +1308,10 @@ class GestionPersonnelDialog(QDialog):
     Fenêtre principale de gestion du personnel.
     Affiche tous les opérateurs avec filtrage par statut.
     """
-    
+
+    # Signal émis quand un opérateur change de statut (pour rafraîchir le dashboard)
+    data_changed = pyqtSignal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Gestion du Personnel")
@@ -1573,7 +1596,7 @@ class GestionPersonnelDialog(QDialog):
     
     def toggle_stats_columns(self, checked):
         """Affiche/masque les colonnes de statistiques."""
-        for col in range(4, 8):  # Colonnes Nb Postes, N1, N2, N3, N4
+        for col in range(3, 8):  # Colonnes Nb Postes, N1, N2, N3, N4
             self.table.setColumnHidden(col, not checked)
     
     def open_detail_dialog(self):
@@ -1594,6 +1617,7 @@ class GestionPersonnelDialog(QDialog):
     def on_operateur_status_changed(self, operateur_id):
         """Callback quand le statut d'un opérateur est modifié."""
         self.load_data()
+        self.data_changed.emit()
 
     def open_dates_entree_dialog(self):
         """Ouvre le dialogue d'affectation des dates d'entrée"""

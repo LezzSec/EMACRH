@@ -1,0 +1,542 @@
+# -*- coding: utf-8 -*-
+"""
+Service de gestion des opérations en masse.
+Permet d'assigner des formations, absences, visites médicales à plusieurs employés.
+
+Utilise les services existants (formation_service, absence_service, medical_service)
+pour les opérations unitaires, et ajoute le tracking batch.
+"""
+
+import logging
+from datetime import date, datetime
+from typing import List, Dict, Tuple, Optional, Callable, Any
+
+from core.db.configbd import DatabaseConnection, DatabaseCursor
+from core.services.logger import log_hist
+from core.services.permission_manager import require, can
+
+logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# 1. GESTION DES OPÉRATIONS BATCH (tracking)
+# ============================================================
+
+def create_batch_operation(
+    operation_type: str,
+    description: str,
+    nb_personnel: int,
+    created_by: str = None
+) -> Optional[int]:
+    """
+    Crée un enregistrement de suivi pour une opération en masse.
+
+    Args:
+        operation_type: Type d'opération (FORMATION, ABSENCE, VISITE_MEDICALE)
+        description: Description de l'opération
+        nb_personnel: Nombre de personnel ciblé
+        created_by: Utilisateur ayant lancé l'opération
+
+    Returns:
+        ID de l'opération batch ou None en cas d'erreur
+    """
+    try:
+        with DatabaseConnection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO batch_operations
+                (operation_type, description, nb_personnel, created_by, status)
+                VALUES (%s, %s, %s, %s, 'EN_COURS')
+            """, (operation_type, description, nb_personnel, created_by))
+            return cur.lastrowid
+    except Exception as e:
+        logger.error(f"Erreur create_batch_operation: {e}")
+        return None
+
+
+def add_batch_detail(
+    batch_id: int,
+    personnel_id: int,
+    status: str,
+    record_id: int = None,
+    error_message: str = None
+):
+    """
+    Ajoute un détail à une opération batch.
+
+    Args:
+        batch_id: ID de l'opération batch
+        personnel_id: ID du personnel
+        status: SUCCES, ERREUR ou IGNORE
+        record_id: ID de l'enregistrement créé
+        error_message: Message d'erreur si échec
+    """
+    try:
+        with DatabaseConnection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO batch_operation_details
+                (batch_id, personnel_id, status, record_id, error_message)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (batch_id, personnel_id, status, record_id, error_message))
+    except Exception as e:
+        logger.error(f"Erreur add_batch_detail: {e}")
+
+
+def complete_batch_operation(
+    batch_id: int,
+    nb_success: int,
+    nb_errors: int,
+    status: str = 'TERMINE'
+):
+    """
+    Marque une opération batch comme terminée.
+
+    Args:
+        batch_id: ID de l'opération batch
+        nb_success: Nombre de succès
+        nb_errors: Nombre d'erreurs
+        status: TERMINE, ERREUR ou ANNULE
+    """
+    try:
+        with DatabaseConnection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE batch_operations
+                SET nb_success = %s, nb_errors = %s, status = %s, completed_at = NOW()
+                WHERE id = %s
+            """, (nb_success, nb_errors, status, batch_id))
+    except Exception as e:
+        logger.error(f"Erreur complete_batch_operation: {e}")
+
+
+# ============================================================
+# 2. FORMATIONS EN MASSE
+# ============================================================
+
+def add_formation_batch(
+    personnel_ids: List[int],
+    formation_data: Dict[str, Any],
+    progress_callback: Optional[Callable[[int, str], None]] = None,
+    created_by: str = None
+) -> Tuple[int, int, List[Dict]]:
+    """
+    Ajoute une formation à plusieurs employés.
+
+    Args:
+        personnel_ids: Liste des IDs de personnel
+        formation_data: Dict avec intitule, organisme, date_debut, date_fin, etc.
+        progress_callback: Callback(percentage, message) pour la progression
+        created_by: Utilisateur ayant lancé l'opération
+
+    Returns:
+        (nb_success, nb_errors, details_list)
+    """
+    require('rh.bulk_operations.formations')
+
+    if not personnel_ids:
+        return 0, 0, []
+
+    # Créer le tracking batch
+    batch_id = create_batch_operation(
+        'FORMATION',
+        formation_data.get('intitule', 'Formation'),
+        len(personnel_ids),
+        created_by
+    )
+
+    details = []
+    nb_success = 0
+    nb_errors = 0
+    total = len(personnel_ids)
+
+    for i, personnel_id in enumerate(personnel_ids):
+        if progress_callback:
+            progress_callback(
+                int((i / total) * 100),
+                f"Traitement {i + 1}/{total}..."
+            )
+
+        try:
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+
+                # Insérer la formation
+                cur.execute("""
+                    INSERT INTO formation (
+                        operateur_id, intitule, organisme, date_debut, date_fin,
+                        duree_heures, statut, certificat_obtenu, cout, commentaire
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    personnel_id,
+                    formation_data.get('intitule'),
+                    formation_data.get('organisme'),
+                    formation_data.get('date_debut'),
+                    formation_data.get('date_fin'),
+                    formation_data.get('duree_heures'),
+                    formation_data.get('statut', 'Planifiée'),
+                    formation_data.get('certificat_obtenu', False),
+                    formation_data.get('cout'),
+                    formation_data.get('commentaire')
+                ))
+
+                formation_id = cur.lastrowid
+                nb_success += 1
+
+                details.append({
+                    'personnel_id': personnel_id,
+                    'status': 'SUCCES',
+                    'record_id': formation_id
+                })
+
+                if batch_id:
+                    add_batch_detail(batch_id, personnel_id, 'SUCCES', formation_id)
+
+        except Exception as e:
+            nb_errors += 1
+            error_msg = str(e)
+            details.append({
+                'personnel_id': personnel_id,
+                'status': 'ERREUR',
+                'error': error_msg
+            })
+            if batch_id:
+                add_batch_detail(batch_id, personnel_id, 'ERREUR', error_message=error_msg)
+            logger.error(f"Erreur formation batch pour personnel {personnel_id}: {e}")
+
+    # Finaliser le batch
+    if batch_id:
+        complete_batch_operation(batch_id, nb_success, nb_errors)
+
+    # Log historique
+    log_hist(
+        action="FORMATION_BATCH",
+        table_name="formation",
+        description=f"Formation '{formation_data.get('intitule')}' assignée à {nb_success} personnes ({nb_errors} erreurs)"
+    )
+
+    if progress_callback:
+        progress_callback(100, "Terminé")
+
+    return nb_success, nb_errors, details
+
+
+# ============================================================
+# 3. ABSENCES EN MASSE
+# ============================================================
+
+def add_absence_batch(
+    personnel_ids: List[int],
+    absence_data: Dict[str, Any],
+    progress_callback: Optional[Callable[[int, str], None]] = None,
+    created_by: str = None
+) -> Tuple[int, int, List[Dict]]:
+    """
+    Crée une demande d'absence pour plusieurs employés.
+
+    Args:
+        personnel_ids: Liste des IDs de personnel
+        absence_data: Dict avec type_absence_code, date_debut, date_fin, motif, etc.
+        progress_callback: Callback(percentage, message) pour la progression
+        created_by: Utilisateur ayant lancé l'opération
+
+    Returns:
+        (nb_success, nb_errors, details_list)
+    """
+    require('rh.bulk_operations.absences')
+
+    if not personnel_ids:
+        return 0, 0, []
+
+    # Récupérer l'ID du type d'absence
+    type_absence_id = None
+    type_absence_code = absence_data.get('type_absence_code')
+
+    try:
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute("SELECT id FROM type_absence WHERE code = %s", (type_absence_code,))
+            row = cur.fetchone()
+            if row:
+                type_absence_id = row['id']
+    except Exception as e:
+        logger.error(f"Type d'absence introuvable: {e}")
+        return 0, len(personnel_ids), [{'personnel_id': pid, 'status': 'ERREUR', 'error': f"Type d'absence '{type_absence_code}' introuvable"} for pid in personnel_ids]
+
+    if not type_absence_id:
+        return 0, len(personnel_ids), [{'personnel_id': pid, 'status': 'ERREUR', 'error': f"Type d'absence '{type_absence_code}' introuvable"} for pid in personnel_ids]
+
+    # Créer le tracking batch
+    batch_id = create_batch_operation(
+        'ABSENCE',
+        f"{type_absence_code} - {absence_data.get('date_debut')} au {absence_data.get('date_fin')}",
+        len(personnel_ids),
+        created_by
+    )
+
+    details = []
+    nb_success = 0
+    nb_errors = 0
+    total = len(personnel_ids)
+
+    # Calculer le nombre de jours
+    from core.services.absence_service import calculer_jours_ouvres
+    nb_jours = calculer_jours_ouvres(
+        absence_data.get('date_debut'),
+        absence_data.get('date_fin'),
+        absence_data.get('demi_journee_debut', 'JOURNEE'),
+        absence_data.get('demi_journee_fin', 'JOURNEE')
+    )
+
+    for i, personnel_id in enumerate(personnel_ids):
+        if progress_callback:
+            progress_callback(
+                int((i / total) * 100),
+                f"Traitement {i + 1}/{total}..."
+            )
+
+        try:
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+
+                cur.execute("""
+                    INSERT INTO demande_absence
+                    (personnel_id, type_absence_id, date_debut, date_fin,
+                     demi_journee_debut, demi_journee_fin, nb_jours, motif, statut)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    personnel_id,
+                    type_absence_id,
+                    absence_data.get('date_debut'),
+                    absence_data.get('date_fin'),
+                    absence_data.get('demi_journee_debut', 'JOURNEE'),
+                    absence_data.get('demi_journee_fin', 'JOURNEE'),
+                    nb_jours,
+                    absence_data.get('motif', ''),
+                    absence_data.get('statut', 'EN_ATTENTE')
+                ))
+
+                demande_id = cur.lastrowid
+                nb_success += 1
+
+                details.append({
+                    'personnel_id': personnel_id,
+                    'status': 'SUCCES',
+                    'record_id': demande_id
+                })
+
+                if batch_id:
+                    add_batch_detail(batch_id, personnel_id, 'SUCCES', demande_id)
+
+        except Exception as e:
+            nb_errors += 1
+            error_msg = str(e)
+            details.append({
+                'personnel_id': personnel_id,
+                'status': 'ERREUR',
+                'error': error_msg
+            })
+            if batch_id:
+                add_batch_detail(batch_id, personnel_id, 'ERREUR', error_message=error_msg)
+            logger.error(f"Erreur absence batch pour personnel {personnel_id}: {e}")
+
+    # Finaliser le batch
+    if batch_id:
+        complete_batch_operation(batch_id, nb_success, nb_errors)
+
+    # Log historique
+    log_hist(
+        action="ABSENCE_BATCH",
+        table_name="demande_absence",
+        description=f"Absence '{type_absence_code}' assignée à {nb_success} personnes ({nb_errors} erreurs)"
+    )
+
+    if progress_callback:
+        progress_callback(100, "Terminé")
+
+    return nb_success, nb_errors, details
+
+
+# ============================================================
+# 4. VISITES MÉDICALES EN MASSE
+# ============================================================
+
+def add_visite_batch(
+    personnel_ids: List[int],
+    visite_data: Dict[str, Any],
+    progress_callback: Optional[Callable[[int, str], None]] = None,
+    created_by: str = None
+) -> Tuple[int, int, List[Dict]]:
+    """
+    Crée une visite médicale pour plusieurs employés.
+
+    Args:
+        personnel_ids: Liste des IDs de personnel
+        visite_data: Dict avec date_visite, type_visite, medecin, etc.
+        progress_callback: Callback(percentage, message) pour la progression
+        created_by: Utilisateur ayant lancé l'opération
+
+    Returns:
+        (nb_success, nb_errors, details_list)
+    """
+    require('rh.bulk_operations.medical')
+
+    if not personnel_ids:
+        return 0, 0, []
+
+    # Créer le tracking batch
+    batch_id = create_batch_operation(
+        'VISITE_MEDICALE',
+        f"{visite_data.get('type_visite', 'Visite')} - {visite_data.get('date_visite')}",
+        len(personnel_ids),
+        created_by
+    )
+
+    details = []
+    nb_success = 0
+    nb_errors = 0
+    total = len(personnel_ids)
+
+    for i, personnel_id in enumerate(personnel_ids):
+        if progress_callback:
+            progress_callback(
+                int((i / total) * 100),
+                f"Traitement {i + 1}/{total}..."
+            )
+
+        try:
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+
+                cur.execute("""
+                    INSERT INTO medical_visite (
+                        operateur_id, date_visite, type_visite, resultat,
+                        restrictions, medecin, commentaire, prochaine_visite
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    personnel_id,
+                    visite_data.get('date_visite'),
+                    visite_data.get('type_visite', 'Périodique'),
+                    visite_data.get('resultat'),
+                    visite_data.get('restrictions'),
+                    visite_data.get('medecin'),
+                    visite_data.get('commentaire'),
+                    visite_data.get('prochaine_visite')
+                ))
+
+                visite_id = cur.lastrowid
+                nb_success += 1
+
+                details.append({
+                    'personnel_id': personnel_id,
+                    'status': 'SUCCES',
+                    'record_id': visite_id
+                })
+
+                if batch_id:
+                    add_batch_detail(batch_id, personnel_id, 'SUCCES', visite_id)
+
+        except Exception as e:
+            nb_errors += 1
+            error_msg = str(e)
+            details.append({
+                'personnel_id': personnel_id,
+                'status': 'ERREUR',
+                'error': error_msg
+            })
+            if batch_id:
+                add_batch_detail(batch_id, personnel_id, 'ERREUR', error_message=error_msg)
+            logger.error(f"Erreur visite batch pour personnel {personnel_id}: {e}")
+
+    # Finaliser le batch
+    if batch_id:
+        complete_batch_operation(batch_id, nb_success, nb_errors)
+
+    # Log historique
+    log_hist(
+        action="VISITE_MEDICALE_BATCH",
+        table_name="medical_visite",
+        description=f"Visite '{visite_data.get('type_visite')}' assignée à {nb_success} personnes ({nb_errors} erreurs)"
+    )
+
+    if progress_callback:
+        progress_callback(100, "Terminé")
+
+    return nb_success, nb_errors, details
+
+
+# ============================================================
+# 5. UTILITAIRES
+# ============================================================
+
+def get_personnel_list_for_bulk() -> List[Dict]:
+    """
+    Récupère la liste du personnel pour les opérations en masse.
+
+    Returns:
+        Liste des opérateurs (id, nom, prenom, matricule, statut)
+    """
+    try:
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute("""
+                SELECT id, nom, prenom, matricule, statut
+                FROM personnel
+                WHERE statut = 'ACTIF'
+                ORDER BY nom, prenom
+            """)
+            return cur.fetchall()
+    except Exception as e:
+        logger.error(f"Erreur get_personnel_list_for_bulk: {e}")
+        return []
+
+
+def get_batch_operations_history(limit: int = 50) -> List[Dict]:
+    """
+    Récupère l'historique des opérations batch.
+
+    Args:
+        limit: Nombre maximum d'enregistrements
+
+    Returns:
+        Liste des opérations batch
+    """
+    try:
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute("""
+                SELECT *
+                FROM batch_operations
+                ORDER BY created_at DESC
+                LIMIT %s
+            """, (limit,))
+            return cur.fetchall()
+    except Exception as e:
+        logger.error(f"Erreur get_batch_operations_history: {e}")
+        return []
+
+
+def get_batch_operation_details(batch_id: int) -> List[Dict]:
+    """
+    Récupère les détails d'une opération batch.
+
+    Args:
+        batch_id: ID de l'opération batch
+
+    Returns:
+        Liste des détails avec infos personnel
+    """
+    try:
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute("""
+                SELECT
+                    bod.*,
+                    p.nom,
+                    p.prenom,
+                    p.matricule
+                FROM batch_operation_details bod
+                JOIN personnel p ON bod.personnel_id = p.id
+                WHERE bod.batch_id = %s
+                ORDER BY p.nom, p.prenom
+            """, (batch_id,))
+            return cur.fetchall()
+    except Exception as e:
+        logger.error(f"Erreur get_batch_operation_details: {e}")
+        return []

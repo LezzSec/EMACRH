@@ -17,7 +17,7 @@ from datetime import datetime, date, timedelta
 from core.services import absence_service
 from core.db.configbd import get_connection
 from core.gui.emac_ui_kit import add_custom_title_bar
-from core.services.auth_service import has_permission
+from core.services.permission_manager import can
 
 
 class PlanningAbsencesDialog(QDialog):
@@ -177,7 +177,7 @@ class PlanningAbsencesDialog(QDialog):
         actions_layout = QVBoxLayout()
 
         # Bouton "Nouvelle demande" uniquement si permission d'écriture sur planning
-        if has_permission('planning', 'ecriture'):
+        if can('planning.absences.edit'):
             btn_nouvelle_demande = QPushButton("➕ Nouvelle demande d'absence")
             btn_nouvelle_demande.setStyleSheet("""
                 QPushButton {
@@ -718,7 +718,7 @@ class MesDemandesDialog(QDialog):
         btn_layout = QHBoxLayout()
 
         # Bouton d'annulation seulement si permission d'écriture
-        if has_permission('planning', 'ecriture'):
+        if can('planning.absences.edit'):
             btn_annuler = QPushButton("Annuler la demande sélectionnée")
             btn_annuler.clicked.connect(self.annuler_demande)
             btn_layout.addWidget(btn_annuler)

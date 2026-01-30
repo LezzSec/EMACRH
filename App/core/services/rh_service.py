@@ -21,6 +21,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from enum import Enum
 
 from core.db.configbd import DatabaseCursor, DatabaseConnection
+from core.services.permission_manager import require
 
 
 # ============================================================
@@ -666,6 +667,7 @@ def update_document_statut(
     Returns:
         (succès, message)
     """
+    require('rh.documents.edit')
     statuts_valides = ['actif', 'expire', 'archive']
     if nouveau_statut not in statuts_valides:
         return False, f"Statut invalide. Valeurs possibles: {statuts_valides}"
@@ -703,6 +705,7 @@ def lier_document_entite(
     Returns:
         (succès, message)
     """
+    require('rh.documents.edit')
     column_map = {
         'contrat': 'contrat_id',
         'formation': 'formation_id',
@@ -751,6 +754,7 @@ def delier_document_entite(
     Returns:
         (succès, message)
     """
+    require('rh.documents.edit')
     column_map = {
         'contrat': 'contrat_id',
         'formation': 'formation_id',
@@ -966,7 +970,7 @@ def get_domaines_rh() -> List[Dict]:
         },
         {
             "code": DomaineRH.DECLARATION.value,
-            "nom": "Déclaration",
+            "nom": "Absence",
             "description": "Arrêts maladie, accidents, congés",
             "icone": "clipboard-list"
         },
@@ -1015,6 +1019,7 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
         (succès, message)
     """
     try:
+        require('rh.personnel.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor(dictionary=True)
 
@@ -1124,6 +1129,7 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
 def create_contrat(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """Crée un nouveau contrat."""
     try:
+        require('rh.contrats.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -1156,6 +1162,7 @@ def create_contrat(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[i
 def update_contrat(contrat_id: int, data: Dict) -> Tuple[bool, str]:
     """Met à jour un contrat existant."""
     try:
+        require('rh.contrats.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -1188,6 +1195,7 @@ def update_contrat(contrat_id: int, data: Dict) -> Tuple[bool, str]:
 def delete_contrat(contrat_id: int) -> Tuple[bool, str]:
     """Désactive un contrat (soft delete)."""
     try:
+        require('rh.contrats.delete')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
             cur.execute("UPDATE contrat SET actif = 0 WHERE id = %s", (contrat_id,))
@@ -1204,6 +1212,7 @@ def delete_contrat(contrat_id: int) -> Tuple[bool, str]:
 def create_declaration(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """Crée une nouvelle déclaration."""
     try:
+        require('rh.declarations.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -1231,6 +1240,7 @@ def create_declaration(operateur_id: int, data: Dict) -> Tuple[bool, str, Option
 def update_declaration(declaration_id: int, data: Dict) -> Tuple[bool, str]:
     """Met à jour une déclaration existante."""
     try:
+        require('rh.declarations.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -1256,6 +1266,7 @@ def update_declaration(declaration_id: int, data: Dict) -> Tuple[bool, str]:
 def delete_declaration(declaration_id: int) -> Tuple[bool, str]:
     """Supprime une déclaration."""
     try:
+        require('rh.declarations.delete')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
             cur.execute("DELETE FROM declaration WHERE id = %s", (declaration_id,))
@@ -1272,6 +1283,7 @@ def delete_declaration(declaration_id: int) -> Tuple[bool, str]:
 def create_formation(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """Crée une nouvelle formation."""
     try:
+        require('rh.formations.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -1304,6 +1316,7 @@ def create_formation(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional
 def update_formation(formation_id: int, data: Dict) -> Tuple[bool, str]:
     """Met à jour une formation existante."""
     try:
+        require('rh.formations.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -1334,6 +1347,7 @@ def update_formation(formation_id: int, data: Dict) -> Tuple[bool, str]:
 def delete_formation(formation_id: int) -> Tuple[bool, str]:
     """Supprime une formation."""
     try:
+        require('rh.formations.delete')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
             cur.execute("DELETE FROM formation WHERE id = %s", (formation_id,))

@@ -297,15 +297,20 @@ class PersonnelRepository(BaseRepository[Personnel]):
         if not cls.exists(id):
             return False, "Employé non trouvé"
 
-        # Colonnes autorisées pour la mise à jour
-        allowed_columns = ["nom", "prenom", "matricule", "statut", "sexe",
-                          "date_entree", "atelier_id", "email", "telephone"]
+        # SÉCURITÉ: Whitelist stricte des colonnes autorisées (frozenset immuable)
+        ALLOWED_COLUMNS = frozenset(["nom", "prenom", "matricule", "statut", "sexe",
+                                     "date_entree", "atelier_id", "email", "telephone"])
 
         # Filtrer les données
-        update_data = {k: v for k, v in data.items() if k in allowed_columns}
+        update_data = {k: v for k, v in data.items() if k in ALLOWED_COLUMNS}
 
         if not update_data:
             return False, "Aucun champ valide à mettre à jour"
+
+        # SÉCURITÉ: Double validation - chaque colonne DOIT être dans la whitelist
+        for col in update_data.keys():
+            if col not in ALLOWED_COLUMNS:
+                raise ValueError(f"Colonne non autorisée: {col}")
 
         # Construire la requête
         set_clauses = [f"{col} = %s" for col in update_data.keys()]

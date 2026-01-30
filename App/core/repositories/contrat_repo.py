@@ -262,13 +262,19 @@ class ContratRepository(BaseRepository[Contrat]):
         if not cls.exists(id):
             return False, "Contrat non trouvé"
 
-        allowed = ["type_contrat", "date_debut", "date_fin", "etp",
-                   "categorie", "coefficient", "actif", "commentaire"]
+        # SÉCURITÉ: Whitelist stricte des colonnes autorisées (frozenset immuable)
+        ALLOWED_COLUMNS = frozenset(["type_contrat", "date_debut", "date_fin", "etp",
+                                     "categorie", "coefficient", "actif", "commentaire"])
 
-        update_data = {k: v for k, v in data.items() if k in allowed}
+        update_data = {k: v for k, v in data.items() if k in ALLOWED_COLUMNS}
 
         if not update_data:
             return False, "Aucun champ valide à mettre à jour"
+
+        # SÉCURITÉ: Double validation - chaque colonne DOIT être dans la whitelist
+        for col in update_data.keys():
+            if col not in ALLOWED_COLUMNS:
+                raise ValueError(f"Colonne non autorisée: {col}")
 
         set_clauses = [f"{col} = %s" for col in update_data.keys()]
         query = f"UPDATE contrat SET {', '.join(set_clauses)} WHERE id = %s"

@@ -15,6 +15,7 @@ Gère la connexion, déconnexion, et vérification des permissions
 import bcrypt
 import re
 import logging
+import socket
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,40 @@ from core.db.configbd import get_connection
 from core.utils.performance_monitor import monitor_login_time, monitor_query
 from core.utils.emac_cache import get_cached_roles, invalidate_user_cache
 from core.services.optimized_db_logger import log_hist_async
+
+
+def _get_client_ip() -> str:
+    """Récupère l'adresse IP ou le hostname de la machine cliente."""
+    try:
+        hostname = socket.gethostname()
+        ip_address = socket.gethostbyname(hostname)
+        return f"{hostname}/{ip_address}"
+    except Exception:
+        return "unknown"
+
+
+def _log_failed_attempt(username: str, reason: str) -> None:
+    """
+    Log une tentative de connexion échouée dans la table d'audit.
+
+    Args:
+        username: Nom d'utilisateur tenté
+        reason: Raison de l'échec (user_not_found, wrong_password, account_inactive)
+    """
+    try:
+        conn = get_connection()
+        if conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO logs_tentatives_connexion (username, ip_address, reason, attempt_time)
+                VALUES (%s, %s, %s, %s)
+            """, (username, _get_client_ip(), reason, datetime.now()))
+            conn.commit()
+            cur.close()
+            conn.close()
+    except Exception as e:
+        # Ne pas bloquer si la table n'existe pas encore
+        logger.debug(f"Impossible de logger la tentative échouée: {e}")
 
 
 # =============================================================================
@@ -84,6 +119,10 @@ class UserSession:
     _user_data = None
     _permissions = None
     _session_id = None
+    _last_activity = None
+
+    # Timeout de session en minutes
+    SESSION_TIMEOUT_MINUTES = 30
 
     def __new__(cls):
         if cls._instance is None:
@@ -96,6 +135,7 @@ class UserSession:
         cls._user_data = user_data
         cls._permissions = permissions
         cls._session_id = session_id
+        cls._last_activity = datetime.now()
 
     @classmethod
     def get_user(cls) -> Optional[Dict]:
@@ -118,11 +158,43 @@ class UserSession:
         cls._user_data = None
         cls._permissions = None
         cls._session_id = None
+        cls._last_activity = None
 
     @classmethod
     def is_authenticated(cls) -> bool:
         """Vérifie si un utilisateur est connecté"""
         return cls._user_data is not None
+
+    @classmethod
+    def update_activity(cls):
+        """Met à jour le timestamp de dernière activité"""
+        if cls._user_data is not None:
+            cls._last_activity = datetime.now()
+
+    @classmethod
+    def is_session_expired(cls) -> bool:
+        """Vérifie si la session a expiré par inactivité"""
+        if cls._user_data is None or cls._last_activity is None:
+            return False
+
+        from datetime import timedelta
+        timeout = timedelta(minutes=cls.SESSION_TIMEOUT_MINUTES)
+        return datetime.now() - cls._last_activity > timeout
+
+    @classmethod
+    def get_remaining_time(cls) -> Optional[int]:
+        """Retourne le temps restant avant expiration en minutes, ou None si pas de session"""
+        if cls._user_data is None or cls._last_activity is None:
+            return None
+
+        from datetime import timedelta
+        timeout = timedelta(minutes=cls.SESSION_TIMEOUT_MINUTES)
+        elapsed = datetime.now() - cls._last_activity
+        remaining = timeout - elapsed
+
+        if remaining.total_seconds() <= 0:
+            return 0
+        return int(remaining.total_seconds() / 60)
 
 
 def hash_password(password: str) -> str:
@@ -201,11 +273,12 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
                     'suppression': bool(row['suppression']) if row['suppression'] is not None else False
                 }
 
-        # Créer une session de connexion
+        # Créer une session de connexion avec l'adresse IP
+        client_ip = _get_client_ip()
         cur.execute("""
-            INSERT INTO logs_connexion (utilisateur_id, date_connexion)
-            VALUES (%s, %s)
-        """, (user['id'], datetime.now()))
+            INSERT INTO logs_connexion (utilisateur_id, date_connexion, ip_address)
+            VALUES (%s, %s, %s)
+        """, (user['id'], datetime.now(), client_ip))
 
         session_id = cur.lastrowid
 

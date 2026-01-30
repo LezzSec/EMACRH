@@ -20,6 +20,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from decimal import Decimal
 
 from core.db.configbd import DatabaseCursor, DatabaseConnection
+from core.services.permission_manager import require
 
 
 # ============================================================
@@ -179,6 +180,7 @@ def update_donnees_medicales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
     Returns:
         (succès, message)
     """
+    require('rh.medical.edit')
     # Whitelist des colonnes autorisées
     ALLOWED_COLUMNS = frozenset([
         'type_suivi_vip', 'periodicite_vip_mois', 'date_electrocardiogramme',
@@ -254,6 +256,7 @@ def get_visites(operateur_id: int) -> List[Dict]:
 def create_visite(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """Crée une nouvelle visite médicale."""
     try:
+        require('rh.medical.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -285,6 +288,7 @@ def create_visite(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[in
 def update_visite(visite_id: int, data: Dict) -> Tuple[bool, str]:
     """Met à jour une visite médicale."""
     try:
+        require('rh.medical.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -315,6 +319,7 @@ def update_visite(visite_id: int, data: Dict) -> Tuple[bool, str]:
 def delete_visite(visite_id: int) -> Tuple[bool, str]:
     """Supprime une visite médicale."""
     try:
+        require('rh.medical.delete')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
             cur.execute("DELETE FROM medical_visite WHERE id = %s", (visite_id,))
@@ -372,6 +377,7 @@ def get_accident_detail(accident_id: int) -> Optional[Dict]:
 def create_accident(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """Crée un nouvel accident du travail."""
     try:
+        require('rh.medical.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -415,6 +421,7 @@ def create_accident(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
 def update_accident(accident_id: int, data: Dict) -> Tuple[bool, str]:
     """Met à jour un accident du travail."""
     try:
+        require('rh.medical.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -453,6 +460,7 @@ def update_accident(accident_id: int, data: Dict) -> Tuple[bool, str]:
 def delete_accident(accident_id: int) -> Tuple[bool, str]:
     """Supprime un accident du travail et ses prolongations."""
     try:
+        require('rh.medical.delete')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
             # Les prolongations sont supprimées en cascade
@@ -553,6 +561,7 @@ def get_maladies_pro(operateur_id: int) -> List[Dict]:
 def create_maladie_pro(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """Crée une nouvelle maladie professionnelle."""
     try:
+        require('rh.medical.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -589,6 +598,7 @@ def create_maladie_pro(operateur_id: int, data: Dict) -> Tuple[bool, str, Option
 def delete_maladie_pro(mp_id: int) -> Tuple[bool, str]:
     """Supprime une maladie professionnelle."""
     try:
+        require('rh.medical.delete')
         with DatabaseConnection() as conn:
             cur = conn.cursor(dictionary=True)
 
@@ -859,6 +869,7 @@ def create_validite(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
         (succès, message, id)
     """
     try:
+        require('rh.medical.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -890,6 +901,7 @@ def create_validite(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
 def update_validite(validite_id: int, data: Dict) -> Tuple[bool, str]:
     """Met à jour une validité existante."""
     try:
+        require('rh.medical.edit')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
 
@@ -918,6 +930,7 @@ def update_validite(validite_id: int, data: Dict) -> Tuple[bool, str]:
 def delete_validite(validite_id: int) -> Tuple[bool, str]:
     """Supprime une validité."""
     try:
+        require('rh.medical.delete')
         with DatabaseConnection() as conn:
             cur = conn.cursor()
             cur.execute("DELETE FROM validite WHERE id = %s", (validite_id,))

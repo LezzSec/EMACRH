@@ -48,6 +48,7 @@ from core.services.vie_salarie_service import (
     get_entretiens, create_entretien, update_entretien, delete_entretien,
     get_types_sanction, get_types_entretien, get_managers_liste
 )
+from core.services.permission_manager import can
 
 
 # ============================================================
@@ -1396,11 +1397,40 @@ class GestionRHDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        # Titre
+        # Titre + Bouton Actions en masse
+        header_layout = QHBoxLayout()
         titre = QLabel("Sélection Opérateur")
         titre.setFont(QFont("Segoe UI", 14, QFont.Bold))
         titre.setStyleSheet("color: #111827;")
-        layout.addWidget(titre)
+        header_layout.addWidget(titre)
+        header_layout.addStretch()
+
+        btn_bulk = QPushButton("⚡ Actions en masse")
+        btn_bulk.setToolTip("Assigner formations, absences ou visites médicales à plusieurs employés")
+        btn_bulk.setCursor(Qt.PointingHandCursor)
+        btn_bulk.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #7c3aed, stop:1 #a855f7);
+                color: white;
+                padding: 8px 16px;
+                border-radius: 6px;
+                border: none;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #6d28d9, stop:1 #9333ea);
+            }
+            QPushButton:pressed {
+                background: #5b21b6;
+            }
+        """)
+        btn_bulk.clicked.connect(self._open_bulk_assignment_dialog)
+        header_layout.addWidget(btn_bulk)
+
+        layout.addLayout(header_layout)
 
         # Champ de recherche
         search_container = QWidget()
@@ -2962,6 +2992,32 @@ class GestionRHDialog(QDialog):
         layout = QHBoxLayout(footer)
         layout.setContentsMargins(20, 12, 20, 12)
 
+        # Bouton Actions en masse
+        btn_bulk = QPushButton("⚡ Actions en masse")
+        btn_bulk.setToolTip("Assigner formations, absences ou visites médicales à plusieurs employés")
+        btn_bulk.setCursor(Qt.PointingHandCursor)
+        btn_bulk.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #7c3aed, stop:1 #a855f7);
+                color: white;
+                padding: 10px 24px;
+                border-radius: 8px;
+                border: none;
+                font-weight: bold;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #6d28d9, stop:1 #9333ea);
+            }
+            QPushButton:pressed {
+                background: #5b21b6;
+            }
+        """)
+        btn_bulk.clicked.connect(self._open_bulk_assignment_dialog)
+        layout.addWidget(btn_bulk)
+
         layout.addStretch()
 
         btn_fermer = EmacButton("Fermer", variant="ghost")
@@ -2969,6 +3025,15 @@ class GestionRHDialog(QDialog):
         layout.addWidget(btn_fermer)
 
         return footer
+
+    def _open_bulk_assignment_dialog(self):
+        """Ouvre le dialogue d'actions en masse."""
+        from core.gui.bulk_assignment import BulkAssignmentDialog
+        dialog = BulkAssignmentDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            # Rafraîchir l'affichage si un opérateur est sélectionné
+            if self.operateur_selectionne:
+                self._charger_domaine(self.domaine_actif)
 
     # =========================================================================
     # UTILITAIRES
@@ -3053,11 +3118,40 @@ class GestionRHWidget(QWidget):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        # Titre
+        # Titre + Bouton Actions en masse
+        header_layout = QHBoxLayout()
         titre = QLabel("Sélection Opérateur")
         titre.setFont(QFont("Segoe UI", 14, QFont.Bold))
         titre.setStyleSheet("color: #111827;")
-        layout.addWidget(titre)
+        header_layout.addWidget(titre)
+        header_layout.addStretch()
+
+        btn_bulk = QPushButton("⚡ Actions en masse")
+        btn_bulk.setToolTip("Assigner formations, absences ou visites médicales à plusieurs employés")
+        btn_bulk.setCursor(Qt.PointingHandCursor)
+        btn_bulk.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #7c3aed, stop:1 #a855f7);
+                color: white;
+                padding: 8px 16px;
+                border-radius: 6px;
+                border: none;
+                font-weight: bold;
+                font-size: 12px;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                    stop:0 #6d28d9, stop:1 #9333ea);
+            }
+            QPushButton:pressed {
+                background: #5b21b6;
+            }
+        """)
+        btn_bulk.clicked.connect(self._open_bulk_assignment_dialog)
+        header_layout.addWidget(btn_bulk)
+
+        layout.addLayout(header_layout)
 
         # Champ de recherche
         search_container = QWidget()
@@ -4606,6 +4700,19 @@ class GestionRHWidget(QWidget):
                 subprocess.run(['xdg-open', str(doc_path)])
         else:
             QMessageBox.warning(self, "Erreur", "Le fichier n'a pas été trouvé sur le disque")
+
+    # =========================================================================
+    # ACTIONS EN MASSE
+    # =========================================================================
+
+    def _open_bulk_assignment_dialog(self):
+        """Ouvre le dialogue d'actions en masse."""
+        from core.gui.bulk_assignment import BulkAssignmentDialog
+        dialog = BulkAssignmentDialog(self)
+        if dialog.exec_() == QDialog.Accepted:
+            # Rafraîchir l'affichage si un opérateur est sélectionné
+            if self.operateur_selectionne:
+                self._charger_contenu_domaine()
 
     # =========================================================================
     # UTILITAIRES

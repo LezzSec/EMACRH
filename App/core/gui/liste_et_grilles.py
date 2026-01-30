@@ -936,10 +936,12 @@ class GrillesDialog(QDialog):
             operateurs_rows = _rows(cursor, dict_mode)
 
             # ✅ REQUÊTE 2 : Liste des postes visibles (RAPIDE)
+            # Exclure la colonne "PRODUCTION" qui ne contient pas de vraies données de polyvalence
             cursor.execute("""
                 SELECT id, poste_code
                 FROM postes
                 WHERE visible = 1
+                  AND poste_code != 'PRODUCTION'
                 ORDER BY poste_code
             """)
             postes_rows = _rows(cursor, dict_mode)

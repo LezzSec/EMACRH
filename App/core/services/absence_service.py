@@ -5,6 +5,7 @@ Calcul des jours ouvrés, gestion des soldes, validation des demandes
 
 ✅ OPTIMISATIONS APPLIQUÉES:
 - Monitoring des requêtes clés (détection régressions)
+- Vérification des permissions via require()
 """
 
 from datetime import datetime, timedelta, date
@@ -12,6 +13,9 @@ from core.db.configbd import DatabaseCursor, DatabaseConnection
 
 # ✅ OPTIMISATIONS : Monitoring
 from core.utils.performance_monitor import monitor_query
+
+# ✅ Permissions
+from core.services.permission_manager import require, PermissionError
 
 
 def calculer_jours_ouvres(date_debut, date_fin, demi_journee_debut='JOURNEE', demi_journee_fin='JOURNEE'):
@@ -87,7 +91,12 @@ def creer_demande_absence(personnel_id, type_absence_code, date_debut, date_fin,
 
     Returns:
         int: ID de la demande créée
+
+    Raises:
+        PermissionError: Si l'utilisateur n'a pas la permission planning.absences.edit
     """
+    require('planning.absences.edit')
+
     with DatabaseConnection() as conn:
         cur = conn.cursor()
 
@@ -127,7 +136,12 @@ def valider_demande(demande_id, validateur_id, valide=True, commentaire=''):
         validateur_id (int): ID du validateur
         valide (bool): True pour valider, False pour refuser
         commentaire (str): Commentaire de validation
+
+    Raises:
+        PermissionError: Si l'utilisateur n'a pas la permission planning.absences.edit
     """
+    require('planning.absences.edit')
+
     with DatabaseConnection() as conn:
         cur = conn.cursor()
 
