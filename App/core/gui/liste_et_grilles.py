@@ -18,10 +18,11 @@ from .besoin_poste_dialog import BesoinPosteDialog
 from core.services.logger import log_hist
 try:
     from core.gui.ui_theme import EmacButton, get_current_theme
-    from core.gui.emac_ui_kit import add_custom_title_bar
+    from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
     THEME_AVAILABLE = True
 except ImportError:
     THEME_AVAILABLE = False
+    show_error_message = None
 
 
 def _cursor(conn):
@@ -703,8 +704,11 @@ class GrillesDialog(QDialog):
                 conn2.close()
 
             except Exception as e:
-                logger.error(f"Erreur modification : {e}")
-                QMessageBox.critical(self, "Erreur", f"Erreur modification : {e}")
+                logger.exception(f"Erreur modification: {e}")
+                if show_error_message:
+                    show_error_message(self, "Erreur", "Erreur lors de la modification", e)
+                else:
+                    QMessageBox.critical(self, "Erreur", "Erreur lors de la modification. Contactez l'administrateur.")
                 return
 
             # ==============================
@@ -1069,7 +1073,11 @@ class GrillesDialog(QDialog):
             self.update_statistics()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors du chargement des données : {e}")
+            logger.exception(f"Erreur chargement donnees: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Erreur lors du chargement des données", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Erreur lors du chargement des données. Contactez l'administrateur.")
         finally:
             cursor.close()
             connection.close()
@@ -1706,7 +1714,11 @@ class GrillesDialog(QDialog):
             QMessageBox.information(self, "Exportation réussie", f"Les données ont été exportées dans {file_name}")
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'exportation : {e}")
+            logger.exception(f"Erreur exportation: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Erreur lors de l'exportation", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Erreur lors de l'exportation. Contactez l'administrateur.")
 
 
     def export_to_pdf(self, file_name, export_current_state):
@@ -1904,8 +1916,11 @@ class GrillesDialog(QDialog):
             QMessageBox.information(self, "Exportation réussie", f"PDF généré : {file_name}")
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'export PDF : {e}")
             logger.exception(f"Erreur export PDF: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Erreur lors de l'export PDF", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Erreur lors de l'export PDF. Contactez l'administrateur.")
 
 
 

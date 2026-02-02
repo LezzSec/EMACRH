@@ -19,6 +19,7 @@ from PyQt5.QtGui import QFont, QColor
 
 from core.db.configbd import get_connection
 from core.services.polyvalence_logger import log_polyvalence_action
+from core.gui.emac_ui_kit import show_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +294,8 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
             conn.close()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les opérateurs :\n{e}")
+            logger.exception(f"Erreur chargement operateurs: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les opérateurs", e)
 
     def _load_postes(self):
         """Charge la liste des postes."""
@@ -319,7 +321,8 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
             conn.close()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les postes :\n{e}")
+            logger.exception(f"Erreur chargement postes: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les postes", e)
 
     def _select_operateur(self, operateur_id):
         """Pré-sélectionne un opérateur dans le combo."""
@@ -441,7 +444,8 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
             self._update_count()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur d'import", f"Impossible d'importer le fichier CSV :\n{e}")
+            logger.exception(f"Erreur import CSV: {e}")
+            show_error_message(self, "Erreur d'import", "Impossible d'importer le fichier CSV", e)
 
     def _save_all_actions(self):
         """Enregistre toutes les actions de la liste dans la base de données."""

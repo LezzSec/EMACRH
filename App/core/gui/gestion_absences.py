@@ -17,7 +17,7 @@ from datetime import datetime, date
 
 from core.services import absence_service
 from core.db.configbd import get_connection
-from core.gui.emac_ui_kit import add_custom_title_bar
+from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 
 
 class GestionAbsencesDialog(QDialog):
@@ -576,7 +576,7 @@ class GestionAbsencesDialog(QDialog):
             self.data_changed.emit()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de créer la demande:\n{str(e)}")
+            show_error_message(self, "Erreur", "Impossible de creer la demande", e)
 
     def annuler_demande(self):
         """Annule une demande sélectionnée"""
@@ -613,7 +613,7 @@ class GestionAbsencesDialog(QDialog):
                 self.data_changed.emit()
 
             except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+                show_error_message(self, "Erreur", "Impossible d'annuler la demande", e)
 
     def valider_demande_selectionnee(self, valide):
         """Valide ou refuse une demande"""
@@ -646,7 +646,8 @@ class GestionAbsencesDialog(QDialog):
                 self.data_changed.emit()
 
             except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+                action = "valider" if valide else "refuser"
+                show_error_message(self, "Erreur", f"Impossible de {action} la demande", e)
 
     def afficher_absences_jour(self, date):
         """Affiche les absences pour un jour donné"""

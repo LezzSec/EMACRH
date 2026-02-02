@@ -14,8 +14,11 @@ from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QBrush
 
 from core.db.configbd import get_connection as get_db_connection
+from core.gui.emac_ui_kit import show_error_message
 import json
 import datetime as dt
+import logging
+logger = logging.getLogger(__name__)
 
 
 # ============================================================
@@ -466,7 +469,8 @@ class HistoriquePersonnelTab(QWidget):
             self._apply_filter()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les données :\n{e}")
+            logger.exception(f"Erreur chargement donnees: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les données", e)
 
     def _apply_filter(self):
         """Applique le filtre de type et affiche les polyvalences."""

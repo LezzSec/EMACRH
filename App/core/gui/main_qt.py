@@ -76,6 +76,12 @@ except ImportError:
     _thread_pool.setMaxThreadCount(4)
 
 
+# Import de show_error_message
+try:
+    from core.gui.emac_ui_kit import show_error_message
+except ImportError:
+    show_error_message = None
+
 # ===========================
 #  Fonctions lazy (DB/Auth/Theme)
 # ===========================
@@ -562,7 +568,11 @@ class MainWindow(QMainWindow):
             dialog.exec_()
             self.load_evaluations_async()
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible d'ouvrir la gestion des évaluations :\n{e}")
+            logger.exception(f"Erreur ouverture gestion evaluations: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible d'ouvrir la gestion des évaluations", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible d'ouvrir la gestion des évaluations. Contactez l'administrateur.")
 
     def show_listes_grilles_dialog(self):
         from core.gui.liste_et_grilles import GrillesDialog
@@ -771,7 +781,11 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Export", f"Export terminé ✅\n\nCSV : {paths['csv']}")
             QDesktopServices.openUrl(QUrl.fromLocalFile(dossier))
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Export impossible : {e}")
+            logger.exception(f"Erreur export: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Export impossible", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Export impossible. Contactez l'administrateur.")
 
     # ---------------------------
     # Auth

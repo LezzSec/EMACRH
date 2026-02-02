@@ -23,10 +23,11 @@ logger = logging.getLogger(__name__)
 # Import du thème moderne
 try:
     from core.gui.ui_theme import EmacButton, EmacCard, EmacHeader, get_current_theme
-    from core.gui.emac_ui_kit import add_custom_title_bar
+    from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
     THEME_AVAILABLE = True
 except ImportError:
     THEME_AVAILABLE = False
+    show_error_message = None  # Fallback
 
 
 # --- Dialogue popup avec 2 onglets pour un opérateur ---
@@ -415,7 +416,11 @@ class DetailOperateurDialog(QDialog):
             conn.close()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les données :\n{e}")
+            logger.exception(f"Erreur chargement donnees: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible de charger les donnees", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible de charger les donnees. Contactez l'administrateur.")
 
     def _calculer_prochaine_eval_ancienne(self):
         """Calcule automatiquement la date de prochaine évaluation selon le niveau et la date d'évaluation."""
@@ -530,7 +535,11 @@ class DetailOperateurDialog(QDialog):
             self.commentaire.clear()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible d'ajouter la polyvalence :\n{e}")
+            logger.exception(f"Erreur ajout polyvalence: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible d'ajouter la polyvalence", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible d'ajouter la polyvalence. Contactez l'administrateur.")
 
     def _on_poly_cell_changed(self, item):
         """Gère les modifications de cellules dans le tableau des polyvalences."""
@@ -661,7 +670,11 @@ class DetailOperateurDialog(QDialog):
                         logger.warning(f"Erreur émission événement polyvalence: {evt_err}")
 
             except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour le niveau :\n{e}")
+                logger.exception(f"Erreur mise a jour niveau: {e}")
+                if show_error_message:
+                    show_error_message(self, "Erreur", "Impossible de mettre a jour le niveau", e)
+                else:
+                    QMessageBox.critical(self, "Erreur", "Impossible de mettre a jour le niveau. Contactez l'administrateur.")
                 self._load_data()
 
             return
@@ -738,7 +751,11 @@ class DetailOperateurDialog(QDialog):
                         return
 
                     except Exception as e:
-                        QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour la date :\n{e}")
+                        logger.exception(f"Erreur mise a jour date: {e}")
+                        if show_error_message:
+                            show_error_message(self, "Erreur", "Impossible de mettre a jour la date", e)
+                        else:
+                            QMessageBox.critical(self, "Erreur", "Impossible de mettre a jour la date. Contactez l'administrateur.")
                         self._load_data()
                         return
 
@@ -778,7 +795,11 @@ class DetailOperateurDialog(QDialog):
                 QMessageBox.information(self, "Succès", "Date d'évaluation mise à jour.")
 
             except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour la date :\n{e}")
+                logger.exception(f"Erreur mise a jour date: {e}")
+                if show_error_message:
+                    show_error_message(self, "Erreur", "Impossible de mettre à jour la date", e)
+                else:
+                    QMessageBox.critical(self, "Erreur", "Impossible de mettre à jour la date. Contactez l'administrateur.")
                 self._load_data()
 
     # NOTE: L'ancienne méthode _proposer_documents_niveau_3 a été supprimée.
@@ -1215,7 +1236,11 @@ class GestionEvaluationDialog(QDialog):
             self.apply_filters()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les évaluations :\n{e}")
+            logger.exception(f"Erreur chargement evaluations: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible de charger les évaluations", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible de charger les évaluations. Contactez l'administrateur.")
 
     def apply_filters(self):
         """Applique les filtres de recherche et affiche les résultats."""
@@ -1411,7 +1436,11 @@ class GestionEvaluationDialog(QDialog):
             self.load_data()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de mettre à jour la date :\n{e}")
+            logger.exception(f"Erreur mise a jour date: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible de mettre à jour la date", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible de mettre à jour la date. Contactez l'administrateur.")
 
     def export_to_pdf(self):
         """Exporte les données affichées en PDF."""
@@ -1462,7 +1491,11 @@ class GestionEvaluationDialog(QDialog):
             QMessageBox.information(self, "Export réussi", f"Le fichier PDF a été créé :\n{file_path}")
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible d'exporter en PDF :\n{e}")
+            logger.exception(f"Erreur export PDF: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible d'exporter en PDF", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible d'exporter en PDF. Contactez l'administrateur.")
 
     def _on_row_double_click(self, row, col):
         """Gère le double-clic sur une ligne du tableau."""

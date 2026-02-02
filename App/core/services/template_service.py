@@ -7,8 +7,10 @@ qui peuvent être pré-remplis avec les informations de l'opérateur et ouverts 
 """
 
 import os
+import sys
 import json
 import shutil
+import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
@@ -16,6 +18,8 @@ from typing import List, Dict, Optional, Tuple
 
 from core.db.configbd import DatabaseCursor, DatabaseConnection
 from core.services.logger import log_hist
+
+logger = logging.getLogger(__name__)
 
 
 def get_templates_dir() -> Path:
@@ -177,10 +181,27 @@ def generate_filled_template(
 
     # Construire le chemin source
     templates_dir = get_templates_dir()
-    source_path = templates_dir / template['fichier_source'].replace('templates/', '')
+
+    # SECURITE: Validation contre path traversal
+    # Nettoyer le chemin et verifier qu'il reste dans templates_dir
+    fichier_source = template['fichier_source'].replace('templates/', '').replace('\\', '/').strip('/')
+
+    # Rejeter les chemins suspects
+    if '..' in fichier_source or fichier_source.startswith('/'):
+        logger.warning(f"Tentative de path traversal detectee: {template['fichier_source']}")
+        return False, "Chemin de fichier invalide", None
+
+    source_path = (templates_dir / fichier_source).resolve()
+
+    # Verifier que le chemin resolu est bien dans templates_dir
+    try:
+        source_path.relative_to(templates_dir.resolve())
+    except ValueError:
+        logger.warning(f"Path traversal bloque: {source_path} hors de {templates_dir}")
+        return False, "Acces au fichier refuse", None
 
     if not source_path.exists():
-        return False, f"Fichier template non trouvé: {source_path}", None
+        return False, "Fichier template non trouve", None
 
     # Date par défaut
     if not date_str:
@@ -297,6 +318,8 @@ def open_template_file(file_path: str) -> Tuple[bool, str]:
     """
     Ouvre un fichier template avec l'application par défaut du système.
 
+    SECURITE: Valide le chemin avant ouverture pour eviter les injections.
+
     Args:
         file_path: Chemin du fichier à ouvrir
 
@@ -305,19 +328,57 @@ def open_template_file(file_path: str) -> Tuple[bool, str]:
     """
     import subprocess
     import platform
+    from pathlib import Path
 
     try:
+        # SECURITE: Convertir en Path et resoudre pour eviter les injections
+        path = Path(file_path).resolve()
+
+        # Verifier que le fichier existe
+        if not path.exists():
+            return False, "Fichier non trouve"
+
+        # Verifier que c'est bien un fichier (pas un repertoire ou lien symbolique suspect)
+        if not path.is_file():
+            return False, "Chemin invalide"
+
+        # SECURITE: Verifier que le chemin est dans un repertoire autorise
+        # (temp_dir ou templates_dir)
+        temp_dir = get_temp_dir().resolve()
+        templates_dir = get_templates_dir().resolve()
+
+        is_in_temp = False
+        is_in_templates = False
+        try:
+            path.relative_to(temp_dir)
+            is_in_temp = True
+        except ValueError:
+            pass
+        try:
+            path.relative_to(templates_dir)
+            is_in_templates = True
+        except ValueError:
+            pass
+
+        if not (is_in_temp or is_in_templates):
+            logger.warning(f"Tentative d'ouverture de fichier hors zone autorisee: {path}")
+            return False, "Acces au fichier refuse"
+
+        # Ouvrir le fichier avec le chemin resolu (securise)
+        file_str = str(path)
+
         if platform.system() == 'Windows':
-            os.startfile(file_path)
+            os.startfile(file_str)
         elif platform.system() == 'Darwin':  # macOS
-            subprocess.run(['open', file_path], check=True)
+            subprocess.run(['open', file_str], check=True)
         else:  # Linux
-            subprocess.run(['xdg-open', file_path], check=True)
+            subprocess.run(['xdg-open', file_str], check=True)
 
         return True, "Fichier ouvert"
 
     except Exception as e:
-        return False, f"Erreur lors de l'ouverture: {str(e)}"
+        logger.error(f"Erreur ouverture fichier: {e}")
+        return False, "Impossible d'ouvrir le fichier"
 
 
 def check_templates_table_exists() -> bool:

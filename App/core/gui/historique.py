@@ -8,9 +8,11 @@ from PyQt5.QtGui import QFont, QColor, QPalette, QCursor
 
 from core.db.configbd import get_connection as get_db_connection
 from core.services.log_exporter import export_day
-from core.gui.emac_ui_kit import add_custom_title_bar
+from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 
 import json
+import logging
+logger = logging.getLogger(__name__)
 import datetime as dt
 import os
 
@@ -847,7 +849,8 @@ class HistoriqueDialog(QDialog):
             try:
                 self._export_range(d_from, d_to)
             except Exception as e:
-                QMessageBox.warning(self, "Erreur d'export", f"Échec de l'export :\n{e}")
+                logger.exception(f"Erreur export: {e}")
+                show_error_message(self, "Erreur d'export", "Échec de l'export", e)
                 return
 
         confirm = QMessageBox.warning(

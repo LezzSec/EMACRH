@@ -18,6 +18,58 @@ from PyQt5.QtGui import QFont, QColor
 
 from core.gui.ui_theme import EmacTheme, EmacCard, EmacButton
 
+import logging
+logger = logging.getLogger(__name__)
+
+# Cache pour l'ID du role admin (evite les requetes repetees)
+_admin_role_id_cache = None
+
+
+def get_admin_role_id() -> int:
+    """
+    Recupere l'ID du role admin depuis la base de donnees.
+    Utilise un cache pour eviter les requetes repetees.
+
+    SECURITE: Ne pas hardcoder l'ID du role admin.
+
+    Returns:
+        ID du role admin, ou 1 par defaut si non trouve
+    """
+    global _admin_role_id_cache
+
+    if _admin_role_id_cache is not None:
+        return _admin_role_id_cache
+
+    try:
+        from core.db.configbd import DatabaseCursor
+
+        with DatabaseCursor(dictionary=True) as cur:
+            # Chercher le role admin par son nom
+            cur.execute("""
+                SELECT id FROM roles
+                WHERE LOWER(nom) IN ('admin', 'administrateur')
+                LIMIT 1
+            """)
+            result = cur.fetchone()
+            if result:
+                _admin_role_id_cache = result['id']
+                logger.debug(f"Role admin trouve: ID={_admin_role_id_cache}")
+                return _admin_role_id_cache
+
+    except Exception as e:
+        logger.warning(f"Impossible de recuperer l'ID du role admin: {e}")
+
+    # Fallback securise: retourner 1 mais logger un warning
+    logger.warning("Utilisation de l'ID admin par defaut (1) - verifier la base de donnees")
+    _admin_role_id_cache = 1
+    return _admin_role_id_cache
+
+
+def invalidate_admin_role_cache():
+    """Invalide le cache de l'ID admin (apres modification des roles)"""
+    global _admin_role_id_cache
+    _admin_role_id_cache = None
+
 
 class FeatureToggle(QWidget):
     """
@@ -173,9 +225,16 @@ class FeaturePuzzleWidget(QWidget):
     """
     permission_changed = pyqtSignal()
 
-    # ID du rôle admin (protégé)
-    ADMIN_ROLE_ID = 1
+    # Module Admin (protege)
     ADMIN_MODULE = 'Admin'
+
+    @property
+    def ADMIN_ROLE_ID(self):
+        """
+        SECURITE: Recupere l'ID du role admin dynamiquement.
+        Ne plus utiliser de valeur hardcodee.
+        """
+        return get_admin_role_id()
 
     def __init__(self, parent=None):
         super().__init__(parent)

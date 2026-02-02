@@ -36,10 +36,11 @@ except ImportError:
 
 try:
     from core.gui.ui_theme import EmacCard, EmacButton, EmacStatusCard
-    from core.gui.emac_ui_kit import add_custom_title_bar
+    from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
     THEME_AVAILABLE = True
 except ImportError:
     THEME_AVAILABLE = False
+    show_error_message = None
 
 
 class ContractFormDialog(QDialog):
@@ -289,7 +290,11 @@ class ContractFormDialog(QDialog):
             connection.close()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les opérateurs : {e}")
+            logger.exception(f"Erreur chargement operateurs: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible de charger les opérateurs", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible de charger les opérateurs. Contactez l'administrateur.")
 
     def load_operator_info(self):
         """Charge les infos de l'opérateur sélectionné."""
@@ -1230,7 +1235,11 @@ class ContractManagementDialog(QDialog):
             self.docs_table.setColumnHidden(0, True)
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors du chargement des documents : {e}")
+            logger.exception(f"Erreur chargement documents: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible de charger les documents", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible de charger les documents. Contactez l'administrateur.")
 
     def add_contract_document(self):
         """Ouvre la fenêtre pour ajouter un document RH."""
@@ -1242,7 +1251,11 @@ class ContractManagementDialog(QDialog):
             if dialog.exec_() == QDialog.Accepted:
                 self.load_contract_documents()
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'ouverture du formulaire : {e}")
+            logger.exception(f"Erreur ouverture formulaire document: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible d'ouvrir le formulaire", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible d'ouvrir le formulaire. Contactez l'administrateur.")
 
     def open_document(self):
         """Ouvre le document sélectionné."""
@@ -1280,7 +1293,11 @@ class ContractManagementDialog(QDialog):
                 QMessageBox.warning(self, "Erreur", "Chemin du fichier non trouvé")
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'ouverture du document : {e}")
+            logger.exception(f"Erreur ouverture document: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible d'ouvrir le document", e)
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible d'ouvrir le document. Contactez l'administrateur.")
 
     def delete_document(self):
         """Supprime le document sélectionné."""
@@ -1325,7 +1342,11 @@ class ContractManagementDialog(QDialog):
                 self.load_contract_documents()
 
             except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Erreur lors de la suppression : {e}")
+                logger.exception(f"Erreur suppression document: {e}")
+                if show_error_message:
+                    show_error_message(self, "Erreur", "Impossible de supprimer le document", e)
+                else:
+                    QMessageBox.critical(self, "Erreur", "Impossible de supprimer le document. Contactez l'administrateur.")
 
     def delete_contract(self):
         """Désactive le contrat sélectionné."""

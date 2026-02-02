@@ -619,28 +619,52 @@ def get_documents_entite(
     Returns:
         Liste des documents
     """
-    try:
-        column_map = {
-            'contrat': 'contrat_id',
-            'formation': 'formation_id',
-            'declaration': 'declaration_id'
-        }
+    # SECURITE: Whitelist stricte des colonnes autorisées
+    # Ne JAMAIS ajouter de colonnes sans validation
+    ALLOWED_COLUMNS = {
+        'contrat': 'contrat_id',
+        'formation': 'formation_id',
+        'declaration': 'declaration_id'
+    }
 
-        column = column_map.get(entite_type)
-        if not column:
+    try:
+        column = ALLOWED_COLUMNS.get(entite_type)
+        if column is None:
+            logger.warning(f"Type d'entité non autorisé: {entite_type}")
             return []
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(f"""
-                SELECT
-                    d.*,
-                    c.nom as categorie_nom,
-                    c.couleur as categorie_couleur
+        # Double vérification de sécurité
+        assert column in ('contrat_id', 'formation_id', 'declaration_id'), \
+            f"Colonne non autorisée: {column}"
+
+        # Construction sécurisée de la requête
+        # La colonne est validée par whitelist, pas d'injection possible
+        query = {
+            'contrat_id': """
+                SELECT d.*, c.nom as categorie_nom, c.couleur as categorie_couleur
                 FROM documents d
                 JOIN categories_documents c ON d.categorie_id = c.id
-                WHERE d.{column} = %s
+                WHERE d.contrat_id = %s
                 ORDER BY d.date_upload DESC
-            """, (entite_id,))
+            """,
+            'formation_id': """
+                SELECT d.*, c.nom as categorie_nom, c.couleur as categorie_couleur
+                FROM documents d
+                JOIN categories_documents c ON d.categorie_id = c.id
+                WHERE d.formation_id = %s
+                ORDER BY d.date_upload DESC
+            """,
+            'declaration_id': """
+                SELECT d.*, c.nom as categorie_nom, c.couleur as categorie_couleur
+                FROM documents d
+                JOIN categories_documents c ON d.categorie_id = c.id
+                WHERE d.declaration_id = %s
+                ORDER BY d.date_upload DESC
+            """
+        }
+
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(query[column], (entite_id,))
 
             return cur.fetchall()
 

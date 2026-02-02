@@ -17,7 +17,9 @@ from PyQt5.QtGui import QFont, QColor
 from datetime import datetime, date
 
 from core.services import formation_service
-from core.gui.emac_ui_kit import add_custom_title_bar
+from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
+import logging
+logger = logging.getLogger(__name__)
 
 # Import des composants modernes EMAC
 try:
@@ -870,7 +872,8 @@ class AddEditFormationDialog(QDialog):
                     self._update_attestation_display()
                     QMessageBox.information(self, "Succes", "Attestation jointe avec succes.")
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur: {e}")
+            logger.exception(f"Erreur joindre attestation: {e}")
+            show_error_message(self, "Erreur", "Impossible de joindre l'attestation", e)
 
     def voir_attestation(self):
         """Ouvre l'attestation jointe"""
@@ -900,9 +903,10 @@ class AddEditFormationDialog(QDialog):
                     else:
                         subprocess.run(['xdg-open', file_path])
                 else:
-                    QMessageBox.warning(self, "Erreur", f"Fichier introuvable: {file_path}")
+                    QMessageBox.warning(self, "Erreur", "Fichier introuvable.")
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur: {e}")
+            logger.exception(f"Erreur voir attestation: {e}")
+            show_error_message(self, "Erreur", "Impossible d'ouvrir l'attestation", e)
 
     def retirer_attestation(self):
         """Retire le lien vers l'attestation (ne supprime pas le fichier)"""

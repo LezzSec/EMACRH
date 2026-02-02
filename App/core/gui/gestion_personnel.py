@@ -1,5 +1,8 @@
 # gestion_personnel.py – Gestion complète du personnel (actifs et inactifs)
 
+import logging
+logger = logging.getLogger(__name__)
+
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QGroupBox,
@@ -13,7 +16,7 @@ from PyQt5.QtGui import QFont, QColor
 from core.db.configbd import get_connection as get_db_connection
 from core.services.logger import log_hist
 from core.gui.historique_personnel import HistoriquePersonnelTab
-from core.gui.emac_ui_kit import add_custom_title_bar
+from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.services.auth_service import get_current_user
 
 import datetime as dt
@@ -665,8 +668,9 @@ class DetailOperateurDialog(QDialog):
             self.stat_total.value_label.setText(str(sum(niveaux.values())))
             
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les polyvalences :\n{e}")
-    
+            logger.exception(f"Erreur chargement polyvalences: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les polyvalences", e)
+
     # Méthode load_summary() supprimée - l'onglet Résumé a été retiré
     
     # Méthode load_history() supprimée - remplacée par le widget HistoriquePersonnelTab
@@ -734,7 +738,8 @@ class DetailOperateurDialog(QDialog):
             self.operateur_status_changed.emit(self.operateur_id)
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de modifier le statut :\n{e}")
+            logger.exception(f"Erreur modification statut: {e}")
+            show_error_message(self, "Erreur", "Impossible de modifier le statut", e)
 
     def export_profile(self):
         """Demande le format d'export puis lance PDF ou Excel."""
@@ -1228,7 +1233,8 @@ class DetailOperateurDialog(QDialog):
             QMessageBox.warning(self, "Module manquant",
                                 "Le module 'openpyxl' est requis pour l'export Excel.\n\npip install openpyxl")
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible d'exporter le profil :\n{e}")
+            logger.exception(f"Erreur export profil: {e}")
+            show_error_message(self, "Erreur", "Impossible d'exporter le profil", e)
 
 
     
@@ -1495,8 +1501,9 @@ class GestionPersonnelDialog(QDialog):
             self.filter_table()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les données :\n{e}")
-    
+            logger.exception(f"Erreur chargement donnees: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les données", e)
+
     def filter_table(self):
         """Filtre et affiche les données dans la table."""
         search_text = self.search_input.text().lower()
@@ -1744,7 +1751,8 @@ class GestionPersonnelDialog(QDialog):
                 "Installez-le avec : pip install openpyxl"
             )
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible d'exporter :\n{e}")
+            logger.exception(f"Erreur export: {e}")
+            show_error_message(self, "Erreur", "Impossible d'exporter", e)
 
 
 class AffecterDatesEntreeDialog(QDialog):
@@ -1933,7 +1941,8 @@ class AffecterDatesEntreeDialog(QDialog):
                 self.table.setCellWidget(row, 5, btn_enregistrer)
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors du chargement :\n{e}")
+            logger.exception(f"Erreur chargement: {e}")
+            show_error_message(self, "Erreur", "Erreur lors du chargement", e)
 
     def enregistrer_date(self, operateur_id, row):
         """Enregistre la date d'entrée pour un employé spécifique"""
@@ -2017,17 +2026,15 @@ class AffecterDatesEntreeDialog(QDialog):
 
             except Exception as e:
                 conn.rollback()
-                QMessageBox.critical(
-                    self,
-                    "Erreur",
-                    f"Erreur lors de l'enregistrement :\n{e}"
-                )
+                logger.exception(f"Erreur enregistrement: {e}")
+                show_error_message(self, "Erreur", "Erreur lors de l'enregistrement", e)
             finally:
                 cur.close()
                 conn.close()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur :\n{e}")
+            logger.exception(f"Erreur: {e}")
+            show_error_message(self, "Erreur", "Une erreur est survenue", e)
 
 
 if __name__ == "__main__":

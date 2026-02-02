@@ -15,7 +15,7 @@ from core.db.configbd import get_connection as get_db_connection
 from core.services.logger import log_hist
 
 logger = logging.getLogger(__name__)
-from core.gui.emac_ui_kit import add_custom_title_bar
+from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 
 try:
     from core.services.audit_logger import log_insert, log_action
@@ -287,7 +287,8 @@ class RegularisationDialog(QDialog):
             self.maladie_label.setText(f"Maladie : {maladie_count}")
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les absents :\n{e}")
+            logger.exception(f"Erreur chargement absents: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les absents", e)
 
     # ==================== ONGLET 2: DÉCLARER UNE ABSENCE ====================
 
@@ -396,7 +397,8 @@ class RegularisationDialog(QDialog):
                 self.personnel_combo.addItem(display, r['id'])
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger le personnel :\n{e}")
+            logger.exception(f"Erreur chargement personnel: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger le personnel", e)
 
     def submit_declaration(self):
         """Enregistre une nouvelle déclaration d'absence."""
@@ -464,7 +466,8 @@ class RegularisationDialog(QDialog):
             self.refresh_all()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible d'enregistrer la déclaration :\n{e}")
+            logger.exception(f"Erreur enregistrement declaration: {e}")
+            show_error_message(self, "Erreur", "Impossible d'enregistrer la déclaration", e)
 
     # ==================== ONGLET 3: CALENDRIER ====================
 
@@ -611,7 +614,8 @@ class RegularisationDialog(QDialog):
                     self.calendar_absents_list.addItem(item)
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les absences :\n{e}")
+            logger.exception(f"Erreur chargement absences: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les absences", e)
 
     # ==================== ONGLET 4: CALENDRIER ÉVALUATIONS ====================
 
@@ -877,7 +881,8 @@ class RegularisationDialog(QDialog):
                     self.eval_calendar_list.addItem(item)
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les évaluations :\n{e}")
+            logger.exception(f"Erreur chargement evaluations: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les évaluations", e)
 
     def load_eval_calendar_data(self):
         """Recharge les marquages et les données du calendrier d'évaluations."""
@@ -1061,7 +1066,8 @@ class RegularisationDialog(QDialog):
                 self.history_table.setItem(row_pos, 6, QTableWidgetItem(r['motif'] or ""))
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger l'historique :\n{e}")
+            logger.exception(f"Erreur chargement historique: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger l'historique", e)
 
     def delete_selected_declaration(self):
         """Supprime la déclaration sélectionnée."""
@@ -1100,7 +1106,8 @@ class RegularisationDialog(QDialog):
             self.refresh_all()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de supprimer la déclaration :\n{e}")
+            logger.exception(f"Erreur suppression declaration: {e}")
+            show_error_message(self, "Erreur", "Impossible de supprimer la déclaration", e)
 
     # ==================== HELPERS ====================
 

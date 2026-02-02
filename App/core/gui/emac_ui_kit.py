@@ -790,6 +790,61 @@ class EmacChip(QtWidgets.QLabel):
         self.setFixedSize(self._container.sizeHint())
 
 
+# =============================
+# Fonctions utilitaires - Securite
+# =============================
+
+def show_error_message(parent, title: str, user_message: str, exception: Exception = None):
+    """
+    Affiche un message d'erreur securise sans exposer les details techniques.
+
+    SECURITE: Ne jamais afficher les details d'exception a l'utilisateur.
+    Les details sont logges pour le debogage.
+
+    Args:
+        parent: Widget parent pour le dialog
+        title: Titre du message box
+        user_message: Message generique pour l'utilisateur
+        exception: Exception a logger (optionnel)
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    # Logger l'exception complete pour le debogage
+    if exception:
+        logger.exception(f"{title}: {user_message} - Details: {exception}")
+
+    # Afficher uniquement un message generique a l'utilisateur
+    QtWidgets.QMessageBox.critical(
+        parent,
+        title,
+        f"{user_message}\n\nSi le probleme persiste, contactez l'administrateur."
+    )
+
+
+def show_warning_message(parent, title: str, user_message: str, exception: Exception = None):
+    """
+    Affiche un avertissement securise sans exposer les details techniques.
+
+    Args:
+        parent: Widget parent pour le dialog
+        title: Titre du message box
+        user_message: Message generique pour l'utilisateur
+        exception: Exception a logger (optionnel)
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    if exception:
+        logger.warning(f"{title}: {user_message} - Details: {exception}")
+
+    QtWidgets.QMessageBox.warning(
+        parent,
+        title,
+        f"{user_message}\n\nSi le probleme persiste, contactez l'administrateur."
+    )
+
+
 if __name__ == "__main__":
     from PyQt5 import QtWidgets
     import sys

@@ -12,6 +12,7 @@ from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from core.gui.historique import HistoriqueDialog
 from core.db.configbd import get_connection as get_db_connection
 from core.services.matricule_service import generer_prochain_matricule
+from core.gui.emac_ui_kit import show_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -176,7 +177,8 @@ class EvaluationDateDialog(QDialog):
         except Exception as e:
             self.poste_combo.clear()
             self.poste_combo.addItem("Erreur de chargement", None)
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger les postes :\n{e}")
+            logger.exception(f"Erreur chargement postes: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les postes", e)
 
     def _validate(self):
         if self.poste_combo.currentData() is None:
@@ -603,7 +605,8 @@ class ManageOperatorsDialog(QDialog):
                 connection.commit()
             except Exception:
                 pass
-            QMessageBox.critical(self, "Échec de l'enregistrement", f"{e}")
+            logger.exception(f"Erreur enregistrement: {e}")
+            show_error_message(self, "Erreur", "Échec de l'enregistrement", e)
         finally:
             try:
                 if hasattr(connection, "autocommit"):

@@ -515,6 +515,137 @@ Install with: `pip install -r requirements.txt`
 - Date formatting: Use `strftime('%d/%m/%Y')` for display (DD/MM/YYYY French format)
 - All user-facing text is in French
 
+## 🔒 Security Patterns (2026-02-02)
+
+**IMPORTANT**: Follow these security patterns to prevent vulnerabilities.
+
+### 1. SQL Injection Prevention
+
+```python
+# ❌ NEVER: Dynamic column/table names with f-strings
+cur.execute(f"SELECT * FROM {table} WHERE {column} = %s", (value,))
+
+# ✅ ALWAYS: Use parameterized queries with whitelist validation
+ALLOWED_COLUMNS = {'nom': 'nom', 'prenom': 'prenom', 'statut': 'statut'}
+
+def get_by_column(column, value):
+    if column not in ALLOWED_COLUMNS:
+        raise ValueError(f"Colonne non autorisee: {column}")
+
+    # Use predefined static queries
+    queries = {
+        'nom': "SELECT * FROM personnel WHERE nom = %s",
+        'prenom': "SELECT * FROM personnel WHERE prenom = %s",
+    }
+    cur.execute(queries[column], (value,))
+```
+
+### 2. Path Traversal Prevention
+
+```python
+from pathlib import Path
+
+# ❌ NEVER: Use user input directly in file paths
+file_path = base_dir / user_input  # Dangerous!
+
+# ✅ ALWAYS: Validate and resolve paths
+def safe_file_access(user_input: str, allowed_dir: Path) -> Path:
+    # Remove traversal attempts
+    clean_input = user_input.replace('..', '').replace('\\', '/').strip('/')
+
+    # Resolve to absolute path
+    target_path = (allowed_dir / clean_input).resolve()
+
+    # Verify containment
+    try:
+        target_path.relative_to(allowed_dir.resolve())
+    except ValueError:
+        raise PermissionError("Acces au fichier refuse")
+
+    return target_path
+```
+
+### 3. Error Message Security (Information Disclosure)
+
+```python
+from core.gui.emac_ui_kit import show_error_message
+import logging
+logger = logging.getLogger(__name__)
+
+# ❌ NEVER: Expose exception details to users
+except Exception as e:
+    QMessageBox.critical(self, "Erreur", f"Erreur: {e}")  # Exposes system info!
+
+# ✅ ALWAYS: Log details, show generic message
+except Exception as e:
+    logger.exception(f"Erreur operation XYZ: {e}")  # Full traceback in logs
+    show_error_message(self, "Erreur", "Operation impossible", e)  # Generic to user
+```
+
+### 4. Permission Checks in Services
+
+```python
+from core.services.permission_manager import require, can
+
+# ✅ ALWAYS: Check permissions at service layer (not just UI)
+def delete_personnel(personnel_id: int):
+    require("rh.personnel.delete")  # Raises PermissionError if denied
+    # ... proceed with deletion
+
+# ✅ For conditional logic
+if can("rh.personnel.edit"):
+    # Show edit button
+```
+
+### 5. Subprocess/Command Execution
+
+```python
+import subprocess
+from pathlib import Path
+
+# ❌ NEVER: Execute commands with user-controlled paths
+subprocess.run(['open', user_file])  # Command injection risk!
+
+# ✅ ALWAYS: Validate file exists and is in allowed directory
+def safe_open_file(file_path: Path, allowed_dirs: list[Path]):
+    resolved = file_path.resolve()
+
+    # Verify file exists
+    if not resolved.is_file():
+        raise FileNotFoundError("Fichier introuvable")
+
+    # Verify in allowed directory
+    if not any(resolved.is_relative_to(d) for d in allowed_dirs):
+        raise PermissionError("Acces refuse")
+
+    # Safe to execute
+    if sys.platform == 'win32':
+        os.startfile(str(resolved))
+    else:
+        subprocess.run(['xdg-open', str(resolved)])
+```
+
+### 6. Input Validation Pattern
+
+```python
+# ✅ Validate at system boundaries (user input, API responses)
+def validate_matricule(matricule: str) -> str:
+    if not matricule or not matricule.strip():
+        raise ValueError("Matricule requis")
+
+    # Whitelist allowed characters
+    import re
+    if not re.match(r'^[A-Z0-9]{4,10}$', matricule.upper()):
+        raise ValueError("Format matricule invalide")
+
+    return matricule.upper().strip()
+```
+
+### Security Audit Reports
+
+- Latest audit: [docs/security/audit-report-2026-02-02.md](docs/security/audit-report-2026-02-02.md)
+- Remediation: [docs/security/audit-remediation-2026-02-02.md](docs/security/audit-remediation-2026-02-02.md)
+
 ## Critical Implementation Notes
 
 1. **Dual Table Names**: When querying employees, check if code uses `personnel` or `operateurs` table. The schema contains both and they may reference different foreign key relationships.

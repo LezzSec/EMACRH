@@ -24,7 +24,7 @@ from core.services.document_service import DocumentService
 from core.services.logger import log_hist
 
 logger = logging.getLogger(__name__)
-from core.gui.emac_ui_kit import add_custom_title_bar
+from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 
 # Import des composants modernes EMAC
 try:
@@ -475,7 +475,8 @@ class GestionDocumentaireDialog(QDialog):
                         break
 
         except Exception as e:
-            QMessageBox.warning(self, "Erreur", f"Impossible de charger les opérateurs : {e}")
+            logger.exception(f"Erreur chargement operateurs: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les opérateurs", e)
 
         finally:
             if cur:
@@ -535,7 +536,8 @@ class GestionDocumentaireDialog(QDialog):
             return cur.fetchall()
 
         except Exception as e:
-            QMessageBox.warning(self, "Erreur", f"Impossible de charger les documents : {e}")
+            logger.exception(f"Erreur chargement documents: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les documents", e)
             return []
 
         finally:
@@ -699,7 +701,8 @@ class GestionDocumentaireDialog(QDialog):
                 # Log
                 log_hist("CONSULTATION_DOCUMENT", f"Consultation du document ID {doc_id}")
             except Exception as e:
-                QMessageBox.warning(self, "Erreur", f"Impossible d'ouvrir le document : {e}")
+                logger.exception(f"Erreur ouverture document: {e}")
+                show_error_message(self, "Erreur", "Impossible d'ouvrir le document", e)
         else:
             QMessageBox.warning(self, "Erreur", "Fichier introuvable sur le disque.")
 
@@ -728,7 +731,8 @@ class GestionDocumentaireDialog(QDialog):
                 # Log
                 log_hist("TELECHARGEMENT_DOCUMENT", f"Téléchargement du document ID {doc_id}")
             except Exception as e:
-                QMessageBox.warning(self, "Erreur", f"Erreur lors du téléchargement : {e}")
+                logger.exception(f"Erreur telechargement document: {e}")
+                show_error_message(self, "Erreur", "Erreur lors du téléchargement", e)
 
     def delete_document(self, doc_id):
         """Supprime un document après confirmation"""
@@ -949,10 +953,11 @@ class AddDocumentDialog(QDialog):
                         self.categorie_combo.addItem(cat['nom'], cat['id'])
         except Exception as e:
             # En cas d'erreur, afficher un message
+            logger.exception(f"Erreur chargement categories: {e}")
             QMessageBox.warning(
                 self,
                 "Erreur",
-                f"Impossible de charger les catégories.\n\nVeuillez d'abord installer le module :\npython scripts/install_gestion_documentaire.py\n\nErreur: {e}"
+                "Impossible de charger les catégories.\n\nVeuillez d'abord installer le module :\npython scripts/install_gestion_documentaire.py\n\nContactez l'administrateur si le problème persiste."
             )
             self.reject()  # Fermer la fenêtre
 
