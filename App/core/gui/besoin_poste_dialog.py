@@ -48,3 +48,4 @@ class BesoinPosteDialog(QtWidgets.QDialog):
         if txt == "":
             return None
         return int(txt)
+    

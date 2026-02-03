@@ -465,7 +465,149 @@ def add_visite_batch(
 
 
 # ============================================================
-# 5. UTILITAIRES
+# 5. COMPÉTENCES EN MASSE
+# ============================================================
+
+def add_competence_batch(
+    personnel_ids: List[int],
+    competence_data: Dict[str, Any],
+    progress_callback: Optional[Callable[[int, str], None]] = None,
+    created_by: str = None
+) -> Tuple[int, int, List[Dict]]:
+    """
+    Assigne une compétence à plusieurs employés.
+
+    Args:
+        personnel_ids: Liste des IDs de personnel
+        competence_data: Dict avec competence_id, date_acquisition, date_expiration, commentaire
+        progress_callback: Callback(percentage, message) pour la progression
+        created_by: Utilisateur ayant lancé l'opération
+
+    Returns:
+        (nb_success, nb_errors, details_list)
+    """
+    require('rh.competences.edit')
+
+    if not personnel_ids:
+        return 0, 0, []
+
+    competence_id = competence_data.get('competence_id')
+    if not competence_id:
+        return 0, len(personnel_ids), [{'personnel_id': pid, 'status': 'ERREUR', 'error': "Compétence non spécifiée"} for pid in personnel_ids]
+
+    # Récupérer le libellé de la compétence pour le tracking
+    competence_libelle = "Compétence"
+    try:
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute("SELECT libelle FROM competences_catalogue WHERE id = %s", (competence_id,))
+            row = cur.fetchone()
+            if row:
+                competence_libelle = row['libelle']
+    except Exception as e:
+        logger.error(f"Erreur récupération libellé compétence: {e}")
+
+    # Créer le tracking batch
+    batch_id = create_batch_operation(
+        'COMPETENCE',
+        f"{competence_libelle} - {competence_data.get('date_acquisition')}",
+        len(personnel_ids),
+        created_by
+    )
+
+    details = []
+    nb_success = 0
+    nb_errors = 0
+    total = len(personnel_ids)
+
+    for i, personnel_id in enumerate(personnel_ids):
+        if progress_callback:
+            progress_callback(
+                int((i / total) * 100),
+                f"Traitement {i + 1}/{total}..."
+            )
+
+        try:
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+
+                # Vérifier si déjà assignée (pour éviter les doublons)
+                cur.execute("""
+                    SELECT id FROM personnel_competences
+                    WHERE personnel_id = %s AND competence_id = %s
+                """, (personnel_id, competence_id))
+
+                existing = cur.fetchone()
+                if existing:
+                    # Mettre à jour au lieu de créer
+                    cur.execute("""
+                        UPDATE personnel_competences
+                        SET date_acquisition = %s, date_expiration = %s, commentaire = %s
+                        WHERE personnel_id = %s AND competence_id = %s
+                    """, (
+                        competence_data.get('date_acquisition'),
+                        competence_data.get('date_expiration'),
+                        competence_data.get('commentaire'),
+                        personnel_id,
+                        competence_id
+                    ))
+                    record_id = existing[0]
+                else:
+                    # Créer une nouvelle assignation
+                    cur.execute("""
+                        INSERT INTO personnel_competences
+                        (personnel_id, competence_id, date_acquisition, date_expiration, commentaire)
+                        VALUES (%s, %s, %s, %s, %s)
+                    """, (
+                        personnel_id,
+                        competence_id,
+                        competence_data.get('date_acquisition'),
+                        competence_data.get('date_expiration'),
+                        competence_data.get('commentaire')
+                    ))
+                    record_id = cur.lastrowid
+
+                nb_success += 1
+
+                details.append({
+                    'personnel_id': personnel_id,
+                    'status': 'SUCCES',
+                    'record_id': record_id
+                })
+
+                if batch_id:
+                    add_batch_detail(batch_id, personnel_id, 'SUCCES', record_id)
+
+        except Exception as e:
+            nb_errors += 1
+            error_msg = str(e)
+            details.append({
+                'personnel_id': personnel_id,
+                'status': 'ERREUR',
+                'error': error_msg
+            })
+            if batch_id:
+                add_batch_detail(batch_id, personnel_id, 'ERREUR', error_message=error_msg)
+            logger.error(f"Erreur compétence batch pour personnel {personnel_id}: {e}")
+
+    # Finaliser le batch
+    if batch_id:
+        complete_batch_operation(batch_id, nb_success, nb_errors)
+
+    # Log historique
+    log_hist(
+        action="COMPETENCE_BATCH",
+        table_name="personnel_competences",
+        description=f"Compétence '{competence_libelle}' assignée à {nb_success} personnes ({nb_errors} erreurs)"
+    )
+
+    if progress_callback:
+        progress_callback(100, "Terminé")
+
+    return nb_success, nb_errors, details
+
+
+# ============================================================
+# 6. UTILITAIRES
 # ============================================================
 
 def get_personnel_list_for_bulk() -> List[Dict]:

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # import pandas as pd  # Déplacé dans les fonctions qui l'utilisent
 from datetime import datetime, timedelta
 from core.gui.historique import HistoriqueDialog
-from core.db.configbd import get_connection as get_db_connection
+from core.db.configbd import get_connection as get_db_connection, DatabaseCursor, DatabaseConnection
 from .besoin_poste_dialog import BesoinPosteDialog
 from core.services.logger import log_hist
 try:
@@ -609,20 +609,16 @@ class GrillesDialog(QDialog):
             old_date_next = None
 
             try:
-                conn1 = get_db_connection()
-                cur1 = conn1.cursor()
-                cur1.execute("""
-                    SELECT niveau, date_evaluation, prochaine_evaluation
-                    FROM polyvalence
-                    WHERE operateur_id = %s AND poste_id = %s
-                """, (operateur_id, poste_id))
+                with DatabaseCursor() as cur1:
+                    cur1.execute("""
+                        SELECT niveau, date_evaluation, prochaine_evaluation
+                        FROM polyvalence
+                        WHERE operateur_id = %s AND poste_id = %s
+                    """, (operateur_id, poste_id))
 
-                result = cur1.fetchone()
-                if result:
-                    old_niveau, old_date_eval, old_date_next = result
-
-                cur1.close()
-                conn1.close()
+                    result = cur1.fetchone()
+                    if result:
+                        old_niveau, old_date_eval, old_date_next = result
 
             except Exception as e:
                 logger.error(f"Erreur lecture ancienne valeur : {e}")
@@ -634,74 +630,73 @@ class GrillesDialog(QDialog):
             new_niveau_int = None
 
             try:
-                conn2 = get_db_connection()
-                cur2 = conn2.cursor()
+                with DatabaseConnection() as conn2:
+                    cur2 = conn2.cursor()
 
-                if value == "":
-                    # Suppression
-                    cur2.execute(
-                        "DELETE FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
-                        (operateur_id, poste_id)
-                    )
-                    action = 'DELETE'
+                    if value == "":
+                        # Suppression
+                        cur2.execute(
+                            "DELETE FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
+                            (operateur_id, poste_id)
+                        )
+                        action = 'DELETE'
 
-                else:
-                    new_niveau_int = int(value)
+                    else:
+                        new_niveau_int = int(value)
 
-                    # Archivage si modification
-                    if old_niveau is not None and old_niveau != new_niveau_int:
-                        try:
+                        # Archivage si modification
+                        if old_niveau is not None and old_niveau != new_niveau_int:
+                            try:
+                                cur2.execute("""
+                                    INSERT INTO historique_polyvalence
+                                    (operateur_id, poste_id, action_type,
+                                     ancien_niveau, nouveau_niveau,
+                                     ancienne_date_evaluation, nouvelle_date_evaluation,
+                                     commentaire, date_action)
+                                    VALUES (%s, %s, 'IMPORT_MANUEL',
+                                            %s, %s,
+                                            %s, NULL,
+                                            'Ancienne polyvalence archivée lors de modification depuis la grille',
+                                            NOW())
+                                """, (
+                                    operateur_id,
+                                    poste_id,
+                                    old_niveau,
+                                    new_niveau_int,
+                                    old_date_eval
+                                ))
+                            except Exception as arch_err:
+                                logger.warning(f"Erreur archivage : {arch_err}")
+
+                        # Calculer la prochaine évaluation selon le niveau
+                        from datetime import date, timedelta
+                        if new_niveau_int == 1:
+                            jours = 30  # 1 mois
+                        elif new_niveau_int == 2:
+                            jours = 30  # 1 mois
+                        elif new_niveau_int in [3, 4]:
+                            jours = 3650  # 10 ans
+                        else:
+                            jours = 30  # Par défaut 1 mois
+
+                        prochaine_eval = date.today() + timedelta(days=jours)
+
+                        # Insert ou update
+                        if old_niveau is None:
                             cur2.execute("""
-                                INSERT INTO historique_polyvalence
-                                (operateur_id, poste_id, action_type,
-                                 ancien_niveau, nouveau_niveau,
-                                 ancienne_date_evaluation, nouvelle_date_evaluation,
-                                 commentaire, date_action)
-                                VALUES (%s, %s, 'IMPORT_MANUEL',
-                                        %s, %s,
-                                        %s, NULL,
-                                        'Ancienne polyvalence archivée lors de modification depuis la grille',
-                                        NOW())
-                            """, (
-                                operateur_id,
-                                poste_id,
-                                old_niveau,
-                                new_niveau_int,
-                                old_date_eval
-                            ))
-                        except Exception as arch_err:
-                            logger.warning(f"Erreur archivage : {arch_err}")
+                                INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
+                                VALUES (%s, %s, %s, CURDATE(), %s)
+                            """, (operateur_id, poste_id, new_niveau_int, prochaine_eval))
+                            action = 'INSERT'
+                        else:
+                            cur2.execute("""
+                                UPDATE polyvalence SET niveau = %s, date_evaluation = CURDATE(), prochaine_evaluation = %s
+                                WHERE operateur_id = %s AND poste_id = %s
+                            """, (new_niveau_int, prochaine_eval, operateur_id, poste_id))
+                            action = 'UPDATE'
 
-                    # Calculer la prochaine évaluation selon le niveau
-                    from datetime import date, timedelta
-                    if new_niveau_int == 1:
-                        jours = 30  # 1 mois
-                    elif new_niveau_int == 2:
-                        jours = 30  # 1 mois
-                    elif new_niveau_int in [3, 4]:
-                        jours = 3650  # 10 ans
-                    else:
-                        jours = 30  # Par défaut 1 mois
-
-                    prochaine_eval = date.today() + timedelta(days=jours)
-
-                    # Insert ou update
-                    if old_niveau is None:
-                        cur2.execute("""
-                            INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
-                            VALUES (%s, %s, %s, CURDATE(), %s)
-                        """, (operateur_id, poste_id, new_niveau_int, prochaine_eval))
-                        action = 'INSERT'
-                    else:
-                        cur2.execute("""
-                            UPDATE polyvalence SET niveau = %s, date_evaluation = CURDATE(), prochaine_evaluation = %s
-                            WHERE operateur_id = %s AND poste_id = %s
-                        """, (new_niveau_int, prochaine_eval, operateur_id, poste_id))
-                        action = 'UPDATE'
-
-                conn2.commit()
-                cur2.close()
-                conn2.close()
+                    conn2.commit()
+                    cur2.close()
 
             except Exception as e:
                 logger.exception(f"Erreur modification: {e}")
@@ -715,34 +710,29 @@ class GrillesDialog(QDialog):
             # 3️⃣ LOGGING dans l'historique
             # ==============================
             try:
-                conn3 = get_db_connection()
-                cur3 = conn3.cursor(dictionary=True)
-
                 # Récupérer des informations supplémentaires
-                # - Matricule de l'opérateur
-                # - Atelier du poste
-                # - Utilisateur connecté
                 matricule = None
                 atelier_nom = None
                 utilisateur = None
 
                 try:
-                    # Matricule de l'opérateur
-                    cur3.execute("SELECT matricule FROM personnel WHERE id = %s", (operateur_id,))
-                    result = cur3.fetchone()
-                    if result:
-                        matricule = result.get('matricule')
+                    with DatabaseCursor(dictionary=True) as cur3:
+                        # Matricule de l'opérateur
+                        cur3.execute("SELECT matricule FROM personnel WHERE id = %s", (operateur_id,))
+                        result = cur3.fetchone()
+                        if result:
+                            matricule = result.get('matricule')
 
-                    # Atelier du poste
-                    cur3.execute("""
-                        SELECT a.nom as atelier_nom
-                        FROM postes p
-                        LEFT JOIN atelier a ON p.atelier_id = a.id
-                        WHERE p.id = %s
-                    """, (poste_id,))
-                    result = cur3.fetchone()
-                    if result:
-                        atelier_nom = result.get('atelier_nom')
+                        # Atelier du poste
+                        cur3.execute("""
+                            SELECT a.nom as atelier_nom
+                            FROM postes p
+                            LEFT JOIN atelier a ON p.atelier_id = a.id
+                            WHERE p.id = %s
+                        """, (poste_id,))
+                        result = cur3.fetchone()
+                        if result:
+                            atelier_nom = result.get('atelier_nom')
 
                     # Utilisateur connecté
                     from core.services.auth_service import get_current_user
@@ -790,18 +780,15 @@ class GrillesDialog(QDialog):
                         "type": "modification"
                     }, ensure_ascii=False)
 
-                # Fermer le curseur dictionary et en ouvrir un normal pour l'insert
-                cur3.close()
-                cur3 = conn3.cursor()
-
-                cur3.execute("""
-                    INSERT INTO historique (date_time, action, operateur_id, poste_id, description, utilisateur)
-                    VALUES (%s, %s, %s, %s, %s, %s)
-                """, (datetime.now(), action, operateur_id, poste_id, description, utilisateur))
-
-                conn3.commit()
-                cur3.close()
-                conn3.close()
+                # Insert dans l'historique
+                with DatabaseConnection() as conn3:
+                    cur3 = conn3.cursor()
+                    cur3.execute("""
+                        INSERT INTO historique (date_time, action, operateur_id, poste_id, description, utilisateur)
+                        VALUES (%s, %s, %s, %s, %s, %s)
+                    """, (datetime.now(), action, operateur_id, poste_id, description, utilisateur))
+                    conn3.commit()
+                    cur3.close()
 
                 # Message final
                 if action == 'DELETE':
@@ -833,28 +820,23 @@ class GrillesDialog(QDialog):
     def reload_cell(self, row, column):
         """Recharge une cellule opérateur spécifique avec sa valeur depuis la base de données."""
         try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-
             operateur_id = self.operateurs[row][0]
             poste_id = self.postes[column][0]
 
-            cursor.execute(
-                "SELECT niveau FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
-                (operateur_id, poste_id)
-            )
-            result = cursor.fetchone()
+            with DatabaseCursor(dictionary=True) as cursor:
+                cursor.execute(
+                    "SELECT niveau FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
+                    (operateur_id, poste_id)
+                )
+                result = cursor.fetchone()
 
             self.main_table.blockSignals(True)
             if result:
-                value = result["niveau"] if isinstance(result, dict) else result[0]
+                value = result.get("niveau")
                 self.main_table.setItem(row, column, QTableWidgetItem(str(value)))
             else:
                 self.main_table.setItem(row, column, QTableWidgetItem(""))
             self.main_table.blockSignals(False)
-
-            cursor.close()
-            connection.close()
 
         except Exception as e:
             logger.error(f"Erreur lors du rechargement de la cellule : {e}")
@@ -924,47 +906,50 @@ class GrillesDialog(QDialog):
 
         ✅ OPTIMISÉ : Utilise 3 requêtes séparées au lieu d'un CROSS JOIN massif
         """
-        connection = get_db_connection()
-        cursor, dict_mode = _cursor(connection)
-
         try:
-            # ✅ REQUÊTE 1 : Liste des opérateurs actifs (RAPIDE)
-            cursor.execute("""
-                SELECT id, nom, prenom
-                FROM personnel
-                WHERE statut = 'ACTIF'
-                  AND matricule IS NOT NULL
-                  AND matricule != ''
-                ORDER BY nom, prenom
-            """)
-            operateurs_rows = _rows(cursor, dict_mode)
-
-            # ✅ REQUÊTE 2 : Liste des postes visibles (RAPIDE)
-            # Exclure la colonne "PRODUCTION" qui ne contient pas de vraies données de polyvalence
-            cursor.execute("""
-                SELECT id, poste_code
-                FROM postes
-                WHERE visible = 1
-                  AND poste_code != 'PRODUCTION'
-                ORDER BY poste_code
-            """)
-            postes_rows = _rows(cursor, dict_mode)
-
-            # ✅ REQUÊTE 3 : Seulement les polyvalences existantes (RAPIDE - pas de CROSS JOIN)
-            cursor.execute("""
-                SELECT operateur_id, poste_id, niveau
-                FROM polyvalence
-                WHERE operateur_id IN (
-                    SELECT id FROM personnel
+            with DatabaseCursor(dictionary=True) as cursor:
+                # ✅ REQUÊTE 1 : Liste des opérateurs actifs (RAPIDE)
+                cursor.execute("""
+                    SELECT id, nom, prenom
+                    FROM personnel
                     WHERE statut = 'ACTIF'
                       AND matricule IS NOT NULL
                       AND matricule != ''
-                )
-                AND poste_id IN (
-                    SELECT id FROM postes WHERE visible = 1
-                )
-            """)
-            polyvalences_rows = _rows(cursor, dict_mode)
+                    ORDER BY nom, prenom
+                """)
+                operateurs_rows = cursor.fetchall()
+
+                # ✅ REQUÊTE 2 : Liste des postes visibles (RAPIDE)
+                # Exclure la colonne "PRODUCTION" qui ne contient pas de vraies données de polyvalence
+                cursor.execute("""
+                    SELECT id, poste_code
+                    FROM postes
+                    WHERE visible = 1
+                      AND poste_code != 'PRODUCTION'
+                    ORDER BY poste_code
+                """)
+                postes_rows = cursor.fetchall()
+
+                # ✅ REQUÊTE 3 : Seulement les polyvalences existantes (RAPIDE - pas de CROSS JOIN)
+                cursor.execute("""
+                    SELECT operateur_id, poste_id, niveau
+                    FROM polyvalence
+                    WHERE operateur_id IN (
+                        SELECT id FROM personnel
+                        WHERE statut = 'ACTIF'
+                          AND matricule IS NOT NULL
+                          AND matricule != ''
+                    )
+                    AND poste_id IN (
+                        SELECT id FROM postes WHERE visible = 1
+                    )
+                """)
+                polyvalences_rows = cursor.fetchall()
+
+                # --- Récupération des besoins_postes ---
+                cursor.execute("SELECT id, besoins_postes FROM postes WHERE visible = 1")
+                besoins_rows = cursor.fetchall()
+                besoins_by_id = {r["id"]: r.get("besoins_postes", "") for r in besoins_rows}
 
             # ✅ OPTIMISATION : Construire les structures de données depuis les 3 requêtes
             # Créer un dictionnaire de polyvalences indexé par (operateur_id, poste_id)
@@ -1053,19 +1038,11 @@ class GrillesDialog(QDialog):
                 it.setForeground(self.color_besoins_text)
                 it.setTextAlignment(Qt.AlignCenter)
 
-            # --- Récupération et affichage des besoins_postes alignés aux colonnes ---
-            try:
-                cursor.execute("SELECT id, besoins_postes FROM postes WHERE visible = 1")
-                besoins_rows = _rows(cursor, dict_mode)
-                besoins_by_id = {r["id"]: r.get("besoins_postes", "") for r in besoins_rows}
-
-                for col_idx, (poste_id, _code) in enumerate(self.postes):
-                    val = besoins_by_id.get(poste_id, "")
-                    it = self.main_table.item(besoins_row, col_idx)
-                    it.setText("" if val in (None, "") else str(val))
-            except Exception as _e:
-                # On n'empêche pas l'écran de se charger si les besoins ne sont pas dispos
-                pass
+            # --- Affichage des besoins_postes alignés aux colonnes ---
+            for col_idx, (poste_id, _code) in enumerate(self.postes):
+                val = besoins_by_id.get(poste_id, "")
+                it = self.main_table.item(besoins_row, col_idx)
+                it.setText("" if val in (None, "") else str(val))
 
             self.main_table.blockSignals(False)
 
@@ -1078,9 +1055,6 @@ class GrillesDialog(QDialog):
                 show_error_message(self, "Erreur", "Erreur lors du chargement des données", e)
             else:
                 QMessageBox.critical(self, "Erreur", "Erreur lors du chargement des données. Contactez l'administrateur.")
-        finally:
-            cursor.close()
-            connection.close()
 
     # ----------------- Mode édition -----------------
     def toggle_edit_mode(self):

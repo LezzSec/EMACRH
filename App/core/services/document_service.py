@@ -307,21 +307,41 @@ class DocumentService:
         try:
             conn = get_connection()
             cursor = conn.cursor()
-            
+
             cursor.execute(
                 "UPDATE documents SET statut = 'archive' WHERE id = %s",
                 (document_id,)
             )
             conn.commit()
-            
+
             cursor.close()
             conn.close()
-            
+
             return True, "Document archivé avec succès"
-            
+
         except Exception as e:
             return False, f"Erreur lors de l'archivage: {str(e)}"
-    
+
+    def restore_document(self, document_id: int) -> Tuple[bool, str]:
+        """Restaure un document archivé (remet son statut à actif)"""
+        try:
+            conn = get_connection()
+            cursor = conn.cursor()
+
+            cursor.execute(
+                "UPDATE documents SET statut = 'actif' WHERE id = %s",
+                (document_id,)
+            )
+            conn.commit()
+
+            cursor.close()
+            conn.close()
+
+            return True, "Document restauré avec succès"
+
+        except Exception as e:
+            return False, f"Erreur lors de la restauration: {str(e)}"
+
     def get_categories(self) -> List[Dict]:
         """Récupère toutes les catégories de documents"""
         try:

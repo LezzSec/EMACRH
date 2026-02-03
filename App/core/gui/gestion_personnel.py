@@ -13,32 +13,14 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
-from core.db.configbd import get_connection as get_db_connection
+from core.db.configbd import DatabaseCursor, DatabaseConnection
+from core.gui.db_worker import DbWorker, DbThreadPool
 from core.services.logger import log_hist
 from core.gui.historique_personnel import HistoriquePersonnelTab
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.services.auth_service import get_current_user
 
 import datetime as dt
-
-
-# -------- Helpers DB --------
-def _cursor(conn):
-    """Retourne (cursor, dict_mode)."""
-    try:
-        cur = conn.cursor(dictionary=True)
-        return cur, True
-    except TypeError:
-        cur = conn.cursor()
-        return cur, False
-
-
-def _rows(cur, dict_mode):
-    """Retourne une liste de dicts quelle que soit la lib DB."""
-    if dict_mode:
-        return cur.fetchall()
-    names = [d[0] for d in cur.description]
-    return [dict(zip(names, r)) for r in cur.fetchall()]
 
 
 class DetailOperateurDialog(QDialog):
@@ -282,11 +264,9 @@ class DetailOperateurDialog(QDialog):
             self._infos_data = []
 
             # -------- Carte Informations personnelles --------
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            cursor.execute("SELECT * FROM personnel_infos WHERE operateur_id = %s", (self.operateur_id,))
-            row_data = _rows(cursor, dict_mode)
-            cursor.close(); connection.close()
+            with DatabaseCursor(dictionary=True) as cursor:
+                cursor.execute("SELECT * FROM personnel_infos WHERE operateur_id = %s", (self.operateur_id,))
+                row_data = cursor.fetchall()
 
             personal_items = []
             if row_data:
@@ -316,16 +296,14 @@ class DetailOperateurDialog(QDialog):
             )
 
             # -------- Carte Contrat actuel --------
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            cursor.execute("""
-                SELECT type_contrat, date_debut, date_fin, etp, categorie
-                FROM contrat
-                WHERE operateur_id = %s AND actif = 1
-                ORDER BY date_debut DESC LIMIT 1
-            """, (self.operateur_id,))
-            contr = _rows(cursor, dict_mode)
-            cursor.close(); connection.close()
+            with DatabaseCursor(dictionary=True) as cursor:
+                cursor.execute("""
+                    SELECT type_contrat, date_debut, date_fin, etp, categorie
+                    FROM contrat
+                    WHERE operateur_id = %s AND actif = 1
+                    ORDER BY date_debut DESC LIMIT 1
+                """, (self.operateur_id,))
+                contr = cursor.fetchall()
 
             contract_items = []
             if contr:
@@ -355,16 +333,14 @@ class DetailOperateurDialog(QDialog):
             )
 
             # -------- Carte Formations --------
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            cursor.execute("""
-                SELECT intitule, organisme, date_debut, date_fin, statut, certificat_obtenu
-                FROM formation
-                WHERE operateur_id = %s
-                ORDER BY date_debut DESC LIMIT 5
-            """, (self.operateur_id,))
-            formations = _rows(cursor, dict_mode)
-            cursor.close(); connection.close()
+            with DatabaseCursor(dictionary=True) as cursor:
+                cursor.execute("""
+                    SELECT intitule, organisme, date_debut, date_fin, statut, certificat_obtenu
+                    FROM formation
+                    WHERE operateur_id = %s
+                    ORDER BY date_debut DESC LIMIT 5
+                """, (self.operateur_id,))
+                formations = cursor.fetchall()
 
             formation_items = []
             if formations:
@@ -385,16 +361,14 @@ class DetailOperateurDialog(QDialog):
             )
 
             # -------- Carte Validités --------
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            cursor.execute("""
-                SELECT type_validite, date_debut, date_fin, periodicite, taux_incapacite
-                FROM validite
-                WHERE operateur_id = %s
-                ORDER BY date_debut DESC
-            """, (self.operateur_id,))
-            validites = _rows(cursor, dict_mode)
-            cursor.close(); connection.close()
+            with DatabaseCursor(dictionary=True) as cursor:
+                cursor.execute("""
+                    SELECT type_validite, date_debut, date_fin, periodicite, taux_incapacite
+                    FROM validite
+                    WHERE operateur_id = %s
+                    ORDER BY date_debut DESC
+                """, (self.operateur_id,))
+                validites = cursor.fetchall()
 
             validite_items = []
             if validites:
@@ -572,26 +546,20 @@ class DetailOperateurDialog(QDialog):
     def load_polyvalences(self):
         """Charge les polyvalences."""
         try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            
-            query = """
-                SELECT 
-                    ps.poste_code,
-                    p.niveau,
-                    p.date_evaluation,
-                    p.prochaine_evaluation
-                FROM polyvalence p
-                JOIN postes ps ON p.poste_id = ps.id
-                WHERE p.operateur_id = %s
-                ORDER BY ps.poste_code
-            """
-            
-            cursor.execute(query, (self.operateur_id,))
-            rows = _rows(cursor, dict_mode)
-            
-            cursor.close()
-            connection.close()
+            with DatabaseCursor(dictionary=True) as cursor:
+                query = """
+                    SELECT
+                        ps.poste_code,
+                        p.niveau,
+                        p.date_evaluation,
+                        p.prochaine_evaluation
+                    FROM polyvalence p
+                    JOIN postes ps ON p.poste_id = ps.id
+                    WHERE p.operateur_id = %s
+                    ORDER BY ps.poste_code
+                """
+                cursor.execute(query, (self.operateur_id,))
+                rows = cursor.fetchall()
             
             self.poly_table.setRowCount(0)
             
@@ -692,40 +660,38 @@ class DetailOperateurDialog(QDialog):
             return
         
         try:
-            connection = get_db_connection()
-            cursor, _ = _cursor(connection)
+            with DatabaseConnection() as connection:
+                cursor = connection.cursor()
 
-            # Récupérer nom/prénom pour le log
-            cursor.execute("SELECT nom, prenom FROM personnel WHERE id = %s", (self.operateur_id,))
-            pers = cursor.fetchone()
+                # Récupérer nom/prénom pour le log
+                cursor.execute("SELECT nom, prenom FROM personnel WHERE id = %s", (self.operateur_id,))
+                pers = cursor.fetchone()
 
-            cursor.execute(
-                "UPDATE personnel SET statut = %s WHERE id = %s",
-                (new_statut, self.operateur_id)
-            )
-
-            connection.commit()
-
-            # Logger le changement de statut
-            if pers:
-                from core.services.logger import log_hist
-                import json
-                log_hist(
-                    action="UPDATE",
-                    table_name="personnel",
-                    record_id=self.operateur_id,
-                    operateur_id=self.operateur_id,
-                    description=json.dumps({
-                        "operateur": f"{pers[1]} {pers[0]}",
-                        "old_statut": self.current_statut,
-                        "new_statut": new_statut,
-                        "type": "changement_statut"
-                    }, ensure_ascii=False),
-                    source="GUI/gestion_personnel"
+                cursor.execute(
+                    "UPDATE personnel SET statut = %s WHERE id = %s",
+                    (new_statut, self.operateur_id)
                 )
 
-            cursor.close()
-            connection.close()
+                connection.commit()
+
+                # Logger le changement de statut
+                if pers:
+                    import json
+                    log_hist(
+                        action="UPDATE",
+                        table_name="personnel",
+                        record_id=self.operateur_id,
+                        operateur_id=self.operateur_id,
+                        description=json.dumps({
+                            "operateur": f"{pers[1]} {pers[0]}",
+                            "old_statut": self.current_statut,
+                            "new_statut": new_statut,
+                            "type": "changement_statut"
+                        }, ensure_ascii=False),
+                        source="GUI/gestion_personnel"
+                    )
+
+                cursor.close()
 
             self.current_statut = new_statut
             self.update_status_button()
@@ -835,17 +801,14 @@ class DetailOperateurDialog(QDialog):
             # ---------- Données opérateur ----------
             nom = prenom = matricule = statut = "-"
             try:
-                conn = get_db_connection()
-                cur = conn.cursor()
-                cur.execute("""
-                    SELECT nom, prenom, COALESCE(matricule,'-'), UPPER(statut)
-                    FROM personnel WHERE id=%s
-                """, (self.operateur_id,))
-                row = cur.fetchone()
-                if row:
-                    nom, prenom, matricule, statut = row
-                cur.close()
-                conn.close()
+                with DatabaseCursor() as cur:
+                    cur.execute("""
+                        SELECT nom, prenom, COALESCE(matricule,'-'), UPPER(statut)
+                        FROM personnel WHERE id=%s
+                    """, (self.operateur_id,))
+                    row = cur.fetchone()
+                    if row:
+                        nom, prenom, matricule, statut = row
             except Exception:
                 pass
     
@@ -1122,14 +1085,13 @@ class DetailOperateurDialog(QDialog):
             # ----- En-tête opérateur -----
             nom = prenom = matricule = statut = "-"
             try:
-                conn = get_db_connection(); cur = conn.cursor()
-                cur.execute("SELECT nom, prenom, COALESCE(matricule,'-'), UPPER(statut) FROM personnel WHERE id=%s", (self.operateur_id,))
-                row = cur.fetchone()
-                if row:
-                    nom, prenom, matricule, statut = row
-            finally:
-                try: cur.close(); conn.close()
-                except: pass
+                with DatabaseCursor() as cur:
+                    cur.execute("SELECT nom, prenom, COALESCE(matricule,'-'), UPPER(statut) FROM personnel WHERE id=%s", (self.operateur_id,))
+                    row = cur.fetchone()
+                    if row:
+                        nom, prenom, matricule, statut = row
+            except Exception:
+                pass
     
             default_name = f"profil_{(matricule or 'operateur')}_{_dt.date.today():%Y%m%d}.xlsx"
             file_path, _ = QFileDialog.getSaveFileName(self, "Exporter le profil", default_name, "Excel Files (*.xlsx)")
@@ -1267,15 +1229,12 @@ class DetailOperateurDialog(QDialog):
     def _load_date_entree(self):
         """Charge la date d'entrée de l'opérateur depuis personnel_infos."""
         try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            cursor.execute(
-                "SELECT date_entree FROM personnel_infos WHERE operateur_id = %s",
-                (self.operateur_id,)
-            )
-            row = _rows(cursor, dict_mode)
-            cursor.close()
-            connection.close()
+            with DatabaseCursor(dictionary=True) as cursor:
+                cursor.execute(
+                    "SELECT date_entree FROM personnel_infos WHERE operateur_id = %s",
+                    (self.operateur_id,)
+                )
+                row = cursor.fetchall()
 
             if row and row[0].get('date_entree'):
                 return row[0]['date_entree']
@@ -1468,41 +1427,46 @@ class GestionPersonnelDialog(QDialog):
         self.load_data()
     
     def load_data(self):
-        """Charge tous les opérateurs avec leurs stats."""
-        try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
+        """Charge tous les opérateurs avec leurs stats (async)."""
 
-            # Charger tout le personnel avec le matricule pour le filtrage côté client
-            query = """
-                SELECT
-                o.id,
-                o.nom,
-                o.prenom,
-                o.matricule,
-                UPPER(o.statut) AS statut,
-                COUNT(p.id) AS nb_postes,
-                SUM(CASE WHEN p.niveau = 1 THEN 1 ELSE 0 END) AS n1,
-                SUM(CASE WHEN p.niveau = 2 THEN 1 ELSE 0 END) AS n2,
-                SUM(CASE WHEN p.niveau = 3 THEN 1 ELSE 0 END) AS n3,
-                SUM(CASE WHEN p.niveau = 4 THEN 1 ELSE 0 END) AS n4
-            FROM personnel o
-            LEFT JOIN polyvalence p ON o.id = p.operateur_id
-            GROUP BY o.id, o.nom, o.prenom, o.matricule, o.statut
-            ORDER BY o.nom, o.prenom;
-            """
+        def fetch_data(progress_callback=None):
+            """Fonction exécutée en background"""
+            with DatabaseCursor(dictionary=True) as cur:
+                query = """
+                    SELECT
+                    o.id,
+                    o.nom,
+                    o.prenom,
+                    o.matricule,
+                    UPPER(o.statut) AS statut,
+                    COUNT(p.id) AS nb_postes,
+                    SUM(CASE WHEN p.niveau = 1 THEN 1 ELSE 0 END) AS n1,
+                    SUM(CASE WHEN p.niveau = 2 THEN 1 ELSE 0 END) AS n2,
+                    SUM(CASE WHEN p.niveau = 3 THEN 1 ELSE 0 END) AS n3,
+                    SUM(CASE WHEN p.niveau = 4 THEN 1 ELSE 0 END) AS n4
+                FROM personnel o
+                LEFT JOIN polyvalence p ON o.id = p.operateur_id
+                GROUP BY o.id, o.nom, o.prenom, o.matricule, o.statut
+                ORDER BY o.nom, o.prenom;
+                """
+                cur.execute(query)
+                return cur.fetchall()
 
-            cursor.execute(query)
-            self.all_data = _rows(cursor, dict_mode)
-
-            cursor.close()
-            connection.close()
-
+        def on_success(data):
+            """Callback UI avec les résultats"""
+            self.all_data = data
             self.filter_table()
 
-        except Exception as e:
-            logger.exception(f"Erreur chargement donnees: {e}")
-            show_error_message(self, "Erreur", "Impossible de charger les données", e)
+        def on_error(error_msg):
+            """Callback en cas d'erreur"""
+            logger.error(f"Erreur chargement donnees: {error_msg}")
+            show_error_message(self, "Erreur", "Impossible de charger les données", Exception(error_msg))
+
+        # Lancer en background
+        worker = DbWorker(fetch_data)
+        worker.signals.result.connect(on_success)
+        worker.signals.error.connect(on_error)
+        DbThreadPool.start(worker)
 
     def filter_table(self):
         """Filtre et affiche les données dans la table."""
@@ -1846,26 +1810,22 @@ class AffecterDatesEntreeDialog(QDialog):
     def load_personnel_sans_date(self):
         """Charge les employés sans date d'entrée"""
         try:
-            conn = get_db_connection()
-            cur = conn.cursor(dictionary=True)
+            with DatabaseCursor(dictionary=True) as cur:
+                cur.execute("""
+                    SELECT
+                        p.id,
+                        p.nom,
+                        p.prenom,
+                        p.matricule,
+                        p.statut,
+                        pi.date_entree
+                    FROM personnel p
+                    LEFT JOIN personnel_infos pi ON p.id = pi.operateur_id
+                    WHERE pi.date_entree IS NULL OR pi.operateur_id IS NULL
+                    ORDER BY p.nom, p.prenom
+                """)
 
-            cur.execute("""
-                SELECT
-                    p.id,
-                    p.nom,
-                    p.prenom,
-                    p.matricule,
-                    p.statut,
-                    pi.date_entree
-                FROM personnel p
-                LEFT JOIN personnel_infos pi ON p.id = pi.operateur_id
-                WHERE pi.date_entree IS NULL OR pi.operateur_id IS NULL
-                ORDER BY p.nom, p.prenom
-            """)
-
-            personnel = cur.fetchall()
-            cur.close()
-            conn.close()
+                personnel = cur.fetchall()
 
             # Mettre à jour les stats
             self.stats_label.setText(
@@ -1970,37 +1930,38 @@ class AffecterDatesEntreeDialog(QDialog):
                 return
 
             # Enregistrer dans la base
-            conn = get_db_connection()
-            cur = conn.cursor()
-
             try:
-                # Vérifier si l'enregistrement existe
-                cur.execute(
-                    "SELECT operateur_id FROM personnel_infos WHERE operateur_id = %s",
-                    (operateur_id,)
-                )
-                exists = cur.fetchone()
+                with DatabaseConnection() as conn:
+                    cur = conn.cursor()
 
-                if exists:
+                    # Vérifier si l'enregistrement existe
                     cur.execute(
-                        "UPDATE personnel_infos SET date_entree = %s WHERE operateur_id = %s",
-                        (date_entree, operateur_id)
+                        "SELECT operateur_id FROM personnel_infos WHERE operateur_id = %s",
+                        (operateur_id,)
                     )
-                else:
-                    cur.execute(
-                        "INSERT INTO personnel_infos (operateur_id, date_entree) VALUES (%s, %s)",
-                        (operateur_id, date_entree)
+                    exists = cur.fetchone()
+
+                    if exists:
+                        cur.execute(
+                            "UPDATE personnel_infos SET date_entree = %s WHERE operateur_id = %s",
+                            (date_entree, operateur_id)
+                        )
+                    else:
+                        cur.execute(
+                            "INSERT INTO personnel_infos (operateur_id, date_entree) VALUES (%s, %s)",
+                            (operateur_id, date_entree)
+                        )
+
+                    # Logger
+                    log_hist(
+                        "AFFECTATION_DATE_ENTREE",
+                        f"Date d'entrée affectée: {date_display}",
+                        operateur_id,
+                        None
                     )
 
-                # Logger
-                log_hist(
-                    "AFFECTATION_DATE_ENTREE",
-                    f"Date d'entrée affectée: {date_display}",
-                    operateur_id,
-                    None
-                )
-
-                conn.commit()
+                    conn.commit()
+                    cur.close()
 
                 QMessageBox.information(
                     self,
@@ -2025,12 +1986,8 @@ class AffecterDatesEntreeDialog(QDialog):
                     self.close()
 
             except Exception as e:
-                conn.rollback()
                 logger.exception(f"Erreur enregistrement: {e}")
                 show_error_message(self, "Erreur", "Erreur lors de l'enregistrement", e)
-            finally:
-                cur.close()
-                conn.close()
 
         except Exception as e:
             logger.exception(f"Erreur: {e}")

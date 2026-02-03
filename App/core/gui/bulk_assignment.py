@@ -1141,7 +1141,295 @@ class MedicalBulkTab(QWidget):
 
 
 # ============================================================
-# 5. DIALOGUE DE PROGRESSION
+# 5. ONGLET COMPÉTENCES
+# ============================================================
+
+class CompetenceBulkTab(QWidget):
+    """Onglet pour l'ajout de compétence en masse."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._catalogue = []
+        self._setup_ui()
+        self._load_catalogue()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        # Style commun
+        input_style = """
+            QLineEdit, QDateEdit, QComboBox, QTextEdit {
+                padding: 6px 10px;
+                border: 1px solid #d1d5db;
+                border-radius: 5px;
+                font-size: 13px;
+                background: white;
+                color: #111827;
+                min-height: 18px;
+            }
+            QLineEdit:focus, QDateEdit:focus, QComboBox:focus, QTextEdit:focus {
+                border: 2px solid #7c3aed;
+                padding: 5px 9px;
+            }
+            QLineEdit::placeholder {
+                color: #9ca3af;
+            }
+            QDateEdit::drop-down, QComboBox::drop-down {
+                border: none;
+                padding-right: 6px;
+            }
+        """
+        label_style = "color: #374151; font-size: 13px;"
+        required_style = "color: #374151; font-size: 13px; font-weight: 500;"
+
+        # === Formulaire ===
+        form_group = QGroupBox("Informations de la compétence")
+        form_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                font-size: 13px;
+                color: #7c3aed;
+                border: none;
+                margin-top: 8px;
+                padding-top: 4px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 0px;
+                padding: 0;
+            }
+        """)
+        form_layout = QGridLayout(form_group)
+        form_layout.setVerticalSpacing(8)
+        form_layout.setHorizontalSpacing(12)
+
+        # Compétence
+        lbl_competence = QLabel("Compétence *:")
+        lbl_competence.setStyleSheet(required_style)
+        form_layout.addWidget(lbl_competence, 0, 0)
+        self.competence_combo = QComboBox()
+        self.competence_combo.setMinimumWidth(300)
+        self.competence_combo.setStyleSheet(input_style)
+        self.competence_combo.currentIndexChanged.connect(self._on_competence_changed)
+        form_layout.addWidget(self.competence_combo, 0, 1, 1, 3)
+
+        # Date d'acquisition
+        lbl_date_acq = QLabel("Date d'acquisition *:")
+        lbl_date_acq.setStyleSheet(required_style)
+        form_layout.addWidget(lbl_date_acq, 1, 0)
+        self.date_acquisition = QDateEdit()
+        self.date_acquisition.setDate(QDate.currentDate())
+        self.date_acquisition.setCalendarPopup(True)
+        self.date_acquisition.setDisplayFormat("dd/MM/yyyy")
+        self.date_acquisition.setStyleSheet(input_style)
+        self.date_acquisition.dateChanged.connect(self._update_expiration_date)
+        form_layout.addWidget(self.date_acquisition, 1, 1)
+
+        # Date d'expiration
+        lbl_date_exp = QLabel("Date d'expiration:")
+        lbl_date_exp.setStyleSheet(label_style)
+        form_layout.addWidget(lbl_date_exp, 1, 2)
+        self.date_expiration = QDateEdit()
+        self.date_expiration.setCalendarPopup(True)
+        self.date_expiration.setDisplayFormat("dd/MM/yyyy")
+        self.date_expiration.setSpecialValueText("Permanent")
+        self.date_expiration.setMinimumDate(QDate(1900, 1, 1))
+        self.date_expiration.setDate(QDate(1900, 1, 1))
+        self.date_expiration.setStyleSheet(input_style)
+        form_layout.addWidget(self.date_expiration, 1, 3)
+
+        # Info validité
+        self.validite_info = QLabel("")
+        self.validite_info.setStyleSheet("color: #64748b; font-style: italic; font-size: 12px;")
+        form_layout.addWidget(self.validite_info, 2, 1, 1, 3)
+
+        # Commentaire
+        lbl_commentaire = QLabel("Commentaire:")
+        lbl_commentaire.setStyleSheet(label_style)
+        form_layout.addWidget(lbl_commentaire, 3, 0)
+        self.commentaire_input = QTextEdit()
+        self.commentaire_input.setMaximumHeight(50)
+        self.commentaire_input.setPlaceholderText("Commentaire optionnel...")
+        self.commentaire_input.setStyleSheet(input_style)
+        form_layout.addWidget(self.commentaire_input, 3, 1, 1, 3)
+
+        # Document / Attestation
+        lbl_document = QLabel("Document:")
+        lbl_document.setStyleSheet(label_style)
+        form_layout.addWidget(lbl_document, 4, 0)
+
+        doc_layout = QHBoxLayout()
+        doc_layout.setSpacing(8)
+        self.document_path_input = QLineEdit()
+        self.document_path_input.setPlaceholderText("Aucun document sélectionné")
+        self.document_path_input.setReadOnly(True)
+        self.document_path_input.setStyleSheet(input_style)
+        doc_layout.addWidget(self.document_path_input, 1)
+
+        btn_browse = QPushButton("Parcourir...")
+        btn_browse.setCursor(Qt.PointingHandCursor)
+        btn_browse.setStyleSheet("""
+            QPushButton {
+                background: #f3f4f6;
+                color: #374151;
+                padding: 8px 16px;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                font-weight: 500;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background: #e5e7eb;
+                border-color: #9ca3af;
+            }
+        """)
+        btn_browse.clicked.connect(self._browse_document)
+        doc_layout.addWidget(btn_browse)
+
+        btn_clear = QPushButton("X")
+        btn_clear.setFixedWidth(32)
+        btn_clear.setCursor(Qt.PointingHandCursor)
+        btn_clear.setToolTip("Supprimer le document")
+        btn_clear.setStyleSheet("""
+            QPushButton {
+                background: #fee2e2;
+                color: #dc2626;
+                padding: 8px;
+                border: 1px solid #fecaca;
+                border-radius: 6px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: #fecaca;
+            }
+        """)
+        btn_clear.clicked.connect(self._clear_document)
+        doc_layout.addWidget(btn_clear)
+
+        form_layout.addLayout(doc_layout, 4, 1, 1, 3)
+
+        # Stocker le chemin du document
+        self._document_path = None
+
+        layout.addWidget(form_group)
+        layout.addStretch()
+
+    def _browse_document(self):
+        """Ouvre un dialogue pour sélectionner un document."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Sélectionner un document (attestation, certificat...)",
+            "",
+            "Documents (*.pdf *.doc *.docx *.png *.jpg *.jpeg);;Tous les fichiers (*)"
+        )
+        if file_path:
+            # SÉCURITÉ: Valider le fichier (taille et extension)
+            valid, error_msg = validate_uploaded_file(file_path)
+            if not valid:
+                QMessageBox.warning(self, "Fichier invalide", error_msg)
+                return
+
+            self._document_path = file_path
+            import os
+            self.document_path_input.setText(os.path.basename(file_path))
+
+    def _clear_document(self):
+        """Supprime le document sélectionné."""
+        self._document_path = None
+        self.document_path_input.clear()
+
+    def _load_catalogue(self):
+        """Charge le catalogue des compétences."""
+        def fetch():
+            with DatabaseCursor(dictionary=True) as cur:
+                cur.execute("""
+                    SELECT id, code, libelle, categorie, duree_validite_mois
+                    FROM competences_catalogue
+                    WHERE actif = 1
+                    ORDER BY categorie, libelle
+                """)
+                return cur.fetchall()
+
+        def on_result(data):
+            self._catalogue = data
+            self.competence_combo.clear()
+            self.competence_combo.addItem("-- Sélectionner une compétence --", None)
+
+            # Grouper par catégorie
+            categories = {}
+            for comp in data:
+                cat = comp.get('categorie') or 'Autre'
+                if cat not in categories:
+                    categories[cat] = []
+                categories[cat].append(comp)
+
+            for cat in sorted(categories.keys()):
+                # Séparateur catégorie
+                self.competence_combo.addItem(f"── {cat} ──", None)
+                idx = self.competence_combo.count() - 1
+                self.competence_combo.model().item(idx).setEnabled(False)
+
+                for comp in categories[cat]:
+                    label = comp['libelle']
+                    if comp.get('duree_validite_mois'):
+                        label += f" ({comp['duree_validite_mois']} mois)"
+                    self.competence_combo.addItem(label, comp)
+
+        def on_error(error):
+            logger.error(f"Erreur chargement catalogue compétences: {error}")
+
+        worker = DbWorker(fetch)
+        worker.signals.result.connect(on_result)
+        worker.signals.error.connect(on_error)
+        DbThreadPool.start(worker)
+
+    def _on_competence_changed(self):
+        """Met à jour l'info validité quand la compétence change."""
+        comp_data = self.competence_combo.currentData()
+        if comp_data and comp_data.get('duree_validite_mois'):
+            mois = comp_data['duree_validite_mois']
+            self.validite_info.setText(f"Validité standard: {mois} mois")
+            self._update_expiration_date()
+        else:
+            self.validite_info.setText("Compétence permanente (pas d'expiration)")
+            self.date_expiration.setDate(QDate(1900, 1, 1))
+
+    def _update_expiration_date(self):
+        """Calcule automatiquement la date d'expiration."""
+        comp_data = self.competence_combo.currentData()
+        if comp_data and comp_data.get('duree_validite_mois'):
+            from dateutil.relativedelta import relativedelta
+            date_acq = self.date_acquisition.date().toPyDate()
+            date_exp = date_acq + relativedelta(months=comp_data['duree_validite_mois'])
+            self.date_expiration.setDate(QDate(date_exp.year, date_exp.month, date_exp.day))
+
+    def get_data(self) -> Dict:
+        """Retourne les données du formulaire."""
+        comp_data = self.competence_combo.currentData()
+        date_exp = self.date_expiration.date()
+
+        return {
+            'competence_id': comp_data['id'] if comp_data else None,
+            'competence_libelle': comp_data['libelle'] if comp_data else None,
+            'date_acquisition': self.date_acquisition.date().toPyDate(),
+            'date_expiration': date_exp.toPyDate() if date_exp.year() > 1900 else None,
+            'commentaire': self.commentaire_input.toPlainText().strip() or None,
+            'document_path': self._document_path  # Chemin du document à joindre
+        }
+
+    def validate(self) -> tuple:
+        """Valide les données du formulaire."""
+        data = self.get_data()
+
+        if not data['competence_id']:
+            return False, "Veuillez sélectionner une compétence"
+
+        return True, ""
+
+
+# ============================================================
+# 6. DIALOGUE DE PROGRESSION
 # ============================================================
 
 class BulkOperationProgressDialog(QDialog):
@@ -1201,6 +1489,10 @@ class BulkOperationProgressDialog(QDialog):
                 )
             elif self.operation_type == "VISITE_MEDICALE":
                 return bulk_service.add_visite_batch(
+                    self.personnel_ids, self.data, None, self.created_by
+                )
+            elif self.operation_type == "COMPETENCE":
+                return bulk_service.add_competence_batch(
                     self.personnel_ids, self.data, None, self.created_by
                 )
             return 0, 0, []
@@ -1394,7 +1686,7 @@ class BulkAssignmentDialog(QDialog):
         title.setStyleSheet("font-size: 18px; font-weight: bold; color: white;")
         header_layout.addWidget(title)
 
-        subtitle = QLabel("Assignez des formations, absences ou visites médicales à plusieurs employés")
+        subtitle = QLabel("Assignez des formations, absences, visites médicales ou compétences à plusieurs employés")
         subtitle.setStyleSheet("color: rgba(255,255,255,0.85); font-size: 12px;")
         header_layout.addWidget(subtitle)
 
@@ -1439,6 +1731,7 @@ class BulkAssignmentDialog(QDialog):
         self.tabs.addTab(self._create_formation_tab(), "Formations")
         self.tabs.addTab(self._create_absence_tab(), "Absences")
         self.tabs.addTab(self._create_medical_tab(), "Médical")
+        self.tabs.addTab(self._create_competence_tab(), "Compétences")
         self.tabs.setMinimumHeight(310)  # Hauteur minimale pour bien voir le formulaire
         content_layout.addWidget(self.tabs, 0)  # Pas de stretch pour les onglets
 
@@ -1547,6 +1840,11 @@ class BulkAssignmentDialog(QDialog):
         self.medical_tab = MedicalBulkTab()
         return self.medical_tab
 
+    def _create_competence_tab(self) -> QWidget:
+        """Crée l'onglet compétences."""
+        self.competence_tab = CompetenceBulkTab()
+        return self.competence_tab
+
     def _on_selection_changed(self, selected_ids: List[int]):
         """Met à jour le bouton selon la sélection."""
         count = len(selected_ids)
@@ -1590,6 +1888,15 @@ class BulkAssignmentDialog(QDialog):
             operation_type = "VISITE_MEDICALE"
             data = self.medical_tab.get_data()
             operation_name = f"Visite {data.get('type_visite', '')}"
+
+        elif current_index == 3:  # Compétences
+            valid, error = self.competence_tab.validate()
+            if not valid:
+                QMessageBox.warning(self, "Validation", error)
+                return
+            operation_type = "COMPETENCE"
+            data = self.competence_tab.get_data()
+            operation_name = data.get('competence_libelle', 'Compétence')
 
         else:
             return

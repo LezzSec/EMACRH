@@ -7,7 +7,7 @@ Domaines gérés:
 - GENERAL: Données générales de l'opérateur
 - CONTRAT: Contrats de travail
 - DECLARATION: Déclarations (arrêt maladie, AT, congés...)
-- COMPETENCES: Polyvalence et niveaux
+- COMPETENCES: Compétences transversales (managériales, sécurité, habilitations)
 - FORMATION: Formations suivies et planifiées
 
 L'interface graphique ne doit jamais contenir de logique SQL.
@@ -22,6 +22,7 @@ from enum import Enum
 
 from core.db.configbd import DatabaseCursor, DatabaseConnection
 from core.services.permission_manager import require
+from core.services import competences_service
 
 
 # ============================================================
@@ -389,44 +390,16 @@ def _get_donnees_declaration(operateur_id: int) -> Dict[str, Any]:
 
 
 def _get_donnees_competences(operateur_id: int) -> Dict[str, Any]:
-    """Récupère les compétences (polyvalence) d'un opérateur."""
+    """Récupère les compétences transversales d'un opérateur."""
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            # Polyvalence avec infos postes
-            cur.execute("""
-                SELECT
-                    pv.id,
-                    pv.poste_id,
-                    pv.niveau,
-                    pv.date_evaluation,
-                    pv.prochaine_evaluation,
-                    ps.poste_code,
-                    a.nom as atelier_nom,
-                    DATEDIFF(pv.prochaine_evaluation, CURDATE()) as jours_avant_evaluation
-                FROM polyvalence pv
-                JOIN postes ps ON pv.poste_id = ps.id
-                LEFT JOIN atelier a ON ps.atelier_id = a.id
-                WHERE pv.operateur_id = %s
-                ORDER BY ps.poste_code
-            """, (operateur_id,))
+        # Utiliser le nouveau service de compétences transversales
+        competences = competences_service.get_competences_personnel(operateur_id)
+        stats = competences_service.get_stats_personnel(operateur_id)
 
-            competences = cur.fetchall()
-
-            # Statistiques
-            stats = {
-                "total_postes": len(competences),
-                "niveau_1": sum(1 for c in competences if c['niveau'] == 1),
-                "niveau_2": sum(1 for c in competences if c['niveau'] == 2),
-                "niveau_3": sum(1 for c in competences if c['niveau'] == 3),
-                "niveau_4": sum(1 for c in competences if c['niveau'] == 4),
-                "evaluations_en_retard": sum(1 for c in competences if c['jours_avant_evaluation'] and c['jours_avant_evaluation'] < 0),
-                "evaluations_a_venir_30j": sum(1 for c in competences if c['jours_avant_evaluation'] and 0 <= c['jours_avant_evaluation'] <= 30),
-            }
-
-            return {
-                "competences": competences,
-                "statistiques": stats
-            }
+        return {
+            "competences": competences,
+            "statistiques": stats
+        }
 
     except Exception as e:
         logger.error(f"Erreur _get_donnees_competences: {e}")
@@ -602,6 +575,49 @@ def get_documents_domaine(
 
     except Exception as e:
         logger.exception(f"Erreur get_documents_domaine: {e}")
+        return []
+
+
+def get_documents_archives_operateur(operateur_id: int) -> List[Dict]:
+    """
+    Récupère tous les documents archivés d'un opérateur (tous domaines confondus).
+
+    Args:
+        operateur_id: ID de l'opérateur
+
+    Returns:
+        Liste des documents archivés
+    """
+    try:
+        with DatabaseCursor(dictionary=True) as cur:
+            sql = """
+                SELECT
+                    d.id,
+                    d.operateur_id,
+                    d.categorie_id,
+                    d.nom_fichier,
+                    d.nom_affichage,
+                    d.chemin_fichier,
+                    d.type_mime,
+                    d.taille_octets,
+                    d.date_upload,
+                    d.date_expiration,
+                    d.statut,
+                    d.notes,
+                    d.uploaded_by,
+                    c.nom as categorie_nom,
+                    c.couleur as categorie_couleur
+                FROM documents d
+                JOIN categories_documents c ON d.categorie_id = c.id
+                WHERE d.operateur_id = %s
+                  AND d.statut = 'archive'
+                ORDER BY d.date_upload DESC
+            """
+            cur.execute(sql, (operateur_id,))
+            return cur.fetchall()
+
+    except Exception as e:
+        logger.exception(f"Erreur get_documents_archives_operateur: {e}")
         return []
 
 
@@ -1379,3 +1395,110 @@ def delete_formation(formation_id: int) -> Tuple[bool, str]:
 
     except Exception as e:
         return False, f"Erreur: {str(e)}"
+
+
+# ============================================================
+# COMPETENCES TRANSVERSALES - CRUD
+# ============================================================
+
+def get_catalogue_competences(actif_only: bool = True) -> List[Dict]:
+    """
+    Récupère le catalogue des compétences disponibles.
+
+    Args:
+        actif_only: Si True, retourne uniquement les compétences actives
+
+    Returns:
+        Liste des compétences du catalogue
+    """
+    return competences_service.get_all_competences(actif_only)
+
+
+def create_competence_personnel(
+    operateur_id: int,
+    data: Dict
+) -> Tuple[bool, str, Optional[int]]:
+    """
+    Assigne une compétence à un opérateur.
+
+    Args:
+        operateur_id: ID de l'opérateur
+        data: Dictionnaire avec competence_id, date_acquisition, date_expiration, commentaire
+
+    Returns:
+        Tuple (succès, message, id_assignation)
+    """
+    try:
+        require('rh.competences.edit')
+
+        competence_id = data.get('competence_id')
+        date_acquisition = data.get('date_acquisition')
+        date_expiration = data.get('date_expiration')
+        commentaire = data.get('commentaire')
+        document_id = data.get('document_id')
+
+        if not competence_id:
+            return False, "Compétence non spécifiée", None
+        if not date_acquisition:
+            return False, "Date d'acquisition obligatoire", None
+
+        return competences_service.assign_competence(
+            personnel_id=operateur_id,
+            competence_id=competence_id,
+            date_acquisition=date_acquisition,
+            date_expiration=date_expiration,
+            commentaire=commentaire,
+            document_id=document_id
+        )
+
+    except PermissionError as e:
+        return False, str(e), None
+    except Exception as e:
+        logger.exception(f"Erreur create_competence_personnel: {e}")
+        return False, "Erreur lors de l'assignation", None
+
+
+def update_competence_personnel(
+    assignment_id: int,
+    data: Dict
+) -> Tuple[bool, str]:
+    """
+    Met à jour une assignation de compétence.
+
+    Args:
+        assignment_id: ID de l'assignation
+        data: Dictionnaire avec les champs à mettre à jour
+
+    Returns:
+        Tuple (succès, message)
+    """
+    try:
+        require('rh.competences.edit')
+        return competences_service.update_assignment(assignment_id, **data)
+
+    except PermissionError as e:
+        return False, str(e)
+    except Exception as e:
+        logger.exception(f"Erreur update_competence_personnel: {e}")
+        return False, "Erreur lors de la mise à jour"
+
+
+def delete_competence_personnel(assignment_id: int) -> Tuple[bool, str]:
+    """
+    Retire une compétence d'un opérateur.
+
+    Args:
+        assignment_id: ID de l'assignation
+
+    Returns:
+        Tuple (succès, message)
+    """
+    try:
+        require('rh.competences.delete')
+        return competences_service.remove_assignment(assignment_id)
+
+    except PermissionError as e:
+        return False, str(e)
+    except Exception as e:
+        logger.exception(f"Erreur delete_competence_personnel: {e}")
+        return False, "Erreur lors du retrait"

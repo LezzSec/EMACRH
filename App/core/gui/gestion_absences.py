@@ -16,8 +16,12 @@ from PyQt5.QtGui import QFont, QColor
 from datetime import datetime, date
 
 from core.services import absence_service
-from core.db.configbd import get_connection
+from core.db.configbd import get_connection, DatabaseCursor, DatabaseConnection
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
+from core.gui.db_worker import DbWorker, DbThreadPool
+
+import logging
+logger = logging.getLogger(__name__)
 
 
 class GestionAbsencesDialog(QDialog):
@@ -476,30 +480,32 @@ class GestionAbsencesDialog(QDialog):
         self.solde_details_label.setText(details)
 
     def load_demandes_validation(self):
-        """Charge les demandes en attente de validation"""
+        """Charge les demandes en attente de validation (async)"""
         # TODO: filtrer par équipe/service du manager
-        conn = get_connection()
-        cur = conn.cursor(dictionary=True)
 
-        try:
-            cur.execute("""
-                SELECT
-                    da.id,
-                    CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                    ta.libelle as type_libelle,
-                    da.date_debut,
-                    da.date_fin,
-                    da.nb_jours,
-                    da.motif
-                FROM demande_absence da
-                JOIN personnel p ON da.personnel_id = p.id
-                JOIN type_absence ta ON da.type_absence_id = ta.id
-                WHERE da.statut = 'EN_ATTENTE'
-                AND p.statut = 'ACTIF'
-                ORDER BY da.date_creation ASC
-            """)
+        def fetch_demandes(progress_callback=None):
+            """Fonction exécutée en background"""
+            with DatabaseCursor(dictionary=True) as cur:
+                cur.execute("""
+                    SELECT
+                        da.id,
+                        CONCAT(p.prenom, ' ', p.nom) as nom_complet,
+                        ta.libelle as type_libelle,
+                        da.date_debut,
+                        da.date_fin,
+                        da.nb_jours,
+                        da.motif
+                    FROM demande_absence da
+                    JOIN personnel p ON da.personnel_id = p.id
+                    JOIN type_absence ta ON da.type_absence_id = ta.id
+                    WHERE da.statut = 'EN_ATTENTE'
+                    AND p.statut = 'ACTIF'
+                    ORDER BY da.date_creation ASC
+                """)
+                return cur.fetchall()
 
-            demandes = cur.fetchall()
+        def on_success(demandes):
+            """Callback UI avec les résultats"""
             self.table_validation.setRowCount(len(demandes))
 
             for row, demande in enumerate(demandes):
@@ -511,9 +517,16 @@ class GestionAbsencesDialog(QDialog):
                 self.table_validation.setItem(row, 5, QTableWidgetItem(str(demande['nb_jours'])))
                 self.table_validation.setItem(row, 6, QTableWidgetItem(demande['motif'] or ''))
 
-        finally:
-            cur.close()
-            conn.close()
+        def on_error(error_msg):
+            """Callback en cas d'erreur"""
+            logger.error(f"Erreur chargement demandes validation: {error_msg}")
+            show_error_message(self, "Erreur", "Impossible de charger les demandes", Exception(error_msg))
+
+        # Lancer en background
+        worker = DbWorker(fetch_demandes)
+        worker.signals.result.connect(on_success)
+        worker.signals.error.connect(on_error)
+        DbThreadPool.start(worker)
 
     # Méthodes d'action
     def update_nb_jours(self):
@@ -601,18 +614,18 @@ class GestionAbsencesDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             try:
-                conn = get_connection()
-                cur = conn.cursor()
-                cur.execute("UPDATE demande_absence SET statut = 'ANNULEE' WHERE id = %s", (demande_id,))
-                conn.commit()
-                cur.close()
-                conn.close()
+                with DatabaseConnection() as conn:
+                    cur = conn.cursor()
+                    cur.execute("UPDATE demande_absence SET statut = 'ANNULEE' WHERE id = %s", (demande_id,))
+                    conn.commit()
+                    cur.close()
 
                 QMessageBox.information(self, "Succès", "Demande annulée")
                 self.load_mes_demandes()
                 self.data_changed.emit()
 
             except Exception as e:
+                logger.exception(f"Erreur annulation demande {demande_id}: {e}")
                 show_error_message(self, "Erreur", "Impossible d'annuler la demande", e)
 
     def valider_demande_selectionnee(self, valide):
@@ -662,13 +675,10 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # Test avec le premier personnel actif
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
-    result = cur.fetchone()
-    personnel_id = result[0] if result else None
-    cur.close()
-    conn.close()
+    with DatabaseCursor() as cur:
+        cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
+        result = cur.fetchone()
+        personnel_id = result[0] if result else None
 
     dialog = GestionAbsencesDialog(personnel_id=personnel_id)
     dialog.show()

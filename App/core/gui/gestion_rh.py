@@ -8,13 +8,17 @@ Structure:
 - Zone droite: Navigation par domaines RH + résumé + documents
 """
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QLineEdit,
     QListWidget, QListWidgetItem, QWidget, QFrame, QScrollArea,
     QStackedWidget, QSizePolicy, QSpacerItem, QGridLayout,
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QMessageBox, QFormLayout, QDateEdit, QComboBox, QTextEdit,
-    QDoubleSpinBox, QCheckBox, QGroupBox
+    QDoubleSpinBox, QCheckBox, QGroupBox, QFileDialog
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QDate
 from PyQt5.QtGui import QFont, QColor
@@ -26,6 +30,7 @@ from core.services.rh_service import (
     get_operateur_by_id,
     get_donnees_domaine,
     get_documents_domaine,
+    get_documents_archives_operateur,
     get_resume_operateur,
     get_domaines_rh,
     DomaineRH,
@@ -33,7 +38,9 @@ from core.services.rh_service import (
     create_contrat, update_contrat, delete_contrat,
     create_declaration, update_declaration, delete_declaration,
     create_formation, update_formation, delete_formation,
-    get_types_declaration
+    get_types_declaration,
+    get_catalogue_competences,
+    create_competence_personnel, update_competence_personnel, delete_competence_personnel
 )
 from core.services.medical_service import (
     get_visites, create_visite, update_visite, delete_visite,
@@ -236,7 +243,11 @@ class EditContratDialog(QDialog):
 
         # Type de contrat
         self.type_combo = QComboBox()
-        self.type_combo.addItems(['CDI', 'CDD', 'Intérimaire', 'Apprentissage', 'Stagiaire'])
+        self.type_combo.addItems([
+            'CDI', 'CDD', 'Intérimaire', 'Apprentissage', 'Stagiaire',
+            'Mise à disposition GE', 'Etranger hors UE', 'Temps partiel',
+            'CIFRE', 'Avenant contrat'
+        ])
         if self.contrat and self.contrat.get('type_contrat'):
             idx = self.type_combo.findText(self.contrat['type_contrat'])
             if idx >= 0:
@@ -411,6 +422,169 @@ class EditDeclarationDialog(QDialog):
             success, message = update_declaration(self.declaration['id'], data)
         else:
             success, message, _ = create_declaration(self.operateur_id, data)
+
+        if success:
+            QMessageBox.information(self, "Succès", message)
+            self.accept()
+        else:
+            QMessageBox.critical(self, "Erreur", message)
+
+
+class EditCompetenceDialog(QDialog):
+    """Formulaire d'édition/création d'une compétence assignée."""
+
+    def __init__(self, operateur_id: int, competence: dict = None, parent=None):
+        super().__init__(parent)
+        self.operateur_id = operateur_id
+        self.competence = competence
+        self.is_edit = competence is not None
+        self.setWindowTitle("Modifier la compétence" if self.is_edit else "Nouvelle compétence")
+        self.setMinimumWidth(450)
+        self._setup_ui()
+
+    def _setup_ui(self):
+        layout = QVBoxLayout(self)
+
+        form = QFormLayout()
+        form.setSpacing(12)
+
+        # Sélection de la compétence (catalogue)
+        self.competence_combo = QComboBox()
+        self.competence_combo.setMinimumWidth(300)
+        self._charger_catalogue()
+        self.competence_combo.currentIndexChanged.connect(self._on_competence_changed)
+
+        if self.is_edit:
+            # En mode édition, désactiver le changement de compétence
+            self.competence_combo.setEnabled(False)
+            # Sélectionner la compétence actuelle
+            for i in range(self.competence_combo.count()):
+                if self.competence_combo.itemData(i) and \
+                   self.competence_combo.itemData(i).get('id') == self.competence.get('competence_id'):
+                    self.competence_combo.setCurrentIndex(i)
+                    break
+
+        form.addRow("Compétence:", self.competence_combo)
+
+        # Date d'acquisition
+        self.date_acquisition = QDateEdit()
+        self.date_acquisition.setCalendarPopup(True)
+        self.date_acquisition.setDisplayFormat("dd/MM/yyyy")
+        self.date_acquisition.setDate(QDate.currentDate())
+        if self.competence and self.competence.get('date_acquisition'):
+            d = self.competence['date_acquisition']
+            self.date_acquisition.setDate(QDate(d.year, d.month, d.day))
+        form.addRow("Date d'acquisition:", self.date_acquisition)
+
+        # Date d'expiration
+        self.date_expiration = QDateEdit()
+        self.date_expiration.setCalendarPopup(True)
+        self.date_expiration.setDisplayFormat("dd/MM/yyyy")
+        self.date_expiration.setSpecialValueText("Permanent (pas d'expiration)")
+        self.date_expiration.setMinimumDate(QDate(1900, 1, 1))
+        if self.competence and self.competence.get('date_expiration'):
+            d = self.competence['date_expiration']
+            self.date_expiration.setDate(QDate(d.year, d.month, d.day))
+        else:
+            self.date_expiration.setDate(QDate(1900, 1, 1))
+        form.addRow("Date d'expiration:", self.date_expiration)
+
+        # Info sur la validité (label informatif)
+        self.validite_info = QLabel("")
+        self.validite_info.setStyleSheet("color: #64748b; font-style: italic;")
+        form.addRow("", self.validite_info)
+
+        # Commentaire
+        self.commentaire = QTextEdit()
+        self.commentaire.setMaximumHeight(80)
+        self.commentaire.setPlaceholderText("Commentaire optionnel...")
+        if self.competence and self.competence.get('commentaire'):
+            self.commentaire.setText(self.competence['commentaire'])
+        form.addRow("Commentaire:", self.commentaire)
+
+        layout.addLayout(form)
+
+        # Boutons
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+
+        btn_cancel = EmacButton("Annuler", variant="ghost")
+        btn_cancel.clicked.connect(self.reject)
+        buttons.addWidget(btn_cancel)
+
+        btn_save = EmacButton("Enregistrer", variant="primary")
+        btn_save.clicked.connect(self._save)
+        buttons.addWidget(btn_save)
+
+        layout.addLayout(buttons)
+
+        # Mettre à jour l'info validité
+        self._on_competence_changed()
+
+    def _charger_catalogue(self):
+        """Charge le catalogue des compétences dans le combo."""
+        self.competence_combo.clear()
+        self.competence_combo.addItem("-- Sélectionner une compétence --", None)
+
+        catalogue = get_catalogue_competences(actif_only=True)
+
+        # Grouper par catégorie
+        categories = {}
+        for comp in catalogue:
+            cat = comp.get('categorie') or 'Autre'
+            if cat not in categories:
+                categories[cat] = []
+            categories[cat].append(comp)
+
+        for cat in sorted(categories.keys()):
+            # Ajouter un séparateur/titre de catégorie
+            self.competence_combo.addItem(f"── {cat} ──", None)
+            idx = self.competence_combo.count() - 1
+            # Désactiver l'item séparateur
+            self.competence_combo.model().item(idx).setEnabled(False)
+
+            for comp in categories[cat]:
+                label = comp['libelle']
+                if comp.get('duree_validite_mois'):
+                    label += f" ({comp['duree_validite_mois']} mois)"
+                self.competence_combo.addItem(label, comp)
+
+    def _on_competence_changed(self):
+        """Met à jour l'info de validité quand la compétence change."""
+        comp_data = self.competence_combo.currentData()
+        if comp_data and comp_data.get('duree_validite_mois'):
+            mois = comp_data['duree_validite_mois']
+            self.validite_info.setText(f"Validité standard: {mois} mois")
+
+            # Pré-remplir la date d'expiration si pas en mode édition
+            if not self.is_edit:
+                date_acq = self.date_acquisition.date().toPyDate()
+                from dateutil.relativedelta import relativedelta
+                date_exp = date_acq + relativedelta(months=mois)
+                self.date_expiration.setDate(QDate(date_exp.year, date_exp.month, date_exp.day))
+        else:
+            self.validite_info.setText("Compétence permanente (pas d'expiration)")
+            if not self.is_edit:
+                self.date_expiration.setDate(QDate(1900, 1, 1))
+
+    def _save(self):
+        comp_data = self.competence_combo.currentData()
+        if not comp_data:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner une compétence")
+            return
+
+        date_exp = self.date_expiration.date()
+        data = {
+            'competence_id': comp_data['id'],
+            'date_acquisition': self.date_acquisition.date().toPyDate(),
+            'date_expiration': date_exp.toPyDate() if date_exp.year() > 1900 else None,
+            'commentaire': self.commentaire.toPlainText().strip() or None,
+        }
+
+        if self.is_edit:
+            success, message = update_competence_personnel(self.competence['assignment_id'], data)
+        else:
+            success, message, _ = create_competence_personnel(self.operateur_id, data)
 
         if success:
             QMessageBox.information(self, "Succès", message)
@@ -1405,7 +1579,7 @@ class GestionRHDialog(QDialog):
         header_layout.addWidget(titre)
         header_layout.addStretch()
 
-        btn_bulk = QPushButton("⚡ Actions en masse")
+        btn_bulk = QPushButton("Actions en masse")
         btn_bulk.setToolTip("Assigner formations, absences ou visites médicales à plusieurs employés")
         btn_bulk.setCursor(Qt.PointingHandCursor)
         btn_bulk.setStyleSheet("""
@@ -1736,9 +1910,60 @@ class GestionRHDialog(QDialog):
             layout.addWidget(btn)
             self.boutons_domaines[domaine['code']] = btn
 
+        # Bouton Archives (caché par défaut, affiché si documents archivés)
+        self.btn_archives = QPushButton("📦 Archives")
+        self.btn_archives.setCheckable(True)
+        self.btn_archives.setCursor(Qt.PointingHandCursor)
+        self.btn_archives.setStyleSheet("""
+            QPushButton {
+                padding: 10px 16px;
+                border: 1px solid #f59e0b;
+                border-radius: 8px;
+                background: #fffbeb;
+                color: #92400e;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background: #fef3c7;
+                border-color: #d97706;
+            }
+            QPushButton:checked {
+                background: #f59e0b;
+                color: white;
+                border-color: #f59e0b;
+            }
+        """)
+        self.btn_archives.clicked.connect(self._on_archives_click)
+        self.btn_archives.setVisible(False)  # Caché par défaut
+        layout.addWidget(self.btn_archives)
+
         layout.addStretch()
 
         return nav
+
+    def _update_archives_tab(self):
+        """Met à jour la visibilité et le compteur de l'onglet Archives."""
+        if not self.operateur_selectionne:
+            if hasattr(self, 'btn_archives'):
+                self.btn_archives.setVisible(False)
+            return
+
+        archives = get_documents_archives_operateur(self.operateur_selectionne['id'])
+        if archives:
+            self.btn_archives.setText(f"📦 Archives ({len(archives)})")
+            self.btn_archives.setVisible(True)
+        else:
+            self.btn_archives.setVisible(False)
+
+    def _on_archives_click(self):
+        """Appelé quand l'utilisateur clique sur l'onglet Archives."""
+        # Décocher tous les autres boutons
+        for code, btn in self.boutons_domaines.items():
+            btn.setChecked(False)
+        self.btn_archives.setChecked(True)
+
+        # Afficher les archives
+        self._charger_contenu_archives()
 
     def _on_domaine_change(self, code_domaine: str):
         """Appelé quand l'utilisateur change de domaine RH."""
@@ -1792,9 +2017,13 @@ class GestionRHDialog(QDialog):
         self.domaine_actif = DomaineRH.GENERAL
         for code, btn in self.boutons_domaines.items():
             btn.setChecked(code == DomaineRH.GENERAL.value)
+        self.btn_archives.setChecked(False)
 
         # Charger le contenu du domaine
         self._charger_contenu_domaine()
+
+        # Mettre à jour l'onglet Archives
+        self._update_archives_tab()
 
         # Afficher la zone de contenu
         self.stack_details.setCurrentIndex(1)
@@ -1818,8 +2047,8 @@ class GestionRHDialog(QDialog):
         if widget_resume:
             self.layout_resume.addWidget(widget_resume)
 
-        # Charger les documents du domaine
-        documents = get_documents_domaine(operateur_id, self.domaine_actif)
+        # Charger les documents du domaine (inclut les archives pour pouvoir les afficher si demandé)
+        documents = get_documents_domaine(operateur_id, self.domaine_actif, include_archives=True)
         widget_documents = self._creer_widget_documents(documents)
         self.layout_documents.addWidget(widget_documents)
 
@@ -2107,38 +2336,41 @@ class GestionRHDialog(QDialog):
         return container
 
     def _creer_resume_competences(self, donnees: dict) -> QWidget:
-        """Crée le résumé des compétences."""
+        """Crée le résumé des compétences transversales."""
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
+        # Bouton ajouter en haut
+        btn_add = EmacButton("+ Nouvelle compétence", variant="primary")
+        btn_add.clicked.connect(self._add_competence)
+        layout.addWidget(btn_add, alignment=Qt.AlignLeft)
+
         stats = donnees.get('statistiques', {})
 
-        # Alertes évaluations
-        en_retard = stats.get('evaluations_en_retard', 0)
-        if en_retard > 0:
-            alert = EmacAlert(f"{en_retard} évaluation(s) en retard !", variant="error")
+        # Alertes expirations
+        expirees = stats.get('expirees', 0)
+        if expirees > 0:
+            alert = EmacAlert(f"{expirees} compétence(s) expirée(s) !", variant="error")
             layout.addWidget(alert)
 
-        a_venir = stats.get('evaluations_a_venir_30j', 0)
-        if a_venir > 0:
-            alert = EmacAlert(f"{a_venir} évaluation(s) à venir dans les 30 jours", variant="warning")
+        expire_bientot = stats.get('expire_bientot_30j', 0)
+        if expire_bientot > 0:
+            alert = EmacAlert(f"{expire_bientot} compétence(s) expirant dans les 30 jours", variant="warning")
             layout.addWidget(alert)
 
         # Carte statistiques
-        card = EmacCard("Statistiques Compétences")
+        card = EmacCard("Statistiques")
         stats_layout = QHBoxLayout()
 
-        niveaux = [
-            ("N1", stats.get('niveau_1', 0)),
-            ("N2", stats.get('niveau_2', 0)),
-            ("N3", stats.get('niveau_3', 0)),
-            ("N4", stats.get('niveau_4', 0)),
-            ("Total", stats.get('total_postes', 0)),
+        items = [
+            ("Valides", stats.get('valides', 0)),
+            ("Expirées", stats.get('expirees', 0)),
+            ("Total", stats.get('total', 0)),
         ]
 
-        for label, count in niveaux:
+        for label, count in items:
             badge = QLabel(f"{label}: {count}")
             badge.setStyleSheet("""
                 background: #f1f5f9;
@@ -2155,14 +2387,122 @@ class GestionRHDialog(QDialog):
 
         # Liste des compétences
         competences = donnees.get('competences', [])
-        card_list = EmacCard(f"Postes maîtrisés ({len(competences)})")
+        card_list = EmacCard(f"Compétences ({len(competences)})")
+
         if competences:
-            card_list.body.addWidget(QLabel(f"{len(competences)} poste(s)"))
+            for comp in competences:
+                row = QHBoxLayout()
+
+                # Indicateur de statut
+                statut = comp.get('statut', 'valide')
+                if statut == 'expiree':
+                    indicator = "X"
+                    color = "#ef4444"
+                elif statut == 'expire_bientot':
+                    indicator = "!"
+                    color = "#f97316"
+                elif statut == 'attention':
+                    indicator = "~"
+                    color = "#eab308"
+                else:
+                    indicator = "O"
+                    color = "#22c55e"
+
+                status_label = QLabel(indicator)
+                status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 14px;")
+                status_label.setFixedWidth(20)
+                row.addWidget(status_label)
+
+                # Info compétence
+                info_layout = QVBoxLayout()
+                info_layout.setSpacing(2)
+
+                libelle = comp.get('libelle', 'N/A')
+                categorie = comp.get('categorie', '')
+                if categorie:
+                    libelle = f"{libelle} [{categorie}]"
+                label_nom = QLabel(libelle)
+                label_nom.setStyleSheet("font-weight: 500;")
+                info_layout.addWidget(label_nom)
+
+                # Dates
+                date_acq = comp.get('date_acquisition')
+                date_exp = comp.get('date_expiration')
+                date_text = f"Acquis le: {self._format_date(date_acq)}"
+                if date_exp:
+                    date_text += f" - Expire le: {self._format_date(date_exp)}"
+                else:
+                    date_text += " - Permanent"
+
+                label_dates = QLabel(date_text)
+                label_dates.setStyleSheet("color: #64748b; font-size: 12px;")
+                info_layout.addWidget(label_dates)
+
+                # Message de statut si besoin
+                if statut in ('expire_bientot', 'attention', 'expiree'):
+                    statut_label = comp.get('statut_label', '')
+                    if statut_label:
+                        label_statut = QLabel(statut_label)
+                        label_statut.setStyleSheet(f"color: {color}; font-size: 11px; font-style: italic;")
+                        info_layout.addWidget(label_statut)
+
+                row.addLayout(info_layout)
+                row.addStretch()
+
+                # Boutons
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.clicked.connect(lambda checked, c=comp: self._edit_competence(c))
+                row.addWidget(btn_edit)
+
+                btn_delete = EmacButton("Retirer", variant="ghost")
+                btn_delete.clicked.connect(lambda checked, c=comp: self._delete_competence(c))
+                row.addWidget(btn_delete)
+
+                card_list.body.addLayout(row)
+
+                # Séparateur
+                sep = QFrame()
+                sep.setFrameShape(QFrame.HLine)
+                sep.setStyleSheet("background: #e2e8f0;")
+                card_list.body.addWidget(sep)
         else:
-            card_list.body.addWidget(QLabel("Aucune compétence enregistrée"))
+            card_list.body.addWidget(QLabel("Aucune compétence assignée"))
+
         layout.addWidget(card_list)
 
         return container
+
+    def _add_competence(self):
+        """Ouvre le formulaire d'ajout de compétence."""
+        if not self.operateur_id:
+            return
+        dialog = EditCompetenceDialog(self.operateur_id, parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_competence(self, competence: dict):
+        """Ouvre le formulaire de modification de compétence."""
+        dialog = EditCompetenceDialog(self.operateur_id, competence, parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_competence(self, competence: dict):
+        """Retire une compétence après confirmation."""
+        libelle = competence.get('libelle', 'cette compétence')
+        reply = QMessageBox.question(
+            self,
+            "Confirmer le retrait",
+            f"Voulez-vous vraiment retirer la compétence '{libelle}' ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, message = delete_competence_personnel(competence['assignment_id'])
+            if success:
+                QMessageBox.information(self, "Succès", message)
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.critical(self, "Erreur", message)
 
     def _creer_resume_formation(self, donnees: dict) -> QWidget:
         """Crée le résumé des formations."""
@@ -2836,8 +3176,11 @@ class GestionRHDialog(QDialog):
                 QMessageBox.warning(self, "Erreur", msg)
 
     def _creer_widget_documents(self, documents: list) -> QWidget:
-        """Crée le widget affichant les documents du domaine."""
-        card = EmacCard(f"Documents associés ({len(documents)})")
+        """Crée le widget affichant les documents du domaine (actifs uniquement)."""
+        # Filtrer seulement les documents actifs
+        docs_actifs = [d for d in documents if d.get('statut') != 'archive']
+
+        card = EmacCard(f"Documents associés ({len(docs_actifs)})")
 
         # Boutons d'action
         btn_layout = QHBoxLayout()
@@ -2850,17 +3193,13 @@ class GestionRHDialog(QDialog):
         btn_layout.addStretch()
         card.body.addLayout(btn_layout)
 
-        if not documents:
+        if not docs_actifs:
             label = QLabel("Aucun document pour ce domaine")
             label.setStyleSheet("color: #9ca3af; padding: 20px;")
             label.setAlignment(Qt.AlignCenter)
             card.body.addWidget(label)
         else:
-            # Stocker les documents pour y accéder après
-            self._documents_list = documents
-
-            # Liste des documents avec bouton Ouvrir sur chaque ligne
-            for doc in documents:
+            for doc in docs_actifs:
                 doc_widget = QFrame()
                 doc_widget.setStyleSheet("""
                     QFrame {
@@ -2897,6 +3236,27 @@ class GestionRHDialog(QDialog):
 
                 doc_layout.addLayout(info_layout, 1)
 
+                doc_id = doc.get('id')
+
+                # Bouton Archiver
+                btn_archiver = QPushButton("📦 Archiver")
+                btn_archiver.setCursor(Qt.PointingHandCursor)
+                btn_archiver.setStyleSheet("""
+                    QPushButton {
+                        background: #f59e0b;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background: #d97706;
+                    }
+                """)
+                btn_archiver.clicked.connect(lambda checked, d=doc_id: self._archiver_document_par_id(d))
+                doc_layout.addWidget(btn_archiver)
+
                 # Bouton Ouvrir
                 btn_ouvrir = QPushButton("📂 Ouvrir")
                 btn_ouvrir.setCursor(Qt.PointingHandCursor)
@@ -2913,13 +3273,40 @@ class GestionRHDialog(QDialog):
                         background: #2563eb;
                     }
                 """)
-                doc_id = doc.get('id')
                 btn_ouvrir.clicked.connect(lambda checked, d=doc_id: self._ouvrir_document_par_id(d))
                 doc_layout.addWidget(btn_ouvrir)
 
                 card.body.addWidget(doc_widget)
 
         return card
+
+    def _restaurer_document_par_id(self, doc_id: int):
+        """Restaure un document archivé."""
+        from core.services.document_service import DocumentService
+
+        reply = QMessageBox.question(
+            self,
+            "Confirmer la restauration",
+            "Voulez-vous restaurer ce document ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                doc_service = DocumentService()
+                success, message = doc_service.restore_document(doc_id)
+
+                if success:
+                    QMessageBox.information(self, "Succès", "Document restauré avec succès")
+                    # Recharger et mettre à jour l'onglet archives
+                    self._charger_contenu_domaine()
+                    self._update_archives_tab()
+                else:
+                    QMessageBox.warning(self, "Erreur", message)
+            except Exception as e:
+                logger.exception(f"Erreur restauration document: {e}")
+                QMessageBox.critical(self, "Erreur", "Impossible de restaurer le document")
 
     def _ouvrir_document_par_id(self, doc_id: int):
         """Ouvre un document par son ID."""
@@ -2936,6 +3323,137 @@ class GestionRHDialog(QDialog):
                 subprocess.run(['xdg-open', str(doc_path)])
         else:
             QMessageBox.warning(self, "Erreur", "Le fichier n'a pas été trouvé sur le disque")
+
+    def _archiver_document_par_id(self, doc_id: int):
+        """Archive un document après confirmation."""
+        from core.services.document_service import DocumentService
+
+        # Confirmation
+        reply = QMessageBox.question(
+            self,
+            "Confirmer l'archivage",
+            "Voulez-vous archiver ce document ?\n\nIl ne sera plus visible dans la liste mais pourra être restauré via l'onglet Archives.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                doc_service = DocumentService()
+                success, message = doc_service.archive_document(doc_id)
+
+                if success:
+                    QMessageBox.information(self, "Succès", "Document archivé avec succès")
+                    # Rafraîchir l'affichage
+                    self._charger_contenu_domaine()
+                    # Mettre à jour l'onglet Archives
+                    self._update_archives_tab()
+                else:
+                    QMessageBox.warning(self, "Erreur", message)
+            except Exception as e:
+                logger.exception(f"Erreur archivage document: {e}")
+
+    def _charger_contenu_archives(self):
+        """Charge et affiche les documents archivés."""
+        if not self.operateur_selectionne:
+            return
+
+        operateur_id = self.operateur_selectionne['id']
+
+        # Vider les zones
+        self._vider_layout(self.layout_resume)
+        self._vider_layout(self.layout_documents)
+
+        # Récupérer les documents archivés
+        archives = get_documents_archives_operateur(operateur_id)
+
+        # Créer le widget des archives
+        card = EmacCard(f"📦 Documents archivés ({len(archives)})")
+
+        if not archives:
+            label = QLabel("Aucun document archivé")
+            label.setStyleSheet("color: #9ca3af; padding: 20px;")
+            label.setAlignment(Qt.AlignCenter)
+            card.body.addWidget(label)
+        else:
+            for doc in archives:
+                doc_widget = QFrame()
+                doc_widget.setStyleSheet("""
+                    QFrame {
+                        background: #f3f4f6;
+                        border: 1px dashed #9ca3af;
+                        border-radius: 8px;
+                        padding: 10px;
+                        margin: 2px 0;
+                    }
+                    QFrame:hover {
+                        background: #e5e7eb;
+                        border-color: #6b7280;
+                    }
+                """)
+
+                doc_layout = QHBoxLayout(doc_widget)
+                doc_layout.setContentsMargins(10, 8, 10, 8)
+
+                # Infos du document
+                info_layout = QVBoxLayout()
+                info_layout.setSpacing(2)
+
+                nom_label = QLabel(f"📦 {doc.get('nom_affichage', '-')}")
+                nom_label.setFont(QFont("Segoe UI", 10, QFont.Bold))
+                nom_label.setStyleSheet("color: #6b7280; background: transparent;")
+                info_layout.addWidget(nom_label)
+
+                details = f"{doc.get('categorie_nom', '-')} • Ajouté le {self._format_date(doc.get('date_upload'))}"
+                details_label = QLabel(details)
+                details_label.setStyleSheet("color: #9ca3af; font-size: 11px; background: transparent;")
+                info_layout.addWidget(details_label)
+
+                doc_layout.addLayout(info_layout, 1)
+
+                doc_id = doc.get('id')
+
+                # Bouton Restaurer
+                btn_restaurer = QPushButton("🔄 Restaurer")
+                btn_restaurer.setCursor(Qt.PointingHandCursor)
+                btn_restaurer.setStyleSheet("""
+                    QPushButton {
+                        background: #10b981;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background: #059669;
+                    }
+                """)
+                btn_restaurer.clicked.connect(lambda checked, d=doc_id: self._restaurer_document_par_id(d))
+                doc_layout.addWidget(btn_restaurer)
+
+                # Bouton Ouvrir
+                btn_ouvrir = QPushButton("📂 Ouvrir")
+                btn_ouvrir.setCursor(Qt.PointingHandCursor)
+                btn_ouvrir.setStyleSheet("""
+                    QPushButton {
+                        background: #3b82f6;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background: #2563eb;
+                    }
+                """)
+                btn_ouvrir.clicked.connect(lambda checked, d=doc_id: self._ouvrir_document_par_id(d))
+                doc_layout.addWidget(btn_ouvrir)
+
+                card.body.addWidget(doc_widget)
+
+        self.layout_resume.addWidget(card)
 
     def _ajouter_document(self):
         """Ouvre le dialogue pour ajouter un document."""
@@ -2993,7 +3511,7 @@ class GestionRHDialog(QDialog):
         layout.setContentsMargins(20, 12, 20, 12)
 
         # Bouton Actions en masse
-        btn_bulk = QPushButton("⚡ Actions en masse")
+        btn_bulk = QPushButton("Actions en masse")
         btn_bulk.setToolTip("Assigner formations, absences ou visites médicales à plusieurs employés")
         btn_bulk.setCursor(Qt.PointingHandCursor)
         btn_bulk.setStyleSheet("""
@@ -3126,7 +3644,7 @@ class GestionRHWidget(QWidget):
         header_layout.addWidget(titre)
         header_layout.addStretch()
 
-        btn_bulk = QPushButton("⚡ Actions en masse")
+        btn_bulk = QPushButton("Actions en masse")
         btn_bulk.setToolTip("Assigner formations, absences ou visites médicales à plusieurs employés")
         btn_bulk.setCursor(Qt.PointingHandCursor)
         btn_bulk.setStyleSheet("""
@@ -3457,9 +3975,60 @@ class GestionRHWidget(QWidget):
             layout.addWidget(btn)
             self.boutons_domaines[domaine['code']] = btn
 
+        # Bouton Archives (caché par défaut, affiché si documents archivés)
+        self.btn_archives = QPushButton("📦 Archives")
+        self.btn_archives.setCheckable(True)
+        self.btn_archives.setCursor(Qt.PointingHandCursor)
+        self.btn_archives.setStyleSheet("""
+            QPushButton {
+                padding: 10px 16px;
+                border: 1px solid #f59e0b;
+                border-radius: 8px;
+                background: #fffbeb;
+                color: #92400e;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background: #fef3c7;
+                border-color: #d97706;
+            }
+            QPushButton:checked {
+                background: #f59e0b;
+                color: white;
+                border-color: #f59e0b;
+            }
+        """)
+        self.btn_archives.clicked.connect(self._on_archives_click)
+        self.btn_archives.setVisible(False)  # Caché par défaut
+        layout.addWidget(self.btn_archives)
+
         layout.addStretch()
 
         return nav
+
+    def _update_archives_tab(self):
+        """Met à jour la visibilité et le compteur de l'onglet Archives."""
+        if not self.operateur_selectionne:
+            if hasattr(self, 'btn_archives'):
+                self.btn_archives.setVisible(False)
+            return
+
+        archives = get_documents_archives_operateur(self.operateur_selectionne['id'])
+        if archives:
+            self.btn_archives.setText(f"📦 Archives ({len(archives)})")
+            self.btn_archives.setVisible(True)
+        else:
+            self.btn_archives.setVisible(False)
+
+    def _on_archives_click(self):
+        """Appelé quand l'utilisateur clique sur l'onglet Archives."""
+        # Décocher tous les autres boutons
+        for code, btn in self.boutons_domaines.items():
+            btn.setChecked(False)
+        self.btn_archives.setChecked(True)
+
+        # Afficher les archives
+        self._charger_contenu_archives()
 
     def _on_domaine_change(self, code_domaine: str):
         """Appelé quand l'utilisateur change de domaine RH."""
@@ -3513,9 +4082,13 @@ class GestionRHWidget(QWidget):
         self.domaine_actif = DomaineRH.GENERAL
         for code, btn in self.boutons_domaines.items():
             btn.setChecked(code == DomaineRH.GENERAL.value)
+        self.btn_archives.setChecked(False)
 
         # Charger le contenu du domaine
         self._charger_contenu_domaine()
+
+        # Mettre à jour l'onglet Archives
+        self._update_archives_tab()
 
         # Afficher la zone de contenu
         self.stack_details.setCurrentIndex(1)
@@ -3539,8 +4112,8 @@ class GestionRHWidget(QWidget):
         if widget_resume:
             self.layout_resume.addWidget(widget_resume)
 
-        # Charger les documents du domaine
-        documents = get_documents_domaine(operateur_id, self.domaine_actif)
+        # Charger les documents du domaine (inclut les archives pour pouvoir les afficher si demandé)
+        documents = get_documents_domaine(operateur_id, self.domaine_actif, include_archives=True)
         widget_documents = self._creer_widget_documents(documents)
         self.layout_documents.addWidget(widget_documents)
 
@@ -3828,38 +4401,41 @@ class GestionRHWidget(QWidget):
         return container
 
     def _creer_resume_competences(self, donnees: dict) -> QWidget:
-        """Crée le résumé des compétences."""
+        """Crée le résumé des compétences transversales."""
         container = QWidget()
         layout = QVBoxLayout(container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
 
+        # Bouton ajouter en haut
+        btn_add = EmacButton("+ Nouvelle compétence", variant="primary")
+        btn_add.clicked.connect(self._add_competence)
+        layout.addWidget(btn_add, alignment=Qt.AlignLeft)
+
         stats = donnees.get('statistiques', {})
 
-        # Alertes évaluations
-        en_retard = stats.get('evaluations_en_retard', 0)
-        if en_retard > 0:
-            alert = EmacAlert(f"{en_retard} évaluation(s) en retard !", variant="error")
+        # Alertes expirations
+        expirees = stats.get('expirees', 0)
+        if expirees > 0:
+            alert = EmacAlert(f"{expirees} compétence(s) expirée(s) !", variant="error")
             layout.addWidget(alert)
 
-        a_venir = stats.get('evaluations_a_venir_30j', 0)
-        if a_venir > 0:
-            alert = EmacAlert(f"{a_venir} évaluation(s) à venir dans les 30 jours", variant="warning")
+        expire_bientot = stats.get('expire_bientot_30j', 0)
+        if expire_bientot > 0:
+            alert = EmacAlert(f"{expire_bientot} compétence(s) expirant dans les 30 jours", variant="warning")
             layout.addWidget(alert)
 
         # Carte statistiques
-        card = EmacCard("Statistiques Compétences")
+        card = EmacCard("Statistiques")
         stats_layout = QHBoxLayout()
 
-        niveaux = [
-            ("N1", stats.get('niveau_1', 0)),
-            ("N2", stats.get('niveau_2', 0)),
-            ("N3", stats.get('niveau_3', 0)),
-            ("N4", stats.get('niveau_4', 0)),
-            ("Total", stats.get('total_postes', 0)),
+        items = [
+            ("Valides", stats.get('valides', 0)),
+            ("Expirées", stats.get('expirees', 0)),
+            ("Total", stats.get('total', 0)),
         ]
 
-        for label, count in niveaux:
+        for label, count in items:
             badge = QLabel(f"{label}: {count}")
             badge.setStyleSheet("""
                 background: #f1f5f9;
@@ -3876,14 +4452,122 @@ class GestionRHWidget(QWidget):
 
         # Liste des compétences
         competences = donnees.get('competences', [])
-        card_list = EmacCard(f"Postes maîtrisés ({len(competences)})")
+        card_list = EmacCard(f"Compétences ({len(competences)})")
+
         if competences:
-            card_list.body.addWidget(QLabel(f"{len(competences)} poste(s)"))
+            for comp in competences:
+                row = QHBoxLayout()
+
+                # Indicateur de statut
+                statut = comp.get('statut', 'valide')
+                if statut == 'expiree':
+                    indicator = "X"
+                    color = "#ef4444"
+                elif statut == 'expire_bientot':
+                    indicator = "!"
+                    color = "#f97316"
+                elif statut == 'attention':
+                    indicator = "~"
+                    color = "#eab308"
+                else:
+                    indicator = "O"
+                    color = "#22c55e"
+
+                status_label = QLabel(indicator)
+                status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 14px;")
+                status_label.setFixedWidth(20)
+                row.addWidget(status_label)
+
+                # Info compétence
+                info_layout = QVBoxLayout()
+                info_layout.setSpacing(2)
+
+                libelle = comp.get('libelle', 'N/A')
+                categorie = comp.get('categorie', '')
+                if categorie:
+                    libelle = f"{libelle} [{categorie}]"
+                label_nom = QLabel(libelle)
+                label_nom.setStyleSheet("font-weight: 500;")
+                info_layout.addWidget(label_nom)
+
+                # Dates
+                date_acq = comp.get('date_acquisition')
+                date_exp = comp.get('date_expiration')
+                date_text = f"Acquis le: {self._format_date(date_acq)}"
+                if date_exp:
+                    date_text += f" - Expire le: {self._format_date(date_exp)}"
+                else:
+                    date_text += " - Permanent"
+
+                label_dates = QLabel(date_text)
+                label_dates.setStyleSheet("color: #64748b; font-size: 12px;")
+                info_layout.addWidget(label_dates)
+
+                # Message de statut si besoin
+                if statut in ('expire_bientot', 'attention', 'expiree'):
+                    statut_label = comp.get('statut_label', '')
+                    if statut_label:
+                        label_statut = QLabel(statut_label)
+                        label_statut.setStyleSheet(f"color: {color}; font-size: 11px; font-style: italic;")
+                        info_layout.addWidget(label_statut)
+
+                row.addLayout(info_layout)
+                row.addStretch()
+
+                # Boutons
+                btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.clicked.connect(lambda checked, c=comp: self._edit_competence(c))
+                row.addWidget(btn_edit)
+
+                btn_delete = EmacButton("Retirer", variant="ghost")
+                btn_delete.clicked.connect(lambda checked, c=comp: self._delete_competence(c))
+                row.addWidget(btn_delete)
+
+                card_list.body.addLayout(row)
+
+                # Séparateur
+                sep = QFrame()
+                sep.setFrameShape(QFrame.HLine)
+                sep.setStyleSheet("background: #e2e8f0;")
+                card_list.body.addWidget(sep)
         else:
-            card_list.body.addWidget(QLabel("Aucune compétence enregistrée"))
+            card_list.body.addWidget(QLabel("Aucune compétence assignée"))
+
         layout.addWidget(card_list)
 
         return container
+
+    def _add_competence(self):
+        """Ouvre le formulaire d'ajout de compétence."""
+        if not self.operateur_id:
+            return
+        dialog = EditCompetenceDialog(self.operateur_id, parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_competence(self, competence: dict):
+        """Ouvre le formulaire de modification de compétence."""
+        dialog = EditCompetenceDialog(self.operateur_id, competence, parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_competence(self, competence: dict):
+        """Retire une compétence après confirmation."""
+        libelle = competence.get('libelle', 'cette compétence')
+        reply = QMessageBox.question(
+            self,
+            "Confirmer le retrait",
+            f"Voulez-vous vraiment retirer la compétence '{libelle}' ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, message = delete_competence_personnel(competence['assignment_id'])
+            if success:
+                QMessageBox.information(self, "Succès", message)
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.critical(self, "Erreur", message)
 
     def _creer_resume_formation(self, donnees: dict) -> QWidget:
         """Crée le résumé des formations."""
@@ -4557,8 +5241,11 @@ class GestionRHWidget(QWidget):
                 QMessageBox.warning(self, "Erreur", msg)
 
     def _creer_widget_documents(self, documents: list) -> QWidget:
-        """Crée le widget affichant les documents du domaine."""
-        card = EmacCard(f"Documents associés ({len(documents)})")
+        """Crée le widget affichant les documents du domaine (actifs uniquement)."""
+        # Filtrer seulement les documents actifs
+        docs_actifs = [d for d in documents if d.get('statut') != 'archive']
+
+        card = EmacCard(f"Documents associés ({len(docs_actifs)})")
 
         # Boutons d'action
         btn_layout = QHBoxLayout()
@@ -4571,17 +5258,13 @@ class GestionRHWidget(QWidget):
         btn_layout.addStretch()
         card.body.addLayout(btn_layout)
 
-        if not documents:
+        if not docs_actifs:
             label = QLabel("Aucun document pour ce domaine")
             label.setStyleSheet("color: #9ca3af; padding: 20px;")
             label.setAlignment(Qt.AlignCenter)
             card.body.addWidget(label)
         else:
-            # Stocker les documents pour y accéder après
-            self._documents_list = documents
-
-            # Liste des documents avec bouton Ouvrir sur chaque ligne
-            for doc in documents:
+            for doc in docs_actifs:
                 doc_widget = QFrame()
                 doc_widget.setStyleSheet("""
                     QFrame {
@@ -4618,6 +5301,27 @@ class GestionRHWidget(QWidget):
 
                 doc_layout.addLayout(info_layout, 1)
 
+                doc_id = doc.get('id')
+
+                # Bouton Archiver
+                btn_archiver = QPushButton("📦 Archiver")
+                btn_archiver.setCursor(Qt.PointingHandCursor)
+                btn_archiver.setStyleSheet("""
+                    QPushButton {
+                        background: #f59e0b;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background: #d97706;
+                    }
+                """)
+                btn_archiver.clicked.connect(lambda checked, d=doc_id: self._archiver_document_par_id(d))
+                doc_layout.addWidget(btn_archiver)
+
                 # Bouton Ouvrir
                 btn_ouvrir = QPushButton("📂 Ouvrir")
                 btn_ouvrir.setCursor(Qt.PointingHandCursor)
@@ -4634,13 +5338,40 @@ class GestionRHWidget(QWidget):
                         background: #2563eb;
                     }
                 """)
-                doc_id = doc.get('id')
                 btn_ouvrir.clicked.connect(lambda checked, d=doc_id: self._ouvrir_document_par_id(d))
                 doc_layout.addWidget(btn_ouvrir)
 
                 card.body.addWidget(doc_widget)
 
         return card
+
+    def _restaurer_document_par_id(self, doc_id: int):
+        """Restaure un document archivé."""
+        from core.services.document_service import DocumentService
+
+        reply = QMessageBox.question(
+            self,
+            "Confirmer la restauration",
+            "Voulez-vous restaurer ce document ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                doc_service = DocumentService()
+                success, message = doc_service.restore_document(doc_id)
+
+                if success:
+                    QMessageBox.information(self, "Succès", "Document restauré avec succès")
+                    # Recharger et mettre à jour l'onglet archives
+                    self._charger_contenu_domaine()
+                    self._update_archives_tab()
+                else:
+                    QMessageBox.warning(self, "Erreur", message)
+            except Exception as e:
+                logger.exception(f"Erreur restauration document: {e}")
+                QMessageBox.critical(self, "Erreur", "Impossible de restaurer le document")
 
     def _ouvrir_document_par_id(self, doc_id: int):
         """Ouvre un document par son ID."""
@@ -4657,6 +5388,137 @@ class GestionRHWidget(QWidget):
                 subprocess.run(['xdg-open', str(doc_path)])
         else:
             QMessageBox.warning(self, "Erreur", "Le fichier n'a pas été trouvé sur le disque")
+
+    def _archiver_document_par_id(self, doc_id: int):
+        """Archive un document après confirmation."""
+        from core.services.document_service import DocumentService
+
+        # Confirmation
+        reply = QMessageBox.question(
+            self,
+            "Confirmer l'archivage",
+            "Voulez-vous archiver ce document ?\n\nIl ne sera plus visible dans la liste mais pourra être restauré via l'onglet Archives.",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.Yes:
+            try:
+                doc_service = DocumentService()
+                success, message = doc_service.archive_document(doc_id)
+
+                if success:
+                    QMessageBox.information(self, "Succès", "Document archivé avec succès")
+                    # Rafraîchir l'affichage
+                    self._charger_contenu_domaine()
+                    # Mettre à jour l'onglet Archives
+                    self._update_archives_tab()
+                else:
+                    QMessageBox.warning(self, "Erreur", message)
+            except Exception as e:
+                logger.exception(f"Erreur archivage document: {e}")
+
+    def _charger_contenu_archives(self):
+        """Charge et affiche les documents archivés."""
+        if not self.operateur_selectionne:
+            return
+
+        operateur_id = self.operateur_selectionne['id']
+
+        # Vider les zones
+        self._vider_layout(self.layout_resume)
+        self._vider_layout(self.layout_documents)
+
+        # Récupérer les documents archivés
+        archives = get_documents_archives_operateur(operateur_id)
+
+        # Créer le widget des archives
+        card = EmacCard(f"📦 Documents archivés ({len(archives)})")
+
+        if not archives:
+            label = QLabel("Aucun document archivé")
+            label.setStyleSheet("color: #9ca3af; padding: 20px;")
+            label.setAlignment(Qt.AlignCenter)
+            card.body.addWidget(label)
+        else:
+            for doc in archives:
+                doc_widget = QFrame()
+                doc_widget.setStyleSheet("""
+                    QFrame {
+                        background: #f3f4f6;
+                        border: 1px dashed #9ca3af;
+                        border-radius: 8px;
+                        padding: 10px;
+                        margin: 2px 0;
+                    }
+                    QFrame:hover {
+                        background: #e5e7eb;
+                        border-color: #6b7280;
+                    }
+                """)
+
+                doc_layout = QHBoxLayout(doc_widget)
+                doc_layout.setContentsMargins(10, 8, 10, 8)
+
+                # Infos du document
+                info_layout = QVBoxLayout()
+                info_layout.setSpacing(2)
+
+                nom_label = QLabel(f"📦 {doc.get('nom_affichage', '-')}")
+                nom_label.setFont(QFont("Segoe UI", 10, QFont.Bold))
+                nom_label.setStyleSheet("color: #6b7280; background: transparent;")
+                info_layout.addWidget(nom_label)
+
+                details = f"{doc.get('categorie_nom', '-')} • Ajouté le {self._format_date(doc.get('date_upload'))}"
+                details_label = QLabel(details)
+                details_label.setStyleSheet("color: #9ca3af; font-size: 11px; background: transparent;")
+                info_layout.addWidget(details_label)
+
+                doc_layout.addLayout(info_layout, 1)
+
+                doc_id = doc.get('id')
+
+                # Bouton Restaurer
+                btn_restaurer = QPushButton("🔄 Restaurer")
+                btn_restaurer.setCursor(Qt.PointingHandCursor)
+                btn_restaurer.setStyleSheet("""
+                    QPushButton {
+                        background: #10b981;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background: #059669;
+                    }
+                """)
+                btn_restaurer.clicked.connect(lambda checked, d=doc_id: self._restaurer_document_par_id(d))
+                doc_layout.addWidget(btn_restaurer)
+
+                # Bouton Ouvrir
+                btn_ouvrir = QPushButton("📂 Ouvrir")
+                btn_ouvrir.setCursor(Qt.PointingHandCursor)
+                btn_ouvrir.setStyleSheet("""
+                    QPushButton {
+                        background: #3b82f6;
+                        color: white;
+                        border: none;
+                        border-radius: 6px;
+                        padding: 8px 16px;
+                        font-weight: bold;
+                    }
+                    QPushButton:hover {
+                        background: #2563eb;
+                    }
+                """)
+                btn_ouvrir.clicked.connect(lambda checked, d=doc_id: self._ouvrir_document_par_id(d))
+                doc_layout.addWidget(btn_ouvrir)
+
+                card.body.addWidget(doc_widget)
+
+        self.layout_resume.addWidget(card)
 
     def _ajouter_document(self):
         """Ouvre le dialogue pour ajouter un document."""
