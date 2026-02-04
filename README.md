@@ -4,6 +4,20 @@ Application de bureau PyQt5 pour la gestion des compétences, évaluations, et r
 
 ---
 
+## TL;DR
+
+| | |
+|---|---|
+| **Quoi** | Application desktop PyQt5 pour la gestion RH et polyvalence en milieu industriel |
+| **Statut** | Déployée en production |
+| **Sécurité** | Auditée - Session timeout, protection TOCTOU, audit trail |
+| **Réseau** | Déploiement client sans MySQL (connexion serveur) |
+| **Performance** | Optimisée (connection pooling, cache LRU, threading) |
+
+**Installation rapide** : voir [Démarrage rapide](#démarrage-rapide)
+
+---
+
 ## Vue d'ensemble
 
 EMAC est une application complète de gestion RH conçue pour les ateliers de production. Elle permet de :
