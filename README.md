@@ -244,10 +244,10 @@ Résultat : `App\dist\EMAC\EMAC.exe`
 1. Copiez le dossier `dist/EMAC/` sur le poste client
 2. Configurez `.env` avec l'adresse du serveur MySQL :
    ```env
-   EMAC_DB_HOST=192.168.1.100
-   EMAC_DB_USER=emac_user
+   EMAC_DB_HOST=Votre Adresse IP
+   EMAC_DB_USER=Votre Utilisateur
    EMAC_DB_PASSWORD=***
-   EMAC_DB_NAME=emac_db
+   EMAC_DB_NAME=Nom de votre base
    ```
 3. Lancez `EMAC.exe`
 
