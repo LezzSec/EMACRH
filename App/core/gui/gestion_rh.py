@@ -1418,9 +1418,20 @@ class AjouterDocumentDialog(QDialog):
     def _charger_categories(self):
         """Charge les catégories de documents."""
         from core.services.rh_service import get_categories_documents, CATEGORIE_TO_DOMAINE
-        categories = get_categories_documents()
+        from core.services.contrat_service import get_contract_types
 
         self.categorie_combo.clear()
+
+        # Si domaine CONTRAT, afficher les types de contrats
+        if self.domaine == DomaineRH.CONTRAT:
+            types_contrat = get_contract_types()
+            for type_contrat in types_contrat:
+                self.categorie_combo.addItem(type_contrat, type_contrat)
+            return
+
+        # Sinon, charger les catégories de documents normales
+        categories = get_categories_documents()
+
         for cat in categories:
             # Si un domaine est spécifié, ne montrer que les catégories liées
             if self.domaine:

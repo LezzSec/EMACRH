@@ -1,23 +1,24 @@
-# 🏭 EMAC - Gestion de Personnel et Polyvalence
+# EMAC - Gestion de Personnel et Polyvalence
 
 Application de bureau PyQt5 pour la gestion des compétences, évaluations, et ressources humaines dans un environnement industriel.
 
 ---
 
-## 📋 Vue d'ensemble
+## Vue d'ensemble
 
 EMAC est une application complète de gestion RH conçue pour les ateliers de production. Elle permet de :
 
-- ✅ **Suivre les compétences** (polyvalence) des employés sur différents postes
-- ✅ **Planifier les évaluations** périodiques avec calendrier automatisé
-- ✅ **Gérer les contrats** et renouvellements
-- ✅ **Suivre les absences** et congés
-- ✅ **Gérer les documents RH** (certificats, permis, formations) 🆕 **Avec upload de fichiers existants**
-- ✅ **Auditer toutes les modifications** dans un historique complet
+- **Suivre les compétences** (polyvalence) des employés sur différents postes
+- **Planifier les évaluations** périodiques avec calendrier automatisé
+- **Gérer les contrats** et renouvellements (CDI, CDD, intérim, etc.)
+- **Suivre les absences** et congés
+- **Gérer les documents RH** (certificats, permis, formations) avec upload de fichiers
+- **Gérer les permissions** avec système granulaire par "features"
+- **Auditer toutes les modifications** dans un historique complet
 
 ---
 
-## 🚀 Démarrage rapide
+## Démarrage rapide
 
 ### Installation
 
@@ -37,9 +38,9 @@ configure_db.bat  # Windows
 # 4. Initialiser la base de données MySQL
 mysql -u root -p emac_db < App/database/schema/bddemac.sql
 
-# 5. ⚡ NOUVEAU : Appliquer les optimisations de performance (RECOMMANDÉ)
+# 5. Appliquer les optimisations de performance (RECOMMANDÉ)
 cd App/scripts
-python apply_performance_indexes.py  # Ajoute 29 index → app 10-100x plus rapide
+python apply_performance_indexes.py  # Ajoute 29 index
 
 # 6. Lancer l'application
 cd App
@@ -47,81 +48,73 @@ py -m core.gui.main_qt
 ```
 
 **Guides** :
-- ⚡ [docs/DEMARRAGE_RAPIDE.md](docs/DEMARRAGE_RAPIDE.md) - Installation en 5 minutes
-- 📖 [App/config/README.md](App/config/README.md) - Configuration détaillée
-- 🌐 [docs/INSTALLATION_CLIENT.md](docs/INSTALLATION_CLIENT.md) - Installation réseau
-- 🗺️ [INDEX.md](INDEX.md) - Navigation complète du projet
+- [docs/DEMARRAGE_RAPIDE.md](docs/DEMARRAGE_RAPIDE.md) - Installation en 5 minutes
+- [App/config/README.md](App/config/README.md) - Configuration détaillée
+- [docs/INSTALLATION_CLIENT.md](docs/INSTALLATION_CLIENT.md) - Installation réseau
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 ### Pour les utilisateurs
-- 📖 [Guide des absences](docs/user/guide-absences.md)
-- 📖 [Guide de l'interface historique](docs/user/guide-interface-historique.md)
-- 📁 **[Comment uploader des documents](COMMENT_UPLOADER_DOCUMENTS.md)** - Guide ultra-rapide
-- 📄 [Guide détaillé - Upload de documents](docs/user/guide-upload-documents.md)
+- [Guide des absences](docs/user/guide-absences.md)
+- [Guide de l'interface historique](docs/user/guide-interface-historique.md)
+- [Guide upload de documents](docs/user/guide-upload-documents.md)
+- [Guide gestion utilisateurs](docs/user/guide-gestion-utilisateurs.md)
 
 ### Pour les développeurs
-- 🏗️ [Architecture du projet](docs/dev/architecture.md)
-- 🧪 [Guide des tests](docs/dev/tests-report.md)
-- 🔧 [Optimisation de l'exécutable](docs/dev/build-optimization.md)
-- 🌐 [Déploiement réseau](docs/dev/deploiement-reseau.md) ⚡ **Résout la lenteur au lancement**
+- [Architecture du projet](docs/dev/architecture.md)
+- [Guide des tests](docs/dev/tests-report.md)
+- [Système d'authentification](docs/dev/authentication-system.md)
+- [Déploiement réseau](docs/dev/deploiement-reseau.md)
 
-#### 🔥 Optimisations Performance (2026-01-06 à 2026-01-08)
+#### Optimisations Performance
 
-**📊 Vue d'ensemble:** [docs/dev/optimisation-reports/README.md](docs/dev/optimisation-reports/README.md)
+**Vue d'ensemble:** [docs/dev/optimisation-reports/README.md](docs/dev/optimisation-reports/README.md)
 
-**Guides techniques par catégorie:**
-- ⚡ **[Optimisations Base de Données](docs/dev/optimisation-database.md)** - Connection pooling, indexes (gains 10-100x)
-- 🧵 **[Optimisations UI/Threads](docs/dev/optimisation-ui-threads.md)** - DbWorker, 2-stage loading (UI fluide, zero freeze)
-- 💾 **[Optimisations Cache](docs/dev/optimisation-cache.md)** - Cache LRU avec TTL (réduction requêtes répétées)
-- 📦 **[Optimisations Packaging](docs/dev/optimisation-packaging.md)** - PyInstaller optimisé (180MB → 95MB, -47%)
-- 📝 **[Optimisations Logs/IO](docs/dev/optimisation-logs-io.md)** - Logs asynchrones (évite micro-lenteurs)
-- 📈 **[Monitoring Performance](docs/dev/monitoring-performance.md)** - Métriques temps réel et détection d'anomalies
-
-**Rapports d'application détaillés:**
-- 📄 [docs/dev/optimisation-reports/db-optimization/](docs/dev/optimisation-reports/db-optimization/) - Détails implémentation DB
-- 📄 [docs/dev/optimisation-reports/ui-optimization/](docs/dev/optimisation-reports/ui-optimization/) - Détails implémentation UI
-- 📄 [docs/dev/optimisation-reports/cache-optimization/](docs/dev/optimisation-reports/cache-optimization/) - Détails cache
-- 📄 [docs/dev/optimisation-reports/RESUME_FINAL.md](docs/dev/optimisation-reports/RESUME_FINAL.md) - Résumé complet avec métriques
-
-**Exemples pratiques:**
-- 📝 [Exemples de logging](docs/dev/exemples-logging.md)
-- 💡 [Exemples de cache](docs/dev/exemples-cache.md)
+| Guide | Description |
+|-------|-------------|
+| [Optimisations Base de Données](docs/dev/optimisation-database.md) | Connection pooling, indexes (gains 10-100x) |
+| [Optimisations UI/Threads](docs/dev/optimisation-ui-threads.md) | DbWorker, 2-stage loading (UI fluide) |
+| [Optimisations Cache](docs/dev/optimisation-cache.md) | Cache LRU avec TTL |
+| [Monitoring Performance](docs/dev/monitoring-performance.md) | Métriques temps réel |
 
 ### Fonctionnalités
-- 📋 [Module Absences](docs/features/module-absences.md)
-- 📄 [Module Documents RH](docs/features/module-documents.md)
-- 📊 [Historique Polyvalence](docs/features/historique-polyvalence.md)
+- [Module Absences](docs/features/module-absences.md)
+- [Module Documents RH](docs/features/module-documents.md)
+- [Historique Polyvalence](docs/features/historique-polyvalence.md)
 
 ### Sécurité
-- 🔐 [Gestion des credentials](docs/security/database-credentials.md)
-- 📝 [Changelog sécurité](docs/security/security-changelog.md)
+- [Gestion des credentials](docs/security/database-credentials.md)
+- [Audit de sécurité 2026-02-02](docs/security/audit-report-2026-02-02.md)
+- [Remédiation sécurité](docs/security/audit-remediation-2026-02-02.md)
+- [Protection admin](docs/security/admin-protection.md)
 
 ---
 
-## 🛠️ Technologies
+## Technologies
 
 - **Interface** : PyQt5 (thème personnalisé)
 - **Base de données** : MySQL 8.0 (serveur distant ou local)
 - **Exports** : Excel (openpyxl), PDF (ReportLab)
 - **Logging** : Système d'audit complet en base de données
 
-**Note importante** : Les postes clients n'ont **PAS besoin** d'installer MySQL. Seul le serveur hébergeant la base de données nécessite MySQL. L'application se connecte au serveur via le réseau.
+**Note importante** : Les postes clients n'ont **PAS besoin** d'installer MySQL. Seul le serveur hébergeant la base de données nécessite MySQL.
 
 ---
 
-## 📂 Structure du projet
+## Structure du projet
 
 ```
 EMAC/
 ├── App/                    # Application principale
 │   ├── core/              # Code source
-│   │   ├── db/           # Couche base de données
+│   │   ├── db/           # Couche base de données (connection pooling)
 │   │   ├── gui/          # Interface PyQt5
 │   │   ├── services/     # Logique métier
-│   │   └── exporters/    # Export Excel/PDF
+│   │   ├── repositories/ # Accès données (Repository pattern)
+│   │   ├── exporters/    # Export Excel/PDF
+│   │   └── utils/        # Utilitaires (cache, logging)
 │   ├── config/           # Configuration (templates)
 │   ├── database/         # Schémas et migrations SQL
 │   ├── scripts/          # Scripts utilitaires
@@ -131,179 +124,179 @@ EMAC/
 │   ├── dev/              # Docs développeur
 │   ├── user/             # Guides utilisateur
 │   ├── features/         # Documentation fonctionnelle
-│   └── security/         # Documentation sécurité
+│   ├── security/         # Documentation sécurité
+│   └── project-history/  # Historique du projet
+│
+├── build-scripts/        # Scripts de build et analyse
 │
 └── Deploy/               # Déploiement réseau
     ├── Lancer_EMAC.bat         # Lanceur optimisé (cache local)
-    ├── README_DEPLOIEMENT.md   # Guide admin système
-    ├── GUIDE_UTILISATEUR.md    # Guide utilisateur final
-    └── test_deploiement.bat    # Script de validation
+    └── README_DEPLOIEMENT.md   # Guide admin système
 ```
 
-**Documentation complète** : [CLAUDE.md](CLAUDE.md)
+**Documentation technique complète** : [CLAUDE.md](CLAUDE.md)
 
 ---
 
-## 🔐 Sécurité
+## Sécurité
 
-- ✅ Protection contre les injections SQL (requêtes paramétrées)
-- ✅ Credentials en variables d'environnement (`.env`)
-- ✅ Mot de passe jamais commité dans Git
-- ✅ Audit trail complet de toutes les modifications
+**Score actuel : 9.0/10** (audit 2026-02-04)
 
-**Guide sécurité** : [docs/security/database-credentials.md](docs/security/database-credentials.md)
+### Protections implémentées
+
+| Protection | Description |
+|------------|-------------|
+| Injection SQL | Requêtes paramétrées + validation whitelist |
+| Path Traversal | Validation chemins avec `Path.resolve()` |
+| Command Injection | Whitelist répertoires autorisés |
+| Divulgation d'info | Messages d'erreur génériques (détails loggés) |
+| Race condition TOCTOU | Cache permissions avec TTL + vérification DB |
+| Session timeout | Déconnexion auto après 30 min d'inactivité |
+| Credentials | Variables d'environnement (`.env`) |
+| Audit trail | Toutes modifications tracées dans `historique` |
+
+### Système de permissions "Features"
+
+Système granulaire de permissions par fonctionnalité :
+- Format : `module.submodule.action` (ex: `rh.personnel.edit`)
+- Overrides utilisateur > Permissions rôle > Refusé
+- Interface de gestion : Gestion Utilisateurs > "Gérer les Features"
+
+**Documentation sécurité** : [docs/security/](docs/security/)
 
 ---
 
-## 🧪 Tests
+## Tests
 
 ```bash
 cd App/tests
 python run_all_tests.py
+
+# Tests de sécurité spécifiques
+pytest unit/test_security.py -v
 ```
 
 Les tests couvrent :
-- ✅ Intégrité de la base de données
-- ✅ Logique métier (évaluations, contrats, absences)
-- ✅ Système d'audit et logging
-- ✅ Gestion des matricules
+- Intégrité de la base de données
+- Logique métier (évaluations, contrats, absences)
+- Système d'audit et logging
+- **Sécurité** : injection SQL, path traversal, TOCTOU, session timeout
 
 **Rapport de tests** : [docs/dev/tests-report.md](docs/dev/tests-report.md)
 
 ---
 
-## 📦 Déploiement
+## Fonctionnalités principales
 
-### Build de l'exécutable
-
-Pour créer un exécutable autonome optimisé :
-
-```bash
-# Build optimisé (recommandé)
-build_optimized.bat
-
-# Résultat : dist/EMAC/ (~40-60 MB)
-```
-
-**Guide complet** : [docs/dev/guide-optimisation-build.md](docs/dev/guide-optimisation-build.md)
-
-### Installation sur les postes clients
-
-⚠️ **Aucune installation de MySQL nécessaire sur les postes clients !**
-
-1. Copiez le dossier `dist/EMAC/` sur le poste client
-2. Configurez `.env` avec l'adresse du serveur MySQL :
-   ```env
-   EMAC_DB_HOST=192.168.1.100  # IP du serveur
-   EMAC_DB_USER=emac_user
-   EMAC_DB_PASSWORD=***
-   EMAC_DB_NAME=emac_db
-   ```
-3. Lancez `EMAC.exe`
-
-**Guide d'installation client** : [INSTALLATION_CLIENT.md](INSTALLATION_CLIENT.md)
-
----
-
-## 📊 Fonctionnalités principales
-
-### 🎯 Gestion de la Polyvalence
+### Gestion de la Polyvalence
 - Matrice de compétences par poste et atelier
 - 4 niveaux de qualification (1=Apprenti → 4=Formateur)
 - Calcul automatique des prochaines évaluations
 - Grilles d'affichage et exports Excel
 
-### 📅 Système d'évaluation
+### Système d'évaluation
 - Planification automatique sur 10 ans
 - Prise en compte des jours fériés
 - Alertes pour les évaluations en retard
 - Historique complet des évaluations
 
-### 📄 Gestion documentaire
+### Gestion documentaire
 - Stockage centralisé des documents RH
 - Suivi des dates d'expiration (permis, certificats)
-- Catégorisation flexible
-- Alertes d'expiration
+- Catégorisation par domaine (RH, Contrats, Formations)
+- Upload de fichiers existants
 
-### 👥 Ressources Humaines
-- Gestion des contrats (CDD, CDI, intérim)
+### Ressources Humaines
+- Gestion des contrats (CDD, CDI, intérim, apprentissage, etc.)
 - Suivi des renouvellements
 - Gestion des absences et congés
 - Calcul automatique des soldes
 
-### 📝 Audit et Historique
+### Audit et Historique
 - Tous les changements tracés (qui, quoi, quand)
-- Consultation de l'historique par table, action, ou opérateur
+- Consultation par table, action, ou opérateur
 - Export des logs en CSV
 - Interface de recherche avancée
 
+### Sécurité avancée
+- Déconnexion automatique après inactivité (30 min)
+- Avertissement 5 min avant déconnexion
+- Vérification des permissions en temps réel
+- Logs de sécurité (tentatives non autorisées)
+
 ---
 
-## 🌐 Déploiement en production
+## Déploiement
 
-### Compilation de l'exécutable
+### Build de l'exécutable
 
 ```bash
 cd App
 pyinstaller EMAC_optimized.spec --clean --noconfirm
 ```
 
-Résultat : `App\dist\EMAC\EMAC.exe` (mode one-folder)
+Résultat : `App\dist\EMAC\EMAC.exe`
 
-### Déploiement sur réseau d'entreprise
+### Installation sur les postes clients
 
-⚡ **Problème résolu** : Lancement lent (2-5 min) depuis un partage réseau
+**Aucune installation de MySQL nécessaire sur les postes clients !**
 
-**Solution** : Système de cache local avec le lanceur `Lancer_EMAC.bat`
+1. Copiez le dossier `dist/EMAC/` sur le poste client
+2. Configurez `.env` avec l'adresse du serveur MySQL :
+   ```env
+   EMAC_DB_HOST=192.168.1.100
+   EMAC_DB_USER=emac_user
+   EMAC_DB_PASSWORD=***
+   EMAC_DB_NAME=emac_db
+   ```
+3. Lancez `EMAC.exe`
 
-| Scénario | Temps | Documentation |
-|----------|-------|---------------|
-| Premier lancement | 30-60 sec | [Deploy/README.md](Deploy/README.md) |
-| Lancements suivants | 2-3 sec | [docs/dev/deploiement-reseau.md](docs/dev/deploiement-reseau.md) |
+### Déploiement réseau
 
-**Pour déployer** :
-1. Consultez [Deploy/README_DEPLOIEMENT.md](Deploy/README_DEPLOIEMENT.md) (administrateurs)
-2. Testez avec `Deploy\test_deploiement.bat`
-3. Distribuez `Deploy\Lancer_EMAC.bat` aux utilisateurs
+| Scénario | Temps |
+|----------|-------|
+| Premier lancement | 30-60 sec |
+| Lancements suivants | 2-3 sec |
+
+**Guide complet** : [Deploy/README_DEPLOIEMENT.md](Deploy/README_DEPLOIEMENT.md)
 
 ---
 
-## 🤝 Contribution
-
-Pour contribuer au projet :
+## Contribution
 
 1. Lire [CLAUDE.md](CLAUDE.md) pour comprendre l'architecture
-2. Consulter [docs/dev/architecture.md](docs/dev/architecture.md)
+2. Consulter les [patterns de sécurité](CLAUDE.md#-security-patterns-2026-02-02)
 3. Créer une branche pour vos modifications
 4. Tester avec `python App/tests/run_all_tests.py`
 5. Soumettre une Pull Request
 
 ---
 
-## 📞 Support
+## Support
 
-- 📧 Documentation technique : [CLAUDE.md](CLAUDE.md)
-- 🔧 Configuration : [App/config/README.md](App/config/README.md)
-- 🐛 Problèmes : Consulter [docs/dev/tests-report.md](docs/dev/tests-report.md)
+- Documentation technique : [CLAUDE.md](CLAUDE.md)
+- Configuration : [App/config/README.md](App/config/README.md)
+- Problèmes : Consulter [docs/dev/tests-report.md](docs/dev/tests-report.md)
 
 ---
 
-## 📄 Licence
+## Licence
 
 Projet interne - Tous droits réservés
 
 ---
 
-## 🎯 Roadmap
+## Roadmap
 
-- [ ] Migration vers python-dotenv pour parsing .env
 - [ ] API REST pour intégration externe
 - [ ] Dashboard temps réel avec WebSockets
 - [ ] Application mobile (consultation)
 - [ ] Export PDF avancé avec templates
+- [ ] Protection brute force (optionnel)
 
 ---
 
-**Version** : 2.0
-**Dernière mise à jour** : 2025-12-16
-**Statut** : ✅ Production
+**Version** : 3.0
+**Dernière mise à jour** : 2026-02-04
+**Statut** : Production
+**Score sécurité** : 9.0/10
