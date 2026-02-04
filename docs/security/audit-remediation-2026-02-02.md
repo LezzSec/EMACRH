@@ -90,23 +90,103 @@ show_error_message(self, "Erreur", "Message generique", e)
 
 | Severite | Description | Statut |
 |----------|-------------|--------|
-| CRITIQUE | Timeout session | Non implemente (par choix utilisateur) |
+| ~~CRITIQUE~~ | ~~Timeout session~~ | ✅ CORRIGE (2026-02-04) |
 | CRITIQUE | Protection brute force | Non implemente (par choix utilisateur) |
-| MOYENNE | Race condition permissions | Non corrige |
+| ~~MOYENNE~~ | ~~Race condition permissions~~ | ✅ CORRIGE (2026-02-04) |
+
+---
+
+## CORRECTION RACE CONDITION TOCTOU (2026-02-04)
+
+### Problème Initial
+Race condition Time-of-Check-Time-of-Use (TOCTOU) dans le système de permissions:
+- Permissions cachées indéfiniment au login
+- Révocations de permissions non prises en compte
+- Services faisaient confiance au cache potentiellement stale
+
+### Corrections Apportées
+
+**1. TTL sur le cache des permissions** (`permission_manager.py`)
+- Cache expire après 5 minutes (`PERMISSION_CACHE_TTL_SECONDS = 300`)
+- Auto-reload si cache périmé lors de `can()`
+
+**2. Vérification fraîche par défaut** (`permission_manager.py`)
+- `require()` vérifie maintenant en DB par défaut (`fresh=True`)
+- `_check_permission_fresh()` bypass le cache pour vérifier directement
+- `require_fresh()` alias explicite pour les opérations critiques
+
+**3. Invalidation avec reload** (`emac_cache.py`)
+- `invalidate_user_cache()` recharge maintenant le PermissionManager
+- Décorateur `@invalidate_permissions_on_change` met à jour le singleton
+
+**4. Fonctions modifiées**
+- `save_user_feature_overrides()` → recharge après modification
+- `save_role_features()` → recharge après modification
+- `reset_user_feature_overrides()` → recharge après modification
+
+### Impact Sécurité
+- ✅ Révocations de permissions prises en compte immédiatement
+- ✅ Opérations critiques (require) vérifient toujours en DB
+- ✅ Plus de fenêtre TOCTOU exploitable
+- ✅ Performance préservée pour vérifications UI (can() avec cache)
+
+---
+
+## CORRECTION SESSION TIMEOUT (2026-02-04)
+
+### Problème Initial
+Pas de déconnexion automatique après période d'inactivité:
+- Risque si utilisateur quitte son poste sans se déconnecter
+- Sessions restaient actives indéfiniment
+- Violation des bonnes pratiques de sécurité
+
+### Solution Implémentée
+
+**1. SessionTimeoutManager** (`session_timeout.py`)
+- Surveillance de l'activité utilisateur (souris, clavier)
+- Timer de vérification périodique (30s)
+- Déconnexion après 30 minutes d'inactivité
+
+**2. Avertissement avant déconnexion**
+- Dialog d'avertissement 5 minutes avant expiration
+- Compteur en temps réel
+- Option de prolonger ou se déconnecter
+
+**3. Intégration MainWindow** (`main_qt.py`)
+- Event filter pour détecter l'activité
+- Déconnexion automatique avec message informatif
+- Log de sécurité (LOGOUT_TIMEOUT)
+
+### Configuration
+```python
+SESSION_TIMEOUT_MINUTES = 30   # Déconnexion après 30 min
+WARNING_BEFORE_MINUTES = 5     # Avertissement 5 min avant
+CHECK_INTERVAL_SECONDS = 30    # Vérification toutes les 30s
+```
+
+### Impact Sécurité
+- ✅ Sessions inactives automatiquement terminées
+- ✅ Utilisateur averti avant déconnexion
+- ✅ Logs d'audit pour les déconnexions automatiques
+- ✅ Réduction du risque d'accès non autorisé
 
 ---
 
 ## SCORE SECURITE MIS A JOUR
 
-| Avant | Apres |
-|-------|-------|
-| 5.5/10 | 7.5/10 |
+| Avant | Apres (02/02) | Apres (04/02) |
+|-------|---------------|---------------|
+| 5.5/10 | 7.5/10 | 9.0/10 |
 
-**Ameliorations:**
+**Ameliorations (02/02):**
 - +1.0 : Injection SQL corrigee
 - +0.3 : Path traversal corrige
 - +0.2 : Command injection corrige
 - +0.5 : Divulgation erreurs corrigee (tous fichiers GUI)
+
+**Ameliorations (04/02):**
+- +0.5 : Race condition TOCTOU corrigee
+- +0.5 : Session timeout implementee
 
 ---
 

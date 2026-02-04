@@ -145,6 +145,9 @@ MIGRATION_CONTEXT_MANAGERS.md
 RESUME_FINAL_OPTIMISATIONS.md
 RESUME_OPTIMISATIONS.txt
 
+# Archive de fichiers non utilisés (nettoyage 2026-02-04)
+_archive/
+
 # ============================================================================
 # À CONSERVER DANS GIT
 # ============================================================================
@@ -152,7 +155,6 @@ RESUME_OPTIMISATIONS.txt
 # docs/                   - Documentation du projet
 # build-scripts/          - Scripts de build et analyse
 # tests/                  - Scripts de test
-# archives/               - Historique du projet (archivé)
 # README.md               - Documentation principale
 # CLAUDE.md               - Instructions pour Claude Code
 # .gitignore              - Cette configuration
@@ -160,3 +162,4 @@ RESUME_OPTIMISATIONS.txt
 # À IGNORER
 # session-reports/        - Rapports de sessions de travail (temporaires)
 # temp/                   - Fichiers temporaires de build
+# _archive/               - Fichiers archivés (code mort, documents obsolètes)

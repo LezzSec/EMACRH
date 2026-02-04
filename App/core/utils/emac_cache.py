@@ -131,10 +131,31 @@ def get_cached_user_permissions(user_id: Optional[int] = None) -> Dict[str, Dict
     return {}
 
 
-def invalidate_user_cache():
-    """Invalide tout le cache utilisateur"""
+def invalidate_user_cache(reload_current_user: bool = True):
+    """
+    Invalide tout le cache utilisateur.
+
+    Args:
+        reload_current_user: Si True, recharge aussi les permissions du singleton
+                            PermissionManager pour l'utilisateur courant.
+                            Ceci est CRITIQUE pour éviter les race conditions TOCTOU.
+    """
     cache = CacheManager.get_instance()
     cache.invalidate_namespace('permissions')
+
+    # SÉCURITÉ: Recharger les permissions du PermissionManager singleton
+    # pour éviter les race conditions où le cache est invalidé mais le
+    # singleton garde les anciennes permissions en mémoire.
+    if reload_current_user:
+        try:
+            from core.services.permission_manager import perm
+            if perm.is_loaded():
+                perm.reload()
+                import logging
+                logging.getLogger(__name__).debug("PermissionManager rechargé après invalidation cache")
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Erreur reload PermissionManager: {e}")
 
 
 # ===========================
@@ -399,6 +420,9 @@ def invalidate_permissions_on_change(func):
     """
     Décorateur pour invalider le cache permissions après modification.
 
+    SÉCURITÉ: Ce décorateur invalide AUSSI le PermissionManager singleton
+    pour éviter les race conditions TOCTOU.
+
     Example:
         @invalidate_permissions_on_change
         def update_user_role(user_id, new_role_id):
@@ -407,6 +431,7 @@ def invalidate_permissions_on_change(func):
     """
     def wrapper(*args, **kwargs):
         result = func(*args, **kwargs)
-        invalidate_user_cache()
+        # reload_current_user=True pour recharger le PermissionManager
+        invalidate_user_cache(reload_current_user=True)
         return result
     return wrapper

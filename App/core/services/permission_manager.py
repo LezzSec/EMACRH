@@ -4,23 +4,36 @@ PermissionManager - Point d'entrée unique pour les vérifications de permission
 
 Architecture:
 - Singleton qui charge les permissions au login
-- Cache en mémoire pour performance (pas de requête DB à chaque vérification)
+- Cache en mémoire avec TTL pour éviter les race conditions (TOCTOU)
+- Vérification fraîche (bypass cache) pour les opérations critiques
 - Résolution: user_features (override) > role_features > refusé
 
 Usage:
     from core.services.permission_manager import perm
 
     if perm.can("rh.personnel.edit"):
-        # Autoriser l'action
+        # Autoriser l'action (utilise le cache)
         ...
 
-    perm.require("admin.permissions")  # Lève PermissionError si refusé
+    perm.require("admin.permissions")  # Vérifie en DB pour les opérations critiques
+    perm.require("rh.view", fresh=False)  # Utilise le cache (moins critique)
+
+Sécurité (Race Condition TOCTOU):
+    - Le cache a un TTL de 5 minutes (PERMISSION_CACHE_TTL_SECONDS)
+    - require() vérifie en DB par défaut pour éviter les actions non autorisées
+    - can() utilise le cache pour les vérifications UI (performance)
+    - Après modification des permissions, invalidate_and_reload_permissions() force le reload
 """
 
 import logging
+import time
 from typing import Set, List, Optional, Dict, Callable, TypeVar, Any
 
 logger = logging.getLogger(__name__)
+
+# TTL du cache des permissions (en secondes)
+# Après ce délai, les permissions seront automatiquement rechargées
+PERMISSION_CACHE_TTL_SECONDS = 300  # 5 minutes
 
 T = TypeVar('T')
 
@@ -71,6 +84,9 @@ class PermissionManager:
         # Flag indiquant si les permissions ont été chargées
         self._loaded = False
 
+        # Timestamp du dernier chargement (pour TTL)
+        self._cache_timestamp: float = 0.0
+
     @classmethod
     def get_instance(cls) -> 'PermissionManager':
         """Retourne l'instance singleton"""
@@ -87,6 +103,7 @@ class PermissionManager:
             cls._instance._user_id = None
             cls._instance._role_id = None
             cls._instance._loaded = False
+            cls._instance._cache_timestamp = 0.0
 
     def load_for_user(self, user_id: int, role_id: int) -> None:
         """
@@ -145,6 +162,7 @@ class PermissionManager:
                         self._allowed_features.add(feature_key)
 
                 self._loaded = True
+                self._cache_timestamp = time.time()
                 logger.info(f"Permissions chargées: {len(self._allowed_features)} features autorisées")
 
         except Exception as e:
@@ -152,31 +170,127 @@ class PermissionManager:
             # En cas d'erreur, on NE charge PAS les features → fallback vers ancien système
             self._allowed_features.clear()
             self._loaded = False  # Important: permet le fallback vers l'ancien système
+            self._cache_timestamp = 0.0
 
     def reload(self) -> None:
         """Recharge les permissions (après modification)"""
         if self._user_id and self._role_id:
             self.load_for_user(self._user_id, self._role_id)
 
-    def can(self, feature_key: str) -> bool:
+    def is_cache_stale(self) -> bool:
         """
-        Vérifie si l'utilisateur a la permission.
+        Vérifie si le cache des permissions est périmé (TTL dépassé).
+
+        Returns:
+            True si le cache doit être rafraîchi
+        """
+        if not self._loaded or self._cache_timestamp == 0.0:
+            return True
+        elapsed = time.time() - self._cache_timestamp
+        return elapsed > PERMISSION_CACHE_TTL_SECONDS
+
+    def _reload_if_stale(self) -> None:
+        """Recharge automatiquement si le cache est périmé"""
+        if self.is_cache_stale() and self._user_id and self._role_id:
+            logger.debug("Cache permissions périmé, rechargement automatique...")
+            self.reload()
+
+    def _check_permission_fresh(self, feature_key: str) -> bool:
+        """
+        Vérifie une permission directement en base de données (bypass cache).
+        Utilisé pour les opérations critiques où la sécurité prime sur la performance.
 
         Args:
-            feature_key: Clé de la feature (ex: "rh.personnel.edit")
+            feature_key: Clé de la feature à vérifier
 
         Returns:
             True si autorisé, False sinon
         """
+        if not self._user_id or not self._role_id:
+            logger.warning("Vérification fraîche impossible: utilisateur non connecté")
+            return False
+
+        from core.db.configbd import DatabaseCursor
+
+        try:
+            with DatabaseCursor(dictionary=True) as cur:
+                # 1. Vérifier si un override utilisateur existe
+                cur.execute("""
+                    SELECT value FROM user_features
+                    WHERE user_id = %s AND feature_key = %s
+                """, (self._user_id, feature_key))
+                override = cur.fetchone()
+
+                if override is not None:
+                    # Override explicite: TRUE ou FALSE
+                    return bool(override['value'])
+
+                # 2. Pas d'override → vérifier si le rôle a cette feature
+                cur.execute("""
+                    SELECT 1 FROM role_features
+                    WHERE role_id = %s AND feature_key = %s
+                """, (self._role_id, feature_key))
+
+                return cur.fetchone() is not None
+
+        except Exception as e:
+            logger.error(f"Erreur vérification fraîche permission '{feature_key}': {e}")
+            # En cas d'erreur DB, refuser par sécurité
+            return False
+
+    def can(self, feature_key: str, fresh: bool = False) -> bool:
+        """
+        Vérifie si l'utilisateur a la permission.
+
+        Note: Pour les vérifications UI (affichage de boutons, etc.), utiliser le cache
+        est acceptable. Pour les actions critiques, utiliser require() qui vérifie en DB.
+
+        Args:
+            feature_key: Clé de la feature (ex: "rh.personnel.edit")
+            fresh: Si True, vérifie directement en DB (bypass cache)
+
+        Returns:
+            True si autorisé, False sinon
+        """
+        if fresh:
+            return self._check_permission_fresh(feature_key)
+
         if not self._loaded:
             logger.warning("Permissions non chargées, refus par défaut")
             return False
 
+        # Auto-reload si cache périmé
+        self._reload_if_stale()
+
         return feature_key in self._allowed_features
 
-    def require(self, feature_key: str) -> None:
+    def require(self, feature_key: str, fresh: bool = True) -> None:
         """
         Vérifie la permission et lève une exception si refusée.
+
+        Par défaut, cette méthode vérifie TOUJOURS en base de données (fresh=True)
+        pour éviter les race conditions TOCTOU où une permission a été révoquée
+        mais le cache n'a pas été mis à jour.
+
+        Args:
+            feature_key: Clé de la feature
+            fresh: Si True (défaut), vérifie en DB. Si False, utilise le cache.
+
+        Raises:
+            PermissionError: Si la permission est refusée
+        """
+        if not self.can(feature_key, fresh=fresh):
+            logger.warning(f"Permission refusée (fresh={fresh}): {feature_key} pour user_id={self._user_id}")
+            raise PermissionError(feature_key)
+
+    def require_fresh(self, feature_key: str) -> None:
+        """
+        Vérifie la permission directement en DB (alias pour require(fresh=True)).
+
+        Utiliser cette méthode pour les opérations critiques:
+        - Création/modification/suppression de données
+        - Opérations administratives
+        - Actions irréversibles
 
         Args:
             feature_key: Clé de la feature
@@ -184,8 +298,7 @@ class PermissionManager:
         Raises:
             PermissionError: Si la permission est refusée
         """
-        if not self.can(feature_key):
-            raise PermissionError(feature_key)
+        self.require(feature_key, fresh=True)
 
     def can_any(self, *feature_keys: str) -> bool:
         """
@@ -271,14 +384,50 @@ def reload_permissions() -> None:
     perm.reload()
 
 
-def can(feature_key: str) -> bool:
-    """Raccourci pour perm.can()"""
-    return perm.can(feature_key)
+def can(feature_key: str, fresh: bool = False) -> bool:
+    """
+    Raccourci pour perm.can().
+
+    Args:
+        feature_key: Clé de la feature
+        fresh: Si True, vérifie en DB (bypass cache)
+    """
+    return perm.can(feature_key, fresh=fresh)
 
 
-def require(feature_key: str) -> None:
-    """Raccourci pour perm.require()"""
-    perm.require(feature_key)
+def require(feature_key: str, fresh: bool = True) -> None:
+    """
+    Raccourci pour perm.require().
+
+    Par défaut vérifie en DB pour éviter les race conditions.
+
+    Args:
+        feature_key: Clé de la feature
+        fresh: Si True (défaut), vérifie en DB
+    """
+    perm.require(feature_key, fresh=fresh)
+
+
+def require_fresh(feature_key: str) -> None:
+    """
+    Raccourci pour perm.require_fresh().
+
+    Toujours vérifie en DB (pour opérations critiques).
+    """
+    perm.require_fresh(feature_key)
+
+
+def invalidate_and_reload_permissions() -> None:
+    """
+    Invalide le cache et recharge les permissions pour l'utilisateur courant.
+
+    Appeler cette fonction après modification des permissions d'un utilisateur
+    pour s'assurer que les changements sont pris en compte immédiatement.
+    """
+    from core.utils.emac_cache import invalidate_user_cache
+    invalidate_user_cache()
+    perm.reload()
+    logger.info("Permissions invalidées et rechargées")
 
 
 # ============================================================================
@@ -453,8 +602,9 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
 
         conn.commit()
 
-        # Invalider le cache
-        invalidate_user_cache()
+        # SÉCURITÉ: Invalider le cache ET recharger le PermissionManager
+        # pour éviter les race conditions TOCTOU
+        invalidate_user_cache(reload_current_user=True)
 
         # Log
         log_hist_async(
@@ -495,7 +645,8 @@ def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
         cur.execute("DELETE FROM user_features WHERE user_id = %s", (user_id,))
         conn.commit()
 
-        invalidate_user_cache()
+        # SÉCURITÉ: Invalider le cache ET recharger le PermissionManager
+        invalidate_user_cache(reload_current_user=True)
 
         current_user = get_current_user()
         log_hist_async(

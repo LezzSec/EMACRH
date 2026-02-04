@@ -261,18 +261,24 @@ Database schema is located in [App/database/schema/bddemac.sql](App/database/sch
 
 3. **Usage in Code**
    ```python
-   from core.services.permission_manager import perm, can, require
+   from core.services.permission_manager import perm, can, require, require_fresh
 
-   # Simple check
+   # UI checks (uses cache for performance)
    if perm.can("rh.personnel.edit"):
        btn_edit.setVisible(True)
 
-   # Shortcut function
+   # Shortcut function (cached)
    if can("production.grilles.export"):
        do_export()
 
-   # Raise exception if not allowed
-   require("admin.permissions")  # Raises PermissionError
+   # Critical operation - ALWAYS verify fresh in DB (default)
+   require("admin.permissions")  # Raises PermissionError, checks DB
+
+   # Explicit fresh check (same as require())
+   require_fresh("rh.personnel.delete")
+
+   # Use cache for non-critical checks
+   require("rh.view", fresh=False)  # Uses cache
 
    # Multiple features
    if perm.can_any("rh.view", "production.view"):
@@ -292,15 +298,59 @@ Database schema is located in [App/database/schema/bddemac.sql](App/database/sch
    - Access via: Gestion Utilisateurs → "🔐 Gérer les Features"
    - File: [feature_puzzle.py](App/core/gui/feature_puzzle.py)
 
-6. **Security: Service-level checks**
+6. **Security: Service-level checks** (Race Condition TOCTOU Protection)
    ```python
-   # In services, always verify permissions
+   # ✅ In services, ALWAYS use require() - checks DB by default
    def delete_personnel(personnel_id):
-       require("rh.personnel.delete")  # Raises if not allowed
+       require("rh.personnel.delete")  # Checks DB, not cache!
        # ... proceed with deletion
+
+   # ❌ NEVER use can() for critical operations
+   def bad_delete(personnel_id):
+       if can("rh.personnel.delete"):  # Uses cache - INSECURE!
+           # Permission could have been revoked since cache was loaded
    ```
 
+7. **Cache TTL & Auto-Reload** (2026-02-04)
+   - Cache expires after 5 minutes (`PERMISSION_CACHE_TTL_SECONDS`)
+   - `can()` auto-reloads if cache is stale
+   - `require()` always checks DB by default (fresh=True)
+   - After permission modification, cache is invalidated AND reloaded
+
 **Full list of features**: See [010_add_features_system.sql](App/database/migrations/010_add_features_system.sql)
+
+### 🔐 Session Timeout (2026-02-04)
+
+**IMPORTANT**: Automatic logout after inactivity period:
+
+1. **Configuration** ([session_timeout.py](App/core/gui/session_timeout.py))
+   - `SESSION_TIMEOUT_MINUTES = 30` - Logout after 30 minutes inactivity
+   - `WARNING_BEFORE_MINUTES = 5` - Warning 5 minutes before
+   - `CHECK_INTERVAL_SECONDS = 30` - Check every 30 seconds
+
+2. **SessionTimeoutManager Features**
+   - Tracks user activity (mouse, keyboard events)
+   - Shows warning dialog before logout
+   - Allows session extension
+   - Logs automatic logouts to audit trail
+
+3. **Integration in MainWindow**
+   ```python
+   # Automatically initialized in MainWindow.__init__
+   self._timeout_manager = SessionTimeoutManager(self)
+   self._timeout_manager.timeout_logout.connect(self._force_logout_timeout)
+   ```
+
+4. **Activity Detection**
+   - Mouse movements, clicks
+   - Keyboard input
+   - Scroll events
+   - Automatically resets timeout timer
+
+5. **Security Benefits**
+   - Protects unattended workstations
+   - Reduces unauthorized access risk
+   - Audit trail of timeout logouts (action: LOGOUT_TIMEOUT)
 
 ## Key Database Tables
 

@@ -82,6 +82,13 @@ try:
 except ImportError:
     show_error_message = None
 
+# Import du gestionnaire de timeout de session
+try:
+    from core.gui.session_timeout import SessionTimeoutManager
+except ImportError:
+    SessionTimeoutManager = None
+    logger.warning("SessionTimeoutManager non disponible")
+
 # ===========================
 #  Fonctions lazy (DB/Auth/Theme)
 # ===========================
@@ -132,6 +139,14 @@ class MainWindow(QMainWindow):
         # Cache postes
         self._postes_cache = None
         self._postes_cache_time = None
+
+        # Session timeout manager (sécurité: déconnexion automatique après inactivité)
+        self._timeout_manager = None
+        if SessionTimeoutManager is not None:
+            self._timeout_manager = SessionTimeoutManager(self)
+            self._timeout_manager.timeout_logout.connect(self._force_logout_timeout)
+            # Démarrer la surveillance après l'affichage de la fenêtre
+            QTimer.singleShot(1000, self._start_timeout_monitoring)
 
         # ✅ Charger les composants du thème
         theme = get_theme_components()
@@ -788,8 +803,54 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Erreur", "Export impossible. Contactez l'administrateur.")
 
     # ---------------------------
-    # Auth
+    # Auth & Session Timeout
     # ---------------------------
+
+    def _start_timeout_monitoring(self):
+        """Démarre la surveillance du timeout de session."""
+        if self._timeout_manager:
+            self._timeout_manager.start()
+            logger.info("Surveillance timeout de session démarrée")
+
+    def _force_logout_timeout(self):
+        """
+        Déconnexion forcée suite à un timeout de session.
+        Pas de confirmation demandée - la session a expiré.
+        """
+        logger.warning("Déconnexion automatique: timeout de session")
+
+        # Arrêter le timeout manager
+        if self._timeout_manager:
+            self._timeout_manager.stop()
+
+        # Déconnecter l'utilisateur
+        auth = _lazy_auth()
+        auth.logout_user()
+        clear_log_context()
+
+        # Fermer la fenêtre actuelle
+        self.close()
+
+        # Afficher un message informatif
+        QMessageBox.warning(
+            None,
+            "Session expirée",
+            "Votre session a expiré en raison d'inactivité.\n"
+            "Veuillez vous reconnecter pour continuer."
+        )
+
+        # Afficher le dialog de login
+        from core.gui.login_dialog import LoginDialog
+        login_dialog = LoginDialog()
+        if login_dialog.exec_() == QDialog.Accepted:
+            try:
+                user = auth.get_current_user()
+                if user:
+                    set_log_context(user_id=user.get('username') or user.get('nom'), screen='MainWindow')
+            except Exception:
+                pass
+            new_window = MainWindow()
+            new_window.show()
 
     def logout(self):
         reply = QMessageBox.question(
@@ -797,6 +858,10 @@ class MainWindow(QMainWindow):
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if reply == QMessageBox.Yes:
+            # Arrêter le timeout manager
+            if self._timeout_manager:
+                self._timeout_manager.stop()
+
             auth = _lazy_auth()
             auth.logout_user()
             clear_log_context()  # Réinitialiser le contexte de logging
@@ -825,6 +890,9 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, event):
         """Gère la fermeture de l'application."""
+        # Arrêter le timeout manager
+        if self._timeout_manager:
+            self._timeout_manager.stop()
         event.accept()
 
 
