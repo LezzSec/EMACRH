@@ -10,7 +10,7 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 
 from core.gui.historique import HistoriqueDialog
-from core.db.configbd import get_connection as get_db_connection
+from core.db.configbd import DatabaseConnection, DatabaseCursor
 from core.services.matricule_service import generer_prochain_matricule
 from core.gui.emac_ui_kit import show_error_message
 
@@ -48,27 +48,14 @@ def log_to_historique(connection, cursor, action: str, operateur_id=None, poste_
         logger.error(f"Erreur log historique: {e}")
         pass
 
-# -------- Helpers DB (compat mysql-connector / psycopg) --------
-def _cursor(conn):
-    """Retourne (cursor, dict_mode). dict_mode=True si le driver supporte dictionary=True."""
-    try:
-        cur = conn.cursor(dictionary=True)
-        return cur, True
-    except TypeError:
-        cur = conn.cursor()      
-        return cur, False
-
-
 # --------------------------- Dialog: Date + Poste ---------------------------
 
 class EvaluationDateDialog(QDialog):
     """
     Fenêtre pour saisir la date d'évaluation (prochaine) et le poste.
     """
-    def __init__(self, connection, cursor, parent=None):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.connection = connection
-        self.cursor = cursor
 
         self.setWindowTitle("Ajouter une polyvalence (optionnel)")
         self.setModal(True)
@@ -153,22 +140,20 @@ class EvaluationDateDialog(QDialog):
     def _charger_postes(self):
         """Remplit le combo avec les postes visibles (id + poste_code)."""
         try:
-            self.cursor.execute(
-                "SELECT id, poste_code FROM postes "
-                "WHERE COALESCE(visible, 1) = 1 "
-                "ORDER BY poste_code;"
-            )
-            rows = self.cursor.fetchall()
+            with DatabaseCursor(dictionary=True) as cursor:
+                cursor.execute(
+                    "SELECT id, poste_code FROM postes "
+                    "WHERE COALESCE(visible, 1) = 1 "
+                    "ORDER BY poste_code;"
+                )
+                rows = cursor.fetchall()
+
             self.poste_combo.clear()
             if not rows:
                 self.poste_combo.addItem("Aucun poste disponible", None)
                 return
             for r in rows:
-                # r peut être un tuple (id, code) ou un dict {"id":..,"poste_code":..}
-                if isinstance(r, dict):
-                    poste_id, label = r.get("id"), r.get("poste_code")
-                else:
-                    poste_id, label = r[0], r[1]
+                poste_id, label = r.get("id"), r.get("poste_code")
                 try:
                     poste_id = int(poste_id) if poste_id is not None else None
                 except Exception:
@@ -378,159 +363,144 @@ class ManageOperatorsDialog(QDialog):
             QMessageBox.warning(self, "Attention", "Veuillez entrer un nom et un prénom valides.")
             return
 
-        connection = None
-        cursor = None
+        # Si production, demander le poste pour la polyvalence AVANT la transaction
+        add_polyvalence = False
+        dlg = None
+        if is_production:
+            dlg = EvaluationDateDialog(self)
+            result = dlg.exec_()
+            add_polyvalence = (result == QDialog.Accepted)
+
+        poste_id = None
+        qdate = None
+        date_iso = None
+        poste_name = None
+        niveau = 1  # Niveau par défaut
+
+        if add_polyvalence and dlg:
+            poste_id = dlg.poste_combo.currentData()
+            qdate = dlg.date_edit.date()
+            date_iso = qdate.toString("yyyy-MM-dd")
+            niveau = dlg.niveau_combo.currentData()
+
         try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
+            with DatabaseConnection() as connection:
+                cursor = connection.cursor(dictionary=True)
 
-            # --- transaction via autocommit ---
-            old_autocommit = getattr(connection, "autocommit", True)
-            try:
-                connection.autocommit = False
-            except Exception:
-                try:
-                    connection.autocommit(False)
-                except Exception:
-                    pass
+                # ✅ SÉCURITÉ: Utiliser les colonnes standard (nom, prenom, statut)
+                # La table personnel a été standardisée avec ces colonnes
 
-            # ✅ SÉCURITÉ: Utiliser les colonnes standard (nom, prenom, statut)
-            # La table personnel a été standardisée avec ces colonnes
-
-            # Vérifier doublon exact nom+prenom
-            cursor.execute(
-                "SELECT id FROM personnel WHERE `nom`=%s AND `prenom`=%s",
-                (nom, prenom)
-            )
-            existing = cursor.fetchone()
-
-            if existing is None:
-                existing_id = None
-            else:
-                existing_id = existing["id"] if dict_mode else existing[0]
-
-            # Si production, demander le poste pour la polyvalence
-            add_polyvalence = False
-            if is_production:
-                dlg = EvaluationDateDialog(connection, cursor, self)
-                result = dlg.exec_()
-                add_polyvalence = (result == QDialog.Accepted)
-
-            poste_id = None
-            qdate = None
-            date_iso = None
-            poste_name = None
-            niveau = 1  # Niveau par défaut
-
-            if add_polyvalence:
-                poste_id = dlg.poste_combo.currentData()
-                qdate = dlg.date_edit.date()
-                date_iso = qdate.toString("yyyy-MM-dd")
-                niveau = dlg.niveau_combo.currentData()  # Récupérer le niveau choisi
+                # Vérifier doublon exact nom+prenom
+                cursor.execute(
+                    "SELECT id FROM personnel WHERE `nom`=%s AND `prenom`=%s",
+                    (nom, prenom)
+                )
+                existing = cursor.fetchone()
+                existing_id = existing["id"] if existing else None
 
                 # Récupérer le nom du poste pour le log
                 if poste_id:
                     cursor.execute("SELECT poste_code FROM postes WHERE id = %s", (poste_id,))
                     poste_row = cursor.fetchone()
-                    poste_name = poste_row["poste_code"] if (poste_row and dict_mode) else (poste_row[0] if poste_row else f"Poste #{poste_id}")
+                    poste_name = poste_row["poste_code"] if poste_row else f"Poste #{poste_id}"
 
-            # Insertion(s)
-            if existing_id:
-                operateur_id = int(existing_id)
-            else:
-                # Générer le matricule si c'est du personnel de production
-                matricule = None
-                if is_production:  # Si production, générer un matricule
-                    matricule = generer_prochain_matricule()
-
-                # ✅ SÉCURITÉ: Requêtes SQL avec colonnes hardcodées
-                # Insérer avec ou sans matricule et statut
-                if matricule:
-                    cursor.execute(
-                        "INSERT INTO personnel (`nom`, `prenom`, `statut`, `matricule`, `numposte`) "
-                        "VALUES (%s, %s, 'ACTIF', %s, 'Production')",
-                        (nom, prenom, matricule)
-                    )
+                # Insertion(s)
+                if existing_id:
+                    operateur_id = int(existing_id)
                 else:
-                    cursor.execute(
-                        "INSERT INTO personnel (`nom`, `prenom`, `statut`) "
-                        "VALUES (%s, %s, 'ACTIF')",
-                        (nom, prenom)
-                    )
+                    # Générer le matricule si c'est du personnel de production
+                    matricule = None
+                    if is_production:  # Si production, générer un matricule
+                        matricule = generer_prochain_matricule()
 
-                operateur_id = self._get_or_create_operateur_id(cursor, nom, prenom)
-                if not operateur_id:
-                    raise RuntimeError("Impossible de récupérer l'id du nouvel opérateur.")
+                    # ✅ SÉCURITÉ: Requêtes SQL avec colonnes hardcodées
+                    # Insérer avec ou sans matricule et statut
+                    if matricule:
+                        cursor.execute(
+                            "INSERT INTO personnel (`nom`, `prenom`, `statut`, `matricule`, `numposte`) "
+                            "VALUES (%s, %s, 'ACTIF', %s, 'Production')",
+                            (nom, prenom, matricule)
+                        )
+                    else:
+                        cursor.execute(
+                            "INSERT INTO personnel (`nom`, `prenom`, `statut`) "
+                            "VALUES (%s, %s, 'ACTIF')",
+                            (nom, prenom)
+                        )
 
-                # Insérer la date d'entrée dans personnel_infos
-                date_entree = self.add_date_entree.date().toString("yyyy-MM-dd")
+                    operateur_id = self._get_or_create_operateur_id(cursor, nom, prenom)
+                    if not operateur_id:
+                        raise RuntimeError("Impossible de récupérer l'id du nouvel opérateur.")
 
-                # Vérifier si personnel_infos existe déjà
-                cursor.execute("SELECT operateur_id FROM personnel_infos WHERE operateur_id = %s", (operateur_id,))
-                exists_infos = cursor.fetchone()
+                    # Insérer la date d'entrée dans personnel_infos
+                    date_entree = self.add_date_entree.date().toString("yyyy-MM-dd")
 
-                if exists_infos:
-                    # Mettre à jour
-                    cursor.execute(
-                        "UPDATE personnel_infos SET date_entree = %s WHERE operateur_id = %s",
-                        (date_entree, operateur_id)
-                    )
-                else:
-                    # Créer
-                    cursor.execute(
-                        "INSERT INTO personnel_infos (operateur_id, date_entree) VALUES (%s, %s)",
-                        (operateur_id, date_entree)
-                    )
+                    # Vérifier si personnel_infos existe déjà
+                    cursor.execute("SELECT operateur_id FROM personnel_infos WHERE operateur_id = %s", (operateur_id,))
+                    exists_infos = cursor.fetchone()
 
-                # ✅ LOG création opérateur dans l'historique
-                log_data = {
-                    "operateur": f"{prenom} {nom}",
-                    "type": "creation_operateur",
-                    "details": f"Création de l'opérateur {prenom} {nom} (Date d'entrée: {self.add_date_entree.date().toString('dd/MM/yyyy')})"
-                }
-                if matricule:
-                    log_data["matricule"] = matricule
-                    log_data["numposte"] = "Production"
-                    log_data["details"] += f" (matricule: {matricule}, poste: Production)"
+                    if exists_infos:
+                        # Mettre à jour
+                        cursor.execute(
+                            "UPDATE personnel_infos SET date_entree = %s WHERE operateur_id = %s",
+                            (date_entree, operateur_id)
+                        )
+                    else:
+                        # Créer
+                        cursor.execute(
+                            "INSERT INTO personnel_infos (operateur_id, date_entree) VALUES (%s, %s)",
+                            (operateur_id, date_entree)
+                        )
 
-                log_to_historique(
-                    connection, cursor,
-                    action="INSERT",
-                    operateur_id=operateur_id,
-                    poste_id=None,  # Pas de poste associé à la création d'opérateur
-                    description_data=log_data
-                )
-
-            # Évaluation liée (seulement si polyvalence ajoutée)
-            if add_polyvalence and poste_id:
-                self._enregistrer_date_polyvalence(connection, cursor, operateur_id, poste_id, qdate, niveau)
-
-                # Déterminer le texte du niveau pour le log
-                niveau_texte = {
-                    1: "Niveau 1 - Débutant",
-                    2: "Niveau 2 - Intermédiaire",
-                    3: "Niveau 3 - Confirmé",
-                    4: "Niveau 4 - Expert/Formateur"
-                }.get(niveau, f"Niveau {niveau}")
-
-                # ✅ LOG planification évaluation dans l'historique
-                log_to_historique(
-                    connection, cursor,
-                    action="INSERT",
-                    operateur_id=operateur_id,
-                    poste_id=poste_id,
-                    description_data={
+                    # ✅ LOG création opérateur dans l'historique
+                    log_data = {
                         "operateur": f"{prenom} {nom}",
-                        "poste": poste_name,
-                        "niveau": niveau_texte,
-                        "type": "planification_evaluation",
-                        "prochaine_evaluation": date_iso,
-                        "details": f"Planification évaluation pour le {date_iso} ({niveau_texte})"
+                        "type": "creation_operateur",
+                        "details": f"Création de l'opérateur {prenom} {nom} (Date d'entrée: {self.add_date_entree.date().toString('dd/MM/yyyy')})"
                     }
-                )
+                    if matricule:
+                        log_data["matricule"] = matricule
+                        log_data["numposte"] = "Production"
+                        log_data["details"] += f" (matricule: {matricule}, poste: Production)"
 
-            # Commit unique
-            connection.commit()
+                    log_to_historique(
+                        connection, cursor,
+                        action="INSERT",
+                        operateur_id=operateur_id,
+                        poste_id=None,  # Pas de poste associé à la création d'opérateur
+                        description_data=log_data
+                    )
+
+                # Évaluation liée (seulement si polyvalence ajoutée)
+                if add_polyvalence and poste_id:
+                    self._enregistrer_date_polyvalence(connection, cursor, operateur_id, poste_id, qdate, niveau)
+
+                    # Déterminer le texte du niveau pour le log
+                    niveau_texte = {
+                        1: "Niveau 1 - Débutant",
+                        2: "Niveau 2 - Intermédiaire",
+                        3: "Niveau 3 - Confirmé",
+                        4: "Niveau 4 - Expert/Formateur"
+                    }.get(niveau, f"Niveau {niveau}")
+
+                    # ✅ LOG planification évaluation dans l'historique
+                    log_to_historique(
+                        connection, cursor,
+                        action="INSERT",
+                        operateur_id=operateur_id,
+                        poste_id=poste_id,
+                        description_data={
+                            "operateur": f"{prenom} {nom}",
+                            "poste": poste_name,
+                            "niveau": niveau_texte,
+                            "type": "planification_evaluation",
+                            "prochaine_evaluation": date_iso,
+                            "details": f"Planification évaluation pour le {date_iso} ({niveau_texte})"
+                        }
+                    )
+
+                cursor.close()
+                # Commit is handled automatically by DatabaseConnection context manager
 
             # UI - Messages informatifs
             if existing_id:
@@ -585,44 +555,9 @@ class ManageOperatorsDialog(QDialog):
                     logger.warning(f"Erreur émission événement personnel.created: {evt_err}")
 
         except Exception as e:
-            try:
-                if connection:
-                    connection.rollback()
-            except Exception:
-                pass
-            # ✅ LOG d'erreur dans l'historique
-            try:
-                log_to_historique(
-                    connection, cursor,
-                    action="ERROR",
-                    operateur_id=None,
-                    poste_id=None,
-                    description_data={
-                        "error": str(e),
-                        "details": "Échec d'enregistrement opérateur/évaluation"
-                    }
-                )
-                connection.commit()
-            except Exception:
-                pass
+            # DatabaseConnection handles rollback automatically on exception
             logger.exception(f"Erreur enregistrement: {e}")
             show_error_message(self, "Erreur", "Échec de l'enregistrement", e)
-        finally:
-            try:
-                if hasattr(connection, "autocommit"):
-                    connection.autocommit = True
-            except Exception:
-                pass
-            try:
-                if cursor:
-                    cursor.close()
-            except Exception:
-                pass
-            try:
-                if connection:
-                    connection.close()
-            except Exception:
-                pass
 
 
     # NOTE: L'ancienne méthode _proposer_documents_nouvel_operateur a été supprimée.

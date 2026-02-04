@@ -881,17 +881,14 @@ class AddEditFormationDialog(QDialog):
             return
 
         try:
-            from core.db.configbd import get_connection
+            from core.db.configbd import DatabaseCursor
             import os
             import sys
             import subprocess
 
-            conn = get_connection()
-            cur = conn.cursor(dictionary=True)
-            cur.execute("SELECT chemin_fichier FROM documents WHERE id = %s", (self.document_id,))
-            result = cur.fetchone()
-            cur.close()
-            conn.close()
+            with DatabaseCursor(dictionary=True) as cur:
+                cur.execute("SELECT chemin_fichier FROM documents WHERE id = %s", (self.document_id,))
+                result = cur.fetchone()
 
             if result and result['chemin_fichier']:
                 file_path = result['chemin_fichier']
@@ -927,13 +924,10 @@ class AddEditFormationDialog(QDialog):
         """Met à jour l'affichage de l'attestation"""
         if self.document_id:
             try:
-                from core.db.configbd import get_connection
-                conn = get_connection()
-                cur = conn.cursor(dictionary=True)
-                cur.execute("SELECT nom_fichier FROM documents WHERE id = %s", (self.document_id,))
-                result = cur.fetchone()
-                cur.close()
-                conn.close()
+                from core.db.configbd import DatabaseCursor
+                with DatabaseCursor(dictionary=True) as cur:
+                    cur.execute("SELECT nom_fichier FROM documents WHERE id = %s", (self.document_id,))
+                    result = cur.fetchone()
 
                 if result:
                     self.attestation_label.setText(f"📄 {result['nom_fichier']}")

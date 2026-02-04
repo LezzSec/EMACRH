@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QBrush
 
-from core.db.configbd import get_connection as get_db_connection
+from core.db.configbd import DatabaseCursor
 from core.gui.emac_ui_kit import show_error_message
 import json
 import datetime as dt
@@ -420,51 +420,46 @@ class HistoriquePersonnelTab(QWidget):
     def _load_data(self):
         """Charge les polyvalences actuelles et anciennes."""
         try:
-            conn = get_db_connection()
-            cur = conn.cursor(dictionary=True)
+            with DatabaseCursor(dictionary=True) as cur:
+                # Charger les polyvalences ACTUELLES (table polyvalence)
+                query_actuelles = """
+                    SELECT
+                        'ACTUELLE' as type,
+                        p.id,
+                        ps.poste_code,
+                        p.niveau,
+                        p.date_evaluation,
+                        p.prochaine_evaluation,
+                        NULL as commentaire
+                    FROM polyvalence p
+                    JOIN postes ps ON p.poste_id = ps.id
+                    WHERE p.operateur_id = %s
+                    ORDER BY ps.poste_code
+                """
+                cur.execute(query_actuelles, (self.operateur_id,))
+                polyvalences_actuelles = cur.fetchall()
 
-            # Charger les polyvalences ACTUELLES (table polyvalence)
-            query_actuelles = """
-                SELECT
-                    'ACTUELLE' as type,
-                    p.id,
-                    ps.poste_code,
-                    p.niveau,
-                    p.date_evaluation,
-                    p.prochaine_evaluation,
-                    NULL as commentaire
-                FROM polyvalence p
-                JOIN postes ps ON p.poste_id = ps.id
-                WHERE p.operateur_id = %s
-                ORDER BY ps.poste_code
-            """
-            cur.execute(query_actuelles, (self.operateur_id,))
-            polyvalences_actuelles = cur.fetchall()
+                # Charger les ANCIENNES polyvalences (table historique_polyvalence avec action_type='IMPORT_MANUEL')
+                query_anciennes = """
+                    SELECT
+                        'ANCIENNE' as type,
+                        hp.id,
+                        p.poste_code,
+                        hp.nouveau_niveau as niveau,
+                        hp.nouvelle_date_evaluation as date_evaluation,
+                        NULL as prochaine_evaluation,
+                        hp.commentaire
+                    FROM historique_polyvalence hp
+                    LEFT JOIN postes p ON hp.poste_id = p.id
+                    WHERE hp.operateur_id = %s
+                      AND hp.action_type = 'IMPORT_MANUEL'
+                    ORDER BY p.poste_code, hp.date_action DESC
+                """
+                cur.execute(query_anciennes, (self.operateur_id,))
+                polyvalences_anciennes = cur.fetchall()
 
-            # Charger les ANCIENNES polyvalences (table historique_polyvalence avec action_type='IMPORT_MANUEL')
-            query_anciennes = """
-                SELECT
-                    'ANCIENNE' as type,
-                    hp.id,
-                    p.poste_code,
-                    hp.nouveau_niveau as niveau,
-                    hp.nouvelle_date_evaluation as date_evaluation,
-                    NULL as prochaine_evaluation,
-                    hp.commentaire
-                FROM historique_polyvalence hp
-                LEFT JOIN postes p ON hp.poste_id = p.id
-                WHERE hp.operateur_id = %s
-                  AND hp.action_type = 'IMPORT_MANUEL'
-                ORDER BY p.poste_code, hp.date_action DESC
-            """
-            cur.execute(query_anciennes, (self.operateur_id,))
-            polyvalences_anciennes = cur.fetchall()
-
-            # Stocker toutes les données
-            self.all_polyvalences = list(polyvalences_actuelles) + list(polyvalences_anciennes)
-
-            cur.close()
-            conn.close()
+                # Stocker toutes les données
+                self.all_polyvalences = list(polyvalences_actuelles) + list(polyvalences_anciennes)
 
             self._apply_filter()
 

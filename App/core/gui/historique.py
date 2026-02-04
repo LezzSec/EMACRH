@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QPalette, QCursor
 
-from core.db.configbd import get_connection as get_db_connection
+from core.db.configbd import DatabaseCursor
 from core.services.log_exporter import export_day
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 
@@ -27,26 +27,25 @@ ACTION_LABEL = {
 def fr_action(a: str) -> str:
     return ACTION_LABEL.get((a or "").upper(), a or "")
 
-def get_entity_name(conn, entity_type: str, entity_id) -> str:
+def get_entity_name(entity_type: str, entity_id) -> str:
     if entity_id is None or entity_id == "":
         return ""
-    
+
     try:
-        cur = conn.cursor(dictionary=True)
-        if entity_type == "operateur":
-            cur.execute("SELECT nom, prenom FROM personnel WHERE id = %s", (entity_id,))
-            row = cur.fetchone()
-            if row:
-                return f"{row['prenom']} {row['nom']}"
-        elif entity_type == "poste":
-            cur.execute("SELECT poste_code FROM postes WHERE id = %s", (entity_id,))
-            row = cur.fetchone()
-            if row:
-                return row['poste_code']
-        cur.close()
+        with DatabaseCursor(dictionary=True) as cur:
+            if entity_type == "operateur":
+                cur.execute("SELECT nom, prenom FROM personnel WHERE id = %s", (entity_id,))
+                row = cur.fetchone()
+                if row:
+                    return f"{row['prenom']} {row['nom']}"
+            elif entity_type == "poste":
+                cur.execute("SELECT poste_code FROM postes WHERE id = %s", (entity_id,))
+                row = cur.fetchone()
+                if row:
+                    return row['poste_code']
     except Exception:
         pass
-    
+
     return f"#{entity_id}"
 
 def get_detailed_action_type(row: dict) -> str:
@@ -78,14 +77,14 @@ def get_detailed_action_type(row: dict) -> str:
 
     return fr_action(action)
 
-def make_resume(row: dict, conn=None) -> str:
+def make_resume(row: dict) -> str:
     action = row.get("action", "")
     op_id = row.get("operateur_id")
     po_id = row.get("poste_id")
     desc = row.get("description") or ""
 
-    op_name = get_entity_name(conn, "operateur", op_id) if conn and op_id else None
-    po_name = get_entity_name(conn, "poste", po_id) if conn and po_id else None
+    op_name = get_entity_name("operateur", op_id) if op_id else None
+    po_name = get_entity_name("poste", po_id) if po_id else None
 
     try:
         data = json.loads(desc)
@@ -143,7 +142,7 @@ class DetailDialog(QDialog):
     """
     Dialogue affichant les détails complets d'une action
     """
-    def __init__(self, row: dict, conn=None, parent=None):
+    def __init__(self, row: dict, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Détails de l'action")
         self.resize(600, 500)
@@ -207,7 +206,7 @@ class DetailDialog(QDialog):
         
         # Opérateur (n'afficher que s'il y en a un)
         op_id = row.get("operateur_id")
-        op_name = get_entity_name(conn, "operateur", op_id) if op_id else ""
+        op_name = get_entity_name("operateur", op_id) if op_id else ""
         if not op_name and op_id:
             try:
                 data = json.loads(row.get("description", "{}"))
@@ -222,7 +221,7 @@ class DetailDialog(QDialog):
 
         # Poste (n'afficher que s'il y en a un)
         po_id = row.get("poste_id")
-        po_name = get_entity_name(conn, "poste", po_id) if po_id else ""
+        po_name = get_entity_name("poste", po_id) if po_id else ""
         if not po_name and po_id:
             try:
                 data = json.loads(row.get("description", "{}"))
@@ -403,10 +402,9 @@ class ActionCard(QFrame):
     """
     Widget représentant une action sous forme de card moderne
     """
-    def __init__(self, row: dict, conn=None, parent=None):
+    def __init__(self, row: dict, parent=None):
         super().__init__(parent)
         self.row = row
-        self.conn = conn
         
         self.setFrameStyle(QFrame.StyledPanel | QFrame.Raised)
         self.setLineWidth(0)
@@ -471,7 +469,7 @@ class ActionCard(QFrame):
         content_layout.setSpacing(6)
         
         # Titre : résumé de l'action
-        resume = make_resume(row, conn)
+        resume = make_resume(row)
         title_label = QLabel(resume)
         title_font = QFont("Segoe UI", 11, QFont.Bold)
         title_label.setFont(title_font)
@@ -526,7 +524,7 @@ class ActionCard(QFrame):
     def mousePressEvent(self, event):
         """Ouvre le dialogue détaillé au clic"""
         if event.button() == Qt.LeftButton:
-            dialog = DetailDialog(self.row, self.conn, self)
+            dialog = DetailDialog(self.row, self)
             dialog.exec_()
         super().mousePressEvent(event)
     
@@ -545,9 +543,6 @@ class HistoriqueDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Historique des modifications")
         self.resize(1000, 700)
-
-        self.conn = None
-        self._ensure_conn()
 
         # Layout principal avec marges nulles
         main_layout = QVBoxLayout(self)
@@ -703,75 +698,50 @@ class HistoriqueDialog(QDialog):
 
         self.reload()
 
-    # ---------- Connexion ----------
-    def _ensure_conn(self):
-        try:
-            if self.conn is None:
-                self.conn = get_db_connection()
-            else:
-                _ = self.conn.cursor(); _.close()
-        except Exception:
-            QMessageBox.critical(self, "Historique", "Impossible de se connecter à la base de données.")
-            self.conn = None
-
-    def _cursor(self):
-        if self.conn is None:
-            self._ensure_conn()
-        if self.conn is None:
-            raise RuntimeError("Connexion DB indisponible")
-        return self.conn.cursor(dictionary=True)
-
     # ---------- Fetch ----------
     def _fetch_logs(self, d_from: QDate, d_to: QDate, search_text: str, action_filter: str):
-        cur = None
-        try:
-            cur = self._cursor()
+        where = ["date_time >= %s", "date_time <= %s"]
+        params = [
+            dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
+            dt.datetime(d_to.year(),   d_to.month(),   d_to.day(),   23, 59, 59)
+        ]
 
-            where = ["date_time >= %s", "date_time <= %s"]
-            params = [
-                dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
-                dt.datetime(d_to.year(),   d_to.month(),   d_to.day(),   23, 59, 59)
-            ]
+        action_map = {
+            "Ajout": "INSERT",
+            "Modification": "UPDATE",
+            "Suppression": "DELETE",
+            "Erreur": "ERROR"
+        }
 
-            action_map = {
-                "Ajout": "INSERT",
-                "Modification": "UPDATE",
-                "Suppression": "DELETE",
-                "Erreur": "ERROR"
-            }
-            
-            if action_filter and action_filter != "(Toutes les actions)":
-                sql_action = action_map.get(action_filter, action_filter)
-                where.append("action = %s")
-                params.append(sql_action)
+        if action_filter and action_filter != "(Toutes les actions)":
+            sql_action = action_map.get(action_filter, action_filter)
+            where.append("action = %s")
+            params.append(sql_action)
 
-            if search_text:
-                like = f"%{search_text}%"
-                where.append("("
-                             "action LIKE %s OR "
-                             "description LIKE %s OR "
-                             "CAST(operateur_id AS CHAR) LIKE %s OR "
-                             "CAST(poste_id AS CHAR) LIKE %s"
-                             ")")
-                params += [like, like, like, like]
+        if search_text:
+            like = f"%{search_text}%"
+            where.append("("
+                         "action LIKE %s OR "
+                         "description LIKE %s OR "
+                         "CAST(operateur_id AS CHAR) LIKE %s OR "
+                         "CAST(poste_id AS CHAR) LIKE %s"
+                         ")")
+            params += [like, like, like, like]
 
-            # SÉCURITÉ: Construction sécurisée de la clause WHERE
-            # Les éléments de 'where' sont des constantes littérales définies dans ce code
-            # Toutes les valeurs utilisateur passent par 'params' (requête paramétrée)
-            where_clause = " AND ".join(where) if where else "1=1"
-            sql = (
-                "SELECT id, date_time, action, operateur_id, poste_id, description, utilisateur "
-                "FROM historique "
-                "WHERE " + where_clause + " "
-                "ORDER BY date_time DESC, id DESC"
-            )
+        # SÉCURITÉ: Construction sécurisée de la clause WHERE
+        # Les éléments de 'where' sont des constantes littérales définies dans ce code
+        # Toutes les valeurs utilisateur passent par 'params' (requête paramétrée)
+        where_clause = " AND ".join(where) if where else "1=1"
+        sql = (
+            "SELECT id, date_time, action, operateur_id, poste_id, description, utilisateur "
+            "FROM historique "
+            "WHERE " + where_clause + " "
+            "ORDER BY date_time DESC, id DESC"
+        )
+
+        with DatabaseCursor(dictionary=True) as cur:
             cur.execute(sql, params)
             return cur.fetchall() or []
-        finally:
-            try:
-                if cur: cur.close()
-            except Exception:
-                pass
 
     # ---------- UI Reload ----------
     def reload(self):
@@ -796,7 +766,7 @@ class HistoriqueDialog(QDialog):
 
         # Créer une card pour chaque action
         for row in rows:
-            card = ActionCard(row, self.conn)
+            card = ActionCard(row)
             self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)
         
         # Message si aucun résultat
@@ -864,9 +834,8 @@ class HistoriqueDialog(QDialog):
         if confirm != QMessageBox.Yes:
             return
 
-        cur = None
         try:
-            cur = self._cursor()
+            from core.db.configbd import DatabaseConnection
             sql = (
                 "DELETE FROM historique "
                 "WHERE date_time >= %s AND date_time <= %s"
@@ -875,11 +844,13 @@ class HistoriqueDialog(QDialog):
                 dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
                 dt.datetime(d_to.year(),   d_to.month(),   d_to.day(),   23, 59, 59)
             ]
-            cur.execute(sql, params)
-            deleted = cur.rowcount or 0
-            self.conn.commit()
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+                cur.execute(sql, params)
+                deleted = cur.rowcount or 0
+                cur.close()
 
-            QMessageBox.information(self, "Archivage terminé", 
+            QMessageBox.information(self, "Archivage terminé",
                                    f"Archivage effectué avec succès.\n"
                                    f"{deleted} ligne(s) supprimée(s) de l'historique.")
             self.reload()
@@ -888,8 +859,3 @@ class HistoriqueDialog(QDialog):
             code = getattr(e, "errno", None) or (e.args[0] if getattr(e, "args", None) else "")
             msg  = getattr(e, "msg", None) or (e.args[1] if getattr(e, "args", None) and len(e.args) > 1 else str(e))
             QMessageBox.critical(self, "Erreur", f"Échec de la suppression :\n{msg or code}")
-        finally:
-            try:
-                cur.close()
-            except Exception:
-                pass

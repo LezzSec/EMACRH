@@ -3,21 +3,10 @@ from PyQt5.QtWidgets import (
     QMessageBox, QComboBox
 )
 
-from core.db.configbd import get_connection as get_db_connection
+from core.db.configbd import DatabaseCursor, DatabaseConnection
 from .besoin_poste_dialog import BesoinPosteDialog
 from core.services.logger import log_hist
 from core.gui.historique import HistoriqueDialog
-
-
-
-def _cursor(conn):
-    """Retourne (cursor, dict_mode). Gère mysql-connector (dict=True) / psycopg (dict=False)."""
-    try:
-        cur = conn.cursor(dictionary=True) 
-        return cur, True
-    except TypeError:
-        cur = conn.cursor()  
-        return cur, False
 
 
 class CreationModificationPosteDialog(QDialog):
@@ -61,32 +50,17 @@ class CreationModificationPosteDialog(QDialog):
     def load_posts(self):
         """Charge les postes existants dans le combobox de suppression."""
         try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
+            with DatabaseCursor(dictionary=True) as cursor:
+                cursor.execute("SELECT poste_code FROM postes ORDER BY poste_code ASC")
+                rows = cursor.fetchall()
 
-            cursor.execute("SELECT poste_code FROM postes ORDER BY poste_code ASC")
-            rows = cursor.fetchall()
-
-            self.delete_combobox.clear()
-            if dict_mode:
+                self.delete_combobox.clear()
                 for r in rows:
                     self.delete_combobox.addItem(str(r["poste_code"]))
-            else:
-                for r in rows:
-                    self.delete_combobox.addItem(str(r[0]))
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur",
                                  f"Une erreur s'est produite lors du chargement des postes :\n{e}")
-        finally:
-            try:
-                cursor.close()
-            except Exception:
-                pass
-            try:
-                connection.close()
-            except Exception:
-                pass
 
     def add_post(self):
         post_name = (self.add_input.text() or "").strip()
@@ -99,37 +73,34 @@ class CreationModificationPosteDialog(QDialog):
         if len(post_name) == 3 and post_name.isdigit():
             post_name = f"0{post_name}"
 
-        connection = None
-        cursor = None
         try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
+            with DatabaseConnection() as connection:
+                cursor = connection.cursor(dictionary=True)
 
-            cursor.execute("SELECT id FROM postes WHERE poste_code = %s", (post_name,))
-            exists = cursor.fetchone()
-            if exists:
-                QMessageBox.warning(self, "Attention", f"Le poste '{post_name}' existe déjà.")
-                return
+                cursor.execute("SELECT id FROM postes WHERE poste_code = %s", (post_name,))
+                exists = cursor.fetchone()
+                if exists:
+                    QMessageBox.warning(self, "Attention", f"Le poste '{post_name}' existe déjà.")
+                    return
 
-            cursor.execute("INSERT INTO postes (poste_code, visible, besoins_postes) VALUES (%s, 1, 0)", (post_name,))
+                cursor.execute("INSERT INTO postes (poste_code, visible, besoins_postes) VALUES (%s, 1, 0)", (post_name,))
 
-            dlg = BesoinPosteDialog(parent=self, titre_poste=post_name)
-            if dlg.exec_() != dlg.Accepted:
-                connection.rollback()
-                QMessageBox.information(self, "Création annulée", "Le poste n'a pas été créé.")
-                return
+                dlg = BesoinPosteDialog(parent=self, titre_poste=post_name)
+                if dlg.exec_() != dlg.Accepted:
+                    connection.rollback()
+                    QMessageBox.information(self, "Création annulée", "Le poste n'a pas été créé.")
+                    return
 
-            besoin_val = dlg.get_besoin_int_or_none()
+                besoin_val = dlg.get_besoin_int_or_none()
 
-
-            cursor.execute(
-                "UPDATE postes SET besoins_postes = %s WHERE poste_code = %s",
-                (besoin_val, post_name)
-            )
-            connection.commit()
+                cursor.execute(
+                    "UPDATE postes SET besoins_postes = %s WHERE poste_code = %s",
+                    (besoin_val, post_name)
+                )
+                connection.commit()
+                cursor.close()
 
             # Logger la création du poste
-            from core.services.logger import log_hist
             import json
             log_hist(
                 action="INSERT",
@@ -148,24 +119,8 @@ class CreationModificationPosteDialog(QDialog):
             self.load_posts()
 
         except Exception as e:
-            try:
-                if connection:
-                    connection.rollback()
-            except Exception:
-                pass
             QMessageBox.critical(self, "Erreur",
                                  f"Une erreur s'est produite lors de la création du poste :\n{e}")
-        finally:
-            try:
-                if cursor:
-                    cursor.close()
-            except Exception:
-                pass
-            try:
-                if connection:
-                    connection.close()
-            except Exception:
-                pass
 
 
     def delete_post(self):
@@ -183,15 +138,15 @@ class CreationModificationPosteDialog(QDialog):
             return
 
         try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
+            with DatabaseConnection() as connection:
+                cursor = connection.cursor(dictionary=True)
 
-            # Suppression (⚠️ laisse la contrainte d'intégrité référentielle décider si relié à polyvalence)
-            cursor.execute("DELETE FROM postes WHERE poste_code = %s", (post_name,))
-            connection.commit()
+                # Suppression (⚠️ laisse la contrainte d'intégrité référentielle décider si relié à polyvalence)
+                cursor.execute("DELETE FROM postes WHERE poste_code = %s", (post_name,))
+                connection.commit()
+                cursor.close()
 
             # Logger la suppression du poste
-            from core.services.logger import log_hist
             import json
             log_hist(
                 action="DELETE",
@@ -211,12 +166,3 @@ class CreationModificationPosteDialog(QDialog):
         except Exception as e:
             QMessageBox.critical(self, "Erreur",
                                  f"Une erreur s'est produite lors de la suppression du poste :\n{e}")
-        finally:
-            try:
-                cursor.close()
-            except Exception:
-                pass
-            try:
-                connection.close()
-            except Exception:
-                pass

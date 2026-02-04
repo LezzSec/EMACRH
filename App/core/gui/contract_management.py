@@ -22,7 +22,7 @@ from core.services.contrat_service import (
     create_contract, update_contract, get_contract_by_id, get_contract_types,
     get_categories
 )
-from core.db.configbd import get_connection as get_db_connection
+from core.db.configbd import DatabaseCursor, DatabaseConnection
 
 # Nouvelle interface RH (widget embeddable)
 from core.gui.gestion_rh import GestionRHWidget
@@ -272,22 +272,18 @@ class ContractFormDialog(QDialog):
     def load_operators(self):
         """Charge la liste des opérateurs actifs."""
         try:
-            connection = get_db_connection()
-            cursor = connection.cursor()
-            cursor.execute("""
-                SELECT id, nom, prenom, matricule
-                FROM personnel
-                WHERE statut = 'ACTIF'
-                ORDER BY nom, prenom
-            """)
+            with DatabaseCursor() as cursor:
+                cursor.execute("""
+                    SELECT id, nom, prenom, matricule
+                    FROM personnel
+                    WHERE statut = 'ACTIF'
+                    ORDER BY nom, prenom
+                """)
 
-            for row in cursor.fetchall():
-                operator_id, nom, prenom, matricule = row
-                display = f"{nom} {prenom} ({matricule})"
-                self.operator_combo.addItem(display, operator_id)
-
-            cursor.close()
-            connection.close()
+                for row in cursor.fetchall():
+                    operator_id, nom, prenom, matricule = row
+                    display = f"{nom} {prenom} ({matricule})"
+                    self.operator_combo.addItem(display, operator_id)
 
         except Exception as e:
             logger.exception(f"Erreur chargement operateurs: {e}")
@@ -805,21 +801,16 @@ class ContractManagementDialog(QDialog):
             return 0
 
         try:
-            conn = get_db_connection()
-            cur = conn.cursor(buffered=True)
+            with DatabaseCursor() as cur:
+                cur.execute("""
+                    SELECT COUNT(*) as count
+                    FROM documents d
+                    INNER JOIN categories_documents c ON d.categorie_id = c.id
+                    WHERE d.operateur_id = %s AND c.nom = 'Contrats de travail'
+                """, (operateur_id,))
 
-            cur.execute("""
-                SELECT COUNT(*) as count
-                FROM documents d
-                INNER JOIN categories_documents c ON d.categorie_id = c.id
-                WHERE d.operateur_id = %s AND c.nom = 'Contrats de travail'
-            """, (operateur_id,))
-
-            result = cur.fetchone()
-            cur.close()
-            conn.close()
-
-            return result[0] if result else 0
+                result = cur.fetchone()
+                return result[0] if result else 0
 
         except Exception:
             return 0
@@ -1094,34 +1085,30 @@ class ContractManagementDialog(QDialog):
     def _load_document_filters(self):
         """Charge les filtres pour les documents."""
         try:
-            conn = get_db_connection()
-            cur = conn.cursor(dictionary=True, buffered=True)
+            with DatabaseCursor(dictionary=True) as cur:
+                # Charger les catégories
+                self.doc_categorie_filter.blockSignals(True)
+                self.doc_categorie_filter.clear()
+                self.doc_categorie_filter.addItem("Toutes les catégories", None)
 
-            # Charger les catégories
-            self.doc_categorie_filter.blockSignals(True)
-            self.doc_categorie_filter.clear()
-            self.doc_categorie_filter.addItem("Toutes les catégories", None)
+                cur.execute("SELECT id, nom FROM categories_documents ORDER BY ordre_affichage, nom")
+                for cat in cur.fetchall():
+                    self.doc_categorie_filter.addItem(cat['nom'], cat['id'])
+                self.doc_categorie_filter.blockSignals(False)
 
-            cur.execute("SELECT id, nom FROM categories_documents ORDER BY ordre_affichage, nom")
-            for cat in cur.fetchall():
-                self.doc_categorie_filter.addItem(cat['nom'], cat['id'])
-            self.doc_categorie_filter.blockSignals(False)
+                # Charger les employés
+                self.doc_employe_filter.blockSignals(True)
+                self.doc_employe_filter.clear()
+                self.doc_employe_filter.addItem("Tous les employés", None)
 
-            # Charger les employés
-            self.doc_employe_filter.blockSignals(True)
-            self.doc_employe_filter.clear()
-            self.doc_employe_filter.addItem("Tous les employés", None)
+                cur.execute("""
+                    SELECT id, CONCAT(prenom, ' ', nom) as nom_complet, matricule
+                    FROM personnel WHERE statut = 'ACTIF' ORDER BY nom, prenom
+                """)
+                for emp in cur.fetchall():
+                    self.doc_employe_filter.addItem(f"{emp['nom_complet']} ({emp['matricule']})", emp['id'])
+                self.doc_employe_filter.blockSignals(False)
 
-            cur.execute("""
-                SELECT id, CONCAT(prenom, ' ', nom) as nom_complet, matricule
-                FROM personnel WHERE statut = 'ACTIF' ORDER BY nom, prenom
-            """)
-            for emp in cur.fetchall():
-                self.doc_employe_filter.addItem(f"{emp['nom_complet']} ({emp['matricule']})", emp['id'])
-            self.doc_employe_filter.blockSignals(False)
-
-            cur.close()
-            conn.close()
         except Exception as e:
             logger.warning(f"Erreur chargement filtres documents: {e}")
 
@@ -1131,53 +1118,48 @@ class ContractManagementDialog(QDialog):
             return
 
         try:
-            conn = get_db_connection()
-            cur = conn.cursor(dictionary=True, buffered=True)
-
             # Récupérer les filtres
             categorie_id = self.doc_categorie_filter.currentData() if hasattr(self, 'doc_categorie_filter') else None
             employe_id = self.doc_employe_filter.currentData() if hasattr(self, 'doc_employe_filter') else None
 
-            # Construire la requête avec filtres
-            query = """
-                SELECT
-                    d.id,
-                    d.operateur_id,
-                    p.nom,
-                    p.prenom,
-                    p.matricule,
-                    c.nom as categorie,
-                    d.nom_fichier,
-                    d.date_upload,
-                    d.date_expiration,
-                    CASE
-                        WHEN d.date_expiration IS NULL THEN 'Valide'
-                        WHEN d.date_expiration < CURDATE() THEN 'Expiré'
-                        WHEN d.date_expiration <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 'Expire bientôt'
-                        ELSE 'Valide'
-                    END as statut
-                FROM documents d
-                INNER JOIN personnel p ON d.operateur_id = p.id
-                INNER JOIN categories_documents c ON d.categorie_id = c.id
-                WHERE 1=1
-            """
-            params = []
+            with DatabaseCursor(dictionary=True) as cur:
+                # Construire la requête avec filtres
+                query = """
+                    SELECT
+                        d.id,
+                        d.operateur_id,
+                        p.nom,
+                        p.prenom,
+                        p.matricule,
+                        c.nom as categorie,
+                        d.nom_fichier,
+                        d.date_upload,
+                        d.date_expiration,
+                        CASE
+                            WHEN d.date_expiration IS NULL THEN 'Valide'
+                            WHEN d.date_expiration < CURDATE() THEN 'Expiré'
+                            WHEN d.date_expiration <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 'Expire bientôt'
+                            ELSE 'Valide'
+                        END as statut
+                    FROM documents d
+                    INNER JOIN personnel p ON d.operateur_id = p.id
+                    INNER JOIN categories_documents c ON d.categorie_id = c.id
+                    WHERE 1=1
+                """
+                params = []
 
-            if categorie_id:
-                query += " AND d.categorie_id = %s"
-                params.append(categorie_id)
+                if categorie_id:
+                    query += " AND d.categorie_id = %s"
+                    params.append(categorie_id)
 
-            if employe_id:
-                query += " AND d.operateur_id = %s"
-                params.append(employe_id)
+                if employe_id:
+                    query += " AND d.operateur_id = %s"
+                    params.append(employe_id)
 
-            query += " ORDER BY d.date_upload DESC"
+                query += " ORDER BY d.date_upload DESC"
 
-            cur.execute(query, tuple(params))
-
-            documents = cur.fetchall()
-            cur.close()
-            conn.close()
+                cur.execute(query, tuple(params))
+                documents = cur.fetchall()
 
             self.docs_table.setRowCount(0)
 
@@ -1267,12 +1249,9 @@ class ContractManagementDialog(QDialog):
         doc_id = int(self.docs_table.item(current_row, 0).text())
 
         try:
-            conn = get_db_connection()
-            cur = conn.cursor(dictionary=True, buffered=True)
-            cur.execute("SELECT chemin_fichier FROM documents WHERE id = %s", (doc_id,))
-            result = cur.fetchone()
-            cur.close()
-            conn.close()
+            with DatabaseCursor(dictionary=True) as cur:
+                cur.execute("SELECT chemin_fichier FROM documents WHERE id = %s", (doc_id,))
+                result = cur.fetchone()
 
             if result and result['chemin_fichier']:
                 import os
@@ -1317,26 +1296,25 @@ class ContractManagementDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             try:
-                conn = get_db_connection()
-                cur = conn.cursor(dictionary=True, buffered=True)
+                with DatabaseConnection() as conn:
+                    cur = conn.cursor(dictionary=True)
 
-                # Récupérer le chemin du fichier
-                cur.execute("SELECT chemin_fichier FROM documents WHERE id = %s", (doc_id,))
-                result = cur.fetchone()
+                    # Récupérer le chemin du fichier
+                    cur.execute("SELECT chemin_fichier FROM documents WHERE id = %s", (doc_id,))
+                    result = cur.fetchone()
 
-                if result and result['chemin_fichier']:
-                    import os
-                    file_path = result['chemin_fichier']
+                    if result and result['chemin_fichier']:
+                        import os
+                        file_path = result['chemin_fichier']
 
-                    # Supprimer le fichier physique
-                    if os.path.exists(file_path):
-                        os.remove(file_path)
+                        # Supprimer le fichier physique
+                        if os.path.exists(file_path):
+                            os.remove(file_path)
 
-                # Supprimer l'entrée en base
-                cur.execute("DELETE FROM documents WHERE id = %s", (doc_id,))
-                conn.commit()
-                cur.close()
-                conn.close()
+                    # Supprimer l'entrée en base
+                    cur.execute("DELETE FROM documents WHERE id = %s", (doc_id,))
+                    conn.commit()
+                    cur.close()
 
                 QMessageBox.information(self, "Succès", "Document supprimé avec succès")
                 self.load_contract_documents()

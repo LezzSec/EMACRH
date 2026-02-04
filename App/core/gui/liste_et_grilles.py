@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # import pandas as pd  # Déplacé dans les fonctions qui l'utilisent
 from datetime import datetime, timedelta
 from core.gui.historique import HistoriqueDialog
-from core.db.configbd import get_connection as get_db_connection, DatabaseCursor, DatabaseConnection
+from core.db.configbd import DatabaseCursor, DatabaseConnection
 from .besoin_poste_dialog import BesoinPosteDialog
 from core.services.logger import log_hist
 try:
@@ -23,23 +23,6 @@ try:
 except ImportError:
     THEME_AVAILABLE = False
     show_error_message = None
-
-
-def _cursor(conn):
-    """Retourne (cursor, dict_mode). dict_mode=True si le curseur supporte dictionary=True."""
-    try:
-        cur = conn.cursor(dictionary=True)  
-        return cur, True
-    except TypeError:
-        cur = conn.cursor()                
-        return cur, False
-
-def _rows(cur, dict_mode):
-    """Retourne une liste de dicts quelle que soit la lib DB."""
-    if dict_mode:
-        return cur.fetchall()
-    names = [d[0] for d in cur.description]
-    return [dict(zip(names, r)) for r in cur.fetchall()]
 
 
 class GrillesDialog(QDialog):
@@ -1098,48 +1081,45 @@ class GrillesDialog(QDialog):
         from datetime import datetime
 
         try:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
+            with DatabaseConnection() as connection:
+                cursor = connection.cursor(dictionary=True)
 
-            modifications_count = 0
+                modifications_count = 0
 
-            for row, col in self.modified_cells:
-                if row >= len(self.operateurs) or col >= len(self.postes):
-                    continue
+                for row, col in self.modified_cells:
+                    if row >= len(self.operateurs) or col >= len(self.postes):
+                        continue
 
-                operateur_id = self.operateurs[row][0]
-                operateur_nom = self.operateurs[row][1]  # "Nom Prenom"
-                poste_id = self.postes[col][0]
-                poste_code = self.postes[col][1]  # "0515"
+                    operateur_id = self.operateurs[row][0]
+                    operateur_nom = self.operateurs[row][1]  # "Nom Prenom"
+                    poste_id = self.postes[col][0]
+                    poste_code = self.postes[col][1]  # "0515"
 
-                item = self.main_table.item(row, col)
-                new_niveau = item.text() if item else None
+                    item = self.main_table.item(row, col)
+                    new_niveau = item.text() if item else None
 
-                if new_niveau is None or new_niveau.strip() == "":
-                    new_niveau = None
-                elif not new_niveau.isdigit():
-                    QMessageBox.critical(self, "Erreur", 
-                        f"Valeur incorrecte : '{new_niveau}' dans la cellule ({row + 1}, {col + 1}).")
-                    continue
-                
-                new_niveau_int = int(new_niveau) if new_niveau else None
+                    if new_niveau is None or new_niveau.strip() == "":
+                        new_niveau = None
+                    elif not new_niveau.isdigit():
+                        QMessageBox.critical(self, "Erreur",
+                            f"Valeur incorrecte : '{new_niveau}' dans la cellule ({row + 1}, {col + 1}).")
+                        continue
 
-                # ✅ NOUVEAU : Vérifier l'ancien niveau
-                cursor.execute("""
-                    SELECT niveau FROM polyvalence 
-                    WHERE operateur_id = %s AND poste_id = %s
-                """, (operateur_id, poste_id))
-                existing = cursor.fetchone()
+                    new_niveau_int = int(new_niveau) if new_niveau else None
 
-                if existing:
-                    if dict_mode:
+                    # ✅ NOUVEAU : Vérifier l'ancien niveau
+                    cursor.execute("""
+                        SELECT niveau FROM polyvalence
+                        WHERE operateur_id = %s AND poste_id = %s
+                    """, (operateur_id, poste_id))
+                    existing = cursor.fetchone()
+
+                    if existing:
                         old_niveau = existing.get('niveau')
+                        action = 'UPDATE'
                     else:
-                        old_niveau = existing[0]
-                    action = 'UPDATE'
-                else:
-                    old_niveau = None
-                    action = 'INSERT'
+                        old_niveau = None
+                        action = 'INSERT'
 
                 # Enregistrer la modification dans polyvalence
                 cursor.execute(
@@ -1188,12 +1168,12 @@ class GrillesDialog(QDialog):
                     logger.warning(f"Erreur logging historique : {e}")
                     # On continue même si le log échoue
 
-            connection.commit()
-            cursor.close()
-            connection.close()
+                connection.commit()
+                cursor.close()
+
             self.modified_cells.clear()
 
-            QMessageBox.information(self, "Succès", 
+            QMessageBox.information(self, "Succès",
                 f"{modifications_count} modification(s) enregistrée(s) dans l'historique !")
 
         except Exception as e:
@@ -1204,197 +1184,171 @@ class GrillesDialog(QDialog):
     def add_data(self):
         choice, ok = QInputDialog.getItem(self, "Ajouter", "Que voulez-vous ajouter ?", ["Colonne", "Ligne"], 0, False)
         if ok and choice:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            if choice == "Colonne":
-                col_name, name_ok = QInputDialog.getText(self, "Nom de Colonne", "Entrez un nom pour la nouvelle colonne :")
-                if name_ok and col_name:
-                    # Vérifier doublon
-                    cursor.execute("SELECT id FROM postes WHERE poste_code = %s", (col_name,))
-                    if cursor.fetchone():
-                        QMessageBox.warning(self, "Attention", f"Le poste '{col_name}' existe déjà.")
-                    else:
-                        # INSERT poste
-                        cursor.execute("INSERT INTO postes (poste_code, visible) VALUES (%s, 1)", (col_name,))
-
-                        # Pop-up besoin (obligatoire en création)
-                        dlg = BesoinPosteDialog(parent=self, titre_poste=col_name)
-                        if dlg.exec_() != dlg.Accepted:
-                            connection.rollback()
-                            QMessageBox.information(self, "Création annulée", "Le poste n'a pas été créé.")
+            with DatabaseConnection() as connection:
+                cursor = connection.cursor(dictionary=True)
+                if choice == "Colonne":
+                    col_name, name_ok = QInputDialog.getText(self, "Nom de Colonne", "Entrez un nom pour la nouvelle colonne :")
+                    if name_ok and col_name:
+                        # Vérifier doublon
+                        cursor.execute("SELECT id FROM postes WHERE poste_code = %s", (col_name,))
+                        if cursor.fetchone():
+                            QMessageBox.warning(self, "Attention", f"Le poste '{col_name}' existe déjà.")
                         else:
-                            besoin_val = dlg.get_besoin_int_or_none()
-                            cursor.execute(
-                                "UPDATE postes SET besoins_postes = %s WHERE poste_code = %s",
-                                (besoin_val, col_name)
-                            )
+                            # INSERT poste
+                            cursor.execute("INSERT INTO postes (poste_code, visible) VALUES (%s, 1)", (col_name,))
+
+                            # Pop-up besoin (obligatoire en création)
+                            dlg = BesoinPosteDialog(parent=self, titre_poste=col_name)
+                            if dlg.exec_() != dlg.Accepted:
+                                connection.rollback()
+                                QMessageBox.information(self, "Création annulée", "Le poste n'a pas été créé.")
+                            else:
+                                besoin_val = dlg.get_besoin_int_or_none()
+                                cursor.execute(
+                                    "UPDATE postes SET besoins_postes = %s WHERE poste_code = %s",
+                                    (besoin_val, col_name)
+                                )
+                                connection.commit()
+                                self.load_data()
+                elif choice == "Ligne":
+                    row_name, name_ok = QInputDialog.getText(self, "Nom de Ligne", "Entrez le nom pour la nouvelle ligne (Nom) :")
+                    if name_ok and row_name:
+                        prenom, ok = QInputDialog.getText(self, "Prénom", "Entrez le prénom de l'opérateur :")
+                        if ok:
+                            cursor.execute("INSERT INTO personnel (nom, prenom, statut) VALUES (%s, %s, 'ACTIF')", (row_name, prenom))
                             connection.commit()
                             self.load_data()
-            elif choice == "Ligne":
-                row_name, name_ok = QInputDialog.getText(self, "Nom de Ligne", "Entrez le nom pour la nouvelle ligne (Nom) :")
-                if name_ok and row_name:
-                    prenom, ok = QInputDialog.getText(self, "Prénom", "Entrez le prénom de l'opérateur :")
-                    if ok:
-                        cursor.execute("INSERT INTO personnel (nom, prenom, statut) VALUES (%s, %s, 'ACTIF')", (row_name, prenom))
-                        connection.commit()
-                        self.load_data()
-            cursor.close()
-            connection.close()
+                cursor.close()
 
     def remove_data(self):
         choice, ok = QInputDialog.getItem(self, "Supprimer", "Que voulez-vous supprimer ?", ["Colonne", "Ligne"], 0, False)
         if ok and choice:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            if choice == "Colonne":
-                col_name, name_ok = QInputDialog.getText(self, "Nom de la Colonne", "Entrez le nom du poste à masquer :")
-                if name_ok and col_name:
-                    cursor.execute("SELECT id FROM postes WHERE poste_code = %s AND visible = 1", (col_name,))
-                    poste = cursor.fetchone()
-                    if poste:
-                        poste_id = poste["id"] if dict_mode else poste[0]
-                        cursor.execute("UPDATE postes SET visible = 0 WHERE id = %s", (poste_id,))
-                        connection.commit()
-                        self.load_data()
-                    else:
-                        QMessageBox.critical(self, "Erreur", f"Le poste '{col_name}' n'existe pas ou est déjà masqué.")
-            elif choice == "Ligne":
-                # Récupérer la liste des opérateurs actifs avec matricule
-                cursor.execute("""
-                    SELECT id, nom, prenom, matricule
-                    FROM personnel
-                    WHERE statut = 'ACTIF'
-                    AND matricule IS NOT NULL
-                    AND matricule != ''
-                    ORDER BY nom, prenom
-                """)
-                operateurs = cursor.fetchall()
+            with DatabaseConnection() as connection:
+                cursor = connection.cursor(dictionary=True)
+                if choice == "Colonne":
+                    col_name, name_ok = QInputDialog.getText(self, "Nom de la Colonne", "Entrez le nom du poste à masquer :")
+                    if name_ok and col_name:
+                        cursor.execute("SELECT id FROM postes WHERE poste_code = %s AND visible = 1", (col_name,))
+                        poste = cursor.fetchone()
+                        if poste:
+                            poste_id = poste["id"]
+                            cursor.execute("UPDATE postes SET visible = 0 WHERE id = %s", (poste_id,))
+                            connection.commit()
+                            self.load_data()
+                        else:
+                            QMessageBox.critical(self, "Erreur", f"Le poste '{col_name}' n'existe pas ou est déjà masqué.")
+                elif choice == "Ligne":
+                    # Récupérer la liste des opérateurs actifs avec matricule
+                    cursor.execute("""
+                        SELECT id, nom, prenom, matricule
+                        FROM personnel
+                        WHERE statut = 'ACTIF'
+                        AND matricule IS NOT NULL
+                        AND matricule != ''
+                        ORDER BY nom, prenom
+                    """)
+                    operateurs = cursor.fetchall()
 
-                if not operateurs:
-                    QMessageBox.information(self, "Information", "Aucun opérateur actif à masquer.")
-                    cursor.close()
-                    connection.close()
-                    return
+                    if not operateurs:
+                        QMessageBox.information(self, "Information", "Aucun opérateur actif à masquer.")
+                        cursor.close()
+                        return
 
-                # Créer une liste de noms pour la sélection
-                operateur_names = []
-                operateur_map = {}
-                for op in operateurs:
-                    if dict_mode:
+                    # Créer une liste de noms pour la sélection
+                    operateur_names = []
+                    operateur_map = {}
+                    for op in operateurs:
                         op_id = op["id"]
                         nom = op["nom"]
                         prenom = op["prenom"]
                         matricule = op["matricule"]
-                    else:
-                        op_id = op[0]
-                        nom = op[1]
-                        prenom = op[2]
-                        matricule = op[3]
 
-                    display_name = f"{nom} {prenom} ({matricule})"
-                    operateur_names.append(display_name)
-                    operateur_map[display_name] = op_id
+                        display_name = f"{nom} {prenom} ({matricule})"
+                        operateur_names.append(display_name)
+                        operateur_map[display_name] = op_id
 
-                # Afficher le dialogue de sélection
-                selected_name, name_ok = QInputDialog.getItem(
-                    self,
-                    "Masquer un opérateur",
-                    "Sélectionnez l'opérateur à masquer :",
-                    operateur_names,
-                    0,
-                    False
-                )
+                    # Afficher le dialogue de sélection
+                    selected_name, name_ok = QInputDialog.getItem(
+                        self,
+                        "Masquer un opérateur",
+                        "Sélectionnez l'opérateur à masquer :",
+                        operateur_names,
+                        0,
+                        False
+                    )
 
-                if name_ok and selected_name:
-                    operateur_id = operateur_map[selected_name]
-                    cursor.execute("UPDATE personnel SET statut = 'INACTIF' WHERE id = %s", (operateur_id,))
-                    connection.commit()
-                    QMessageBox.information(self, "Succès", f"L'opérateur {selected_name} a été masqué.")
-                    self.load_data()
-            cursor.close()
-            connection.close()
+                    if name_ok and selected_name:
+                        operateur_id = operateur_map[selected_name]
+                        cursor.execute("UPDATE personnel SET statut = 'INACTIF' WHERE id = %s", (operateur_id,))
+                        connection.commit()
+                        QMessageBox.information(self, "Succès", f"L'opérateur {selected_name} a été masqué.")
+                        self.load_data()
+                cursor.close()
 
     def duplicate_data(self):
         choice, ok = QInputDialog.getItem(self, "Dupliquer", "Que voulez-vous dupliquer ?", ["Colonne", "Ligne"], 0, False)
         if ok and choice:
-            connection = get_db_connection()
-            cursor, dict_mode = _cursor(connection)
-            if choice == "Colonne":
-                col_name, name_ok = QInputDialog.getText(self, "Nom de la Colonne", "Entrez le nom du poste à dupliquer :")
-                if name_ok and col_name:
-                    cursor.execute("SELECT id, poste_code FROM postes WHERE poste_code = %s AND visible = 1", (col_name,))
-                    poste = cursor.fetchone()
-                    if poste:
-                        poste_id = poste["id"] if dict_mode else poste[0]
-                        poste_code = poste["poste_code"] if dict_mode else poste[1]
+            with DatabaseConnection() as connection:
+                cursor = connection.cursor(dictionary=True)
+                if choice == "Colonne":
+                    col_name, name_ok = QInputDialog.getText(self, "Nom de la Colonne", "Entrez le nom du poste à dupliquer :")
+                    if name_ok and col_name:
+                        cursor.execute("SELECT id, poste_code FROM postes WHERE poste_code = %s AND visible = 1", (col_name,))
+                        poste = cursor.fetchone()
+                        if poste:
+                            poste_id = poste["id"]
+                            poste_code = poste["poste_code"]
 
-                        # Création du nouveau poste
-                        try:
-                            cursor.execute(
-                                "INSERT INTO postes (poste_code, visible) VALUES (%s, 1) RETURNING id",
-                                (f"{poste_code}_copy",)
-                            )
-                            new_poste_id = cursor.fetchone()[0]
-                        except Exception:
-                            # Fallback MySQL
+                            # Création du nouveau poste (MySQL)
                             cursor.execute(
                                 "INSERT INTO postes (poste_code, visible) VALUES (%s, 1)",
                                 (f"{poste_code}_copy",)
                             )
-                            new_poste_id = getattr(cursor, "lastrowid", None)
+                            new_poste_id = cursor.lastrowid
 
-                        # Copier la polyvalence
-                        cursor.execute(
-                            """
-                            INSERT INTO polyvalence (operateur_id, poste_id, niveau)
-                            SELECT operateur_id, %s, niveau FROM polyvalence WHERE poste_id = %s
-                            """,
-                            (new_poste_id, poste_id)
-                        )
-                        connection.commit()
-                        self.load_data()
-                    else:
-                        QMessageBox.critical(self, "Erreur", f"Le poste '{col_name}' n'existe pas ou est masqué.")
-
-            elif choice == "Ligne":
-                row_name, name_ok = QInputDialog.getText(self, "Nom de la Ligne", "Entrez le nom complet de l'opérateur à dupliquer :")
-                if name_ok and row_name:
-                    cursor.execute("SELECT id, nom, prenom FROM personnel WHERE CONCAT(nom, ' ', prenom) = %s AND statut = 'ACTIF'", (row_name,))
-                    operateur = cursor.fetchone()
-                    if operateur:
-                        operateur_id = operateur["id"] if dict_mode else operateur[0]
-                        nom = operateur["nom"] if dict_mode else operateur[1]
-                        prenom = operateur["prenom"] if dict_mode else operateur[2]
-
-                        # Créer le nouvel opérateur
-                        try:
+                            # Copier la polyvalence
                             cursor.execute(
-                                "INSERT INTO personnel (nom, prenom, statut) VALUES (%s, %s, 'ACTIF') RETURNING id",
-                                (f"{nom}_copy", prenom)
+                                """
+                                INSERT INTO polyvalence (operateur_id, poste_id, niveau)
+                                SELECT operateur_id, %s, niveau FROM polyvalence WHERE poste_id = %s
+                                """,
+                                (new_poste_id, poste_id)
                             )
-                            new_operateur_id = cursor.fetchone()[0]
-                        except Exception:
-                            # Fallback MySQL
+                            connection.commit()
+                            self.load_data()
+                        else:
+                            QMessageBox.critical(self, "Erreur", f"Le poste '{col_name}' n'existe pas ou est masqué.")
+
+                elif choice == "Ligne":
+                    row_name, name_ok = QInputDialog.getText(self, "Nom de la Ligne", "Entrez le nom complet de l'opérateur à dupliquer :")
+                    if name_ok and row_name:
+                        cursor.execute("SELECT id, nom, prenom FROM personnel WHERE CONCAT(nom, ' ', prenom) = %s AND statut = 'ACTIF'", (row_name,))
+                        operateur = cursor.fetchone()
+                        if operateur:
+                            operateur_id = operateur["id"]
+                            nom = operateur["nom"]
+                            prenom = operateur["prenom"]
+
+                            # Créer le nouvel opérateur (MySQL)
                             cursor.execute(
                                 "INSERT INTO personnel (nom, prenom, statut) VALUES (%s, %s, 'ACTIF')",
                                 (f"{nom}_copy", prenom)
                             )
-                            new_operateur_id = getattr(cursor, "lastrowid", None)
+                            new_operateur_id = cursor.lastrowid
 
-                        # Copier la polyvalence
-                        cursor.execute(
-                            """
-                            INSERT INTO polyvalence (operateur_id, poste_id, niveau)
-                            SELECT %s, poste_id, niveau FROM polyvalence WHERE operateur_id = %s
-                            """,
-                            (new_operateur_id, operateur_id)
-                        )
-                        connection.commit()
-                        self.load_data()
-                    else:
-                        QMessageBox.critical(self, "Erreur", f"L'opérateur '{row_name}' n'existe pas ou est inactif.")
-            cursor.close()
-            connection.close()
+                            # Copier la polyvalence
+                            cursor.execute(
+                                """
+                                INSERT INTO polyvalence (operateur_id, poste_id, niveau)
+                                SELECT %s, poste_id, niveau FROM polyvalence WHERE operateur_id = %s
+                                """,
+                                (new_operateur_id, operateur_id)
+                            )
+                            connection.commit()
+                            self.load_data()
+                        else:
+                            QMessageBox.critical(self, "Erreur", f"L'opérateur '{row_name}' n'existe pas ou est inactif.")
+                cursor.close()
 
     # ----------------- Reload & Tri -----------------
     def reload_data(self):

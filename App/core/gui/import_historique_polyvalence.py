@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor
 
-from core.db.configbd import get_connection
+from core.db.configbd import DatabaseCursor
 from core.services.polyvalence_logger import log_polyvalence_action
 from core.gui.emac_ui_kit import show_error_message
 
@@ -271,16 +271,13 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
     def _load_operateurs(self):
         """Charge la liste des opérateurs."""
         try:
-            conn = get_connection()
-            cur = conn.cursor(dictionary=True)
-
-            cur.execute("""
-                SELECT id, nom, prenom, matricule
-                FROM personnel
-                ORDER BY nom, prenom
-            """)
-
-            operateurs = cur.fetchall()
+            with DatabaseCursor(dictionary=True) as cur:
+                cur.execute("""
+                    SELECT id, nom, prenom, matricule
+                    FROM personnel
+                    ORDER BY nom, prenom
+                """)
+                operateurs = cur.fetchall()
 
             self.operateurs_map = {}
             for op in operateurs:
@@ -290,9 +287,6 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
                 self.operateur_combo.addItem(display, op['id'])
                 self.operateurs_map[op['id']] = display
 
-            cur.close()
-            conn.close()
-
         except Exception as e:
             logger.exception(f"Erreur chargement operateurs: {e}")
             show_error_message(self, "Erreur", "Impossible de charger les opérateurs", e)
@@ -300,25 +294,19 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
     def _load_postes(self):
         """Charge la liste des postes."""
         try:
-            conn = get_connection()
-            cur = conn.cursor(dictionary=True)
-
-            cur.execute("""
-                SELECT id, poste_code
-                FROM postes
-                WHERE visible = 1
-                ORDER BY poste_code
-            """)
-
-            postes = cur.fetchall()
+            with DatabaseCursor(dictionary=True) as cur:
+                cur.execute("""
+                    SELECT id, poste_code
+                    FROM postes
+                    WHERE visible = 1
+                    ORDER BY poste_code
+                """)
+                postes = cur.fetchall()
 
             self.postes_map = {}
             for poste in postes:
                 self.poste_combo.addItem(poste['poste_code'], poste['id'])
                 self.postes_map[poste['id']] = poste['poste_code']
-
-            cur.close()
-            conn.close()
 
         except Exception as e:
             logger.exception(f"Erreur chargement postes: {e}")

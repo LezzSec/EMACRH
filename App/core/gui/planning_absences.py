@@ -15,7 +15,7 @@ from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QBrush
 from datetime import datetime, date, timedelta
 
 from core.services import absence_service
-from core.db.configbd import get_connection
+from core.db.configbd import DatabaseCursor, DatabaseConnection
 from core.gui.emac_ui_kit import add_custom_title_bar
 from core.services.permission_manager import can
 
@@ -293,10 +293,7 @@ class PlanningAbsencesDialog(QDialog):
         first_day = QDate(year, month, 1)
         last_day = QDate(year, month, first_day.daysInMonth())
 
-        conn = get_connection()
-        cur = conn.cursor(dictionary=True)
-
-        try:
+        with DatabaseCursor(dictionary=True) as cur:
             cur.execute("""
                 SELECT
                     da.date_debut,
@@ -315,31 +312,28 @@ class PlanningAbsencesDialog(QDialog):
             """, (last_day.toString("yyyy-MM-dd"), first_day.toString("yyyy-MM-dd")))
 
             absences = cur.fetchall()
-            self.absences_by_date = {}
 
-            for absence in absences:
-                debut = absence['date_debut']
-                fin = absence['date_fin']
+        self.absences_by_date = {}
 
-                current_date = debut
-                while current_date <= fin:
-                    date_key = current_date.strftime('%Y-%m-%d')
-                    if date_key not in self.absences_by_date:
-                        self.absences_by_date[date_key] = []
+        for absence in absences:
+            debut = absence['date_debut']
+            fin = absence['date_fin']
 
-                    self.absences_by_date[date_key].append({
-                        'nom': absence['nom_complet'],
-                        'type': absence['type_libelle'],
-                        'debut': debut,
-                        'fin': fin
-                    })
-                    current_date += timedelta(days=1)
+            current_date = debut
+            while current_date <= fin:
+                date_key = current_date.strftime('%Y-%m-%d')
+                if date_key not in self.absences_by_date:
+                    self.absences_by_date[date_key] = []
 
-            self.update_calendar_colors()
+                self.absences_by_date[date_key].append({
+                    'nom': absence['nom_complet'],
+                    'type': absence['type_libelle'],
+                    'debut': debut,
+                    'fin': fin
+                })
+                current_date += timedelta(days=1)
 
-        finally:
-            cur.close()
-            conn.close()
+        self.update_calendar_colors()
 
 
     def load_evaluations_month(self, year=None, month=None):
@@ -351,10 +345,7 @@ class PlanningAbsencesDialog(QDialog):
         first_day = QDate(year, month, 1)
         last_day = QDate(year, month, first_day.daysInMonth())
 
-        conn = get_connection()
-        cur = conn.cursor(dictionary=True)
-
-        try:
+        with DatabaseCursor(dictionary=True) as cur:
             cur.execute("""
                 SELECT
                     poly.prochaine_evaluation,
@@ -371,26 +362,23 @@ class PlanningAbsencesDialog(QDialog):
             """, (first_day.toString("yyyy-MM-dd"), last_day.toString("yyyy-MM-dd")))
 
             evaluations = cur.fetchall()
-            self.evaluations_by_date = {}
 
-            for evaluation in evaluations:
-                date_eval = evaluation['prochaine_evaluation']
-                date_key = date_eval.strftime('%Y-%m-%d')
+        self.evaluations_by_date = {}
 
-                if date_key not in self.evaluations_by_date:
-                    self.evaluations_by_date[date_key] = []
+        for evaluation in evaluations:
+            date_eval = evaluation['prochaine_evaluation']
+            date_key = date_eval.strftime('%Y-%m-%d')
 
-                self.evaluations_by_date[date_key].append({
-                    'nom': evaluation['nom_complet'],
-                    'poste': evaluation['poste_code'],
-                    'niveau': evaluation['niveau']
-                })
+            if date_key not in self.evaluations_by_date:
+                self.evaluations_by_date[date_key] = []
 
-            self.update_calendar_colors()
+            self.evaluations_by_date[date_key].append({
+                'nom': evaluation['nom_complet'],
+                'poste': evaluation['poste_code'],
+                'niveau': evaluation['niveau']
+            })
 
-        finally:
-            cur.close()
-            conn.close()
+        self.update_calendar_colors()
 
 
     def update_calendar_colors(self):
@@ -781,12 +769,11 @@ class MesDemandesDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             try:
-                conn = get_connection()
-                cur = conn.cursor()
-                cur.execute("UPDATE demande_absence SET statut = 'ANNULEE' WHERE id = %s", (demande_id,))
-                conn.commit()
-                cur.close()
-                conn.close()
+                with DatabaseConnection() as conn:
+                    cur = conn.cursor()
+                    cur.execute("UPDATE demande_absence SET statut = 'ANNULEE' WHERE id = %s", (demande_id,))
+                    conn.commit()
+                    cur.close()
 
                 QMessageBox.information(self, "Succès", "Demande annulée")
                 self.load_demandes()
@@ -802,13 +789,10 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # Test avec le premier personnel actif
-    conn = get_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
-    result = cur.fetchone()
-    personnel_id = result[0] if result else None
-    cur.close()
-    conn.close()
+    with DatabaseCursor() as cur:
+        cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
+        result = cur.fetchone()
+        personnel_id = result[0] if result else None
 
     dialog = PlanningAbsencesDialog(personnel_id=personnel_id)
     dialog.show()

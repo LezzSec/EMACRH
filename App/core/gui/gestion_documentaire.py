@@ -19,7 +19,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate, pyqtSignal, QUrl
 from PyQt5.QtGui import QFont, QColor, QIcon, QDesktopServices
 
-from core.db.configbd import get_connection
+from core.db.configbd import DatabaseCursor
 from core.services.document_service import DocumentService
 from core.services.logger import log_hist
 
@@ -408,57 +408,34 @@ class GestionDocumentaireDialog(QDialog):
 
     def check_tables_exist(self):
         """Vérifie que les tables nécessaires existent"""
-        conn = None
-        cur = None
         try:
-            conn = get_connection()
-            cur = conn.cursor(buffered=True)
+            with DatabaseCursor() as cur:
+                # Vérifier la table categories_documents
+                cur.execute("SHOW TABLES LIKE 'categories_documents'")
+                cat_exists = cur.fetchone()
 
-            # Vérifier la table categories_documents
-            cur.execute("SHOW TABLES LIKE 'categories_documents'")
-            cat_exists = cur.fetchone()
+                # Vérifier la table documents
+                cur.execute("SHOW TABLES LIKE 'documents'")
+                doc_exists = cur.fetchone()
 
-            # Fermer le curseur et en créer un nouveau pour éviter "Unread result"
-            cur.close()
-            cur = conn.cursor(buffered=True)
-
-            # Vérifier la table documents
-            cur.execute("SHOW TABLES LIKE 'documents'")
-            doc_exists = cur.fetchone()
-
-            return cat_exists and doc_exists
+                return cat_exists and doc_exists
         except Exception as e:
             logger.error(f"Erreur lors de la vérification des tables: {e}")
             return False
-        finally:
-            if cur:
-                cur.close()
-            if conn:
-                conn.close()
 
     def load_operateurs(self):
         """Charge la liste des opérateurs"""
-        conn = None
-        cur = None
-
         try:
-            conn = get_connection()
-            cur = conn.cursor(buffered=True)
+            with DatabaseCursor(dictionary=True) as cur:
+                query = """
+                SELECT id, nom, prenom, statut
+                FROM personnel
+                WHERE statut = 'ACTIF'
+                ORDER BY nom, prenom
+                """
 
-            # ✅ SÉCURITÉ: Utiliser directement le nom de table (hardcodé)
-            # Fermer et rouvrir le curseur avec dictionary=True
-            cur.close()
-            cur = conn.cursor(dictionary=True, buffered=True)
-
-            query = """
-            SELECT id, nom, prenom, statut
-            FROM personnel
-            WHERE statut = 'ACTIF'
-            ORDER BY nom, prenom
-            """
-
-            cur.execute(query)
-            operateurs = cur.fetchall()
+                cur.execute(query)
+                operateurs = cur.fetchall()
 
             self.operateur_combo.clear()
             self.operateur_combo.addItem("Tous les employés", None)
@@ -477,12 +454,6 @@ class GestionDocumentaireDialog(QDialog):
         except Exception as e:
             logger.exception(f"Erreur chargement operateurs: {e}")
             show_error_message(self, "Erreur", "Impossible de charger les opérateurs", e)
-
-        finally:
-            if cur:
-                cur.close()
-            if conn:
-                conn.close()
 
     def load_categories(self):
         """Charge les catégories de documents (exclut les contrats car gérés dans module dédié)"""
@@ -518,33 +489,21 @@ class GestionDocumentaireDialog(QDialog):
 
     def get_all_documents(self):
         """Récupère tous les documents de tous les opérateurs (sauf contrats)"""
-        conn = None
-        cur = None
-
         try:
-            conn = get_connection()
-            cur = conn.cursor(dictionary=True, buffered=True)
-
-            # Exclure les documents de catégorie "Contrats de travail"
-            query = """
-                SELECT * FROM v_documents_complet
-                WHERE categorie_nom != 'Contrats de travail'
-                ORDER BY date_upload DESC
-            """
-            cur.execute(query)
-
-            return cur.fetchall()
+            with DatabaseCursor(dictionary=True) as cur:
+                # Exclure les documents de catégorie "Contrats de travail"
+                query = """
+                    SELECT * FROM v_documents_complet
+                    WHERE categorie_nom != 'Contrats de travail'
+                    ORDER BY date_upload DESC
+                """
+                cur.execute(query)
+                return cur.fetchall()
 
         except Exception as e:
             logger.exception(f"Erreur chargement documents: {e}")
             show_error_message(self, "Erreur", "Impossible de charger les documents", e)
             return []
-
-        finally:
-            if cur:
-                cur.close()
-            if conn:
-                conn.close()
 
     def display_documents(self, documents):
         """Affiche les documents dans le tableau"""

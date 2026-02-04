@@ -14,7 +14,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QColor, QFont
 
-from core.db.configbd import get_connection
+from core.db.configbd import DatabaseCursor
 from core.services.document_service import DocumentService
 
 logger = logging.getLogger(__name__)
@@ -189,31 +189,26 @@ class DocumentDashboard(QWidget):
     def load_statistics(self):
         """Charge les statistiques générales"""
         try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            # Total
-            cursor.execute("SELECT COUNT(*) as total FROM documents")
-            total = cursor.fetchone()['total']
-            self.label_total.value_label.setText(str(total))
-            
-            # Par statut
-            cursor.execute("""
-                SELECT 
-                    SUM(CASE WHEN statut = 'actif' THEN 1 ELSE 0 END) as actifs,
-                    SUM(CASE WHEN statut = 'expire' THEN 1 ELSE 0 END) as expires,
-                    SUM(CASE WHEN statut = 'archive' THEN 1 ELSE 0 END) as archives
-                FROM documents
-            """)
-            stats = cursor.fetchone()
-            
-            self.label_actifs.value_label.setText(str(stats['actifs'] or 0))
-            self.label_expires.value_label.setText(str(stats['expires'] or 0))
-            self.label_archives.value_label.setText(str(stats['archives'] or 0))
-            
-            cursor.close()
-            conn.close()
-            
+            with DatabaseCursor(dictionary=True) as cursor:
+                # Total
+                cursor.execute("SELECT COUNT(*) as total FROM documents")
+                total = cursor.fetchone()['total']
+                self.label_total.value_label.setText(str(total))
+
+                # Par statut
+                cursor.execute("""
+                    SELECT
+                        SUM(CASE WHEN statut = 'actif' THEN 1 ELSE 0 END) as actifs,
+                        SUM(CASE WHEN statut = 'expire' THEN 1 ELSE 0 END) as expires,
+                        SUM(CASE WHEN statut = 'archive' THEN 1 ELSE 0 END) as archives
+                    FROM documents
+                """)
+                stats = cursor.fetchone()
+
+                self.label_actifs.value_label.setText(str(stats['actifs'] or 0))
+                self.label_expires.value_label.setText(str(stats['expires'] or 0))
+                self.label_archives.value_label.setText(str(stats['archives'] or 0))
+
         except Exception as e:
             logger.error(f"Erreur lors du chargement des statistiques: {e}")
     
@@ -274,26 +269,24 @@ class DocumentDashboard(QWidget):
     def load_categories(self):
         """Charge la répartition par catégorie"""
         try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            cursor.execute("""
-                SELECT 
-                    c.nom,
-                    c.couleur,
-                    COUNT(d.id) as count
-                FROM categories_documents c
-                LEFT JOIN documents d ON c.id = d.categorie_id AND d.statut = 'actif'
-                GROUP BY c.id, c.nom, c.couleur
-                ORDER BY count DESC
-            """)
-            categories = cursor.fetchall()
-            
+            with DatabaseCursor(dictionary=True) as cursor:
+                cursor.execute("""
+                    SELECT
+                        c.nom,
+                        c.couleur,
+                        COUNT(d.id) as count
+                    FROM categories_documents c
+                    LEFT JOIN documents d ON c.id = d.categorie_id AND d.statut = 'actif'
+                    GROUP BY c.id, c.nom, c.couleur
+                    ORDER BY count DESC
+                """)
+                categories = cursor.fetchall()
+
             # Calculer le total pour les pourcentages
             total = sum(cat['count'] for cat in categories)
-            
+
             self.table_categories.setRowCount(len(categories))
-            
+
             for row, cat in enumerate(categories):
                 # Catégorie avec couleur
                 cat_item = QTableWidgetItem(cat['nom'])
@@ -301,10 +294,10 @@ class DocumentDashboard(QWidget):
                     cat_item.setBackground(QColor(cat['couleur'] + "20"))
                     cat_item.setForeground(QColor(cat['couleur']))
                 self.table_categories.setItem(row, 0, cat_item)
-                
+
                 # Nombre
                 self.table_categories.setItem(row, 1, QTableWidgetItem(str(cat['count'])))
-                
+
                 # Pourcentage
                 if total > 0:
                     pct = (cat['count'] / total) * 100
@@ -312,64 +305,56 @@ class DocumentDashboard(QWidget):
                 else:
                     pct_str = "0%"
                 self.table_categories.setItem(row, 2, QTableWidgetItem(pct_str))
-            
+
             self.table_categories.resizeColumnsToContents()
-            
-            cursor.close()
-            conn.close()
-            
+
         except Exception as e:
             logger.error(f"Erreur lors du chargement des catégories: {e}")
     
     def load_top_operateurs(self):
         """Charge le top 10 des opérateurs avec le plus de documents"""
         try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            cursor.execute("""
-                SELECT 
-                    operateur_nom,
-                    total_documents,
-                    documents_actifs,
-                    documents_expires,
-                    taille_totale_mo
-                FROM v_documents_stats_operateur
-                WHERE total_documents > 0
-                ORDER BY total_documents DESC
-                LIMIT 10
-            """)
-            operateurs = cursor.fetchall()
-            
+            with DatabaseCursor(dictionary=True) as cursor:
+                cursor.execute("""
+                    SELECT
+                        operateur_nom,
+                        total_documents,
+                        documents_actifs,
+                        documents_expires,
+                        taille_totale_mo
+                    FROM v_documents_stats_operateur
+                    WHERE total_documents > 0
+                    ORDER BY total_documents DESC
+                    LIMIT 10
+                """)
+                operateurs = cursor.fetchall()
+
             self.table_operateurs.setRowCount(len(operateurs))
-            
+
             for row, op in enumerate(operateurs):
                 # Nom
                 self.table_operateurs.setItem(row, 0, QTableWidgetItem(op['operateur_nom']))
-                
+
                 # Total
                 self.table_operateurs.setItem(row, 1, QTableWidgetItem(str(op['total_documents'])))
-                
+
                 # Actifs
                 actifs_item = QTableWidgetItem(str(op['documents_actifs']))
                 actifs_item.setForeground(QColor("#059669"))
                 self.table_operateurs.setItem(row, 2, actifs_item)
-                
+
                 # Expirés
                 expires_item = QTableWidgetItem(str(op['documents_expires']))
                 if op['documents_expires'] > 0:
                     expires_item.setForeground(QColor("#dc2626"))
                 self.table_operateurs.setItem(row, 3, expires_item)
-                
+
                 # Taille
                 taille = f"{op['taille_totale_mo']:.2f} Mo" if op['taille_totale_mo'] else "0 Mo"
                 self.table_operateurs.setItem(row, 4, QTableWidgetItem(taille))
-            
+
             self.table_operateurs.resizeColumnsToContents()
-            
-            cursor.close()
-            conn.close()
-            
+
         except Exception as e:
             logger.error(f"Erreur lors du chargement des opérateurs: {e}")
 
