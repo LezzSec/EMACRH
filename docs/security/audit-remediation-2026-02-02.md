@@ -173,27 +173,9 @@ CHECK_INTERVAL_SECONDS = 30    # Vérification toutes les 30s
 
 ---
 
-## SCORE SECURITE MIS A JOUR
-
-| Avant | Apres (02/02) | Apres (04/02) |
-|-------|---------------|---------------|
-| 5.5/10 | 7.5/10 | 9.0/10 |
-
-**Ameliorations (02/02):**
-- +1.0 : Injection SQL corrigee
-- +0.3 : Path traversal corrige
-- +0.2 : Command injection corrige
-- +0.5 : Divulgation erreurs corrigee (tous fichiers GUI)
-
-**Ameliorations (04/02):**
-- +0.5 : Race condition TOCTOU corrigee
-- +0.5 : Session timeout implementee
-
----
-
 ## RECOMMANDATIONS FUTURES
 
-1. ~~**Ajouter des tests de securite** pour les nouvelles validations~~ ✅ FAIT (12 tests)
+1. ~~**Ajouter des tests de securite** pour les nouvelles validations~~ ✅ FAIT (23 tests)
 2. ~~**Documenter les patterns de securite** dans CLAUDE.md~~ ✅ FAIT
 3. **Audit regulier** des nouveaux fichiers pour maintenir les standards
 
@@ -201,17 +183,17 @@ CHECK_INTERVAL_SECONDS = 30    # Vérification toutes les 30s
 
 ## TESTS DE SECURITE AJOUTES
 
-**Fichier:** `App/tests/unit/test_security.py` (12 tests)
+**Fichier:** `App/tests/unit/test_security.py` (23 tests)
 
 | Classe | Tests | Description |
 |--------|-------|-------------|
 | `TestSQLInjectionPrevention` | 4 | Validation whitelist, rejet injection SQL |
 | `TestPathTraversalPrevention` | 2 | Blocage `..` et chemins absolus |
 | `TestCommandInjectionPrevention` | 4 | Fichiers hors zone, repertoires, symlinks |
-| `TestSecurityIntegration` | 2 | Messages generiques, logging securite |
+| `TestTOCTOURaceConditionPrevention` | 9 | Cache TTL, vérification fraîche, invalidation |
+| `TestSessionTimeout` | 4 | Création, remaining seconds, reset, config |
 
 **Execution:** `pytest tests/unit/test_security.py -v`
 
 ---
 
-*Rapport genere le 2026-02-02 par Claude Code*
