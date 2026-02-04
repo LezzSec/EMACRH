@@ -2,7 +2,7 @@
 
 **Date initiale:** 2026-02-02
 **Dernière mise à jour:** 2026-02-04
-**Méthodologie:** Audit interne basé sur checklist OWASP Top 10 + tests automatisés (pytest)
+**Méthodologie:** Audit interne 
 
 ---
 

@@ -1,7 +1,7 @@
 # RAPPORT DE REMEDIATION SECURITE - EMAC
 **Date:** 2026-02-02
 **Suite a:** audit-report-2026-02-02.md
-**Méthodologie:** Audit interne basé sur checklist OWASP Top 10 + tests automatisés (pytest)
+**Méthodologie:** Audit interne
 
 ---
 
