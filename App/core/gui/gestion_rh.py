@@ -132,6 +132,11 @@ class EditInfosGeneralesDialog(QDialog):
         self.nationalite = QLineEdit(self.donnees.get('nationalite') or '')
         form.addRow("Nationalité:", self.nationalite)
 
+        # Numéro de sécurité sociale
+        self.numero_ss = QLineEdit(self.donnees.get('numero_ss') or '')
+        self.numero_ss.setPlaceholderText("Ex: 1 93 02 75 108 136 23")
+        form.addRow("N° Sécurité Sociale:", self.numero_ss)
+
         # Adresse
         self.adresse1 = QLineEdit(self.donnees.get('adresse1') or '')
         form.addRow("Adresse:", self.adresse1)
@@ -207,6 +212,7 @@ class EditInfosGeneralesDialog(QDialog):
             'date_naissance': self.date_naissance.date().toPyDate() if self.date_naissance.date().year() > 1900 else None,
             'date_entree': self.date_entree.date().toPyDate() if self.date_entree.date().year() > 1900 else None,
             'nationalite': self.nationalite.text().strip(),
+            'numero_ss': self.numero_ss.text().strip(),
             'adresse1': self.adresse1.text().strip(),
             'adresse2': self.adresse2.text().strip(),
             'cp_adresse': self.cp.text().strip(),
@@ -2106,19 +2112,53 @@ class GestionRHDialog(QDialog):
         grid = QGridLayout()
         grid.setSpacing(12)
 
+        # Helper pour gérer les valeurs None
+        def val(key, default='-'):
+            v = donnees.get(key)
+            return v if v is not None and v != '' else default
+
+        # Construire l'adresse complète
+        adresse_parts = []
+        if donnees.get('adresse1'):
+            adresse_parts.append(donnees['adresse1'])
+        if donnees.get('adresse2'):
+            adresse_parts.append(donnees['adresse2'])
+        adresse = ', '.join(adresse_parts) if adresse_parts else '-'
+
+        # Construire ville + CP
+        ville_parts = []
+        if donnees.get('cp_adresse'):
+            ville_parts.append(donnees['cp_adresse'])
+        if donnees.get('ville_adresse'):
+            ville_parts.append(donnees['ville_adresse'])
+        ville = ' '.join(ville_parts) if ville_parts else '-'
+
+        # Lieu de naissance
+        naissance_parts = []
+        if donnees.get('ville_naissance'):
+            naissance_parts.append(donnees['ville_naissance'])
+        if donnees.get('pays_naissance'):
+            naissance_parts.append(f"({donnees['pays_naissance']})")
+        lieu_naissance = ' '.join(naissance_parts) if naissance_parts else '-'
+
         infos = [
-            ("Nom", donnees.get('nom', '-')),
-            ("Prénom", donnees.get('prenom', '-')),
-            ("Matricule", donnees.get('matricule', '-')),
-            ("Statut", donnees.get('statut', '-')),
+            ("Nom", val('nom')),
+            ("Prénom", val('prenom')),
+            ("Matricule", val('matricule')),
+            ("Statut", val('statut')),
+            ("Sexe", "Homme" if donnees.get('sexe') == 'M' else "Femme" if donnees.get('sexe') == 'F' else '-'),
+            ("Nationalité", val('nationalite')),
+            ("N° Sécurité Sociale", val('numero_ss')),
             ("Date de naissance", self._format_date(donnees.get('date_naissance'))),
-            ("Âge", f"{donnees.get('age', '-')} ans" if donnees.get('age') else '-'),
+            ("Lieu de naissance", lieu_naissance),
+            ("Âge", f"{donnees.get('age')} ans" if donnees.get('age') else '-'),
             ("Date d'entrée", self._format_date(donnees.get('date_entree'))),
-            ("Ancienneté", donnees.get('anciennete', '-')),
-            ("Téléphone", donnees.get('telephone', '-')),
-            ("Email", donnees.get('email', '-')),
-            ("Adresse", donnees.get('adresse1', '-')),
-            ("Ville", f"{donnees.get('cp_adresse', '')} {donnees.get('ville_adresse', '')}".strip() or '-'),
+            ("Ancienneté", val('anciennete')),
+            ("Téléphone", val('telephone')),
+            ("Email", val('email')),
+            ("Adresse", adresse),
+            ("Ville", ville),
+            ("Pays", val('pays_adresse')),
         ]
 
         for i, (label, valeur) in enumerate(infos):
@@ -4171,19 +4211,53 @@ class GestionRHWidget(QWidget):
         grid = QGridLayout()
         grid.setSpacing(12)
 
+        # Helper pour gérer les valeurs None
+        def val(key, default='-'):
+            v = donnees.get(key)
+            return v if v is not None and v != '' else default
+
+        # Construire l'adresse complète
+        adresse_parts = []
+        if donnees.get('adresse1'):
+            adresse_parts.append(donnees['adresse1'])
+        if donnees.get('adresse2'):
+            adresse_parts.append(donnees['adresse2'])
+        adresse = ', '.join(adresse_parts) if adresse_parts else '-'
+
+        # Construire ville + CP
+        ville_parts = []
+        if donnees.get('cp_adresse'):
+            ville_parts.append(donnees['cp_adresse'])
+        if donnees.get('ville_adresse'):
+            ville_parts.append(donnees['ville_adresse'])
+        ville = ' '.join(ville_parts) if ville_parts else '-'
+
+        # Lieu de naissance
+        naissance_parts = []
+        if donnees.get('ville_naissance'):
+            naissance_parts.append(donnees['ville_naissance'])
+        if donnees.get('pays_naissance'):
+            naissance_parts.append(f"({donnees['pays_naissance']})")
+        lieu_naissance = ' '.join(naissance_parts) if naissance_parts else '-'
+
         infos = [
-            ("Nom", donnees.get('nom', '-')),
-            ("Prénom", donnees.get('prenom', '-')),
-            ("Matricule", donnees.get('matricule', '-')),
-            ("Statut", donnees.get('statut', '-')),
+            ("Nom", val('nom')),
+            ("Prénom", val('prenom')),
+            ("Matricule", val('matricule')),
+            ("Statut", val('statut')),
+            ("Sexe", "Homme" if donnees.get('sexe') == 'M' else "Femme" if donnees.get('sexe') == 'F' else '-'),
+            ("Nationalité", val('nationalite')),
+            ("N° Sécurité Sociale", val('numero_ss')),
             ("Date de naissance", self._format_date(donnees.get('date_naissance'))),
-            ("Âge", f"{donnees.get('age', '-')} ans" if donnees.get('age') else '-'),
+            ("Lieu de naissance", lieu_naissance),
+            ("Âge", f"{donnees.get('age')} ans" if donnees.get('age') else '-'),
             ("Date d'entrée", self._format_date(donnees.get('date_entree'))),
-            ("Ancienneté", donnees.get('anciennete', '-')),
-            ("Téléphone", donnees.get('telephone', '-')),
-            ("Email", donnees.get('email', '-')),
-            ("Adresse", donnees.get('adresse1', '-')),
-            ("Ville", f"{donnees.get('cp_adresse', '')} {donnees.get('ville_adresse', '')}".strip() or '-'),
+            ("Ancienneté", val('anciennete')),
+            ("Téléphone", val('telephone')),
+            ("Email", val('email')),
+            ("Adresse", adresse),
+            ("Ville", ville),
+            ("Pays", val('pays_adresse')),
         ]
 
         for i, (label, valeur) in enumerate(infos):

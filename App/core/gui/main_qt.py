@@ -179,8 +179,11 @@ class MainWindow(QMainWindow):
         btn_voir_retards.clicked.connect(lambda: self.ouvrir_gestion_evaluations("En retard"))
         self.retard_card.body.addWidget(btn_voir_retards)
 
+        # Masqué par défaut, affiché uniquement pour les utilisateurs Production
+        self.retard_card.setVisible(False)
         left.addWidget(self.retard_card)
 
+        # Carte Prochaines Évaluations (uniquement pour utilisateurs Production)
         self.next_card = EmacStatusCard("Prochaines Évaluations", variant='success', subtitle="À planifier (30j)")
         self.next_eval_filter = QComboBox()
         self.next_eval_filter.addItem("Tous les postes", "")
@@ -193,9 +196,32 @@ class MainWindow(QMainWindow):
         btn_voir_prochaines.clicked.connect(lambda: self.ouvrir_gestion_evaluations("À planifier (30j)"))
         self.next_card.body.addWidget(btn_voir_prochaines)
 
+        # Masqué par défaut, affiché uniquement pour les utilisateurs Production
+        self.next_card.setVisible(False)
         left.addWidget(self.next_card)
 
-        root.addLayout(left, 0, 0, 2, 1)
+        # Carte Alertes RH (uniquement pour utilisateurs RH)
+        self.alertes_rh_card = EmacStatusCard("Alertes Contrats", variant='warning', subtitle="Expirent dans 30j")
+        self.alertes_rh_filter = QComboBox()
+        self.alertes_rh_filter.addItem("Tous les types", "")
+        self.alertes_rh_filter.addItem("CDI", "CDI")
+        self.alertes_rh_filter.addItem("CDD", "CDD")
+        self.alertes_rh_filter.addItem("Intérim", "Intérim")
+        self.alertes_rh_filter.addItem("Alternance", "Alternance")
+        self.alertes_rh_filter.currentIndexChanged.connect(self.load_alertes_rh_async)
+        self.alertes_rh_scroll, self.alertes_rh_list = self.create_scrollable_list()
+        self.alertes_rh_card.body.addWidget(self.alertes_rh_filter)
+        self.alertes_rh_card.body.addWidget(self.alertes_rh_scroll)
+
+        btn_voir_alertes = EmacButton("📋 Gestion RH", variant='ghost')
+        btn_voir_alertes.clicked.connect(self.show_contract_management)
+        self.alertes_rh_card.body.addWidget(btn_voir_alertes)
+
+        # Masqué par défaut, affiché uniquement pour les utilisateurs RH
+        self.alertes_rh_card.setVisible(False)
+        left.addWidget(self.alertes_rh_card)
+
+        root.addLayout(left, 0, 0, 3, 1)  # 3 cartes maintenant
 
         right = QVBoxLayout()
         right.setSpacing(18)
@@ -262,10 +288,11 @@ class MainWindow(QMainWindow):
     # ---------------------------
 
     def bootstrap_async(self):
-        """Charge user + permissions + filtres + evals sans bloquer l'UI."""
+        """Charge user + permissions + filtres sans bloquer l'UI."""
         self.load_user_and_permissions_async()
         self.populate_filters_async()
-        self.load_evaluations_async()
+        # Note: load_evaluations_async() et load_alertes_rh_async() sont appelés
+        # dans _apply_user_and_perms selon les permissions de l'utilisateur
         self._init_document_trigger_service()
 
     def load_user_and_permissions_async(self):
@@ -288,6 +315,7 @@ class MainWindow(QMainWindow):
             "postes_ecriture": can('production.postes.edit'),
             "contrats_ecriture": can('rh.contrats.edit'),
             "documentsrh_lecture": can('rh.documents.view'),
+            "documentsrh_ecriture": can('rh.documents.edit'),  # Pour alertes RH
             "planning_lecture": can('planning.view'),
             "historique_lecture": can('admin.historique.view'),
             "is_admin": auth.is_admin(),
@@ -324,6 +352,20 @@ class MainWindow(QMainWindow):
             b3.clicked.connect(self.show_gestion_evaluations)
             r3.addWidget(b3)
             self.rows.insertLayout(2, r3)
+
+        # Cartes Évaluations : afficher uniquement pour les utilisateurs Production
+        has_production_access = perms.get("evaluations_lecture")
+        self.retard_card.setVisible(has_production_access)
+        self.next_card.setVisible(has_production_access)
+        if has_production_access:
+            self.load_evaluations_async()
+
+        # Alertes Contrats : afficher uniquement pour les utilisateurs RH
+        # Utilise rh.contrats.edit ou rh.documents.edit (permissions d'écriture RH uniquement)
+        has_rh_access = perms.get("contrats_ecriture") or perms.get("documentsrh_ecriture")
+        self.alertes_rh_card.setVisible(has_rh_access)
+        if has_rh_access:
+            self.load_alertes_rh_async()
 
         # Drawer : on le construit au premier clic, mais on garde les perms en mémoire
         self._perms_cache = perms
@@ -468,6 +510,8 @@ class MainWindow(QMainWindow):
             add_btn("Création/Suppression de poste", self.show_poste_form)
         if perms.get("contrats_ecriture") or perms.get("documentsrh_lecture"):
             add_btn("Gestion RH (Contrats & Documents)", self.show_contract_management)
+        if perms.get("contrats_lecture") or perms.get("personnel_lecture"):
+            add_btn("Alertes RH", self.show_alertes_rh)
         if perms.get("planning_lecture"):
             add_btn("Planning & Évaluations", self.show_regularisation)
         if perms.get("documentsrh_lecture") or perms.get("personnel_lecture"):
@@ -638,12 +682,21 @@ class MainWindow(QMainWindow):
         from core.gui.contract_management import ContractManagementDialog
         dialog = ContractManagementDialog(self)
         dialog.data_changed.connect(self.load_evaluations_async)
+        dialog.data_changed.connect(self.load_alertes_rh_async)
+        dialog.exec_()
+
+    def show_alertes_rh(self):
+        """Ouvre le dialog de gestion des alertes RH."""
+        from core.gui.gestion_alertes_rh import GestionAlertesRHDialog
+        dialog = GestionAlertesRHDialog(self)
+        dialog.data_changed.connect(self.load_alertes_rh_async)
         dialog.exec_()
 
     def show_gestion_documentaire(self):
         from core.gui.gestion_documentaire import GestionDocumentaireDialog
         dialog = GestionDocumentaireDialog(self)
         dialog.document_added.connect(self.load_evaluations_async)
+        dialog.document_added.connect(self.load_alertes_rh_async)
         dialog.exec_()
 
 
@@ -700,6 +753,7 @@ class MainWindow(QMainWindow):
 
         try:
             with DatabaseCursor(dictionary=True) as cur:
+                # Évaluations en retard
                 query_retard = """
                     SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
                     FROM polyvalence poly
@@ -717,6 +771,7 @@ class MainWindow(QMainWindow):
                 cur.execute(query_retard, params_retard)
                 retard = cur.fetchall()
 
+                # Prochaines évaluations (30 jours)
                 query_next = """
                     SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
                     FROM polyvalence poly
@@ -763,6 +818,70 @@ class MainWindow(QMainWindow):
                 self.next_eval_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
         except Exception as e:
             logger.error(f"Erreur dans _apply_evaluations_to_ui: {e}", exc_info=True)
+
+    # ---------------------------
+    # Alertes Contrats (RH uniquement)
+    # ---------------------------
+
+    def load_alertes_rh_async(self):
+        """Charge les contrats expirant bientôt."""
+        type_contrat = self.alertes_rh_filter.currentData() if hasattr(self, 'alertes_rh_filter') else ""
+        w = DbWorker(self._fetch_alertes_rh, type_contrat)
+        w.signals.result.connect(self._apply_alertes_rh_to_ui)
+        w.signals.error.connect(self._on_bg_error)
+        DbThreadPool.start(w)
+
+    def _fetch_alertes_rh(self, type_contrat_filter, progress_callback=None):
+        from core.db.configbd import DatabaseCursor
+
+        try:
+            with DatabaseCursor(dictionary=True) as cur:
+                query = """
+                    SELECT
+                        c.id,
+                        c.type_contrat,
+                        c.date_fin,
+                        p.nom,
+                        p.prenom
+                    FROM contrat c
+                    INNER JOIN personnel p ON p.id = c.operateur_id
+                    WHERE c.actif = 1
+                      AND c.date_fin IS NOT NULL
+                      AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                      AND p.statut = 'ACTIF'
+                      {type_filter}
+                    ORDER BY c.date_fin ASC
+                    LIMIT 10
+                """
+                type_filter = "AND c.type_contrat = %s" if type_contrat_filter else ""
+                query = query.format(type_filter=type_filter)
+                params = (type_contrat_filter,) if type_contrat_filter else ()
+                cur.execute(query, params)
+                contrats = cur.fetchall()
+
+                return {"contrats": contrats}
+        except Exception as e:
+            logger.error(f"Erreur dans _fetch_alertes_rh: {e}", exc_info=True)
+            raise
+
+    def _apply_alertes_rh_to_ui(self, payload):
+        try:
+            contrats = payload.get("contrats", [])
+
+            self.alertes_rh_list.clear()
+
+            for c in contrats:
+                nom = c.get('nom', '')
+                prenom = c.get('prenom', '')
+                type_contrat = c.get('type_contrat', '')
+                date_fin = c.get('date_fin')
+                date_txt = date_fin.strftime('%d/%m/%Y') if hasattr(date_fin, 'strftime') else str(date_fin)
+                self.alertes_rh_list.addItem(f"{nom} {prenom} · {type_contrat}  —  Expire: {date_txt}")
+
+            if not contrats:
+                self.alertes_rh_list.addItem("✅ Aucun contrat à renouveler")
+        except Exception as e:
+            logger.error(f"Erreur dans _apply_alertes_rh_to_ui: {e}", exc_info=True)
 
     def _on_bg_error(self, tb):
         # Ne bloque pas l'app au démarrage

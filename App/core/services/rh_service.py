@@ -244,7 +244,8 @@ def _get_donnees_generales(operateur_id: int) -> Dict[str, Any]:
                     pi.email,
                     pi.ville_naissance,
                     pi.pays_naissance,
-                    pi.commentaire
+                    pi.commentaire,
+                    pi.numero_ss
                 FROM personnel p
                 LEFT JOIN personnel_infos pi ON pi.operateur_id = p.id
                 WHERE p.id = %s
@@ -941,6 +942,134 @@ def get_resume_operateur(operateur_id: int) -> Dict[str, Any]:
 
 
 # ============================================================
+# 5bis. ALERTES DASHBOARD RH
+# ============================================================
+
+def get_alertes_rh_dashboard(jours: int = 30) -> Dict:
+    """
+    Récupère les alertes RH pour le dashboard principal.
+    Combine les contrats et documents qui expirent bientôt.
+
+    Args:
+        jours: Nombre de jours pour la recherche (défaut: 30)
+
+    Returns:
+        Dict avec 'contrats' et 'documents' (listes d'alertes)
+    """
+    alertes = {
+        "contrats": [],
+        "documents": []
+    }
+
+    try:
+        with DatabaseCursor(dictionary=True) as cur:
+            # 1. Contrats expirant bientôt
+            cur.execute("""
+                SELECT
+                    c.id,
+                    c.operateur_id,
+                    c.type_contrat,
+                    c.date_fin,
+                    p.nom,
+                    p.prenom,
+                    p.matricule,
+                    DATEDIFF(c.date_fin, CURDATE()) as jours_restants
+                FROM contrat c
+                INNER JOIN personnel p ON p.id = c.operateur_id
+                WHERE c.actif = 1
+                  AND c.date_fin IS NOT NULL
+                  AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+                  AND p.statut = 'ACTIF'
+                ORDER BY c.date_fin ASC
+                LIMIT 15
+            """, (jours,))
+            alertes["contrats"] = cur.fetchall()
+
+            # 2. Documents expirant bientôt
+            cur.execute("""
+                SELECT
+                    d.id,
+                    d.operateur_id,
+                    d.nom_affichage,
+                    d.nom_original,
+                    d.date_expiration,
+                    p.nom,
+                    p.prenom,
+                    p.matricule,
+                    c.nom as categorie,
+                    DATEDIFF(d.date_expiration, CURDATE()) as jours_restants
+                FROM documents d
+                INNER JOIN personnel p ON p.id = d.operateur_id
+                LEFT JOIN documents_categories c ON c.id = d.categorie_id
+                WHERE d.statut = 'actif'
+                  AND d.date_expiration IS NOT NULL
+                  AND d.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+                  AND p.statut = 'ACTIF'
+                ORDER BY d.date_expiration ASC
+                LIMIT 15
+            """, (jours,))
+            alertes["documents"] = cur.fetchall()
+
+    except Exception as e:
+        logger.error(f"Erreur get_alertes_rh_dashboard: {e}")
+        alertes["error"] = str(e)
+
+    return alertes
+
+
+def get_alertes_rh_count(jours: int = 30) -> Dict:
+    """
+    Compte le nombre d'alertes RH (contrats + documents).
+
+    Args:
+        jours: Nombre de jours pour la recherche (défaut: 30)
+
+    Returns:
+        Dict avec 'contrats_count' et 'documents_count'
+    """
+    counts = {
+        "contrats_count": 0,
+        "documents_count": 0,
+        "total": 0
+    }
+
+    try:
+        with DatabaseCursor(dictionary=True) as cur:
+            # Contrats
+            cur.execute("""
+                SELECT COUNT(*) as cnt
+                FROM contrat c
+                INNER JOIN personnel p ON p.id = c.operateur_id
+                WHERE c.actif = 1
+                  AND c.date_fin IS NOT NULL
+                  AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+                  AND p.statut = 'ACTIF'
+            """, (jours,))
+            result = cur.fetchone()
+            counts["contrats_count"] = result['cnt'] if result else 0
+
+            # Documents
+            cur.execute("""
+                SELECT COUNT(*) as cnt
+                FROM documents d
+                INNER JOIN personnel p ON p.id = d.operateur_id
+                WHERE d.statut = 'actif'
+                  AND d.date_expiration IS NOT NULL
+                  AND d.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+                  AND p.statut = 'ACTIF'
+            """, (jours,))
+            result = cur.fetchone()
+            counts["documents_count"] = result['cnt'] if result else 0
+
+            counts["total"] = counts["contrats_count"] + counts["documents_count"]
+
+    except Exception as e:
+        logger.error(f"Erreur get_alertes_rh_count: {e}")
+
+    return counts
+
+
+# ============================================================
 # 6. HELPERS
 # ============================================================
 
@@ -1118,7 +1247,7 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
                 'sexe', 'date_naissance', 'date_entree', 'nationalite',
                 'adresse1', 'adresse2', 'cp_adresse', 'ville_adresse',
                 'pays_adresse', 'telephone', 'email', 'ville_naissance',
-                'pays_naissance', 'commentaire'
+                'pays_naissance', 'commentaire', 'numero_ss'
             ])
 
             if exists:

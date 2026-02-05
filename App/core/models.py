@@ -72,6 +72,13 @@ class StatutAbsence(Enum):
     REFUSEE = "REFUSEE"
 
 
+class UrgenceAlerte(Enum):
+    """Niveau d'urgence d'une alerte RH"""
+    CRITIQUE = "CRITIQUE"      # Rouge - action immédiate requise
+    AVERTISSEMENT = "AVERTISSEMENT"  # Orange - attention requise
+    INFO = "INFO"              # Bleu - information
+
+
 # ===========================
 # Base Mixin
 # ===========================
@@ -480,6 +487,61 @@ class StatistiquesEvaluations(ModelMixin):
 
 
 # ===========================
+# Alertes RH
+# ===========================
+
+@dataclass
+class Alert(ModelMixin):
+    """
+    Représente une alerte RH (contrat expirant, personnel sans affectation, etc.)
+
+    Utilisé par le module de gestion des alertes RH.
+    """
+    id: int
+    categorie: str  # "CONTRAT" ou "PERSONNEL"
+    type_alerte: str  # Type spécifique (CONTRAT_EXPIRE, SANS_COMPETENCES, etc.)
+    urgence: str  # CRITIQUE, AVERTISSEMENT, INFO
+    titre: str
+    description: str
+    personnel_id: Optional[int] = None
+    personnel_nom: Optional[str] = None
+    personnel_prenom: Optional[str] = None
+    date_alerte: Optional[date] = None
+    date_echeance: Optional[date] = None
+    jours_restants: Optional[int] = None  # Négatif si dépassé
+    data: Dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def personnel_nom_complet(self) -> str:
+        """Nom complet du personnel concerné"""
+        if self.personnel_nom and self.personnel_prenom:
+            return f"{self.personnel_nom.upper()} {self.personnel_prenom.capitalize()}"
+        return ""
+
+    @property
+    def urgence_ordre(self) -> int:
+        """Ordre de tri par urgence (0=plus urgent)"""
+        return {'CRITIQUE': 0, 'AVERTISSEMENT': 1, 'INFO': 2}.get(self.urgence, 3)
+
+    @property
+    def est_critique(self) -> bool:
+        return self.urgence == "CRITIQUE"
+
+    @property
+    def est_avertissement(self) -> bool:
+        return self.urgence == "AVERTISSEMENT"
+
+
+@dataclass
+class StatistiquesAlertes(ModelMixin):
+    """Statistiques sur les alertes RH"""
+    total: int = 0
+    critiques: int = 0
+    avertissements: int = 0
+    infos: int = 0
+
+
+# ===========================
 # Factory helpers
 # ===========================
 
@@ -514,6 +576,7 @@ __all__ = [
     'NiveauPolyvalence',
     'TypeAbsence',
     'StatutAbsence',
+    'UrgenceAlerte',
 
     # Modèles principaux
     'Personnel',
@@ -529,6 +592,10 @@ __all__ = [
     'EvaluationResume',
     'StatistiquesContrats',
     'StatistiquesEvaluations',
+
+    # Alertes RH
+    'Alert',
+    'StatistiquesAlertes',
 
     # Factory helpers
     'personnel_from_row',
