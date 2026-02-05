@@ -436,19 +436,19 @@ class ManageOperatorsDialog(QDialog):
                     date_entree = self.add_date_entree.date().toString("yyyy-MM-dd")
 
                     # Vérifier si personnel_infos existe déjà
-                    cursor.execute("SELECT operateur_id FROM personnel_infos WHERE operateur_id = %s", (operateur_id,))
+                    cursor.execute("SELECT personnel_id FROM personnel_infos WHERE personnel_id = %s", (operateur_id,))
                     exists_infos = cursor.fetchone()
 
                     if exists_infos:
                         # Mettre à jour
                         cursor.execute(
-                            "UPDATE personnel_infos SET date_entree = %s WHERE operateur_id = %s",
+                            "UPDATE personnel_infos SET date_entree = %s WHERE personnel_id = %s",
                             (date_entree, operateur_id)
                         )
                     else:
                         # Créer
                         cursor.execute(
-                            "INSERT INTO personnel_infos (operateur_id, date_entree) VALUES (%s, %s)",
+                            "INSERT INTO personnel_infos (personnel_id, date_entree) VALUES (%s, %s)",
                             (operateur_id, date_entree)
                         )
 

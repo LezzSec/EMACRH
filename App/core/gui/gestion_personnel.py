@@ -265,7 +265,7 @@ class DetailOperateurDialog(QDialog):
 
             # -------- Carte Informations personnelles --------
             with DatabaseCursor(dictionary=True) as cursor:
-                cursor.execute("SELECT * FROM personnel_infos WHERE operateur_id = %s", (self.operateur_id,))
+                cursor.execute("SELECT * FROM personnel_infos WHERE personnel_id = %s", (self.operateur_id,))
                 row_data = cursor.fetchall()
 
             personal_items = []
@@ -275,7 +275,7 @@ class DetailOperateurDialog(QDialog):
                     date_entree_str = data['date_entree'].strftime("%d/%m/%Y") if isinstance(data['date_entree'], dt.date) else str(data['date_entree'])
                     personal_items.append(("Date d'entrée", date_entree_str))
                 for key, val in data.items():
-                    if key in ("operateur_id", "date_entree"):
+                    if key in ("personnel_id", "date_entree"):
                         continue
                     label = self._format_column_name(key)
                     value = (
@@ -1231,7 +1231,7 @@ class DetailOperateurDialog(QDialog):
         try:
             with DatabaseCursor(dictionary=True) as cursor:
                 cursor.execute(
-                    "SELECT date_entree FROM personnel_infos WHERE operateur_id = %s",
+                    "SELECT date_entree FROM personnel_infos WHERE personnel_id = %s",
                     (self.operateur_id,)
                 )
                 row = cursor.fetchall()
@@ -1820,8 +1820,8 @@ class AffecterDatesEntreeDialog(QDialog):
                         p.statut,
                         pi.date_entree
                     FROM personnel p
-                    LEFT JOIN personnel_infos pi ON p.id = pi.operateur_id
-                    WHERE pi.date_entree IS NULL OR pi.operateur_id IS NULL
+                    LEFT JOIN personnel_infos pi ON p.id = pi.personnel_id
+                    WHERE pi.date_entree IS NULL OR pi.personnel_id IS NULL
                     ORDER BY p.nom, p.prenom
                 """)
 
@@ -1936,19 +1936,19 @@ class AffecterDatesEntreeDialog(QDialog):
 
                     # Vérifier si l'enregistrement existe
                     cur.execute(
-                        "SELECT operateur_id FROM personnel_infos WHERE operateur_id = %s",
+                        "SELECT personnel_id FROM personnel_infos WHERE personnel_id = %s",
                         (operateur_id,)
                     )
                     exists = cur.fetchone()
 
                     if exists:
                         cur.execute(
-                            "UPDATE personnel_infos SET date_entree = %s WHERE operateur_id = %s",
+                            "UPDATE personnel_infos SET date_entree = %s WHERE personnel_id = %s",
                             (date_entree, operateur_id)
                         )
                     else:
                         cur.execute(
-                            "INSERT INTO personnel_infos (operateur_id, date_entree) VALUES (%s, %s)",
+                            "INSERT INTO personnel_infos (personnel_id, date_entree) VALUES (%s, %s)",
                             (operateur_id, date_entree)
                         )
 

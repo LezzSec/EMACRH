@@ -70,7 +70,7 @@ def main():
             # Vérifier si fiche existante
             # ----------------------------
             cursor.execute(
-                "SELECT * FROM personnel_infos WHERE operateur_id = %s",
+                "SELECT * FROM personnel_infos WHERE personnel_id = %s",
                 (op_id,)
             )
             existing = cursor.fetchone()
@@ -119,7 +119,7 @@ def main():
                         telephone = %s,
                         email = %s,
                         commentaire = %s
-                    WHERE operateur_id = %s
+                    WHERE personnel_id = %s
                 """
 
                 params = (
@@ -132,7 +132,7 @@ def main():
                 print("\n➡ Création d'une nouvelle fiche…\n")
                 sql = """
                     INSERT INTO personnel_infos (
-                        operateur_id,
+                        personnel_id,
                         sexe, date_entree, nationalite,
                         cp_naissance, ville_naissance, pays_naissance,
                         date_naissance,

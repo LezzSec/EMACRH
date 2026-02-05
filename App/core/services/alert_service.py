@@ -191,7 +191,7 @@ class AlertService:
                    ON c.operateur_id = p.id
                   AND c.actif = 1
             LEFT JOIN personnel_infos pi
-                   ON pi.operateur_id = p.id
+                   ON pi.personnel_id = p.id
             WHERE p.statut = 'ACTIF'
               AND c.id IS NULL
             ORDER BY p.nom, p.prenom;
@@ -238,7 +238,7 @@ class AlertService:
         query = """
             SELECT p.id, p.nom, p.prenom, p.matricule, pi.date_entree
             FROM personnel p
-            LEFT JOIN personnel_infos pi ON pi.operateur_id = p.id
+            LEFT JOIN personnel_infos pi ON pi.personnel_id = p.id
             LEFT JOIN polyvalence poly ON poly.operateur_id = p.id
             WHERE p.statut = 'ACTIF'
               AND poly.id IS NULL
@@ -288,7 +288,7 @@ class AlertService:
             SELECT p.id, p.nom, p.prenom, p.matricule, pi.date_entree,
                    DATEDIFF(CURDATE(), pi.date_entree) as jours_depuis_entree
             FROM personnel p
-            JOIN personnel_infos pi ON pi.operateur_id = p.id
+            JOIN personnel_infos pi ON pi.personnel_id = p.id
             LEFT JOIN polyvalence poly ON poly.operateur_id = p.id
             WHERE p.statut = 'ACTIF'
               AND pi.date_entree IS NOT NULL

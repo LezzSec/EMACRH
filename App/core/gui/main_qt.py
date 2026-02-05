@@ -510,11 +510,11 @@ class MainWindow(QMainWindow):
             add_btn("Création/Suppression de poste", self.show_poste_form)
         if perms.get("contrats_ecriture") or perms.get("documentsrh_lecture"):
             add_btn("Gestion RH (Contrats & Documents)", self.show_contract_management)
-        if perms.get("contrats_lecture") or perms.get("personnel_lecture"):
+        if perms.get("contrats_lecture") or perms.get("documentsrh_lecture"):
             add_btn("Alertes RH", self.show_alertes_rh)
         if perms.get("planning_lecture"):
-            add_btn("Planning & Évaluations", self.show_regularisation)
-        if perms.get("documentsrh_lecture") or perms.get("personnel_lecture"):
+            add_btn("Planning", self.show_regularisation)
+        if perms.get("documentsrh_lecture"):
             add_btn("Documents Templates", self.show_gestion_templates)
         if perms.get("is_admin"):
             add_btn("Historique", self.show_historique)

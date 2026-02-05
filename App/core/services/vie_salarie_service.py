@@ -585,7 +585,7 @@ def get_statistiques_vie_salarie_globales() -> Dict[str, Any]:
             cur.execute("""
                 SELECT COUNT(DISTINCT p.id) as count
                 FROM personnel p
-                LEFT JOIN personnel_infos pi ON p.id = pi.operateur_id
+                LEFT JOIN personnel_infos pi ON p.id = pi.personnel_id
                 LEFT JOIN (
                     SELECT operateur_id, MAX(date_entretien) as derniere_date
                     FROM vie_salarie_entretien

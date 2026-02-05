@@ -247,7 +247,7 @@ def _get_donnees_generales(operateur_id: int) -> Dict[str, Any]:
                     pi.commentaire,
                     pi.numero_ss
                 FROM personnel p
-                LEFT JOIN personnel_infos pi ON pi.operateur_id = p.id
+                LEFT JOIN personnel_infos pi ON pi.personnel_id = p.id
                 WHERE p.id = %s
             """, (operateur_id,))
 
@@ -1239,7 +1239,7 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
                 )
 
             # 2. Vérifier si personnel_infos existe
-            cur.execute("SELECT id FROM personnel_infos WHERE operateur_id = %s", (operateur_id,))
+            cur.execute("SELECT personnel_id FROM personnel_infos WHERE personnel_id = %s", (operateur_id,))
             exists = cur.fetchone()
 
             # SÉCURITÉ: Whitelist stricte des colonnes autorisées pour personnel_infos
@@ -1264,11 +1264,11 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
                 if fields:
                     values.append(operateur_id)
                     # SÉCURITÉ: Les colonnes proviennent uniquement de ALLOWED_COLUMNS (constante)
-                    sql = "UPDATE personnel_infos SET " + ", ".join(fields) + " WHERE operateur_id = %s"
+                    sql = "UPDATE personnel_infos SET " + ", ".join(fields) + " WHERE personnel_id = %s"
                     cur.execute(sql, tuple(values))
             else:
                 # INSERT
-                columns = ['operateur_id']
+                columns = ['personnel_id']
                 values = [operateur_id]
                 placeholders = ['%s']
 
