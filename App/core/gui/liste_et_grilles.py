@@ -561,7 +561,7 @@ class GrillesDialog(QDialog):
         # Déconnecter le signal pour éviter la boucle infinie
         try:
             self.main_table.cellChanged.disconnect(self.on_cell_changed)
-        except:
+        except Exception:
             pass
 
         try:
@@ -796,7 +796,7 @@ class GrillesDialog(QDialog):
             # Reconnecter le signal
             try:
                 self.main_table.cellChanged.connect(self.on_cell_changed)
-            except:
+            except Exception:
                 pass
 
 

@@ -65,7 +65,7 @@ if __name__ == "__main__":
                 "Erreur EMAC",
                 f"Une erreur critique est survenue:\n\n{type(e).__name__}: {str(e)}\n\nConsultez la console pour plus de détails."
             )
-        except:
+        except Exception:
             pass
 
         input("\nAppuyez sur Entrée pour fermer...")

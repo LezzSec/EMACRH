@@ -14,8 +14,60 @@ from typing import List, Dict, Tuple, Optional, Callable, Any
 from core.db.configbd import DatabaseConnection, DatabaseCursor
 from core.services.logger import log_hist
 from core.services.permission_manager import require, can
+from core.services.document_service import DocumentService
 
 logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# HELPER: Gestion des catégories de documents
+# ============================================================
+
+def _get_categorie_id_by_name(nom_categorie: str) -> Optional[int]:
+    """
+    Récupère l'ID d'une catégorie de documents par son nom.
+
+    Args:
+        nom_categorie: Nom de la catégorie
+
+    Returns:
+        ID de la catégorie ou None si introuvable
+    """
+    try:
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute(
+                "SELECT id FROM categories_documents WHERE nom = %s",
+                (nom_categorie,)
+            )
+            row = cur.fetchone()
+            return row['id'] if row else None
+    except Exception as e:
+        logger.error(f"Erreur récupération catégorie '{nom_categorie}': {e}")
+        return None
+
+
+# ============================================================
+# HELPER: Gestion des callbacks de progression
+# ============================================================
+
+def _emit_progress(progress_callback: Optional[Callable], *args, **kwargs):
+    """
+    Émet un callback de progression de manière sécurisée.
+
+    Gère automatiquement les deux cas:
+    - Signal PyQt5 (provenant de DbWorker) → utilise .emit()
+    - Fonction normale → appel direct
+    - None → ignore
+    """
+    if progress_callback is None:
+        return
+
+    # Vérifier si c'est un signal Qt (a une méthode .emit)
+    if hasattr(progress_callback, 'emit'):
+        progress_callback.emit(*args, **kwargs)
+    else:
+        # Fonction normale
+        progress_callback(*args, **kwargs)
 
 
 # ============================================================
@@ -150,12 +202,23 @@ def add_formation_batch(
     nb_errors = 0
     total = len(personnel_ids)
 
+    # Préparer le service de documents si un fichier est fourni
+    doc_service = None
+    categorie_formation_id = None
+    document_path = formation_data.get('document_path')
+
+    if document_path:
+        doc_service = DocumentService()
+        categorie_formation_id = _get_categorie_id_by_name("Diplômes et formations")
+        if not categorie_formation_id:
+            logger.warning("Catégorie 'Diplômes et formations' introuvable - documents ne seront pas ajoutés")
+
     for i, personnel_id in enumerate(personnel_ids):
-        if progress_callback:
-            progress_callback(
-                int((i / total) * 100),
-                f"Traitement {i + 1}/{total}..."
-            )
+        _emit_progress(
+            progress_callback,
+            int((i / total) * 100),
+            f"Traitement {i + 1}/{total}..."
+        )
 
         try:
             with DatabaseConnection() as conn:
@@ -181,6 +244,32 @@ def add_formation_batch(
                 ))
 
                 formation_id = cur.lastrowid
+
+                # Ajouter le document si fourni
+                if doc_service and document_path and categorie_formation_id:
+                    try:
+                        success, message, document_id = doc_service.add_document(
+                            personnel_id=personnel_id,
+                            categorie_id=categorie_formation_id,
+                            fichier_source=document_path,
+                            nom_affichage=f"Attestation - {formation_data.get('intitule', 'Formation')}",
+                            notes=f"Document associé à la formation du {formation_data.get('date_debut')}",
+                            uploaded_by=created_by or "Système"
+                        )
+
+                        if success and document_id:
+                            # Lier le document à la formation
+                            cur.execute(
+                                "UPDATE documents SET formation_id = %s WHERE id = %s",
+                                (formation_id, document_id)
+                            )
+                            conn.commit()
+                            logger.debug(f"Document {document_id} lié à la formation {formation_id}")
+                        else:
+                            logger.warning(f"Échec ajout document pour formation {formation_id}: {message}")
+                    except Exception as doc_error:
+                        logger.error(f"Erreur ajout document pour formation {formation_id}: {doc_error}")
+
                 nb_success += 1
 
                 details.append({
@@ -215,8 +304,7 @@ def add_formation_batch(
         description=f"Formation '{formation_data.get('intitule')}' assignée à {nb_success} personnes ({nb_errors} erreurs)"
     )
 
-    if progress_callback:
-        progress_callback(100, "Terminé")
+    _emit_progress(progress_callback, 100, "Terminé")
 
     return nb_success, nb_errors, details
 
@@ -278,6 +366,17 @@ def add_absence_batch(
     nb_errors = 0
     total = len(personnel_ids)
 
+    # Préparer le service de documents si un justificatif est fourni
+    doc_service = None
+    categorie_admin_id = None
+    document_path = absence_data.get('document_path')
+
+    if document_path:
+        doc_service = DocumentService()
+        categorie_admin_id = _get_categorie_id_by_name("Documents administratifs")
+        if not categorie_admin_id:
+            logger.warning("Catégorie 'Documents administratifs' introuvable - justificatifs ne seront pas ajoutés")
+
     # Calculer le nombre de jours
     from core.services.absence_service import calculer_jours_ouvres
     nb_jours = calculer_jours_ouvres(
@@ -288,11 +387,11 @@ def add_absence_batch(
     )
 
     for i, personnel_id in enumerate(personnel_ids):
-        if progress_callback:
-            progress_callback(
-                int((i / total) * 100),
-                f"Traitement {i + 1}/{total}..."
-            )
+        _emit_progress(
+            progress_callback,
+            int((i / total) * 100),
+            f"Traitement {i + 1}/{total}..."
+        )
 
         try:
             with DatabaseConnection() as conn:
@@ -316,6 +415,26 @@ def add_absence_batch(
                 ))
 
                 demande_id = cur.lastrowid
+
+                # Ajouter le justificatif si fourni
+                if doc_service and document_path and categorie_admin_id:
+                    try:
+                        success, message, document_id = doc_service.add_document(
+                            personnel_id=personnel_id,
+                            categorie_id=categorie_admin_id,
+                            fichier_source=document_path,
+                            nom_affichage=f"Justificatif absence - {type_absence_code}",
+                            notes=f"Justificatif pour absence du {absence_data.get('date_debut')} au {absence_data.get('date_fin')}",
+                            uploaded_by=created_by or "Système"
+                        )
+
+                        if not success:
+                            logger.warning(f"Échec ajout justificatif pour absence {demande_id}: {message}")
+                        else:
+                            logger.debug(f"Justificatif {document_id} ajouté pour absence {demande_id}")
+                    except Exception as doc_error:
+                        logger.error(f"Erreur ajout justificatif pour absence {demande_id}: {doc_error}")
+
                 nb_success += 1
 
                 details.append({
@@ -350,8 +469,7 @@ def add_absence_batch(
         description=f"Absence '{type_absence_code}' assignée à {nb_success} personnes ({nb_errors} erreurs)"
     )
 
-    if progress_callback:
-        progress_callback(100, "Terminé")
+    _emit_progress(progress_callback, 100, "Terminé")
 
     return nb_success, nb_errors, details
 
@@ -396,12 +514,23 @@ def add_visite_batch(
     nb_errors = 0
     total = len(personnel_ids)
 
+    # Préparer le service de documents si une fiche d'aptitude est fournie
+    doc_service = None
+    categorie_medical_id = None
+    document_path = visite_data.get('document_path')
+
+    if document_path:
+        doc_service = DocumentService()
+        categorie_medical_id = _get_categorie_id_by_name("Certificats médicaux")
+        if not categorie_medical_id:
+            logger.warning("Catégorie 'Certificats médicaux' introuvable - documents ne seront pas ajoutés")
+
     for i, personnel_id in enumerate(personnel_ids):
-        if progress_callback:
-            progress_callback(
-                int((i / total) * 100),
-                f"Traitement {i + 1}/{total}..."
-            )
+        _emit_progress(
+            progress_callback,
+            int((i / total) * 100),
+            f"Traitement {i + 1}/{total}..."
+        )
 
         try:
             with DatabaseConnection() as conn:
@@ -424,6 +553,26 @@ def add_visite_batch(
                 ))
 
                 visite_id = cur.lastrowid
+
+                # Ajouter le document médical si fourni
+                if doc_service and document_path and categorie_medical_id:
+                    try:
+                        success, message, document_id = doc_service.add_document(
+                            personnel_id=personnel_id,
+                            categorie_id=categorie_medical_id,
+                            fichier_source=document_path,
+                            nom_affichage=f"Fiche aptitude - {visite_data.get('type_visite', 'Visite')}",
+                            notes=f"Document pour visite {visite_data.get('type_visite')} du {visite_data.get('date_visite')}",
+                            uploaded_by=created_by or "Système"
+                        )
+
+                        if not success:
+                            logger.warning(f"Échec ajout document médical pour visite {visite_id}: {message}")
+                        else:
+                            logger.debug(f"Document médical {document_id} ajouté pour visite {visite_id}")
+                    except Exception as doc_error:
+                        logger.error(f"Erreur ajout document médical pour visite {visite_id}: {doc_error}")
+
                 nb_success += 1
 
                 details.append({
@@ -458,8 +607,7 @@ def add_visite_batch(
         description=f"Visite '{visite_data.get('type_visite')}' assignée à {nb_success} personnes ({nb_errors} erreurs)"
     )
 
-    if progress_callback:
-        progress_callback(100, "Terminé")
+    _emit_progress(progress_callback, 100, "Terminé")
 
     return nb_success, nb_errors, details
 
@@ -519,12 +667,23 @@ def add_competence_batch(
     nb_errors = 0
     total = len(personnel_ids)
 
+    # Préparer le service de documents si une attestation est fournie
+    doc_service = None
+    categorie_formation_id = None
+    document_path = competence_data.get('document_path')
+
+    if document_path:
+        doc_service = DocumentService()
+        categorie_formation_id = _get_categorie_id_by_name("Diplômes et formations")
+        if not categorie_formation_id:
+            logger.warning("Catégorie 'Diplômes et formations' introuvable - attestations ne seront pas ajoutées")
+
     for i, personnel_id in enumerate(personnel_ids):
-        if progress_callback:
-            progress_callback(
-                int((i / total) * 100),
-                f"Traitement {i + 1}/{total}..."
-            )
+        _emit_progress(
+            progress_callback,
+            int((i / total) * 100),
+            f"Traitement {i + 1}/{total}..."
+        )
 
         try:
             with DatabaseConnection() as conn:
@@ -566,6 +725,26 @@ def add_competence_batch(
                     ))
                     record_id = cur.lastrowid
 
+                # Ajouter l'attestation de compétence si fournie
+                if doc_service and document_path and categorie_formation_id:
+                    try:
+                        success, message, document_id = doc_service.add_document(
+                            personnel_id=personnel_id,
+                            categorie_id=categorie_formation_id,
+                            fichier_source=document_path,
+                            nom_affichage=f"Attestation - {competence_libelle}",
+                            notes=f"Attestation pour compétence acquise le {competence_data.get('date_acquisition')}",
+                            date_expiration=competence_data.get('date_expiration'),
+                            uploaded_by=created_by or "Système"
+                        )
+
+                        if not success:
+                            logger.warning(f"Échec ajout attestation pour compétence {record_id}: {message}")
+                        else:
+                            logger.debug(f"Attestation {document_id} ajoutée pour compétence {record_id}")
+                    except Exception as doc_error:
+                        logger.error(f"Erreur ajout attestation pour compétence {record_id}: {doc_error}")
+
                 nb_success += 1
 
                 details.append({
@@ -600,8 +779,7 @@ def add_competence_batch(
         description=f"Compétence '{competence_libelle}' assignée à {nb_success} personnes ({nb_errors} erreurs)"
     )
 
-    if progress_callback:
-        progress_callback(100, "Terminé")
+    _emit_progress(progress_callback, 100, "Terminé")
 
     return nb_success, nb_errors, details
 

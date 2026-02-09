@@ -77,7 +77,7 @@ def _load_env_once() -> None:
                     # Supprimer le fichier temporaire immédiatement
                     try:
                         os.unlink(tmp_path)
-                    except:
+                    except Exception:
                         pass
                 except Exception as e:
                     # Si le déchiffrement échoue, continuer avec les autres candidats
@@ -204,7 +204,7 @@ def get_connection():
             # Si la reconnexion échoue, fermer et récupérer une nouvelle connexion
             try:
                 conn.close()
-            except:
+            except Exception:
                 pass
             conn = pool.get_connection()
         return conn

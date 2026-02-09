@@ -195,7 +195,7 @@ class OptimizedDBLogger:
                 'utilisateur': utilisateur,
                 'timestamp': time.time()
             })
-        except:
+        except Exception:
             # Queue pleine → fallback sur logger synchrone
             self._log_sync(
                 action, table_name, record_id, description,
@@ -224,7 +224,7 @@ class OptimizedDBLogger:
                 source=source,
                 utilisateur=utilisateur
             )
-        except:
+        except Exception:
             pass
 
     def flush(self):

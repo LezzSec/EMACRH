@@ -72,7 +72,7 @@ class DocumentService:
     
     def add_document(
         self,
-        operateur_id: int,
+        personnel_id: int,
         categorie_id: int,
         fichier_source: str,
         nom_affichage: str = None,
@@ -84,7 +84,7 @@ class DocumentService:
         Ajoute un document pour un opérateur
         
         Args:
-            operateur_id: ID de l'opérateur
+            personnel_id: ID de l'opérateur
             categorie_id: ID de la catégorie
             fichier_source: Chemin du fichier à ajouter
             nom_affichage: Nom d'affichage (optionnel, sinon nom du fichier)
@@ -102,11 +102,11 @@ class DocumentService:
             # Récupérer les infos de l'opérateur
             cursor.execute(
                 "SELECT nom, prenom FROM personnel WHERE id = %s",
-                (operateur_id,)
+                (personnel_id,)
             )
             operateur = cursor.fetchone()
             if not operateur:
-                return False, f"Opérateur ID {operateur_id} introuvable", None
+                return False, f"Opérateur ID {personnel_id} introuvable", None
 
             # Créer le nom du dossier: "Nom Prenom"
             nom_dossier = f"{operateur['nom']} {operateur['prenom']}"
@@ -165,7 +165,7 @@ class DocumentService:
             # Insérer dans la base de données
             sql = """
                 INSERT INTO documents (
-                    operateur_id, categorie_id, nom_fichier, nom_affichage,
+                    personnel_id, categorie_id, nom_fichier, nom_affichage,
                     chemin_fichier, type_mime, taille_octets, date_expiration,
                     notes, uploaded_by
                 ) VALUES (
@@ -174,7 +174,7 @@ class DocumentService:
             """
             
             cursor.execute(sql, (
-                operateur_id, categorie_id, nom_fichier_clean, nom_affichage,
+                personnel_id, categorie_id, nom_fichier_clean, nom_affichage,
                 chemin_relatif, type_mime, taille_octets, date_expiration,
                 notes, uploaded_by
             ))
@@ -192,7 +192,7 @@ class DocumentService:
     
     def get_documents_operateur(
         self,
-        operateur_id: int,
+        personnel_id: int,
         categorie_id: int = None,
         statut: str = None
     ) -> List[Dict]:
@@ -200,7 +200,7 @@ class DocumentService:
         Récupère les documents d'un opérateur
         
         Args:
-            operateur_id: ID de l'opérateur
+            personnel_id: ID de l'opérateur
             categorie_id: Filtrer par catégorie (optionnel)
             statut: Filtrer par statut (optionnel)
         
@@ -211,8 +211,8 @@ class DocumentService:
             conn = get_connection()
             cursor = conn.cursor(dictionary=True)
             
-            sql = "SELECT * FROM v_documents_complet WHERE operateur_id = %s"
-            params = [operateur_id]
+            sql = "SELECT * FROM v_documents_complet WHERE personnel_id = %s"
+            params = [personnel_id]
             
             if categorie_id is not None:
                 sql += " AND categorie_id = %s"

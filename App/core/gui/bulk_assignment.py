@@ -151,6 +151,7 @@ class PersonnelSelectionWidget(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
         self.table.itemChanged.connect(self._on_item_changed)
@@ -263,15 +264,23 @@ class PersonnelSelectionWidget(QWidget):
 
             # Checkbox
             checkbox = QTableWidgetItem()
-            checkbox.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled)
+            checkbox.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             checkbox.setCheckState(Qt.Unchecked)
             checkbox.setData(Qt.UserRole, row_data['id'])
             self.table.setItem(row, 0, checkbox)
 
-            # Données
-            self.table.setItem(row, 1, QTableWidgetItem(row_data.get('nom', '')))
-            self.table.setItem(row, 2, QTableWidgetItem(row_data.get('prenom', '')))
-            self.table.setItem(row, 3, QTableWidgetItem(row_data.get('matricule', '')))
+            # Données (non éditables)
+            nom_item = QTableWidgetItem(row_data.get('nom', ''))
+            nom_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            self.table.setItem(row, 1, nom_item)
+
+            prenom_item = QTableWidgetItem(row_data.get('prenom', ''))
+            prenom_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            self.table.setItem(row, 2, prenom_item)
+
+            matricule_item = QTableWidgetItem(row_data.get('matricule', ''))
+            matricule_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable)
+            self.table.setItem(row, 3, matricule_item)
 
             statut = row_data.get('statut', '')
             statut_item = QTableWidgetItem(statut)
@@ -306,13 +315,19 @@ class PersonnelSelectionWidget(QWidget):
 
             self.table.setRowHidden(row, not (match_search and match_status))
 
-        self._update_count()
+        # Get selected IDs once to avoid inconsistency
+        selected_ids = self.get_selected_ids()
+        self._update_count_with_ids(selected_ids)
+        # Emit signal to update button text (filtering changes visible selection)
+        self.selection_changed.emit(selected_ids)
 
     def _on_item_changed(self, item):
         """Appelé quand un item change (checkbox)."""
         if item.column() == 0:
-            self._update_count()
-            self.selection_changed.emit(self.get_selected_ids())
+            # Get selected IDs once to avoid inconsistency
+            selected_ids = self.get_selected_ids()
+            self._update_count_with_ids(selected_ids)
+            self.selection_changed.emit(selected_ids)
 
     def _select_all(self):
         """Sélectionne tous les éléments visibles."""
@@ -323,8 +338,10 @@ class PersonnelSelectionWidget(QWidget):
                 if item:
                     item.setCheckState(Qt.Checked)
         self.table.blockSignals(False)
-        self._update_count()
-        self.selection_changed.emit(self.get_selected_ids())
+        # Get selected IDs once to avoid inconsistency
+        selected_ids = self.get_selected_ids()
+        self._update_count_with_ids(selected_ids)
+        self.selection_changed.emit(selected_ids)
 
     def _deselect_all(self):
         """Désélectionne tous les éléments."""
@@ -334,12 +351,19 @@ class PersonnelSelectionWidget(QWidget):
             if item:
                 item.setCheckState(Qt.Unchecked)
         self.table.blockSignals(False)
-        self._update_count()
-        self.selection_changed.emit(self.get_selected_ids())
+        # Get selected IDs once to avoid inconsistency
+        selected_ids = self.get_selected_ids()
+        self._update_count_with_ids(selected_ids)
+        self.selection_changed.emit(selected_ids)
 
     def _update_count(self):
         """Met à jour le compteur de sélection."""
-        count = len(self.get_selected_ids())
+        selected_ids = self.get_selected_ids()
+        self._update_count_with_ids(selected_ids)
+
+    def _update_count_with_ids(self, selected_ids: List[int]):
+        """Met à jour le compteur avec une liste d'IDs fournie."""
+        count = len(selected_ids)
         visible_count = sum(1 for row in range(self.table.rowCount()) if not self.table.isRowHidden(row))
         self.count_label.setText(f"Sélectionnés: {count} / {visible_count}")
 
@@ -840,7 +864,7 @@ class AbsenceBulkTab(QWidget):
 
     def _load_types_absence(self):
         """Charge les types d'absence depuis la base de données."""
-        def fetch():
+        def fetch(progress_callback=None):
             with DatabaseCursor(dictionary=True) as cur:
                 cur.execute("""
                     SELECT id, code, libelle
@@ -1341,7 +1365,7 @@ class CompetenceBulkTab(QWidget):
 
     def _load_catalogue(self):
         """Charge le catalogue des compétences."""
-        def fetch():
+        def fetch(progress_callback=None):
             with DatabaseCursor(dictionary=True) as cur:
                 cur.execute("""
                     SELECT id, code, libelle, categorie, duree_validite_mois
@@ -1474,26 +1498,35 @@ class BulkOperationProgressDialog(QDialog):
         """Lance l'opération en background."""
         from core.services import bulk_service
 
-        def progress_callback(percentage, message):
-            # Mise à jour via signal (thread-safe)
-            pass
-
-        def do_operation():
+        def do_operation(progress_callback=None):
+            # DbWorker injecte automatiquement progress_callback, donc on doit l'accepter
             if self.operation_type == "FORMATION":
                 return bulk_service.add_formation_batch(
-                    self.personnel_ids, self.data, None, self.created_by
+                    self.personnel_ids,
+                    self.data,
+                    progress_callback=progress_callback,
+                    created_by=self.created_by
                 )
             elif self.operation_type == "ABSENCE":
                 return bulk_service.add_absence_batch(
-                    self.personnel_ids, self.data, None, self.created_by
+                    self.personnel_ids,
+                    self.data,
+                    progress_callback=progress_callback,
+                    created_by=self.created_by
                 )
             elif self.operation_type == "VISITE_MEDICALE":
                 return bulk_service.add_visite_batch(
-                    self.personnel_ids, self.data, None, self.created_by
+                    self.personnel_ids,
+                    self.data,
+                    progress_callback=progress_callback,
+                    created_by=self.created_by
                 )
             elif self.operation_type == "COMPETENCE":
                 return bulk_service.add_competence_batch(
-                    self.personnel_ids, self.data, None, self.created_by
+                    self.personnel_ids,
+                    self.data,
+                    progress_callback=progress_callback,
+                    created_by=self.created_by
                 )
             return 0, 0, []
 

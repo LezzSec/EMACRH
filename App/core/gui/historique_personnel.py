@@ -30,7 +30,7 @@ def format_datetime(dt_value):
     if isinstance(dt_value, str):
         try:
             dt_value = dt.datetime.fromisoformat(dt_value)
-        except:
+        except Exception:
             return str(dt_value)
 
     if hasattr(dt_value, 'strftime'):
@@ -62,7 +62,7 @@ def parse_description_json(description_str):
 
     try:
         return json.loads(description_str)
-    except:
+    except Exception:
         return {"raw": description_str}
 
 
@@ -386,7 +386,7 @@ class HistoriquePersonnelTab(QWidget):
         if isinstance(date_val, str):
             try:
                 return dt.datetime.strptime(date_val, "%Y-%m-%d").strftime("%d/%m/%Y")
-            except:
+            except Exception:
                 return date_val
         if hasattr(date_val, "strftime"):
             return date_val.strftime("%d/%m/%Y")
@@ -414,7 +414,7 @@ class HistoriquePersonnelTab(QWidget):
                 return f"{months} mois"
             else:
                 return f"{delta.days} jour(s)"
-        except:
+        except Exception:
             return "N/A"
 
     def _load_data(self):

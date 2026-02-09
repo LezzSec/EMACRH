@@ -189,7 +189,7 @@ class PerformanceMonitor:
                 from core.utils.optimized_logger import get_logger
                 logger = get_logger('performance')
                 logger.warning(message)
-            except:
+            except Exception:
                 pass
 
     def get_stats(self, category: Optional[str] = None) -> Dict:

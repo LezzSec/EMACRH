@@ -166,7 +166,7 @@ SELECT
         )
     ) AS jours_retard
 FROM personnel p
-LEFT JOIN personnel_infos pi ON p.id = pi.operateur_id
+LEFT JOIN personnel_infos pi ON p.id = pi.personnel_id
 WHERE p.statut = 'ACTIF'
   AND DATEDIFF(
         CURDATE(),

@@ -161,6 +161,26 @@ class EditInfosGeneralesDialog(QDialog):
         self.email = QLineEdit(self.donnees.get('email') or '')
         form.addRow("Email:", self.email)
 
+        # Pays (de l'adresse)
+        self.pays_adresse = QLineEdit(self.donnees.get('pays_adresse') or '')
+        self.pays_adresse.setPlaceholderText("Ex: France")
+        form.addRow("Pays:", self.pays_adresse)
+
+        # --- Section Naissance ---
+        naissance_group = QGroupBox("Lieu de naissance")
+        naissance_layout = QFormLayout(naissance_group)
+
+        # Ville de naissance
+        self.ville_naissance = QLineEdit(self.donnees.get('ville_naissance') or '')
+        self.ville_naissance.setPlaceholderText("Ex: Paris")
+        naissance_layout.addRow("Ville:", self.ville_naissance)
+
+        # Pays de naissance
+        self.pays_naissance = QLineEdit(self.donnees.get('pays_naissance') or '')
+        self.pays_naissance.setPlaceholderText("Ex: France")
+        naissance_layout.addRow("Pays:", self.pays_naissance)
+
+        layout.addWidget(naissance_group)
         layout.addLayout(form)
 
         # Boutons
@@ -217,6 +237,9 @@ class EditInfosGeneralesDialog(QDialog):
             'adresse2': self.adresse2.text().strip(),
             'cp_adresse': self.cp.text().strip(),
             'ville_adresse': self.ville.text().strip(),
+            'pays_adresse': self.pays_adresse.text().strip(),
+            'ville_naissance': self.ville_naissance.text().strip(),
+            'pays_naissance': self.pays_naissance.text().strip(),
             'telephone': self.telephone.text().strip(),
             'email': self.email.text().strip(),
         }

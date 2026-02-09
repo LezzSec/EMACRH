@@ -1207,7 +1207,7 @@ class DetailOperateurDialog(QDialog):
         if isinstance(date_val, str):
             try:
                 return dt.datetime.strptime(date_val, "%Y-%m-%d").strftime("%d/%m/%Y")
-            except:
+            except Exception:
                 return date_val
         if hasattr(date_val, "strftime"):
             return date_val.strftime("%d/%m/%Y")
@@ -1220,7 +1220,7 @@ class DetailOperateurDialog(QDialog):
         if isinstance(datetime_val, str):
             try:
                 return dt.datetime.fromisoformat(datetime_val).strftime("%d/%m/%Y %H:%M")
-            except:
+            except Exception:
                 return datetime_val
         if hasattr(datetime_val, "strftime"):
             return datetime_val.strftime("%d/%m/%Y %H:%M")
@@ -1264,7 +1264,7 @@ class DetailOperateurDialog(QDialog):
                 return f"{months} mois"
             else:
                 return f"{delta.days} jour(s)"
-        except:
+        except Exception:
             return "N/A"
 
 
@@ -1696,7 +1696,7 @@ class GestionPersonnelDialog(QDialog):
                     try:
                         if len(str(cell.value)) > max_length:
                             max_length = len(cell.value)
-                    except:
+                    except Exception:
                         pass
                 adjusted_width = min(max_length + 2, 30)
                 ws.column_dimensions[column_letter].width = adjusted_width

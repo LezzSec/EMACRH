@@ -509,7 +509,7 @@ class MainWindow(QMainWindow):
         if perms.get("postes_ecriture"):
             add_btn("Création/Suppression de poste", self.show_poste_form)
         if perms.get("contrats_ecriture") or perms.get("documentsrh_lecture"):
-            add_btn("Gestion RH (Contrats & Documents)", self.show_contract_management)
+            add_btn("Gestion RH", self.show_contract_management)
         if perms.get("contrats_lecture") or perms.get("documentsrh_lecture"):
             add_btn("Alertes RH", self.show_alertes_rh)
         if perms.get("planning_lecture"):
@@ -898,7 +898,7 @@ class MainWindow(QMainWindow):
                 "Vérifiez les logs pour plus de détails.",
                 QMessageBox.Ok
             )
-        except:
+        except Exception:
             pass  # Si on ne peut même pas afficher le message, tant pis
 
     # ---------------------------

@@ -934,7 +934,7 @@ class AddEditFormationDialog(QDialog):
                     self.attestation_label.setStyleSheet("color: #10b981; font-weight: bold;")
                     self.btn_voir.setEnabled(True)
                     self.btn_supprimer_doc.setEnabled(True)
-            except:
+            except Exception:
                 pass
 
     def save_formation(self):

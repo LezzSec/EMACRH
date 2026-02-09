@@ -597,7 +597,7 @@ class NouvelleDemande(QDialog):
             types = absence_service.get_types_absence()
             for t in types:
                 self.type_combo.addItem(f"{t['libelle']}", t['code'])
-        except:
+        except Exception:
             pass
 
     def update_nb_jours(self):
@@ -609,7 +609,7 @@ class NouvelleDemande(QDialog):
 
             nb_jours = absence_service.calculer_jours_ouvres(date_debut, date_fin, demi_debut, demi_fin)
             self.nb_jours_label.setText(str(nb_jours))
-        except:
+        except Exception:
             self.nb_jours_label.setText("0")
 
     def get_demi_journee(self, button_group):
@@ -744,7 +744,7 @@ class MesDemandesDialog(QDialog):
                 elif demande['statut'] == 'REFUSEE':
                     for col in range(7):
                         self.table.item(row, col).setBackground(QColor(231, 76, 60, 50))
-        except:
+        except Exception:
             pass
 
     def annuler_demande(self):
