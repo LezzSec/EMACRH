@@ -3,7 +3,7 @@
 ![Status](https://img.shields.io/badge/status-production-green)
 ![Version](https://img.shields.io/badge/version-3.0-blue)
 ![Security](https://img.shields.io/badge/security-audited-brightgreen)
-![Python](https://img.shields.io/badge/python-3.8+-yellow)
+![Python](https://img.shields.io/badge/python-3.12-yellow)
 ![PyQt5](https://img.shields.io/badge/PyQt5-5.15-orange)
 
 Application de bureau pour la gestion RH et polyvalence en milieu industriel.
@@ -14,8 +14,7 @@ Application de bureau pour la gestion RH et polyvalence en milieu industriel.
 
 | | |
 |---|---|
-| **Stack** | PyQt5 + MySQL 8.0 |
-| **Sécurité** | Audit interne OWASP ([details](#sécurité)) |
+| **Sécurité** | Audit interne ([details](#sécurité)) |
 | **Réseau** | Client sans MySQL ([details](#administrateurs)) |
 | **Performance** | Pool + cache + threading ([details](#performance)) |
 
