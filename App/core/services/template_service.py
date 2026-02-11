@@ -10,16 +10,16 @@ import os
 import sys
 import json
 import shutil
-import logging
 import tempfile
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+from core.db.query_executor import QueryExecutor
 from core.services.logger import log_hist
+from core.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def get_templates_dir() -> Path:
@@ -65,9 +65,7 @@ def get_all_templates(actif_only: bool = True) -> List[Dict]:
         query += " WHERE actif = TRUE"
     query += " ORDER BY contexte, ordre_affichage"
 
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute(query)
-        templates = cur.fetchall()
+    templates = QueryExecutor.fetch_all(query, dictionary=True)
 
     # Parser le JSON des postes_associes
     for t in templates:
@@ -101,9 +99,7 @@ def get_templates_by_contexte(contexte: str) -> List[Dict]:
         ORDER BY ordre_affichage
     """
 
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute(query, (contexte,))
-        templates = cur.fetchall()
+    templates = QueryExecutor.fetch_all(query, (contexte,), dictionary=True)
 
     for t in templates:
         if t['postes_associes']:
@@ -170,11 +166,11 @@ def generate_filled_template(
         Tuple (succès, message, chemin_fichier_généré)
     """
     # Récupérer les infos du template
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT * FROM documents_templates WHERE id = %s
-        """, (template_id,))
-        template = cur.fetchone()
+    template = QueryExecutor.fetch_one(
+        "SELECT * FROM documents_templates WHERE id = %s",
+        (template_id,),
+        dictionary=True
+    )
 
     if not template:
         return False, "Template non trouvé", None
@@ -384,25 +380,23 @@ def open_template_file(file_path: str) -> Tuple[bool, str]:
 def check_templates_table_exists() -> bool:
     """Vérifie si la table documents_templates existe."""
     try:
-        with DatabaseCursor() as cur:
-            cur.execute("""
-                SELECT COUNT(*) FROM information_schema.tables
-                WHERE table_schema = DATABASE()
-                AND table_name = 'documents_templates'
-            """)
-            result = cur.fetchone()
-            return result[0] > 0
+        count = QueryExecutor.fetch_scalar("""
+            SELECT COUNT(*) FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'documents_templates'
+        """, default=0)
+        return count > 0
     except Exception:
         return False
 
 
 def get_template_by_id(template_id: int) -> Optional[Dict]:
     """Récupère un template par son ID."""
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT * FROM documents_templates WHERE id = %s
-        """, (template_id,))
-        template = cur.fetchone()
+    template = QueryExecutor.fetch_one(
+        "SELECT * FROM documents_templates WHERE id = %s",
+        (template_id,),
+        dictionary=True
+    )
 
     if template and template['postes_associes']:
         try:
@@ -423,14 +417,12 @@ def get_postes_for_operateur(operateur_id: int) -> List[str]:
     Returns:
         Liste des codes postes
     """
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT DISTINCT p.numposte
-            FROM polyvalence pv
-            JOIN postes p ON pv.poste_id = p.id
-            WHERE pv.operateur_id = %s
-        """, (operateur_id,))
-        results = cur.fetchall()
+    results = QueryExecutor.fetch_all("""
+        SELECT DISTINCT p.numposte
+        FROM polyvalence pv
+        JOIN postes p ON pv.poste_id = p.id
+        WHERE pv.operateur_id = %s
+    """, (operateur_id,), dictionary=True)
 
     return [r['numposte'] for r in results if r['numposte']]
 

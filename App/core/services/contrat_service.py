@@ -7,12 +7,13 @@ Fournit les opérations CRUD et la logique métier pour la table contrat
 - Logs DB optimisés (async, non-bloquant)
 """
 
-import logging
 from datetime import date, datetime, timedelta
-
-logger = logging.getLogger(__name__)
 from typing import List, Dict, Optional, Tuple
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+
+from core.db.query_executor import QueryExecutor
+from core.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # ✅ OPTIMISATIONS : Monitoring + Logs optimisés
 from core.utils.performance_monitor import monitor_query
@@ -100,60 +101,55 @@ def create_contract(data: dict) -> Tuple[bool, str, Optional[int]]:
         return False, msg, None
 
     try:
-        with DatabaseConnection() as connection:
-            cursor = connection.cursor()
+        # Désactiver les anciens contrats de cet opérateur
+        QueryExecutor.execute_write(
+            "UPDATE contrat SET actif = 0 WHERE operateur_id = %s AND actif = 1",
+            (data['operateur_id'],)
+        )
 
-            # Désactiver les anciens contrats de cet opérateur
-            cursor.execute(
-                "UPDATE contrat SET actif = 0 WHERE operateur_id = %s AND actif = 1",
-                (data['operateur_id'],)
+        # Insérer le nouveau contrat
+        query = """
+            INSERT INTO contrat (
+                operateur_id, type_contrat, date_debut, date_fin, etp,
+                categorie, echelon, emploi, salaire, actif,
+                nom_tuteur, prenom_tuteur, ecole, nom_ett, adresse_ett,
+                nom_ge, adresse_ge, date_autorisation_travail,
+                date_demande_autorisation, type_titre_autorisation,
+                numero_autorisation_travail, date_limite_autorisation
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
+        """
 
-            # Insérer le nouveau contrat
-            query = """
-                INSERT INTO contrat (
-                    operateur_id, type_contrat, date_debut, date_fin, etp,
-                    categorie, echelon, emploi, salaire, actif,
-                    nom_tuteur, prenom_tuteur, ecole, nom_ett, adresse_ett,
-                    nom_ge, adresse_ge, date_autorisation_travail,
-                    date_demande_autorisation, type_titre_autorisation,
-                    numero_autorisation_travail, date_limite_autorisation
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-            """
+        values = (
+            data['operateur_id'],
+            data['type_contrat'],
+            data['date_debut'],
+            data.get('date_fin'),
+            data.get('etp', 1.0),
+            data.get('categorie'),
+            data.get('echelon'),
+            data.get('emploi'),
+            data.get('salaire'),
+            data.get('actif', 1),
+            data.get('nom_tuteur'),
+            data.get('prenom_tuteur'),
+            data.get('ecole'),
+            data.get('nom_ett'),
+            data.get('adresse_ett'),
+            data.get('nom_ge'),
+            data.get('adresse_ge'),
+            data.get('date_autorisation_travail'),
+            data.get('date_demande_autorisation'),
+            data.get('type_titre_autorisation'),
+            data.get('numero_autorisation_travail'),
+            data.get('date_limite_autorisation'),
+        )
 
-            values = (
-                data['operateur_id'],
-                data['type_contrat'],
-                data['date_debut'],
-                data.get('date_fin'),
-                data.get('etp', 1.0),
-                data.get('categorie'),
-                data.get('echelon'),
-                data.get('emploi'),
-                data.get('salaire'),
-                data.get('actif', 1),
-                data.get('nom_tuteur'),
-                data.get('prenom_tuteur'),
-                data.get('ecole'),
-                data.get('nom_ett'),
-                data.get('adresse_ett'),
-                data.get('nom_ge'),
-                data.get('adresse_ge'),
-                data.get('date_autorisation_travail'),
-                data.get('date_demande_autorisation'),
-                data.get('type_titre_autorisation'),
-                data.get('numero_autorisation_travail'),
-                data.get('date_limite_autorisation'),
-            )
+        contract_id = QueryExecutor.execute_write(query, values, return_lastrowid=True)
 
-            cursor.execute(query, values)
-            contract_id = cursor.lastrowid
-            cursor.close()
-
-            return True, "Contrat créé avec succès", contract_id
+        return True, "Contrat créé avec succès", contract_id
 
     except Exception as e:
         return False, f"Erreur lors de la création du contrat : {e}", None
@@ -181,61 +177,60 @@ def update_contract(contract_id: int, data: dict) -> Tuple[bool, str]:
         return False, msg
 
     try:
-        with DatabaseCursor() as cursor:
-            query = """
-                UPDATE contrat SET
-                    type_contrat = %s,
-                    date_debut = %s,
-                    date_fin = %s,
-                    etp = %s,
-                    categorie = %s,
-                    echelon = %s,
-                    emploi = %s,
-                    salaire = %s,
-                    actif = %s,
-                    nom_tuteur = %s,
-                    prenom_tuteur = %s,
-                    ecole = %s,
-                    nom_ett = %s,
-                    adresse_ett = %s,
-                    nom_ge = %s,
-                    adresse_ge = %s,
-                    date_autorisation_travail = %s,
-                    date_demande_autorisation = %s,
-                    type_titre_autorisation = %s,
-                    numero_autorisation_travail = %s,
-                    date_limite_autorisation = %s
-                WHERE id = %s
-            """
+        query = """
+            UPDATE contrat SET
+                type_contrat = %s,
+                date_debut = %s,
+                date_fin = %s,
+                etp = %s,
+                categorie = %s,
+                echelon = %s,
+                emploi = %s,
+                salaire = %s,
+                actif = %s,
+                nom_tuteur = %s,
+                prenom_tuteur = %s,
+                ecole = %s,
+                nom_ett = %s,
+                adresse_ett = %s,
+                nom_ge = %s,
+                adresse_ge = %s,
+                date_autorisation_travail = %s,
+                date_demande_autorisation = %s,
+                type_titre_autorisation = %s,
+                numero_autorisation_travail = %s,
+                date_limite_autorisation = %s
+            WHERE id = %s
+        """
 
-            values = (
-                data['type_contrat'],
-                data['date_debut'],
-                data.get('date_fin'),
-                data.get('etp', 1.0),
-                data.get('categorie'),
-                data.get('echelon'),
-                data.get('emploi'),
-                data.get('salaire'),
-                data.get('actif', 1),
-                data.get('nom_tuteur'),
-                data.get('prenom_tuteur'),
-                data.get('ecole'),
-                data.get('nom_ett'),
-                data.get('adresse_ett'),
-                data.get('nom_ge'),
-                data.get('adresse_ge'),
-                data.get('date_autorisation_travail'),
-                data.get('date_demande_autorisation'),
-                data.get('type_titre_autorisation'),
-                data.get('numero_autorisation_travail'),
-                data.get('date_limite_autorisation'),
-                contract_id
-            )
+        values = (
+            data['type_contrat'],
+            data['date_debut'],
+            data.get('date_fin'),
+            data.get('etp', 1.0),
+            data.get('categorie'),
+            data.get('echelon'),
+            data.get('emploi'),
+            data.get('salaire'),
+            data.get('actif', 1),
+            data.get('nom_tuteur'),
+            data.get('prenom_tuteur'),
+            data.get('ecole'),
+            data.get('nom_ett'),
+            data.get('adresse_ett'),
+            data.get('nom_ge'),
+            data.get('adresse_ge'),
+            data.get('date_autorisation_travail'),
+            data.get('date_demande_autorisation'),
+            data.get('type_titre_autorisation'),
+            data.get('numero_autorisation_travail'),
+            data.get('date_limite_autorisation'),
+            contract_id
+        )
 
-            cursor.execute(query, values)
+        QueryExecutor.execute_write(query, values)
 
-            return True, "Contrat mis à jour avec succès"
+        return True, "Contrat mis à jour avec succès"
 
     except Exception as e:
         return False, f"Erreur lors de la mise à jour du contrat : {e}"
@@ -257,14 +252,13 @@ def delete_contract(contract_id: int) -> Tuple[bool, str]:
     require('rh.contrats.delete')
 
     try:
-        with DatabaseCursor() as cursor:
-            # Soft delete : on désactive plutôt que de supprimer
-            cursor.execute(
-                "UPDATE contrat SET actif = 0 WHERE id = %s",
-                (contract_id,)
-            )
+        # Soft delete : on désactive plutôt que de supprimer
+        QueryExecutor.execute_write(
+            "UPDATE contrat SET actif = 0 WHERE id = %s",
+            (contract_id,)
+        )
 
-            return True, "Contrat désactivé avec succès"
+        return True, "Contrat désactivé avec succès"
 
     except Exception as e:
         return False, f"Erreur lors de la suppression du contrat : {e}"
@@ -276,18 +270,14 @@ def delete_contract(contract_id: int) -> Tuple[bool, str]:
 def get_active_contract(operateur_id: int) -> Optional[dict]:
     """Récupère le contrat actif d'un opérateur."""
     try:
-        with DatabaseCursor(dictionary=True) as cursor:
-            cursor.execute("""
-                SELECT c.*, p.nom, p.prenom
-                FROM contrat c
-                LEFT JOIN personnel p ON p.id = c.operateur_id
-                WHERE c.operateur_id = %s AND c.actif = 1
-                ORDER BY c.date_debut DESC
-                LIMIT 1
-            """, (operateur_id,))
-
-            result = cursor.fetchall()
-            return result[0] if result else None
+        return QueryExecutor.fetch_one("""
+            SELECT c.*, p.nom, p.prenom
+            FROM contrat c
+            LEFT JOIN personnel p ON p.id = c.operateur_id
+            WHERE c.operateur_id = %s AND c.actif = 1
+            ORDER BY c.date_debut DESC
+            LIMIT 1
+        """, (operateur_id,), dictionary=True)
 
     except Exception as e:
         logger.error(f"Erreur lors de la récupération du contrat actif : {e}")
@@ -309,9 +299,7 @@ def get_all_contracts(operateur_id: int, include_inactive: bool = False) -> List
 
         query += " ORDER BY c.date_debut DESC"
 
-        with DatabaseCursor(dictionary=True) as cursor:
-            cursor.execute(query, (operateur_id,))
-            return cursor.fetchall()
+        return QueryExecutor.fetch_all(query, (operateur_id,), dictionary=True)
 
     except Exception as e:
         logger.error(f"Erreur lors de la récupération des contrats : {e}")
@@ -321,16 +309,12 @@ def get_all_contracts(operateur_id: int, include_inactive: bool = False) -> List
 def get_contract_by_id(contract_id: int) -> Optional[dict]:
     """Récupère un contrat par son ID."""
     try:
-        with DatabaseCursor(dictionary=True) as cursor:
-            cursor.execute("""
-                SELECT c.*, p.nom, p.prenom
-                FROM contrat c
-                LEFT JOIN personnel p ON p.id = c.operateur_id
-                WHERE c.id = %s
-            """, (contract_id,))
-
-            result = cursor.fetchall()
-            return result[0] if result else None
+        return QueryExecutor.fetch_one("""
+            SELECT c.*, p.nom, p.prenom
+            FROM contrat c
+            LEFT JOIN personnel p ON p.id = c.operateur_id
+            WHERE c.id = %s
+        """, (contract_id,), dictionary=True)
 
     except Exception as e:
         logger.error(f"Erreur lors de la récupération du contrat : {e}")
@@ -351,23 +335,20 @@ def get_expiring_contracts(days: int = 30) -> List[dict]:
     try:
         end_date = date.today() + timedelta(days=days)
 
-        with DatabaseCursor(dictionary=True) as cursor:
-            cursor.execute("""
-                SELECT
-                    c.*,
-                    p.nom,
-                    p.prenom,
-                    DATEDIFF(c.date_fin, CURDATE()) as jours_restants
-                FROM contrat c
-                LEFT JOIN personnel p ON p.id = c.operateur_id
-                WHERE c.actif = 1
-                  AND c.date_fin IS NOT NULL
-                  AND c.date_fin BETWEEN CURDATE() AND %s
-                  AND p.statut = 'ACTIF'
-                ORDER BY c.date_fin ASC
-            """, (end_date,))
-
-            return cursor.fetchall()
+        return QueryExecutor.fetch_all("""
+            SELECT
+                c.*,
+                p.nom,
+                p.prenom,
+                DATEDIFF(c.date_fin, CURDATE()) as jours_restants
+            FROM contrat c
+            LEFT JOIN personnel p ON p.id = c.operateur_id
+            WHERE c.actif = 1
+              AND c.date_fin IS NOT NULL
+              AND c.date_fin BETWEEN CURDATE() AND %s
+              AND p.statut = 'ACTIF'
+            ORDER BY c.date_fin ASC
+        """, (end_date,), dictionary=True)
 
     except Exception as e:
         logger.error(f"Erreur lors de la récupération des contrats expirants : {e}")
@@ -378,21 +359,18 @@ def get_expiring_contracts(days: int = 30) -> List[dict]:
 def get_all_active_contracts() -> List[dict]:
     """Récupère tous les contrats actifs de tous les opérateurs."""
     try:
-        with DatabaseCursor(dictionary=True) as cursor:
-            cursor.execute("""
-                SELECT
-                    c.*,
-                    p.nom,
-                    p.prenom,
-                    p.matricule,
-                    p.statut
-                FROM contrat c
-                LEFT JOIN personnel p ON p.id = c.operateur_id
-                WHERE c.actif = 1
-                ORDER BY p.nom, p.prenom, c.date_debut DESC
-            """)
-
-            return cursor.fetchall()
+        return QueryExecutor.fetch_all("""
+            SELECT
+                c.*,
+                p.nom,
+                p.prenom,
+                p.matricule,
+                p.statut
+            FROM contrat c
+            LEFT JOIN personnel p ON p.id = c.operateur_id
+            WHERE c.actif = 1
+            ORDER BY p.nom, p.prenom, c.date_debut DESC
+        """, dictionary=True)
 
     except Exception as e:
         logger.error(f"Erreur lors de la récupération des contrats actifs : {e}")
@@ -407,43 +385,36 @@ def get_contract_statistics() -> dict:
     try:
         stats = {}
 
-        with DatabaseCursor(dictionary=True) as cursor:
-            # Total contrats actifs
-            cursor.execute("SELECT COUNT(*) as total FROM contrat WHERE actif = 1")
-            result = cursor.fetchall()
-            stats['total_actifs'] = result[0]['total'] if result else 0
+        # Total contrats actifs
+        stats['total_actifs'] = QueryExecutor.fetch_scalar(
+            "SELECT COUNT(*) FROM contrat WHERE actif = 1",
+            default=0
+        )
 
-            # Répartition par type
-            cursor.execute("""
-                SELECT type_contrat, COUNT(*) as count
-                FROM contrat
-                WHERE actif = 1
-                GROUP BY type_contrat
-                ORDER BY count DESC
-            """)
-            stats['par_type'] = cursor.fetchall()
+        # Répartition par type
+        stats['par_type'] = QueryExecutor.fetch_all("""
+            SELECT type_contrat, COUNT(*) as count
+            FROM contrat
+            WHERE actif = 1
+            GROUP BY type_contrat
+            ORDER BY count DESC
+        """, dictionary=True)
 
-            # Contrats expirant < 30j
-            cursor.execute("""
-                SELECT COUNT(*) as total
-                FROM contrat
-                WHERE actif = 1
-                  AND date_fin IS NOT NULL
-                  AND date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-            """)
-            result = cursor.fetchall()
-            stats['expiration_30j'] = result[0]['total'] if result else 0
+        # Contrats expirant < 30j
+        stats['expiration_30j'] = QueryExecutor.fetch_scalar("""
+            SELECT COUNT(*) FROM contrat
+            WHERE actif = 1
+              AND date_fin IS NOT NULL
+              AND date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+        """, default=0)
 
-            # Contrats expirés
-            cursor.execute("""
-                SELECT COUNT(*) as total
-                FROM contrat
-                WHERE actif = 1
-                  AND date_fin IS NOT NULL
-                  AND date_fin < CURDATE()
-            """)
-            result = cursor.fetchall()
-            stats['expires'] = result[0]['total'] if result else 0
+        # Contrats expirés
+        stats['expires'] = QueryExecutor.fetch_scalar("""
+            SELECT COUNT(*) FROM contrat
+            WHERE actif = 1
+              AND date_fin IS NOT NULL
+              AND date_fin < CURDATE()
+        """, default=0)
 
         return stats
 

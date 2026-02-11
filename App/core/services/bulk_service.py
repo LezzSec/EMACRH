@@ -7,16 +7,16 @@ Utilise les services existants (formation_service, absence_service, medical_serv
 pour les opérations unitaires, et ajoute le tracking batch.
 """
 
-import logging
 from datetime import date, datetime
 from typing import List, Dict, Tuple, Optional, Callable, Any
 
-from core.db.configbd import DatabaseConnection, DatabaseCursor
+from core.db.query_executor import QueryExecutor
 from core.services.logger import log_hist
 from core.services.permission_manager import require, can
 from core.services.document_service import DocumentService
+from core.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ============================================================
@@ -34,13 +34,12 @@ def _get_categorie_id_by_name(nom_categorie: str) -> Optional[int]:
         ID de la catégorie ou None si introuvable
     """
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(
-                "SELECT id FROM categories_documents WHERE nom = %s",
-                (nom_categorie,)
-            )
-            row = cur.fetchone()
-            return row['id'] if row else None
+        row = QueryExecutor.fetch_one(
+            "SELECT id FROM categories_documents WHERE nom = %s",
+            (nom_categorie,),
+            dictionary=True
+        )
+        return row['id'] if row else None
     except Exception as e:
         logger.error(f"Erreur récupération catégorie '{nom_categorie}': {e}")
         return None
@@ -93,14 +92,12 @@ def create_batch_operation(
         ID de l'opération batch ou None en cas d'erreur
     """
     try:
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO batch_operations
-                (operation_type, description, nb_personnel, created_by, status)
-                VALUES (%s, %s, %s, %s, 'EN_COURS')
-            """, (operation_type, description, nb_personnel, created_by))
-            return cur.lastrowid
+        return QueryExecutor.execute_write("""
+            INSERT INTO batch_operations
+            (operation_type, description, nb_personnel, created_by, status)
+            VALUES (%s, %s, %s, %s, 'EN_COURS')
+        """, (operation_type, description, nb_personnel, created_by),
+            return_lastrowid=True)
     except Exception as e:
         logger.error(f"Erreur create_batch_operation: {e}")
         return None
@@ -124,13 +121,11 @@ def add_batch_detail(
         error_message: Message d'erreur si échec
     """
     try:
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO batch_operation_details
-                (batch_id, personnel_id, status, record_id, error_message)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (batch_id, personnel_id, status, record_id, error_message))
+        QueryExecutor.execute_write("""
+            INSERT INTO batch_operation_details
+            (batch_id, personnel_id, status, record_id, error_message)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (batch_id, personnel_id, status, record_id, error_message))
     except Exception as e:
         logger.error(f"Erreur add_batch_detail: {e}")
 
@@ -151,13 +146,11 @@ def complete_batch_operation(
         status: TERMINE, ERREUR ou ANNULE
     """
     try:
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                UPDATE batch_operations
-                SET nb_success = %s, nb_errors = %s, status = %s, completed_at = NOW()
-                WHERE id = %s
-            """, (nb_success, nb_errors, status, batch_id))
+        QueryExecutor.execute_write("""
+            UPDATE batch_operations
+            SET nb_success = %s, nb_errors = %s, status = %s, completed_at = NOW()
+            WHERE id = %s
+        """, (nb_success, nb_errors, status, batch_id))
     except Exception as e:
         logger.error(f"Erreur complete_batch_operation: {e}")
 
@@ -221,65 +214,59 @@ def add_formation_batch(
         )
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
+            # Insérer la formation
+            formation_id = QueryExecutor.execute_write("""
+                INSERT INTO formation (
+                    operateur_id, intitule, organisme, date_debut, date_fin,
+                    duree_heures, statut, certificat_obtenu, cout, commentaire
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                personnel_id,
+                formation_data.get('intitule'),
+                formation_data.get('organisme'),
+                formation_data.get('date_debut'),
+                formation_data.get('date_fin'),
+                formation_data.get('duree_heures'),
+                formation_data.get('statut', 'Planifiée'),
+                formation_data.get('certificat_obtenu', False),
+                formation_data.get('cout'),
+                formation_data.get('commentaire')
+            ), return_lastrowid=True)
 
-                # Insérer la formation
-                cur.execute("""
-                    INSERT INTO formation (
-                        operateur_id, intitule, organisme, date_debut, date_fin,
-                        duree_heures, statut, certificat_obtenu, cout, commentaire
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    personnel_id,
-                    formation_data.get('intitule'),
-                    formation_data.get('organisme'),
-                    formation_data.get('date_debut'),
-                    formation_data.get('date_fin'),
-                    formation_data.get('duree_heures'),
-                    formation_data.get('statut', 'Planifiée'),
-                    formation_data.get('certificat_obtenu', False),
-                    formation_data.get('cout'),
-                    formation_data.get('commentaire')
-                ))
+            # Ajouter le document si fourni
+            if doc_service and document_path and categorie_formation_id:
+                try:
+                    success, message, document_id = doc_service.add_document(
+                        personnel_id=personnel_id,
+                        categorie_id=categorie_formation_id,
+                        fichier_source=document_path,
+                        nom_affichage=f"Attestation - {formation_data.get('intitule', 'Formation')}",
+                        notes=f"Document associé à la formation du {formation_data.get('date_debut')}",
+                        uploaded_by=created_by or "Système"
+                    )
 
-                formation_id = cur.lastrowid
-
-                # Ajouter le document si fourni
-                if doc_service and document_path and categorie_formation_id:
-                    try:
-                        success, message, document_id = doc_service.add_document(
-                            personnel_id=personnel_id,
-                            categorie_id=categorie_formation_id,
-                            fichier_source=document_path,
-                            nom_affichage=f"Attestation - {formation_data.get('intitule', 'Formation')}",
-                            notes=f"Document associé à la formation du {formation_data.get('date_debut')}",
-                            uploaded_by=created_by or "Système"
+                    if success and document_id:
+                        # Lier le document à la formation
+                        QueryExecutor.execute_write(
+                            "UPDATE documents SET formation_id = %s WHERE id = %s",
+                            (formation_id, document_id)
                         )
+                        logger.debug(f"Document {document_id} lié à la formation {formation_id}")
+                    else:
+                        logger.warning(f"Échec ajout document pour formation {formation_id}: {message}")
+                except Exception as doc_error:
+                    logger.error(f"Erreur ajout document pour formation {formation_id}: {doc_error}")
 
-                        if success and document_id:
-                            # Lier le document à la formation
-                            cur.execute(
-                                "UPDATE documents SET formation_id = %s WHERE id = %s",
-                                (formation_id, document_id)
-                            )
-                            conn.commit()
-                            logger.debug(f"Document {document_id} lié à la formation {formation_id}")
-                        else:
-                            logger.warning(f"Échec ajout document pour formation {formation_id}: {message}")
-                    except Exception as doc_error:
-                        logger.error(f"Erreur ajout document pour formation {formation_id}: {doc_error}")
+            nb_success += 1
 
-                nb_success += 1
+            details.append({
+                'personnel_id': personnel_id,
+                'status': 'SUCCES',
+                'record_id': formation_id
+            })
 
-                details.append({
-                    'personnel_id': personnel_id,
-                    'status': 'SUCCES',
-                    'record_id': formation_id
-                })
-
-                if batch_id:
-                    add_batch_detail(batch_id, personnel_id, 'SUCCES', formation_id)
+            if batch_id:
+                add_batch_detail(batch_id, personnel_id, 'SUCCES', formation_id)
 
         except Exception as e:
             nb_errors += 1
@@ -341,11 +328,13 @@ def add_absence_batch(
     type_absence_code = absence_data.get('type_absence_code')
 
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("SELECT id FROM type_absence WHERE code = %s", (type_absence_code,))
-            row = cur.fetchone()
-            if row:
-                type_absence_id = row['id']
+        row = QueryExecutor.fetch_one(
+            "SELECT id FROM type_absence WHERE code = %s",
+            (type_absence_code,),
+            dictionary=True
+        )
+        if row:
+            type_absence_id = row['id']
     except Exception as e:
         logger.error(f"Type d'absence introuvable: {e}")
         return 0, len(personnel_ids), [{'personnel_id': pid, 'status': 'ERREUR', 'error': f"Type d'absence '{type_absence_code}' introuvable"} for pid in personnel_ids]
@@ -394,57 +383,52 @@ def add_absence_batch(
         )
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
+            demande_id = QueryExecutor.execute_write("""
+                INSERT INTO demande_absence
+                (personnel_id, type_absence_id, date_debut, date_fin,
+                 demi_journee_debut, demi_journee_fin, nb_jours, motif, statut)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                personnel_id,
+                type_absence_id,
+                absence_data.get('date_debut'),
+                absence_data.get('date_fin'),
+                absence_data.get('demi_journee_debut', 'JOURNEE'),
+                absence_data.get('demi_journee_fin', 'JOURNEE'),
+                nb_jours,
+                absence_data.get('motif', ''),
+                absence_data.get('statut', 'EN_ATTENTE')
+            ), return_lastrowid=True)
 
-                cur.execute("""
-                    INSERT INTO demande_absence
-                    (personnel_id, type_absence_id, date_debut, date_fin,
-                     demi_journee_debut, demi_journee_fin, nb_jours, motif, statut)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    personnel_id,
-                    type_absence_id,
-                    absence_data.get('date_debut'),
-                    absence_data.get('date_fin'),
-                    absence_data.get('demi_journee_debut', 'JOURNEE'),
-                    absence_data.get('demi_journee_fin', 'JOURNEE'),
-                    nb_jours,
-                    absence_data.get('motif', ''),
-                    absence_data.get('statut', 'EN_ATTENTE')
-                ))
+            # Ajouter le justificatif si fourni
+            if doc_service and document_path and categorie_admin_id:
+                try:
+                    success, message, document_id = doc_service.add_document(
+                        personnel_id=personnel_id,
+                        categorie_id=categorie_admin_id,
+                        fichier_source=document_path,
+                        nom_affichage=f"Justificatif absence - {type_absence_code}",
+                        notes=f"Justificatif pour absence du {absence_data.get('date_debut')} au {absence_data.get('date_fin')}",
+                        uploaded_by=created_by or "Système"
+                    )
 
-                demande_id = cur.lastrowid
+                    if not success:
+                        logger.warning(f"Échec ajout justificatif pour absence {demande_id}: {message}")
+                    else:
+                        logger.debug(f"Justificatif {document_id} ajouté pour absence {demande_id}")
+                except Exception as doc_error:
+                    logger.error(f"Erreur ajout justificatif pour absence {demande_id}: {doc_error}")
 
-                # Ajouter le justificatif si fourni
-                if doc_service and document_path and categorie_admin_id:
-                    try:
-                        success, message, document_id = doc_service.add_document(
-                            personnel_id=personnel_id,
-                            categorie_id=categorie_admin_id,
-                            fichier_source=document_path,
-                            nom_affichage=f"Justificatif absence - {type_absence_code}",
-                            notes=f"Justificatif pour absence du {absence_data.get('date_debut')} au {absence_data.get('date_fin')}",
-                            uploaded_by=created_by or "Système"
-                        )
+            nb_success += 1
 
-                        if not success:
-                            logger.warning(f"Échec ajout justificatif pour absence {demande_id}: {message}")
-                        else:
-                            logger.debug(f"Justificatif {document_id} ajouté pour absence {demande_id}")
-                    except Exception as doc_error:
-                        logger.error(f"Erreur ajout justificatif pour absence {demande_id}: {doc_error}")
+            details.append({
+                'personnel_id': personnel_id,
+                'status': 'SUCCES',
+                'record_id': demande_id
+            })
 
-                nb_success += 1
-
-                details.append({
-                    'personnel_id': personnel_id,
-                    'status': 'SUCCES',
-                    'record_id': demande_id
-                })
-
-                if batch_id:
-                    add_batch_detail(batch_id, personnel_id, 'SUCCES', demande_id)
+            if batch_id:
+                add_batch_detail(batch_id, personnel_id, 'SUCCES', demande_id)
 
         except Exception as e:
             nb_errors += 1
@@ -533,56 +517,51 @@ def add_visite_batch(
         )
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
+            visite_id = QueryExecutor.execute_write("""
+                INSERT INTO medical_visite (
+                    operateur_id, date_visite, type_visite, resultat,
+                    restrictions, medecin, commentaire, prochaine_visite
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                personnel_id,
+                visite_data.get('date_visite'),
+                visite_data.get('type_visite', 'Périodique'),
+                visite_data.get('resultat'),
+                visite_data.get('restrictions'),
+                visite_data.get('medecin'),
+                visite_data.get('commentaire'),
+                visite_data.get('prochaine_visite')
+            ), return_lastrowid=True)
 
-                cur.execute("""
-                    INSERT INTO medical_visite (
-                        operateur_id, date_visite, type_visite, resultat,
-                        restrictions, medecin, commentaire, prochaine_visite
-                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """, (
-                    personnel_id,
-                    visite_data.get('date_visite'),
-                    visite_data.get('type_visite', 'Périodique'),
-                    visite_data.get('resultat'),
-                    visite_data.get('restrictions'),
-                    visite_data.get('medecin'),
-                    visite_data.get('commentaire'),
-                    visite_data.get('prochaine_visite')
-                ))
+            # Ajouter le document médical si fourni
+            if doc_service and document_path and categorie_medical_id:
+                try:
+                    success, message, document_id = doc_service.add_document(
+                        personnel_id=personnel_id,
+                        categorie_id=categorie_medical_id,
+                        fichier_source=document_path,
+                        nom_affichage=f"Fiche aptitude - {visite_data.get('type_visite', 'Visite')}",
+                        notes=f"Document pour visite {visite_data.get('type_visite')} du {visite_data.get('date_visite')}",
+                        uploaded_by=created_by or "Système"
+                    )
 
-                visite_id = cur.lastrowid
+                    if not success:
+                        logger.warning(f"Échec ajout document médical pour visite {visite_id}: {message}")
+                    else:
+                        logger.debug(f"Document médical {document_id} ajouté pour visite {visite_id}")
+                except Exception as doc_error:
+                    logger.error(f"Erreur ajout document médical pour visite {visite_id}: {doc_error}")
 
-                # Ajouter le document médical si fourni
-                if doc_service and document_path and categorie_medical_id:
-                    try:
-                        success, message, document_id = doc_service.add_document(
-                            personnel_id=personnel_id,
-                            categorie_id=categorie_medical_id,
-                            fichier_source=document_path,
-                            nom_affichage=f"Fiche aptitude - {visite_data.get('type_visite', 'Visite')}",
-                            notes=f"Document pour visite {visite_data.get('type_visite')} du {visite_data.get('date_visite')}",
-                            uploaded_by=created_by or "Système"
-                        )
+            nb_success += 1
 
-                        if not success:
-                            logger.warning(f"Échec ajout document médical pour visite {visite_id}: {message}")
-                        else:
-                            logger.debug(f"Document médical {document_id} ajouté pour visite {visite_id}")
-                    except Exception as doc_error:
-                        logger.error(f"Erreur ajout document médical pour visite {visite_id}: {doc_error}")
+            details.append({
+                'personnel_id': personnel_id,
+                'status': 'SUCCES',
+                'record_id': visite_id
+            })
 
-                nb_success += 1
-
-                details.append({
-                    'personnel_id': personnel_id,
-                    'status': 'SUCCES',
-                    'record_id': visite_id
-                })
-
-                if batch_id:
-                    add_batch_detail(batch_id, personnel_id, 'SUCCES', visite_id)
+            if batch_id:
+                add_batch_detail(batch_id, personnel_id, 'SUCCES', visite_id)
 
         except Exception as e:
             nb_errors += 1
@@ -646,11 +625,13 @@ def add_competence_batch(
     # Récupérer le libellé de la compétence pour le tracking
     competence_libelle = "Compétence"
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("SELECT libelle FROM competences_catalogue WHERE id = %s", (competence_id,))
-            row = cur.fetchone()
-            if row:
-                competence_libelle = row['libelle']
+        row = QueryExecutor.fetch_one(
+            "SELECT libelle FROM competences_catalogue WHERE id = %s",
+            (competence_id,),
+            dictionary=True
+        )
+        if row:
+            competence_libelle = row['libelle']
     except Exception as e:
         logger.error(f"Erreur récupération libellé compétence: {e}")
 
@@ -686,75 +667,70 @@ def add_competence_batch(
         )
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
+            # Vérifier si déjà assignée (pour éviter les doublons)
+            existing = QueryExecutor.fetch_one("""
+                SELECT id FROM personnel_competences
+                WHERE personnel_id = %s AND competence_id = %s
+            """, (personnel_id, competence_id), dictionary=True)
 
-                # Vérifier si déjà assignée (pour éviter les doublons)
-                cur.execute("""
-                    SELECT id FROM personnel_competences
+            if existing:
+                # Mettre à jour au lieu de créer
+                QueryExecutor.execute_write("""
+                    UPDATE personnel_competences
+                    SET date_acquisition = %s, date_expiration = %s, commentaire = %s
                     WHERE personnel_id = %s AND competence_id = %s
-                """, (personnel_id, competence_id))
+                """, (
+                    competence_data.get('date_acquisition'),
+                    competence_data.get('date_expiration'),
+                    competence_data.get('commentaire'),
+                    personnel_id,
+                    competence_id
+                ))
+                record_id = existing['id']
+            else:
+                # Créer une nouvelle assignation
+                record_id = QueryExecutor.execute_write("""
+                    INSERT INTO personnel_competences
+                    (personnel_id, competence_id, date_acquisition, date_expiration, commentaire)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (
+                    personnel_id,
+                    competence_id,
+                    competence_data.get('date_acquisition'),
+                    competence_data.get('date_expiration'),
+                    competence_data.get('commentaire')
+                ), return_lastrowid=True)
 
-                existing = cur.fetchone()
-                if existing:
-                    # Mettre à jour au lieu de créer
-                    cur.execute("""
-                        UPDATE personnel_competences
-                        SET date_acquisition = %s, date_expiration = %s, commentaire = %s
-                        WHERE personnel_id = %s AND competence_id = %s
-                    """, (
-                        competence_data.get('date_acquisition'),
-                        competence_data.get('date_expiration'),
-                        competence_data.get('commentaire'),
-                        personnel_id,
-                        competence_id
-                    ))
-                    record_id = existing[0]
-                else:
-                    # Créer une nouvelle assignation
-                    cur.execute("""
-                        INSERT INTO personnel_competences
-                        (personnel_id, competence_id, date_acquisition, date_expiration, commentaire)
-                        VALUES (%s, %s, %s, %s, %s)
-                    """, (
-                        personnel_id,
-                        competence_id,
-                        competence_data.get('date_acquisition'),
-                        competence_data.get('date_expiration'),
-                        competence_data.get('commentaire')
-                    ))
-                    record_id = cur.lastrowid
+            # Ajouter l'attestation de compétence si fournie
+            if doc_service and document_path and categorie_formation_id:
+                try:
+                    success, message, document_id = doc_service.add_document(
+                        personnel_id=personnel_id,
+                        categorie_id=categorie_formation_id,
+                        fichier_source=document_path,
+                        nom_affichage=f"Attestation - {competence_libelle}",
+                        notes=f"Attestation pour compétence acquise le {competence_data.get('date_acquisition')}",
+                        date_expiration=competence_data.get('date_expiration'),
+                        uploaded_by=created_by or "Système"
+                    )
 
-                # Ajouter l'attestation de compétence si fournie
-                if doc_service and document_path and categorie_formation_id:
-                    try:
-                        success, message, document_id = doc_service.add_document(
-                            personnel_id=personnel_id,
-                            categorie_id=categorie_formation_id,
-                            fichier_source=document_path,
-                            nom_affichage=f"Attestation - {competence_libelle}",
-                            notes=f"Attestation pour compétence acquise le {competence_data.get('date_acquisition')}",
-                            date_expiration=competence_data.get('date_expiration'),
-                            uploaded_by=created_by or "Système"
-                        )
+                    if not success:
+                        logger.warning(f"Échec ajout attestation pour compétence {record_id}: {message}")
+                    else:
+                        logger.debug(f"Attestation {document_id} ajoutée pour compétence {record_id}")
+                except Exception as doc_error:
+                    logger.error(f"Erreur ajout attestation pour compétence {record_id}: {doc_error}")
 
-                        if not success:
-                            logger.warning(f"Échec ajout attestation pour compétence {record_id}: {message}")
-                        else:
-                            logger.debug(f"Attestation {document_id} ajoutée pour compétence {record_id}")
-                    except Exception as doc_error:
-                        logger.error(f"Erreur ajout attestation pour compétence {record_id}: {doc_error}")
+            nb_success += 1
 
-                nb_success += 1
+            details.append({
+                'personnel_id': personnel_id,
+                'status': 'SUCCES',
+                'record_id': record_id
+            })
 
-                details.append({
-                    'personnel_id': personnel_id,
-                    'status': 'SUCCES',
-                    'record_id': record_id
-                })
-
-                if batch_id:
-                    add_batch_detail(batch_id, personnel_id, 'SUCCES', record_id)
+            if batch_id:
+                add_batch_detail(batch_id, personnel_id, 'SUCCES', record_id)
 
         except Exception as e:
             nb_errors += 1
@@ -796,14 +772,12 @@ def get_personnel_list_for_bulk() -> List[Dict]:
         Liste des opérateurs (id, nom, prenom, matricule, statut)
     """
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT id, nom, prenom, matricule, statut
-                FROM personnel
-                WHERE statut = 'ACTIF'
-                ORDER BY nom, prenom
-            """)
-            return cur.fetchall()
+        return QueryExecutor.fetch_all("""
+            SELECT id, nom, prenom, matricule, statut
+            FROM personnel
+            WHERE statut = 'ACTIF'
+            ORDER BY nom, prenom
+        """, dictionary=True)
     except Exception as e:
         logger.error(f"Erreur get_personnel_list_for_bulk: {e}")
         return []
@@ -820,14 +794,12 @@ def get_batch_operations_history(limit: int = 50) -> List[Dict]:
         Liste des opérations batch
     """
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT *
-                FROM batch_operations
-                ORDER BY created_at DESC
-                LIMIT %s
-            """, (limit,))
-            return cur.fetchall()
+        return QueryExecutor.fetch_all("""
+            SELECT *
+            FROM batch_operations
+            ORDER BY created_at DESC
+            LIMIT %s
+        """, (limit,), dictionary=True)
     except Exception as e:
         logger.error(f"Erreur get_batch_operations_history: {e}")
         return []
@@ -844,19 +816,17 @@ def get_batch_operation_details(batch_id: int) -> List[Dict]:
         Liste des détails avec infos personnel
     """
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT
-                    bod.*,
-                    p.nom,
-                    p.prenom,
-                    p.matricule
-                FROM batch_operation_details bod
-                JOIN personnel p ON bod.personnel_id = p.id
-                WHERE bod.batch_id = %s
-                ORDER BY p.nom, p.prenom
-            """, (batch_id,))
-            return cur.fetchall()
+        return QueryExecutor.fetch_all("""
+            SELECT
+                bod.*,
+                p.nom,
+                p.prenom,
+                p.matricule
+            FROM batch_operation_details bod
+            JOIN personnel p ON bod.personnel_id = p.id
+            WHERE bod.batch_id = %s
+            ORDER BY p.nom, p.prenom
+        """, (batch_id,), dictionary=True)
     except Exception as e:
         logger.error(f"Erreur get_batch_operation_details: {e}")
         return []

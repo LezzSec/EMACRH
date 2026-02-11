@@ -20,13 +20,13 @@ Usage:
 """
 
 import json
-import logging
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from core.db.configbd import DatabaseCursor
+from core.db.query_executor import QueryExecutor
+from core.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -60,14 +60,12 @@ def check_event_rules_table_exists() -> bool:
         True si la table existe, False sinon
     """
     try:
-        with DatabaseCursor() as cur:
-            cur.execute("""
-                SELECT COUNT(*) FROM information_schema.tables
-                WHERE table_schema = DATABASE()
-                AND table_name = 'document_event_rules'
-            """)
-            result = cur.fetchone()
-            return result[0] > 0
+        count = QueryExecutor.fetch_scalar("""
+            SELECT COUNT(*) FROM information_schema.tables
+            WHERE table_schema = DATABASE()
+            AND table_name = 'document_event_rules'
+        """, default=0)
+        return count > 0
     except Exception:
         return False
 
@@ -109,9 +107,7 @@ def get_rules_for_event(event_name: str) -> List[EventRule]:
     """
 
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (event_name,))
-            rows = cur.fetchall()
+        rows = QueryExecutor.fetch_all(query, (event_name,), dictionary=True)
     except Exception as e:
         logger.error(f"Erreur lecture règles pour '{event_name}': {e}")
         return []
@@ -309,15 +305,13 @@ def get_all_event_names() -> List[str]:
         return []
 
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT DISTINCT event_name
-                FROM document_event_rules
-                WHERE actif = TRUE
-                ORDER BY event_name
-            """)
-            rows = cur.fetchall()
-            return [row['event_name'] for row in rows]
+        rows = QueryExecutor.fetch_all("""
+            SELECT DISTINCT event_name
+            FROM document_event_rules
+            WHERE actif = TRUE
+            ORDER BY event_name
+        """, dictionary=True)
+        return [row['event_name'] for row in rows]
     except Exception as e:
         logger.error(f"Erreur lecture noms d'événements: {e}")
         return []
@@ -334,22 +328,20 @@ def get_rules_summary() -> List[Dict]:
         return []
 
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT
-                    r.id,
-                    r.event_name,
-                    r.execution_mode,
-                    r.priority,
-                    r.actif,
-                    r.description,
-                    t.nom as template_nom,
-                    t.contexte as template_contexte
-                FROM document_event_rules r
-                JOIN documents_templates t ON r.template_id = t.id
-                ORDER BY r.event_name, r.priority
-            """)
-            return cur.fetchall()
+        return QueryExecutor.fetch_all("""
+            SELECT
+                r.id,
+                r.event_name,
+                r.execution_mode,
+                r.priority,
+                r.actif,
+                r.description,
+                t.nom as template_nom,
+                t.contexte as template_contexte
+            FROM document_event_rules r
+            JOIN documents_templates t ON r.template_id = t.id
+            ORDER BY r.event_name, r.priority
+        """, dictionary=True)
     except Exception as e:
         logger.error(f"Erreur lecture résumé règles: {e}")
         return []

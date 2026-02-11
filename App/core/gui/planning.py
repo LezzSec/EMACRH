@@ -1,7 +1,6 @@
 # regularisation.py – Planning & Absences
 # Gestion des absences, congés et planning du personnel
 
-import logging
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QMessageBox, QTableWidget, QTableWidgetItem, QDateEdit, QComboBox,
@@ -11,10 +10,11 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QTextCharFormat
 from datetime import date, datetime, timedelta
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+from core.db.query_executor import QueryExecutor
 from core.services.logger import log_hist
+from core.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 
 try:
@@ -188,26 +188,23 @@ class RegularisationDialog(QDialog):
     def load_absents_today(self):
         """Charge la liste des absents aujourd'hui."""
         try:
-            with DatabaseCursor(dictionary=True) as cursor:
-                today = date.today()
+            today = date.today()
 
-                cursor.execute("""
-                    SELECT
-                        d.id,
-                        d.operateur_id,
-                        p.nom,
-                        p.prenom,
-                        d.type_declaration,
-                        d.date_debut,
-                        d.date_fin,
-                        d.motif
-                    FROM declaration d
-                    LEFT JOIN personnel p ON p.id = d.operateur_id
-                    WHERE %s BETWEEN d.date_debut AND d.date_fin
-                    ORDER BY p.nom, p.prenom
-                """, (today,))
-
-                rows = cursor.fetchall()
+            rows = QueryExecutor.fetch_all("""
+                SELECT
+                    d.id,
+                    d.operateur_id,
+                    p.nom,
+                    p.prenom,
+                    d.type_declaration,
+                    d.date_debut,
+                    d.date_fin,
+                    d.motif
+                FROM declaration d
+                LEFT JOIN personnel p ON p.id = d.operateur_id
+                WHERE %s BETWEEN d.date_debut AND d.date_fin
+                ORDER BY p.nom, p.prenom
+            """, (today,), dictionary=True)
 
             self.absents_table.setRowCount(0)
 
@@ -351,15 +348,12 @@ class RegularisationDialog(QDialog):
     def load_personnel_combo(self):
         """Charge la liste du personnel dans le combo."""
         try:
-            with DatabaseCursor(dictionary=True) as cursor:
-                cursor.execute("""
-                    SELECT id, nom, prenom, matricule
-                    FROM personnel
-                    WHERE statut = 'ACTIF'
-                    ORDER BY nom, prenom
-                """)
-
-                rows = cursor.fetchall()
+            rows = QueryExecutor.fetch_all("""
+                SELECT id, nom, prenom, matricule
+                FROM personnel
+                WHERE statut = 'ACTIF'
+                ORDER BY nom, prenom
+            """, dictionary=True)
 
             self.personnel_combo.clear()
 
@@ -392,35 +386,21 @@ class RegularisationDialog(QDialog):
             return
 
         try:
-            with DatabaseConnection() as connection:
-                cursor = connection.cursor()
+            new_id = QueryExecutor.execute_write("""
+                INSERT INTO declaration (operateur_id, type_declaration, date_debut, date_fin, motif)
+                VALUES (%s, %s, %s, %s, %s)
+            """, (operateur_id, type_decl, date_debut, date_fin, motif), return_lastrowid=True)
 
-                cursor.execute("""
-                    INSERT INTO declaration (operateur_id, type_declaration, date_debut, date_fin, motif)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (operateur_id, type_decl, date_debut, date_fin, motif))
-
-                connection.commit()
-
-                # Logger l'action
-                try:
-                    log_insert(
-                        "declaration",
-                        description=f"Déclaration d'absence : {type_decl}",
-                        record_id=cursor.lastrowid,
-                        details={
-                            "operateur_id": operateur_id,
-                            "type": type_decl,
-                            "debut": str(date_debut),
-                            "fin": str(date_fin)
-                        },
-                        connection=connection,
-                        cursor=cursor
-                    )
-                except Exception:
-                    pass
-
-                cursor.close()
+            # Logger l'action
+            try:
+                log_hist(
+                    "INSERT",
+                    f"Déclaration d'absence : {type_decl}",
+                    operateur_id,
+                    None
+                )
+            except Exception:
+                pass
 
             QMessageBox.information(
                 self, "Succès",
@@ -495,16 +475,13 @@ class RegularisationDialog(QDialog):
             else:
                 last_day = date(current_date.year, current_date.month + 1, 1) - timedelta(days=1)
 
-            with DatabaseCursor(dictionary=True) as cursor:
-                cursor.execute("""
-                    SELECT DISTINCT date_debut, date_fin
-                    FROM declaration
-                    WHERE (date_debut BETWEEN %s AND %s)
-                       OR (date_fin BETWEEN %s AND %s)
-                       OR (date_debut <= %s AND date_fin >= %s)
-                """, (first_day, last_day, first_day, last_day, first_day, last_day))
-
-                rows = cursor.fetchall()
+            rows = QueryExecutor.fetch_all("""
+                SELECT DISTINCT date_debut, date_fin
+                FROM declaration
+                WHERE (date_debut BETWEEN %s AND %s)
+                   OR (date_fin BETWEEN %s AND %s)
+                   OR (date_debut <= %s AND date_fin >= %s)
+            """, (first_day, last_day, first_day, last_day, first_day, last_day), dictionary=True)
 
             # Réinitialiser le format
             default_format = QTextCharFormat()
@@ -541,20 +518,17 @@ class RegularisationDialog(QDialog):
         self.selected_date_label.setText(f"📅 Absences du {selected.strftime('%d/%m/%Y')}")
 
         try:
-            with DatabaseCursor(dictionary=True) as cursor:
-                cursor.execute("""
-                    SELECT
-                        p.nom,
-                        p.prenom,
-                        d.type_declaration,
-                        d.motif
-                    FROM declaration d
-                    LEFT JOIN personnel p ON p.id = d.operateur_id
-                    WHERE %s BETWEEN d.date_debut AND d.date_fin
-                    ORDER BY p.nom, p.prenom
-                """, (selected,))
-
-                rows = cursor.fetchall()
+            rows = QueryExecutor.fetch_all("""
+                SELECT
+                    p.nom,
+                    p.prenom,
+                    d.type_declaration,
+                    d.motif
+                FROM declaration d
+                LEFT JOIN personnel p ON p.id = d.operateur_id
+                WHERE %s BETWEEN d.date_debut AND d.date_fin
+                ORDER BY p.nom, p.prenom
+            """, (selected,), dictionary=True)
 
             self.calendar_absents_list.clear()
 
@@ -656,16 +630,13 @@ class RegularisationDialog(QDialog):
     def load_eval_postes_filter(self):
         """Charge la liste des postes pour le filtre d'évaluations."""
         try:
-            with DatabaseCursor(dictionary=True) as cursor:
-                cursor.execute("""
-                    SELECT DISTINCT p.id, p.poste_code
-                    FROM postes p
-                    INNER JOIN polyvalence poly ON poly.poste_id = p.id
-                    WHERE p.visible = 1
-                    ORDER BY p.poste_code
-                """)
-
-                rows = cursor.fetchall()
+            rows = QueryExecutor.fetch_all("""
+                SELECT DISTINCT p.id, p.poste_code
+                FROM postes p
+                INNER JOIN polyvalence poly ON poly.poste_id = p.id
+                WHERE p.visible = 1
+                ORDER BY p.poste_code
+            """, dictionary=True)
 
             self.eval_poste_filter.clear()
             self.eval_poste_filter.addItem("(Tous)", None)
@@ -690,18 +661,15 @@ class RegularisationDialog(QDialog):
             else:
                 last_day = date(year, month + 1, 1) - timedelta(days=1)
 
-            with DatabaseCursor(dictionary=True) as cursor:
-                cursor.execute("""
-                    SELECT DISTINCT DATE(poly.prochaine_evaluation) as eval_date
-                    FROM polyvalence poly
-                    JOIN personnel pers ON poly.operateur_id = pers.id
-                    JOIN postes p ON poly.poste_id = p.id
-                    WHERE poly.prochaine_evaluation BETWEEN %s AND %s
-                      AND pers.statut = 'ACTIF'
-                      AND p.visible = 1
-                """, (first_day, last_day))
-
-                rows = cursor.fetchall()
+            rows = QueryExecutor.fetch_all("""
+                SELECT DISTINCT DATE(poly.prochaine_evaluation) as eval_date
+                FROM polyvalence poly
+                JOIN personnel pers ON poly.operateur_id = pers.id
+                JOIN postes p ON poly.poste_id = p.id
+                WHERE poly.prochaine_evaluation BETWEEN %s AND %s
+                  AND pers.statut = 'ACTIF'
+                  AND p.visible = 1
+            """, (first_day, last_day), dictionary=True)
 
             self.eval_dates_cache = set()
             for r in rows:
@@ -794,9 +762,7 @@ class RegularisationDialog(QDialog):
 
             query += " ORDER BY pers.nom, pers.prenom, p.poste_code"
 
-            with DatabaseCursor(dictionary=True) as cursor:
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
+            rows = QueryExecutor.fetch_all(query, params, dictionary=True)
 
             self.eval_calendar_list.clear()
 
@@ -970,9 +936,7 @@ class RegularisationDialog(QDialog):
 
             query += " ORDER BY d.date_debut DESC, p.nom, p.prenom"
 
-            with DatabaseCursor(dictionary=True) as cursor:
-                cursor.execute(query, params)
-                rows = cursor.fetchall()
+            rows = QueryExecutor.fetch_all(query, params, dictionary=True)
 
             self.history_table.setRowCount(0)
 
@@ -1040,11 +1004,7 @@ class RegularisationDialog(QDialog):
             return
 
         try:
-            with DatabaseConnection() as connection:
-                cursor = connection.cursor()
-                cursor.execute("DELETE FROM declaration WHERE id = %s", (decl_id,))
-                connection.commit()
-                cursor.close()
+            QueryExecutor.execute_write("DELETE FROM declaration WHERE id = %s", (decl_id,))
 
             QMessageBox.information(self, "Succès", "✅ Déclaration supprimée avec succès.")
 

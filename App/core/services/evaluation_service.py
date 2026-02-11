@@ -8,12 +8,13 @@ Fournit les fonctions pour recuperer les evaluations en retard et a venir
 - DTOs typés pour robustesse (EvaluationResume, Polyvalence)
 """
 
-import logging
 from datetime import datetime, date, timedelta
-
-logger = logging.getLogger(__name__)
 from typing import List, Dict, Optional
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+
+from core.db.query_executor import QueryExecutor
+from core.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # ✅ OPTIMISATIONS : Monitoring + Logs optimisés
 from core.utils.performance_monitor import monitor_query
@@ -35,31 +36,28 @@ def get_evaluations_en_retard() -> List[Dict]:
     Returns:
         List[Dict]: Liste des evaluations en retard avec informations employe et poste
     """
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT
-                p.id as polyvalence_id,
-                p.operateur_id,
-                pers.nom,
-                pers.prenom,
-                pers.matricule,
-                p.poste_id,
-                pos.poste_code,
-                a.nom as nom_atelier,
-                p.niveau,
-                p.date_evaluation,
-                p.prochaine_evaluation,
-                DATEDIFF(CURDATE(), p.prochaine_evaluation) as jours_retard
-            FROM polyvalence p
-            JOIN personnel pers ON p.operateur_id = pers.id
-            JOIN postes pos ON p.poste_id = pos.id
-            LEFT JOIN atelier a ON pos.atelier_id = a.id
-            WHERE pers.statut = 'ACTIF'
-              AND p.prochaine_evaluation < CURDATE()
-            ORDER BY jours_retard DESC, p.prochaine_evaluation ASC
-        """)
-
-        return cur.fetchall()
+    return QueryExecutor.fetch_all("""
+        SELECT
+            p.id as polyvalence_id,
+            p.operateur_id,
+            pers.nom,
+            pers.prenom,
+            pers.matricule,
+            p.poste_id,
+            pos.poste_code,
+            a.nom as nom_atelier,
+            p.niveau,
+            p.date_evaluation,
+            p.prochaine_evaluation,
+            DATEDIFF(CURDATE(), p.prochaine_evaluation) as jours_retard
+        FROM polyvalence p
+        JOIN personnel pers ON p.operateur_id = pers.id
+        JOIN postes pos ON p.poste_id = pos.id
+        LEFT JOIN atelier a ON pos.atelier_id = a.id
+        WHERE pers.statut = 'ACTIF'
+          AND p.prochaine_evaluation < CURDATE()
+        ORDER BY jours_retard DESC, p.prochaine_evaluation ASC
+    """, dictionary=True)
 
 
 @monitor_query('Get Prochaines Evaluations')
@@ -75,31 +73,28 @@ def get_prochaines_evaluations(jours: int = 30) -> List[Dict]:
     """
     date_limite = date.today() + timedelta(days=jours)
 
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT
-                p.id as polyvalence_id,
-                p.operateur_id,
-                pers.nom,
-                pers.prenom,
-                pers.matricule,
-                p.poste_id,
-                pos.poste_code,
-                a.nom as nom_atelier,
-                p.niveau,
-                p.date_evaluation,
-                p.prochaine_evaluation,
-                DATEDIFF(p.prochaine_evaluation, CURDATE()) as jours_restants
-            FROM polyvalence p
-            JOIN personnel pers ON p.operateur_id = pers.id
-            JOIN postes pos ON p.poste_id = pos.id
-            LEFT JOIN atelier a ON pos.atelier_id = a.id
-            WHERE pers.statut = 'ACTIF'
-              AND p.prochaine_evaluation BETWEEN CURDATE() AND %s
-            ORDER BY p.prochaine_evaluation ASC
-        """, (date_limite,))
-
-        return cur.fetchall()
+    return QueryExecutor.fetch_all("""
+        SELECT
+            p.id as polyvalence_id,
+            p.operateur_id,
+            pers.nom,
+            pers.prenom,
+            pers.matricule,
+            p.poste_id,
+            pos.poste_code,
+            a.nom as nom_atelier,
+            p.niveau,
+            p.date_evaluation,
+            p.prochaine_evaluation,
+            DATEDIFF(p.prochaine_evaluation, CURDATE()) as jours_restants
+        FROM polyvalence p
+        JOIN personnel pers ON p.operateur_id = pers.id
+        JOIN postes pos ON p.poste_id = pos.id
+        LEFT JOIN atelier a ON pos.atelier_id = a.id
+        WHERE pers.statut = 'ACTIF'
+          AND p.prochaine_evaluation BETWEEN CURDATE() AND %s
+        ORDER BY p.prochaine_evaluation ASC
+    """, (date_limite,), dictionary=True)
 
 
 @monitor_query('Get Evaluations Par Operateur')
@@ -113,29 +108,26 @@ def get_evaluations_par_operateur(operateur_id: int) -> List[Dict]:
     Returns:
         List[Dict]: Liste des evaluations de l'operateur
     """
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT
-                p.id as polyvalence_id,
-                p.poste_id,
-                pos.poste_code,
-                a.nom as nom_atelier,
-                p.niveau,
-                p.date_evaluation,
-                p.prochaine_evaluation,
-                CASE
-                    WHEN p.prochaine_evaluation < CURDATE() THEN 'RETARD'
-                    WHEN p.prochaine_evaluation <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 'URGENT'
-                    ELSE 'OK'
-                END as statut
-            FROM polyvalence p
-            JOIN postes pos ON p.poste_id = pos.id
-            LEFT JOIN atelier a ON pos.atelier_id = a.id
-            WHERE p.operateur_id = %s
-            ORDER BY p.prochaine_evaluation ASC
-        """, (operateur_id,))
-
-        return cur.fetchall()
+    return QueryExecutor.fetch_all("""
+        SELECT
+            p.id as polyvalence_id,
+            p.poste_id,
+            pos.poste_code,
+            a.nom as nom_atelier,
+            p.niveau,
+            p.date_evaluation,
+            p.prochaine_evaluation,
+            CASE
+                WHEN p.prochaine_evaluation < CURDATE() THEN 'RETARD'
+                WHEN p.prochaine_evaluation <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 'URGENT'
+                ELSE 'OK'
+            END as statut
+        FROM polyvalence p
+        JOIN postes pos ON p.poste_id = pos.id
+        LEFT JOIN atelier a ON pos.atelier_id = a.id
+        WHERE p.operateur_id = %s
+        ORDER BY p.prochaine_evaluation ASC
+    """, (operateur_id,), dictionary=True)
 
 
 def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
@@ -161,35 +153,37 @@ def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
         return False
 
     try:
-        with DatabaseCursor() as cur:
-            # Récupérer les anciennes valeurs pour le log
-            cur.execute("SELECT operateur_id, poste_id, niveau, date_evaluation FROM polyvalence WHERE id = %s", (polyvalence_id,))
-            ancien = cur.fetchone()
-            operateur_id = ancien[0] if ancien else None
-            poste_id = ancien[1] if ancien else None
-            ancien_niveau = ancien[2] if ancien else None
-            ancienne_date = ancien[3] if ancien else None
+        # Récupérer les anciennes valeurs pour le log
+        ancien = QueryExecutor.fetch_one(
+            "SELECT operateur_id, poste_id, niveau, date_evaluation FROM polyvalence WHERE id = %s",
+            (polyvalence_id,),
+            dictionary=True
+        )
+        operateur_id = ancien['operateur_id'] if ancien else None
+        poste_id = ancien['poste_id'] if ancien else None
+        ancien_niveau = ancien['niveau'] if ancien else None
+        ancienne_date = ancien['date_evaluation'] if ancien else None
 
-            cur.execute("""
-                UPDATE polyvalence
-                SET niveau = %s,
-                    date_evaluation = %s,
-                    prochaine_evaluation = %s
-                WHERE id = %s
-            """, (nouveau_niveau, date_evaluation, prochaine_evaluation, polyvalence_id))
+        QueryExecutor.execute_write("""
+            UPDATE polyvalence
+            SET niveau = %s,
+                date_evaluation = %s,
+                prochaine_evaluation = %s
+            WHERE id = %s
+        """, (nouveau_niveau, date_evaluation, prochaine_evaluation, polyvalence_id))
 
-            # Logger la modification
-            from core.services.logger import log_hist
-            log_hist(
-                action="UPDATE",
-                table_name="polyvalence",
-                record_id=polyvalence_id,
-                description=f"Évaluation mise à jour: N{ancien_niveau}→N{nouveau_niveau}, date: {ancienne_date}→{date_evaluation}, prochaine: {prochaine_evaluation}",
-                operateur_id=operateur_id,
-                poste_id=poste_id
-            )
+        # Logger la modification
+        from core.services.logger import log_hist
+        log_hist(
+            action="UPDATE",
+            table_name="polyvalence",
+            record_id=polyvalence_id,
+            description=f"Évaluation mise à jour: N{ancien_niveau}→N{nouveau_niveau}, date: {ancienne_date}→{date_evaluation}, prochaine: {prochaine_evaluation}",
+            operateur_id=operateur_id,
+            poste_id=poste_id
+        )
 
-            return True
+        return True
 
     except Exception as e:
         logger.error(f"Erreur lors de la mise a jour de l'evaluation : {e}")
@@ -206,46 +200,38 @@ def get_statistiques_evaluations() -> Dict:
     """
     stats = {}
 
-    with DatabaseCursor(dictionary=True) as cur:
-        # Total d'evaluations actives
-        cur.execute("""
-            SELECT COUNT(*) as total
-            FROM polyvalence p
-            JOIN personnel pers ON p.operateur_id = pers.id
-            WHERE pers.statut = 'ACTIF'
-        """)
-        stats['total'] = cur.fetchone()['total']
+    # Total d'evaluations actives
+    stats['total'] = QueryExecutor.fetch_scalar("""
+        SELECT COUNT(*) FROM polyvalence p
+        JOIN personnel pers ON p.operateur_id = pers.id
+        WHERE pers.statut = 'ACTIF'
+    """, default=0)
 
-        # Evaluations en retard
-        cur.execute("""
-            SELECT COUNT(*) as total
-            FROM polyvalence p
-            JOIN personnel pers ON p.operateur_id = pers.id
-            WHERE pers.statut = 'ACTIF'
-              AND p.prochaine_evaluation < CURDATE()
-        """)
-        stats['en_retard'] = cur.fetchone()['total']
+    # Evaluations en retard
+    stats['en_retard'] = QueryExecutor.fetch_scalar("""
+        SELECT COUNT(*) FROM polyvalence p
+        JOIN personnel pers ON p.operateur_id = pers.id
+        WHERE pers.statut = 'ACTIF'
+          AND p.prochaine_evaluation < CURDATE()
+    """, default=0)
 
-        # Evaluations a venir (30 jours)
-        cur.execute("""
-            SELECT COUNT(*) as total
-            FROM polyvalence p
-            JOIN personnel pers ON p.operateur_id = pers.id
-            WHERE pers.statut = 'ACTIF'
-              AND p.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-        """)
-        stats['a_venir_30j'] = cur.fetchone()['total']
+    # Evaluations a venir (30 jours)
+    stats['a_venir_30j'] = QueryExecutor.fetch_scalar("""
+        SELECT COUNT(*) FROM polyvalence p
+        JOIN personnel pers ON p.operateur_id = pers.id
+        WHERE pers.statut = 'ACTIF'
+          AND p.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+    """, default=0)
 
-        # Repartition par niveau
-        cur.execute("""
-            SELECT niveau, COUNT(*) as count
-            FROM polyvalence p
-            JOIN personnel pers ON p.operateur_id = pers.id
-            WHERE pers.statut = 'ACTIF'
-            GROUP BY niveau
-            ORDER BY niveau
-        """)
-        stats['par_niveau'] = cur.fetchall()
+    # Repartition par niveau
+    stats['par_niveau'] = QueryExecutor.fetch_all("""
+        SELECT niveau, COUNT(*) as count
+        FROM polyvalence p
+        JOIN personnel pers ON p.operateur_id = pers.id
+        WHERE pers.statut = 'ACTIF'
+        GROUP BY niveau
+        ORDER BY niveau
+    """, dictionary=True)
 
     return stats
 

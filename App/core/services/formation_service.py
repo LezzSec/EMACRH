@@ -4,15 +4,15 @@ Service de gestion des formations
 CRUD pour la table `formation` existante
 """
 
-import logging
 from datetime import date, datetime
-
-logger = logging.getLogger(__name__)
 from decimal import Decimal
 from typing import Optional, List, Dict, Tuple, Any
 
-from core.db.configbd import get_connection, DatabaseCursor, DatabaseConnection
+from core.db.query_executor import QueryExecutor
 from core.services.logger import log_hist
+from core.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 def get_all_formations(
@@ -30,45 +30,43 @@ def get_all_formations(
         Liste des formations avec infos opérateur
     """
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            sql = """
-                SELECT
-                    f.id, f.operateur_id, f.intitule, f.organisme,
-                    f.date_debut, f.date_fin, f.duree_heures, f.statut,
-                    f.certificat_obtenu, f.cout, f.commentaire,
-                    f.document_id,
-                    f.date_creation, f.date_modification,
-                    CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                    p.matricule,
-                    d.nom_fichier as attestation_nom
-                FROM formation f
-                JOIN personnel p ON f.operateur_id = p.id
-                LEFT JOIN documents d ON f.document_id = d.id
-                WHERE 1=1
-            """
-            params = []
+        sql = """
+            SELECT
+                f.id, f.operateur_id, f.intitule, f.organisme,
+                f.date_debut, f.date_fin, f.duree_heures, f.statut,
+                f.certificat_obtenu, f.cout, f.commentaire,
+                f.document_id,
+                f.date_creation, f.date_modification,
+                CONCAT(p.prenom, ' ', p.nom) as nom_complet,
+                p.matricule,
+                d.nom_fichier as attestation_nom
+            FROM formation f
+            JOIN personnel p ON f.operateur_id = p.id
+            LEFT JOIN documents d ON f.document_id = d.id
+            WHERE 1=1
+        """
+        params = []
 
-            if statut:
-                sql += " AND f.statut = %s"
-                params.append(statut)
+        if statut:
+            sql += " AND f.statut = %s"
+            params.append(statut)
 
-            if operateur_id:
-                sql += " AND f.operateur_id = %s"
-                params.append(operateur_id)
+        if operateur_id:
+            sql += " AND f.operateur_id = %s"
+            params.append(operateur_id)
 
-            sql += " ORDER BY f.date_debut DESC"
+        sql += " ORDER BY f.date_debut DESC"
 
-            cur.execute(sql, tuple(params))
-            formations = cur.fetchall()
+        formations = QueryExecutor.fetch_all(sql, tuple(params), dictionary=True)
 
-            # Convertir Decimal en float pour éviter les problèmes de sérialisation
-            for f in formations:
-                if f.get('duree_heures') is not None:
-                    f['duree_heures'] = float(f['duree_heures'])
-                if f.get('cout') is not None:
-                    f['cout'] = float(f['cout'])
+        # Convertir Decimal en float pour éviter les problèmes de sérialisation
+        for f in formations:
+            if f.get('duree_heures') is not None:
+                f['duree_heures'] = float(f['duree_heures'])
+            if f.get('cout') is not None:
+                f['cout'] = float(f['cout'])
 
-            return formations
+        return formations
     except Exception as e:
         logger.error(f"Erreur get_all_formations: {e}")
         return []
@@ -98,32 +96,29 @@ def get_formation_by_id(formation_id: int) -> Optional[Dict]:
         Dictionnaire de la formation ou None
     """
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            sql = """
-                SELECT
-                    f.id, f.operateur_id, f.intitule, f.organisme,
-                    f.date_debut, f.date_fin, f.duree_heures, f.statut,
-                    f.certificat_obtenu, f.cout, f.commentaire,
-                    f.document_id,
-                    f.date_creation, f.date_modification,
-                    CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                    p.matricule,
-                    d.nom_fichier as attestation_nom
-                FROM formation f
-                JOIN personnel p ON f.operateur_id = p.id
-                LEFT JOIN documents d ON f.document_id = d.id
-                WHERE f.id = %s
-            """
-            cur.execute(sql, (formation_id,))
-            formation = cur.fetchone()
+        formation = QueryExecutor.fetch_one("""
+            SELECT
+                f.id, f.operateur_id, f.intitule, f.organisme,
+                f.date_debut, f.date_fin, f.duree_heures, f.statut,
+                f.certificat_obtenu, f.cout, f.commentaire,
+                f.document_id,
+                f.date_creation, f.date_modification,
+                CONCAT(p.prenom, ' ', p.nom) as nom_complet,
+                p.matricule,
+                d.nom_fichier as attestation_nom
+            FROM formation f
+            JOIN personnel p ON f.operateur_id = p.id
+            LEFT JOIN documents d ON f.document_id = d.id
+            WHERE f.id = %s
+        """, (formation_id,), dictionary=True)
 
-            if formation:
-                if formation.get('duree_heures') is not None:
-                    formation['duree_heures'] = float(formation['duree_heures'])
-                if formation.get('cout') is not None:
-                    formation['cout'] = float(formation['cout'])
+        if formation:
+            if formation.get('duree_heures') is not None:
+                formation['duree_heures'] = float(formation['duree_heures'])
+            if formation.get('cout') is not None:
+                formation['cout'] = float(formation['cout'])
 
-            return formation
+        return formation
     except Exception as e:
         logger.error(f"Erreur get_formation_by_id: {e}")
         return None
@@ -160,33 +155,26 @@ def add_formation(
         (succès, message, formation_id)
     """
     try:
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
-
-            sql = """
-                INSERT INTO formation (
-                    operateur_id, intitule, organisme, date_debut, date_fin,
-                    duree_heures, statut, certificat_obtenu, cout, commentaire
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-            """
-
-            cur.execute(sql, (
+        formation_id = QueryExecutor.execute_write("""
+            INSERT INTO formation (
                 operateur_id, intitule, organisme, date_debut, date_fin,
                 duree_heures, statut, certificat_obtenu, cout, commentaire
-            ))
-
-            formation_id = cur.lastrowid
-
-            log_hist(
-                action="CREATION_FORMATION",
-                table_name="formation",
-                record_id=formation_id,
-                description=f"Formation '{intitule}' ajoutée pour opérateur {operateur_id}"
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
+        """, (
+            operateur_id, intitule, organisme, date_debut, date_fin,
+            duree_heures, statut, certificat_obtenu, cout, commentaire
+        ), return_lastrowid=True)
 
-            return True, "Formation ajoutée avec succès", formation_id
+        log_hist(
+            action="CREATION_FORMATION",
+            table_name="formation",
+            record_id=formation_id,
+            description=f"Formation '{intitule}' ajoutée pour opérateur {operateur_id}"
+        )
+
+        return True, "Formation ajoutée avec succès", formation_id
 
     except Exception as e:
         return False, f"Erreur lors de l'ajout: {str(e)}", None
@@ -217,32 +205,29 @@ def update_formation(formation_id: int, **kwargs) -> Tuple[bool, str]:
         return False, "Aucun champ à mettre à jour"
 
     try:
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
+        # SÉCURITÉ: Vérification que chaque clé est bien dans la whitelist
+        set_clauses = []
+        values = []
+        for key in updates.keys():
+            assert key in ALLOWED_FIELDS, f"Colonne non autorisée: {key}"
+            set_clauses.append(f"{key} = %s")
+            values.append(updates[key])
+        values.append(formation_id)
 
-            # SÉCURITÉ: Vérification que chaque clé est bien dans la whitelist
-            set_clauses = []
-            values = []
-            for key in updates.keys():
-                assert key in ALLOWED_FIELDS, f"Colonne non autorisée: {key}"
-                set_clauses.append(f"{key} = %s")
-                values.append(updates[key])
-            values.append(formation_id)
+        # SÉCURITÉ: Les colonnes proviennent uniquement de ALLOWED_FIELDS (constante)
+        sql = "UPDATE formation SET " + ", ".join(set_clauses) + " WHERE id = %s"
 
-            # SÉCURITÉ: Les colonnes proviennent uniquement de ALLOWED_FIELDS (constante)
-            sql = "UPDATE formation SET " + ", ".join(set_clauses) + " WHERE id = %s"
+        QueryExecutor.execute_write(sql, tuple(values))
 
-            cur.execute(sql, tuple(values))
+        log_hist(
+            action="UPDATE_FORMATION",
+            table_name="formation",
+            record_id=formation_id,
+            description=f"Formation {formation_id} mise à jour",
+            details=updates
+        )
 
-            log_hist(
-                action="UPDATE_FORMATION",
-                table_name="formation",
-                record_id=formation_id,
-                description=f"Formation {formation_id} mise à jour",
-                details=updates
-            )
-
-            return True, "Formation mise à jour avec succès"
+        return True, "Formation mise à jour avec succès"
 
     except Exception as e:
         return False, f"Erreur lors de la mise à jour: {str(e)}"
@@ -262,21 +247,19 @@ def delete_formation(formation_id: int) -> Tuple[bool, str]:
         # Récupérer les infos avant suppression pour le log
         formation = get_formation_by_id(formation_id)
 
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
-            cur.execute("DELETE FROM formation WHERE id = %s", (formation_id,))
+        QueryExecutor.execute_write(
+            "DELETE FROM formation WHERE id = %s",
+            (formation_id,)
+        )
 
-            if cur.rowcount == 0:
-                return False, "Formation introuvable"
+        log_hist(
+            action="SUPPRESSION_FORMATION",
+            table_name="formation",
+            record_id=formation_id,
+            description=f"Formation '{formation.get('intitule', '?')}' supprimée" if formation else f"Formation {formation_id} supprimée"
+        )
 
-            log_hist(
-                action="SUPPRESSION_FORMATION",
-                table_name="formation",
-                record_id=formation_id,
-                description=f"Formation '{formation.get('intitule', '?')}' supprimée" if formation else f"Formation {formation_id} supprimée"
-            )
-
-            return True, "Formation supprimée avec succès"
+        return True, "Formation supprimée avec succès"
 
     except Exception as e:
         return False, f"Erreur lors de la suppression: {str(e)}"
@@ -290,45 +273,41 @@ def get_formations_stats() -> Dict[str, Any]:
         Dictionnaire avec les stats
     """
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            stats = {}
+        stats = {}
 
-            # Total formations
-            cur.execute("SELECT COUNT(*) as total FROM formation")
-            stats['total'] = cur.fetchone()['total']
+        # Total formations
+        stats['total'] = QueryExecutor.fetch_scalar(
+            "SELECT COUNT(*) FROM formation", default=0
+        )
 
-            # Par statut
-            cur.execute("""
-                SELECT statut, COUNT(*) as count
-                FROM formation
-                GROUP BY statut
-            """)
-            stats['par_statut'] = {row['statut']: row['count'] for row in cur.fetchall()}
+        # Par statut
+        rows = QueryExecutor.fetch_all("""
+            SELECT statut, COUNT(*) as count
+            FROM formation
+            GROUP BY statut
+        """, dictionary=True)
+        stats['par_statut'] = {row['statut']: row['count'] for row in rows}
 
-            # Formations cette année
-            annee = datetime.now().year
-            cur.execute("""
-                SELECT COUNT(*) as count
-                FROM formation
-                WHERE YEAR(date_debut) = %s
-            """, (annee,))
-            stats['cette_annee'] = cur.fetchone()['count']
+        # Formations cette année
+        annee = datetime.now().year
+        stats['cette_annee'] = QueryExecutor.fetch_scalar("""
+            SELECT COUNT(*) FROM formation
+            WHERE YEAR(date_debut) = %s
+        """, (annee,), default=0)
 
-            # Formations terminées cette année
-            cur.execute("""
-                SELECT COUNT(*) as count
-                FROM formation
-                WHERE statut = 'Terminée' AND YEAR(date_fin) = %s
-            """, (annee,))
-            stats['terminees_cette_annee'] = cur.fetchone()['count']
+        # Formations terminées cette année
+        stats['terminees_cette_annee'] = QueryExecutor.fetch_scalar("""
+            SELECT COUNT(*) FROM formation
+            WHERE statut = 'Terminée' AND YEAR(date_fin) = %s
+        """, (annee,), default=0)
 
-            # En cours
-            stats['en_cours'] = stats['par_statut'].get('En cours', 0)
+        # En cours
+        stats['en_cours'] = stats['par_statut'].get('En cours', 0)
 
-            # Planifiées
-            stats['planifiees'] = stats['par_statut'].get('Planifiée', 0)
+        # Planifiées
+        stats['planifiees'] = stats['par_statut'].get('Planifiée', 0)
 
-            return stats
+        return stats
 
     except Exception as e:
         logger.error(f"Erreur get_formations_stats: {e}")
@@ -350,14 +329,12 @@ def get_personnel_list() -> List[Dict]:
         Liste des opérateurs (id, nom_complet, matricule)
     """
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT id, CONCAT(prenom, ' ', nom) as nom_complet, matricule
-                FROM personnel
-                WHERE statut = 'ACTIF'
-                ORDER BY nom, prenom
-            """)
-            return cur.fetchall()
+        return QueryExecutor.fetch_all("""
+            SELECT id, CONCAT(prenom, ' ', nom) as nom_complet, matricule
+            FROM personnel
+            WHERE statut = 'ACTIF'
+            ORDER BY nom, prenom
+        """, dictionary=True)
     except Exception as e:
         logger.error(f"Erreur get_personnel_list: {e}")
         return []

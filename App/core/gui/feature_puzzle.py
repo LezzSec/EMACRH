@@ -17,9 +17,9 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
 from core.gui.ui_theme import EmacTheme, EmacCard, EmacButton
+from core.utils.logging_config import get_logger
 
-import logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Cache pour l'ID du role admin (evite les requetes repetees)
 _admin_role_id_cache = None
@@ -41,20 +41,20 @@ def get_admin_role_id() -> int:
         return _admin_role_id_cache
 
     try:
-        from core.db.configbd import DatabaseCursor
+        from core.db.query_executor import QueryExecutor
 
-        with DatabaseCursor(dictionary=True) as cur:
-            # Chercher le role admin par son nom
-            cur.execute("""
-                SELECT id FROM roles
-                WHERE LOWER(nom) IN ('admin', 'administrateur')
-                LIMIT 1
-            """)
-            result = cur.fetchone()
-            if result:
-                _admin_role_id_cache = result['id']
-                logger.debug(f"Role admin trouve: ID={_admin_role_id_cache}")
-                return _admin_role_id_cache
+        result = QueryExecutor.fetch_one(
+            """
+            SELECT id FROM roles
+            WHERE LOWER(nom) IN ('admin', 'administrateur')
+            LIMIT 1
+            """,
+            dictionary=True
+        )
+        if result:
+            _admin_role_id_cache = result['id']
+            logger.debug(f"Role admin trouve: ID={_admin_role_id_cache}")
+            return _admin_role_id_cache
 
     except Exception as e:
         logger.warning(f"Impossible de recuperer l'ID du role admin: {e}")

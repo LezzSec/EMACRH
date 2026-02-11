@@ -9,7 +9,10 @@ Calcul des jours ouvrés, gestion des soldes, validation des demandes
 """
 
 from datetime import datetime, timedelta, date
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+from core.db.query_executor import QueryExecutor
+from core.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # ✅ OPTIMISATIONS : Monitoring
 from core.utils.performance_monitor import monitor_query
@@ -63,15 +66,13 @@ def get_jours_feries(annee_debut, annee_fin):
     Returns:
         set: Ensemble des dates fériées
     """
-    with DatabaseCursor() as cur:
-        cur.execute("""
-            SELECT date_ferie
-            FROM jours_feries
-            WHERE YEAR(date_ferie) BETWEEN %s AND %s
-        """, (annee_debut, annee_fin))
+    rows = QueryExecutor.fetch_all("""
+        SELECT date_ferie
+        FROM jours_feries
+        WHERE YEAR(date_ferie) BETWEEN %s AND %s
+    """, (annee_debut, annee_fin))
 
-        jours_feries = {row[0] for row in cur.fetchall()}
-        return jours_feries
+    return {row[0] for row in rows}
 
 
 def creer_demande_absence(personnel_id, type_absence_code, date_debut, date_fin,
@@ -97,34 +98,32 @@ def creer_demande_absence(personnel_id, type_absence_code, date_debut, date_fin,
     """
     require('planning.absences.edit')
 
-    with DatabaseConnection() as conn:
-        cur = conn.cursor()
+    # Récupérer l'ID du type d'absence
+    type_absence_row = QueryExecutor.fetch_one(
+        "SELECT id FROM type_absence WHERE code = %s",
+        (type_absence_code,),
+        dictionary=True
+    )
 
-        # Récupérer l'ID du type d'absence
-        cur.execute("SELECT id FROM type_absence WHERE code = %s", (type_absence_code,))
-        type_absence_row = cur.fetchone()
+    if not type_absence_row:
+        raise ValueError(f"Type d'absence '{type_absence_code}' introuvable")
 
-        if not type_absence_row:
-            raise ValueError(f"Type d'absence '{type_absence_code}' introuvable")
+    type_absence_id = type_absence_row['id']
 
-        type_absence_id = type_absence_row[0]
+    # Calculer le nombre de jours
+    nb_jours = calculer_jours_ouvres(date_debut, date_fin, demi_journee_debut, demi_journee_fin)
 
-        # Calculer le nombre de jours
-        nb_jours = calculer_jours_ouvres(date_debut, date_fin, demi_journee_debut, demi_journee_fin)
+    # Insérer la demande
+    demande_id = QueryExecutor.execute_write("""
+        INSERT INTO demande_absence
+        (personnel_id, type_absence_id, date_debut, date_fin,
+         demi_journee_debut, demi_journee_fin, nb_jours, motif, statut)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'EN_ATTENTE')
+    """, (personnel_id, type_absence_id, date_debut, date_fin,
+          demi_journee_debut, demi_journee_fin, nb_jours, motif),
+        return_lastrowid=True)
 
-        # Insérer la demande
-        cur.execute("""
-            INSERT INTO demande_absence
-            (personnel_id, type_absence_id, date_debut, date_fin,
-             demi_journee_debut, demi_journee_fin, nb_jours, motif, statut)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'EN_ATTENTE')
-        """, (personnel_id, type_absence_id, date_debut, date_fin,
-              demi_journee_debut, demi_journee_fin, nb_jours, motif))
-
-        demande_id = cur.lastrowid
-        cur.close()
-
-        return demande_id
+    return demande_id
 
 
 def valider_demande(demande_id, validateur_id, valide=True, commentaire=''):
@@ -142,35 +141,28 @@ def valider_demande(demande_id, validateur_id, valide=True, commentaire=''):
     """
     require('planning.absences.edit')
 
-    with DatabaseConnection() as conn:
-        cur = conn.cursor()
+    statut = 'VALIDEE' if valide else 'REFUSEE'
 
-        statut = 'VALIDEE' if valide else 'REFUSEE'
+    QueryExecutor.execute_write("""
+        UPDATE demande_absence
+        SET statut = %s,
+            validateur_id = %s,
+            date_validation = NOW(),
+            commentaire_validation = %s
+        WHERE id = %s
+    """, (statut, validateur_id, commentaire, demande_id))
 
-        cur.execute("""
-            UPDATE demande_absence
-            SET statut = %s,
-                validateur_id = %s,
-                date_validation = NOW(),
-                commentaire_validation = %s
-            WHERE id = %s
-        """, (statut, validateur_id, commentaire, demande_id))
+    # Si validée et type décompté, mettre à jour les soldes
+    if valide:
+        row = QueryExecutor.fetch_one("""
+            SELECT da.personnel_id, da.nb_jours, ta.code, YEAR(da.date_debut) as annee
+            FROM demande_absence da
+            JOIN type_absence ta ON da.type_absence_id = ta.id
+            WHERE da.id = %s AND ta.decompte_solde = TRUE
+        """, (demande_id,), dictionary=True)
 
-        # Si validée et type décompté, mettre à jour les soldes
-        if valide:
-            cur.execute("""
-                SELECT da.personnel_id, da.nb_jours, ta.code, YEAR(da.date_debut)
-                FROM demande_absence da
-                JOIN type_absence ta ON da.type_absence_id = ta.id
-                WHERE da.id = %s AND ta.decompte_solde = TRUE
-            """, (demande_id,))
-
-            row = cur.fetchone()
-            if row:
-                personnel_id, nb_jours, type_code, annee = row
-                decompter_solde(personnel_id, annee, type_code, nb_jours)
-
-        cur.close()
+        if row:
+            decompter_solde(row['personnel_id'], row['annee'], row['code'], row['nb_jours'])
 
 
 def decompter_solde(personnel_id, annee, type_code, nb_jours):
@@ -183,37 +175,32 @@ def decompter_solde(personnel_id, annee, type_code, nb_jours):
         type_code (str): CP ou RTT
         nb_jours (float): Nombre de jours à décompter
     """
-    with DatabaseConnection() as conn:
-        cur = conn.cursor()
+    # Vérifier si le solde existe
+    exists = QueryExecutor.exists('solde_conges', {
+        'personnel_id': personnel_id,
+        'annee': annee
+    })
 
-        # Vérifier si le solde existe
-        cur.execute("""
-            SELECT id FROM solde_conges
-            WHERE personnel_id = %s AND annee = %s
+    if not exists:
+        # Créer le solde si inexistant
+        QueryExecutor.execute_write("""
+            INSERT INTO solde_conges (personnel_id, annee)
+            VALUES (%s, %s)
         """, (personnel_id, annee))
 
-        if not cur.fetchone():
-            # Créer le solde si inexistant
-            cur.execute("""
-                INSERT INTO solde_conges (personnel_id, annee)
-                VALUES (%s, %s)
-            """, (personnel_id, annee))
-
-        # Décompter selon le type
-        if type_code == 'CP':
-            cur.execute("""
-                UPDATE solde_conges
-                SET cp_pris = cp_pris + %s
-                WHERE personnel_id = %s AND annee = %s
-            """, (nb_jours, personnel_id, annee))
-        elif type_code == 'RTT':
-            cur.execute("""
-                UPDATE solde_conges
-                SET rtt_pris = rtt_pris + %s
-                WHERE personnel_id = %s AND annee = %s
-            """, (nb_jours, personnel_id, annee))
-
-        cur.close()
+    # Décompter selon le type
+    if type_code == 'CP':
+        QueryExecutor.execute_write("""
+            UPDATE solde_conges
+            SET cp_pris = cp_pris + %s
+            WHERE personnel_id = %s AND annee = %s
+        """, (nb_jours, personnel_id, annee))
+    elif type_code == 'RTT':
+        QueryExecutor.execute_write("""
+            UPDATE solde_conges
+            SET rtt_pris = rtt_pris + %s
+            WHERE personnel_id = %s AND annee = %s
+        """, (nb_jours, personnel_id, annee))
 
 
 @monitor_query('Get Solde Conges')
@@ -224,35 +211,32 @@ def get_solde_conges(personnel_id, annee):
     Returns:
         dict: {cp_restant, rtt_restant, cp_acquis, etc.}
     """
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT
-                cp_acquis,
-                cp_n_1,
-                cp_pris,
-                (cp_acquis + cp_n_1 - cp_pris) as cp_restant,
-                rtt_acquis,
-                rtt_pris,
-                (rtt_acquis - rtt_pris) as rtt_restant
-            FROM solde_conges
-            WHERE personnel_id = %s AND annee = %s
-        """, (personnel_id, annee))
+    solde = QueryExecutor.fetch_one("""
+        SELECT
+            cp_acquis,
+            cp_n_1,
+            cp_pris,
+            (cp_acquis + cp_n_1 - cp_pris) as cp_restant,
+            rtt_acquis,
+            rtt_pris,
+            (rtt_acquis - rtt_pris) as rtt_restant
+        FROM solde_conges
+        WHERE personnel_id = %s AND annee = %s
+    """, (personnel_id, annee), dictionary=True)
 
-        solde = cur.fetchone()
+    if not solde:
+        # Retourner un solde vide
+        return {
+            'cp_acquis': 0,
+            'cp_n_1': 0,
+            'cp_pris': 0,
+            'cp_restant': 0,
+            'rtt_acquis': 0,
+            'rtt_pris': 0,
+            'rtt_restant': 0
+        }
 
-        if not solde:
-            # Retourner un solde vide
-            return {
-                'cp_acquis': 0,
-                'cp_n_1': 0,
-                'cp_pris': 0,
-                'cp_restant': 0,
-                'rtt_acquis': 0,
-                'rtt_pris': 0,
-                'rtt_restant': 0
-            }
-
-        return solde
+    return solde
 
 
 @monitor_query('Get Demandes Personnel')
@@ -302,9 +286,7 @@ def get_demandes_personnel(personnel_id, annee=None, statut=None):
 
     query += " ORDER BY da.date_debut DESC"
 
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute(query, tuple(params))
-        return cur.fetchall()
+    return QueryExecutor.fetch_all(query, tuple(params), dictionary=True)
 
 
 @monitor_query('Get Absences Periode')
@@ -320,30 +302,27 @@ def get_absences_periode(date_debut, date_fin, statut='VALIDEE'):
     Returns:
         list: Liste des absences
     """
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT
-                da.id,
-                da.personnel_id,
-                CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                p.matricule,
-                da.date_debut,
-                da.date_fin,
-                da.nb_jours,
-                ta.code as type_code,
-                ta.libelle as type_libelle,
-                ta.couleur
-            FROM demande_absence da
-            JOIN personnel p ON da.personnel_id = p.id
-            JOIN type_absence ta ON da.type_absence_id = ta.id
-            WHERE p.statut = 'ACTIF'
-            AND da.statut = %s
-            AND da.date_debut <= %s
-            AND da.date_fin >= %s
-            ORDER BY da.date_debut, p.nom
-        """, (statut, date_fin, date_debut))
-
-        return cur.fetchall()
+    return QueryExecutor.fetch_all("""
+        SELECT
+            da.id,
+            da.personnel_id,
+            CONCAT(p.prenom, ' ', p.nom) as nom_complet,
+            p.matricule,
+            da.date_debut,
+            da.date_fin,
+            da.nb_jours,
+            ta.code as type_code,
+            ta.libelle as type_libelle,
+            ta.couleur
+        FROM demande_absence da
+        JOIN personnel p ON da.personnel_id = p.id
+        JOIN type_absence ta ON da.type_absence_id = ta.id
+        WHERE p.statut = 'ACTIF'
+        AND da.statut = %s
+        AND da.date_debut <= %s
+        AND da.date_fin >= %s
+        ORDER BY da.date_debut, p.nom
+    """, (statut, date_fin, date_debut), dictionary=True)
 
 
 def initialiser_soldes_annee(annee, cp_standard=25, rtt_standard=10):
@@ -355,42 +334,38 @@ def initialiser_soldes_annee(annee, cp_standard=25, rtt_standard=10):
         cp_standard (float): CP acquis par défaut
         rtt_standard (float): RTT acquis par défaut
     """
-    with DatabaseConnection() as conn:
-        cur = conn.cursor()
+    # Récupérer tous les personnel actifs
+    rows = QueryExecutor.fetch_all(
+        "SELECT id FROM personnel WHERE statut = 'ACTIF'"
+    )
+    personnel_ids = [row[0] for row in rows]
 
-        # Récupérer tous les personnel actifs
-        cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF'")
-        personnel_ids = [row[0] for row in cur.fetchall()]
+    for personnel_id in personnel_ids:
+        # Vérifier si le solde existe déjà
+        exists = QueryExecutor.exists('solde_conges', {
+            'personnel_id': personnel_id,
+            'annee': annee
+        })
 
-        for personnel_id in personnel_ids:
-            # Vérifier si le solde existe déjà
-            cur.execute("""
-                SELECT id FROM solde_conges
-                WHERE personnel_id = %s AND annee = %s
-            """, (personnel_id, annee))
+        if not exists:
+            # Créer le solde
+            QueryExecutor.execute_write("""
+                INSERT INTO solde_conges
+                (personnel_id, annee, cp_acquis, rtt_acquis)
+                VALUES (%s, %s, %s, %s)
+            """, (personnel_id, annee, cp_standard, rtt_standard))
 
-            if not cur.fetchone():
-                # Créer le solde
-                cur.execute("""
-                    INSERT INTO solde_conges
-                    (personnel_id, annee, cp_acquis, rtt_acquis)
-                    VALUES (%s, %s, %s, %s)
-                """, (personnel_id, annee, cp_standard, rtt_standard))
-
-        cur.close()
-        return len(personnel_ids)
+    return len(personnel_ids)
 
 
 def get_types_absence():
     """Récupère tous les types d'absence actifs"""
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT id, code, libelle, decompte_solde, couleur
-            FROM type_absence
-            WHERE actif = TRUE
-            ORDER BY code
-        """)
-        return cur.fetchall()
+    return QueryExecutor.fetch_all("""
+        SELECT id, code, libelle, decompte_solde, couleur
+        FROM type_absence
+        WHERE actif = TRUE
+        ORDER BY code
+    """, dictionary=True)
 
 
 # ========================= ALIASES POUR COMPATIBILITÉ =========================

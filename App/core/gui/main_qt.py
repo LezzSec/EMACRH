@@ -656,12 +656,12 @@ class MainWindow(QMainWindow):
         DbThreadPool.start(w)
 
     def _fetch_one_actif_personnel_id(self, progress_callback=None):
-        from core.db.configbd import DatabaseCursor
+        from core.db.query_executor import QueryExecutor
 
-        with DatabaseCursor() as cur:
-            cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
-            r = cur.fetchone()
-            return r[0] if r else None
+        result = QueryExecutor.fetch_scalar(
+            "SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1"
+        )
+        return result
 
     def _open_regularisation(self, personnel_id):
         if not personnel_id:
@@ -720,14 +720,14 @@ class MainWindow(QMainWindow):
             if (time.time() - self._postes_cache_time) < 300:
                 return self._postes_cache
 
-        from core.db.configbd import DatabaseCursor
+        from core.db.query_executor import QueryExecutor
 
-        with DatabaseCursor() as cur:
-            cur.execute("SELECT DISTINCT poste_code FROM postes WHERE visible = 1 ORDER BY poste_code;")
-            postes = cur.fetchall()
-            self._postes_cache = postes
-            self._postes_cache_time = time.time()
-            return postes
+        postes = QueryExecutor.fetch_all(
+            "SELECT DISTINCT poste_code FROM postes WHERE visible = 1 ORDER BY poste_code"
+        )
+        self._postes_cache = postes
+        self._postes_cache_time = time.time()
+        return postes
 
     def _apply_postes_to_filters(self, postes):
         try:
@@ -749,47 +749,44 @@ class MainWindow(QMainWindow):
         DbThreadPool.start(w)
 
     def _fetch_evaluations(self, poste_retard, poste_next, progress_callback=None):
-        from core.db.configbd import DatabaseCursor
+        from core.db.query_executor import QueryExecutor
 
         try:
-            with DatabaseCursor(dictionary=True) as cur:
-                # Évaluations en retard
-                query_retard = """
-                    SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
-                    FROM polyvalence poly
-                    INNER JOIN personnel p ON p.id = poly.operateur_id
-                    LEFT JOIN postes pos ON pos.id = poly.poste_id
-                    WHERE poly.prochaine_evaluation < CURDATE()
-                      AND p.statut = 'ACTIF'
-                      {retard_filter}
-                    ORDER BY poly.prochaine_evaluation ASC
-                    LIMIT 10
-                """
-                retard_filter = "AND pos.poste_code = %s" if poste_retard else ""
-                query_retard = query_retard.format(retard_filter=retard_filter)
-                params_retard = (poste_retard,) if poste_retard else ()
-                cur.execute(query_retard, params_retard)
-                retard = cur.fetchall()
+            # Évaluations en retard
+            query_retard = """
+                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
+                FROM polyvalence poly
+                INNER JOIN personnel p ON p.id = poly.operateur_id
+                LEFT JOIN postes pos ON pos.id = poly.poste_id
+                WHERE poly.prochaine_evaluation < CURDATE()
+                  AND p.statut = 'ACTIF'
+                  {retard_filter}
+                ORDER BY poly.prochaine_evaluation ASC
+                LIMIT 10
+            """
+            retard_filter = "AND pos.poste_code = %s" if poste_retard else ""
+            query_retard = query_retard.format(retard_filter=retard_filter)
+            params_retard = (poste_retard,) if poste_retard else ()
+            retard = QueryExecutor.fetch_all(query_retard, params_retard, dictionary=True)
 
-                # Prochaines évaluations (30 jours)
-                query_next = """
-                    SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
-                    FROM polyvalence poly
-                    INNER JOIN personnel p ON p.id = poly.operateur_id
-                    LEFT JOIN postes pos ON pos.id = poly.poste_id
-                    WHERE poly.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                      AND p.statut = 'ACTIF'
-                      {next_filter}
-                    ORDER BY poly.prochaine_evaluation ASC
-                    LIMIT 10
-                """
-                next_filter = "AND pos.poste_code = %s" if poste_next else ""
-                query_next = query_next.format(next_filter=next_filter)
-                params_next = (poste_next,) if poste_next else ()
-                cur.execute(query_next, params_next)
-                prochaines = cur.fetchall()
+            # Prochaines évaluations (30 jours)
+            query_next = """
+                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
+                FROM polyvalence poly
+                INNER JOIN personnel p ON p.id = poly.operateur_id
+                LEFT JOIN postes pos ON pos.id = poly.poste_id
+                WHERE poly.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                  AND p.statut = 'ACTIF'
+                  {next_filter}
+                ORDER BY poly.prochaine_evaluation ASC
+                LIMIT 10
+            """
+            next_filter = "AND pos.poste_code = %s" if poste_next else ""
+            query_next = query_next.format(next_filter=next_filter)
+            params_next = (poste_next,) if poste_next else ()
+            prochaines = QueryExecutor.fetch_all(query_next, params_next, dictionary=True)
 
-                return {"retard": retard, "prochaines": prochaines}
+            return {"retard": retard, "prochaines": prochaines}
         except Exception as e:
             logger.error(f"Erreur dans _fetch_evaluations: {e}", exc_info=True)
             raise
@@ -832,10 +829,11 @@ class MainWindow(QMainWindow):
         DbThreadPool.start(w)
 
     def _fetch_alertes_rh(self, type_contrat_filter, progress_callback=None):
-        from core.db.configbd import DatabaseCursor
+        from core.db.query_executor import QueryExecutor
 
         try:
-            with DatabaseCursor(dictionary=True) as cur:
+            # Construire la requête conditionnellement (sans .format() pour éviter injection)
+            if type_contrat_filter:
                 query = """
                     SELECT
                         c.id,
@@ -849,17 +847,32 @@ class MainWindow(QMainWindow):
                       AND c.date_fin IS NOT NULL
                       AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
                       AND p.statut = 'ACTIF'
-                      {type_filter}
+                      AND c.type_contrat = %s
                     ORDER BY c.date_fin ASC
                     LIMIT 10
                 """
-                type_filter = "AND c.type_contrat = %s" if type_contrat_filter else ""
-                query = query.format(type_filter=type_filter)
-                params = (type_contrat_filter,) if type_contrat_filter else ()
-                cur.execute(query, params)
-                contrats = cur.fetchall()
+                params = (type_contrat_filter,)
+            else:
+                query = """
+                    SELECT
+                        c.id,
+                        c.type_contrat,
+                        c.date_fin,
+                        p.nom,
+                        p.prenom
+                    FROM contrat c
+                    INNER JOIN personnel p ON p.id = c.operateur_id
+                    WHERE c.actif = 1
+                      AND c.date_fin IS NOT NULL
+                      AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                      AND p.statut = 'ACTIF'
+                    ORDER BY c.date_fin ASC
+                    LIMIT 10
+                """
+                params = ()
+            contrats = QueryExecutor.fetch_all(query, params, dictionary=True)
 
-                return {"contrats": contrats}
+            return {"contrats": contrats}
         except Exception as e:
             logger.error(f"Erreur dans _fetch_alertes_rh: {e}", exc_info=True)
             raise

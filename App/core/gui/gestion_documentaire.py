@@ -19,12 +19,13 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate, pyqtSignal, QUrl
 from PyQt5.QtGui import QFont, QColor, QIcon, QDesktopServices
 
-from core.db.configbd import DatabaseCursor
+from core.db.query_executor import QueryExecutor
 from core.services.document_service import DocumentService
 from core.services.logger import log_hist
-
-logger = logging.getLogger(__name__)
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
+from core.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Import des composants modernes EMAC
 try:
@@ -409,16 +410,13 @@ class GestionDocumentaireDialog(QDialog):
     def check_tables_exist(self):
         """Vérifie que les tables nécessaires existent"""
         try:
-            with DatabaseCursor() as cur:
-                # Vérifier la table categories_documents
-                cur.execute("SHOW TABLES LIKE 'categories_documents'")
-                cat_exists = cur.fetchone()
+            # Vérifier la table categories_documents
+            cat_exists = QueryExecutor.fetch_one("SHOW TABLES LIKE 'categories_documents'")
 
-                # Vérifier la table documents
-                cur.execute("SHOW TABLES LIKE 'documents'")
-                doc_exists = cur.fetchone()
+            # Vérifier la table documents
+            doc_exists = QueryExecutor.fetch_one("SHOW TABLES LIKE 'documents'")
 
-                return cat_exists and doc_exists
+            return cat_exists and doc_exists
         except Exception as e:
             logger.error(f"Erreur lors de la vérification des tables: {e}")
             return False
@@ -426,16 +424,15 @@ class GestionDocumentaireDialog(QDialog):
     def load_operateurs(self):
         """Charge la liste des opérateurs"""
         try:
-            with DatabaseCursor(dictionary=True) as cur:
-                query = """
+            operateurs = QueryExecutor.fetch_all(
+                """
                 SELECT id, nom, prenom, statut
                 FROM personnel
                 WHERE statut = 'ACTIF'
                 ORDER BY nom, prenom
-                """
-
-                cur.execute(query)
-                operateurs = cur.fetchall()
+                """,
+                dictionary=True
+            )
 
             self.operateur_combo.clear()
             self.operateur_combo.addItem("Tous les employés", None)
@@ -490,15 +487,15 @@ class GestionDocumentaireDialog(QDialog):
     def get_all_documents(self):
         """Récupère tous les documents de tous les opérateurs (sauf contrats)"""
         try:
-            with DatabaseCursor(dictionary=True) as cur:
-                # Exclure les documents de catégorie "Contrats de travail"
-                query = """
-                    SELECT * FROM v_documents_complet
-                    WHERE categorie_nom != 'Contrats de travail'
-                    ORDER BY date_upload DESC
+            # Exclure les documents de catégorie "Contrats de travail"
+            return QueryExecutor.fetch_all(
                 """
-                cur.execute(query)
-                return cur.fetchall()
+                SELECT * FROM v_documents_complet
+                WHERE categorie_nom != 'Contrats de travail'
+                ORDER BY date_upload DESC
+                """,
+                dictionary=True
+            )
 
         except Exception as e:
             logger.exception(f"Erreur chargement documents: {e}")

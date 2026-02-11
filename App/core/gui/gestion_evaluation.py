@@ -1,7 +1,6 @@
 # gestion_evaluation.py — Gestion moderne des évaluations
 # Interface améliorée avec recherche, filtres intégrés et code couleur
 
-import logging
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QPushButton, QComboBox, QLabel, QFileDialog,
@@ -15,10 +14,11 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from datetime import date, timedelta
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+from core.db.query_executor import QueryExecutor
 from core.services.logger import log_hist
+from core.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Import du thème moderne
 try:
@@ -293,74 +293,72 @@ class DetailOperateurDialog(QDialog):
     def _load_data(self):
         """Charge toutes les données de l'opérateur."""
         try:
-            with DatabaseCursor(dictionary=True) as cursor:
-                # Charger tous les postes pour le combo
-                cursor.execute("SELECT id, poste_code FROM postes ORDER BY poste_code")
-                postes = cursor.fetchall()
-                for poste in postes:
-                    self.poste_combo.addItem(poste['poste_code'], poste['id'])
+            # Charger tous les postes pour le combo
+            postes = QueryExecutor.fetch_all(
+                "SELECT id, poste_code FROM postes ORDER BY poste_code",
+                dictionary=True
+            )
+            for poste in postes:
+                self.poste_combo.addItem(poste['poste_code'], poste['id'])
 
-                # Charger les statistiques
-                cursor.execute("""
-                    SELECT COUNT(*) as total,
-                           SUM(CASE WHEN niveau = 4 THEN 1 ELSE 0 END) as n4,
-                           SUM(CASE WHEN niveau = 3 THEN 1 ELSE 0 END) as n3,
-                           SUM(CASE WHEN niveau = 2 THEN 1 ELSE 0 END) as n2,
-                           SUM(CASE WHEN niveau = 1 THEN 1 ELSE 0 END) as n1,
-                           SUM(CASE WHEN prochaine_evaluation < CURDATE() THEN 1 ELSE 0 END) as retard,
-                           SUM(CASE WHEN prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as a_planifier
-                    FROM polyvalence
-                    WHERE operateur_id = %s
-                """, (self.operateur_id,))
-                stats = cursor.fetchone()
+            # Charger les statistiques
+            stats = QueryExecutor.fetch_one("""
+                SELECT COUNT(*) as total,
+                       SUM(CASE WHEN niveau = 4 THEN 1 ELSE 0 END) as n4,
+                       SUM(CASE WHEN niveau = 3 THEN 1 ELSE 0 END) as n3,
+                       SUM(CASE WHEN niveau = 2 THEN 1 ELSE 0 END) as n2,
+                       SUM(CASE WHEN niveau = 1 THEN 1 ELSE 0 END) as n1,
+                       SUM(CASE WHEN prochaine_evaluation < CURDATE() THEN 1 ELSE 0 END) as retard,
+                       SUM(CASE WHEN prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as a_planifier
+                FROM polyvalence
+                WHERE operateur_id = %s
+            """, (self.operateur_id,), dictionary=True)
 
-                if stats:
-                    total = stats['total'] or 0
-                    parts = []
-                    if stats['n4']: parts.append(f"N4×{stats['n4']}")
-                    if stats['n3']: parts.append(f"N3×{stats['n3']}")
-                    if stats['n2']: parts.append(f"N2×{stats['n2']}")
-                    if stats['n1']: parts.append(f"N1×{stats['n1']}")
+            if stats:
+                total = stats['total'] or 0
+                parts = []
+                if stats['n4']: parts.append(f"N4×{stats['n4']}")
+                if stats['n3']: parts.append(f"N3×{stats['n3']}")
+                if stats['n2']: parts.append(f"N2×{stats['n2']}")
+                if stats['n1']: parts.append(f"N1×{stats['n1']}")
 
-                    poly_text = " | ".join(parts) if parts else "Aucune"
+                poly_text = " | ".join(parts) if parts else "Aucune"
 
-                    eval_parts = []
-                    if stats['retard']: eval_parts.append(f"⚠️ {stats['retard']} en retard")
-                    if stats['a_planifier']: eval_parts.append(f"📅 {stats['a_planifier']} à planifier")
-                    if not eval_parts: eval_parts.append("✅ Toutes à jour")
+                eval_parts = []
+                if stats['retard']: eval_parts.append(f"⚠️ {stats['retard']} en retard")
+                if stats['a_planifier']: eval_parts.append(f"📅 {stats['a_planifier']} à planifier")
+                if not eval_parts: eval_parts.append("✅ Toutes à jour")
 
-                    eval_text = " | ".join(eval_parts)
+                eval_text = " | ".join(eval_parts)
 
-                    self.stats_label.setText(
-                        f"<b>{total} polyvalence(s) actuelle(s)</b><br/>"
-                        f"Niveaux : {poly_text}<br/>"
-                        f"Évaluations : {eval_text}"
-                    )
+                self.stats_label.setText(
+                    f"<b>{total} polyvalence(s) actuelle(s)</b><br/>"
+                    f"Niveaux : {poly_text}<br/>"
+                    f"Évaluations : {eval_text}"
+                )
 
-                # Charger les polyvalences actuelles dans le tableau
-                cursor.execute("""
-                    SELECT poly.id,
-                           ps.poste_code,
-                           poly.niveau,
-                           poly.date_evaluation,
-                           poly.prochaine_evaluation
-                    FROM polyvalence poly
-                    JOIN postes ps ON poly.poste_id = ps.id
-                    WHERE poly.operateur_id = %s
-                      AND poly.id = (
-                          SELECT MAX(p2.id)
-                          FROM polyvalence p2
-                          WHERE p2.operateur_id = poly.operateur_id
-                            AND p2.poste_id = poly.poste_id
-                      )
-                    ORDER BY ps.poste_code
-                """, (self.operateur_id,))
+            # Charger les polyvalences actuelles dans le tableau
+            polyvalences = QueryExecutor.fetch_all("""
+                SELECT poly.id,
+                       ps.poste_code,
+                       poly.niveau,
+                       poly.date_evaluation,
+                       poly.prochaine_evaluation
+                FROM polyvalence poly
+                JOIN postes ps ON poly.poste_id = ps.id
+                WHERE poly.operateur_id = %s
+                  AND poly.id = (
+                      SELECT MAX(p2.id)
+                      FROM polyvalence p2
+                      WHERE p2.operateur_id = poly.operateur_id
+                        AND p2.poste_id = poly.poste_id
+                  )
+                ORDER BY ps.poste_code
+            """, (self.operateur_id,), dictionary=True)
 
-                polyvalences = cursor.fetchall()
-
-                # Bloquer temporairement les signaux pour éviter les mises à jour pendant le remplissage
-                self.poly_table.blockSignals(True)
-                self.poly_table.setRowCount(len(polyvalences))
+            # Bloquer temporairement les signaux pour éviter les mises à jour pendant le remplissage
+            self.poly_table.blockSignals(True)
+            self.poly_table.setRowCount(len(polyvalences))
 
                 for row_idx, poly in enumerate(polyvalences):
                     # Colonne 0 : Poste (non éditable)
@@ -404,11 +402,11 @@ class DetailOperateurDialog(QDialog):
                     # Colonne 5 : ID (caché)
                     self.poly_table.setItem(row_idx, 5, QTableWidgetItem(str(poly['id'])))
 
-                # Réactiver les signaux
-                self.poly_table.blockSignals(False)
+            # Réactiver les signaux
+            self.poly_table.blockSignals(False)
 
-                # Charger les anciennes polyvalences
-                self._load_anciennes_polyvalences(cursor)
+            # Charger les anciennes polyvalences
+            self._load_anciennes_polyvalences()
 
         except Exception as e:
             logger.exception(f"Erreur chargement donnees: {e}")
@@ -439,9 +437,9 @@ class DetailOperateurDialog(QDialog):
         date_future = date_eval.addDays(jours)
         self.date_prochaine_eval.setDate(date_future)
 
-    def _load_anciennes_polyvalences(self, cursor):
+    def _load_anciennes_polyvalences(self):
         """Charge les anciennes polyvalences dans le tableau."""
-        cursor.execute("""
+        anciennes = QueryExecutor.fetch_all("""
             SELECT
                 hp.id,
                 p.poste_code,
@@ -453,9 +451,7 @@ class DetailOperateurDialog(QDialog):
             WHERE hp.operateur_id = %s
               AND hp.action_type = 'IMPORT_MANUEL'
             ORDER BY hp.date_action DESC
-        """, (self.operateur_id,))
-
-        anciennes = cursor.fetchall()
+        """, (self.operateur_id,), dictionary=True)
         self.anciennes_table.setRowCount(len(anciennes))
 
         for row_idx, anc in enumerate(anciennes):
@@ -497,28 +493,22 @@ class DetailOperateurDialog(QDialog):
         commentaire = self.commentaire.text().strip()
 
         try:
-            with DatabaseConnection() as conn:
-                cursor = conn.cursor()
+            # Insérer dans historique_polyvalence
+            QueryExecutor.execute_write("""
+                INSERT INTO historique_polyvalence
+                (operateur_id, poste_id, action_type, nouveau_niveau, nouvelle_date_evaluation, commentaire, date_action)
+                VALUES (%s, %s, 'IMPORT_MANUEL', %s, %s, %s, NOW())
+            """, (self.operateur_id, poste_id, niveau, date_eval, commentaire or None))
 
-                # Insérer dans historique_polyvalence
-                cursor.execute("""
-                    INSERT INTO historique_polyvalence
-                    (operateur_id, poste_id, action_type, nouveau_niveau, nouvelle_date_evaluation, commentaire, date_action)
-                    VALUES (%s, %s, 'IMPORT_MANUEL', %s, %s, %s, NOW())
-                """, (self.operateur_id, poste_id, niveau, date_eval, commentaire or None))
-
-                # Également insérer/mettre à jour dans polyvalence avec la prochaine évaluation
-                cursor.execute("""
-                    INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
-                    VALUES (%s, %s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE
-                        niveau = VALUES(niveau),
-                        date_evaluation = VALUES(date_evaluation),
-                        prochaine_evaluation = VALUES(prochaine_evaluation)
-                """, (self.operateur_id, poste_id, niveau, date_eval, date_prochaine))
-
-                conn.commit()
-                cursor.close()
+            # Également insérer/mettre à jour dans polyvalence avec la prochaine évaluation
+            QueryExecutor.execute_write("""
+                INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
+                VALUES (%s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    niveau = VALUES(niveau),
+                    date_evaluation = VALUES(date_evaluation),
+                    prochaine_evaluation = VALUES(prochaine_evaluation)
+            """, (self.operateur_id, poste_id, niveau, date_eval, date_prochaine))
 
             QMessageBox.information(self, "Succès", "Ancienne polyvalence ajoutée avec succès.")
 
@@ -596,24 +586,20 @@ class DetailOperateurDialog(QDialog):
 
             # Mettre à jour dans la base de données
             try:
-                with DatabaseConnection() as conn:
-                    cursor = conn.cursor()
+                # Récupérer operateur_id et poste_id pour le log
+                poly_data = QueryExecutor.fetch_one(
+                    "SELECT operateur_id, poste_id, niveau FROM polyvalence WHERE id = %s",
+                    (poly_id,)
+                )
+                operateur_id = poly_data[0] if poly_data else None
+                poste_id = poly_data[1] if poly_data else None
+                ancien_niveau = poly_data[2] if poly_data else None
 
-                    # Récupérer operateur_id et poste_id pour le log
-                    cursor.execute("SELECT operateur_id, poste_id, niveau FROM polyvalence WHERE id = %s", (poly_id,))
-                    poly_data = cursor.fetchone()
-                    operateur_id = poly_data[0] if poly_data else None
-                    poste_id = poly_data[1] if poly_data else None
-                    ancien_niveau = poly_data[2] if poly_data else None
-
-                    cursor.execute("""
-                        UPDATE polyvalence
-                        SET niveau = %s, date_evaluation = %s, prochaine_evaluation = %s
-                        WHERE id = %s
-                    """, (new_niveau, date_eval, prochaine_eval, poly_id))
-
-                    conn.commit()
-                    cursor.close()
+                QueryExecutor.execute_write("""
+                    UPDATE polyvalence
+                    SET niveau = %s, date_evaluation = %s, prochaine_evaluation = %s
+                    WHERE id = %s
+                """, (new_niveau, date_eval, prochaine_eval, poly_id))
 
                 # Logger la modification
                 log_hist(
@@ -706,24 +692,20 @@ class DetailOperateurDialog(QDialog):
 
                     # Mettre à jour les DEUX dates
                     try:
-                        with DatabaseConnection() as conn:
-                            cursor = conn.cursor()
+                        # Récupérer operateur_id et poste_id pour le log
+                        poly_data = QueryExecutor.fetch_one(
+                            "SELECT operateur_id, poste_id, date_evaluation FROM polyvalence WHERE id = %s",
+                            (poly_id,)
+                        )
+                        operateur_id = poly_data[0] if poly_data else None
+                        poste_id = poly_data[1] if poly_data else None
+                        ancienne_date = poly_data[2] if poly_data else None
 
-                            # Récupérer operateur_id et poste_id pour le log
-                            cursor.execute("SELECT operateur_id, poste_id, date_evaluation FROM polyvalence WHERE id = %s", (poly_id,))
-                            poly_data = cursor.fetchone()
-                            operateur_id = poly_data[0] if poly_data else None
-                            poste_id = poly_data[1] if poly_data else None
-                            ancienne_date = poly_data[2] if poly_data else None
-
-                            cursor.execute("""
-                                UPDATE polyvalence
-                                SET date_evaluation = %s, prochaine_evaluation = %s
-                                WHERE id = %s
-                            """, (new_date, prochaine_eval, poly_id))
-
-                            conn.commit()
-                            cursor.close()
+                        QueryExecutor.execute_write("""
+                            UPDATE polyvalence
+                            SET date_evaluation = %s, prochaine_evaluation = %s
+                            WHERE id = %s
+                        """, (new_date, prochaine_eval, poly_id))
 
                         # Logger la modification
                         log_hist(
@@ -757,20 +739,19 @@ class DetailOperateurDialog(QDialog):
             # Si on arrive ici, c'est qu'il n'y avait pas de niveau valide
             # Faire une simple mise à jour de la date d'évaluation sans recalcul
             try:
-                with DatabaseConnection() as conn:
-                    cursor = conn.cursor()
+                # Récupérer operateur_id et poste_id pour le log
+                poly_data = QueryExecutor.fetch_one(
+                    "SELECT operateur_id, poste_id, date_evaluation FROM polyvalence WHERE id = %s",
+                    (poly_id,)
+                )
+                operateur_id = poly_data[0] if poly_data else None
+                poste_id = poly_data[1] if poly_data else None
+                ancienne_date = poly_data[2] if poly_data else None
 
-                    # Récupérer operateur_id et poste_id pour le log
-                    cursor.execute("SELECT operateur_id, poste_id, date_evaluation FROM polyvalence WHERE id = %s", (poly_id,))
-                    poly_data = cursor.fetchone()
-                    operateur_id = poly_data[0] if poly_data else None
-                    poste_id = poly_data[1] if poly_data else None
-                    ancienne_date = poly_data[2] if poly_data else None
-
-                    cursor.execute("UPDATE polyvalence SET date_evaluation = %s WHERE id = %s", (new_date, poly_id))
-
-                    conn.commit()
-                    cursor.close()
+                QueryExecutor.execute_write(
+                    "UPDATE polyvalence SET date_evaluation = %s WHERE id = %s",
+                    (new_date, poly_id)
+                )
 
                 # Logger la modification
                 log_hist(
@@ -1146,44 +1127,42 @@ class GestionEvaluationDialog(QDialog):
     def load_data(self):
         """Charge la liste des opérateurs avec leur résumé de polyvalences."""
         try:
-            with DatabaseCursor() as cursor:
-                # Charger les opérateurs avec statistiques de polyvalences
-                # Filtrer uniquement ceux qui ont au moins une polyvalence
-                query = """
-                    SELECT
-                        p.id,
-                        p.nom,
-                        p.prenom,
-                        p.matricule,
-                        COUNT(poly.id) as total_poly,
-                        SUM(CASE WHEN poly.niveau = 4 THEN 1 ELSE 0 END) as n4,
-                        SUM(CASE WHEN poly.niveau = 3 THEN 1 ELSE 0 END) as n3,
-                        SUM(CASE WHEN poly.niveau = 2 THEN 1 ELSE 0 END) as n2,
-                        SUM(CASE WHEN poly.niveau = 1 THEN 1 ELSE 0 END) as n1,
-                        SUM(
-                            CASE
-                                WHEN poly.prochaine_evaluation IS NULL THEN 1
-                                WHEN poly.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1
-                                ELSE 0
-                            END
-                        ) as a_planifier,
+            # Charger les opérateurs avec statistiques de polyvalences
+            # Filtrer uniquement ceux qui ont au moins une polyvalence
+            query = """
+                SELECT
+                    p.id,
+                    p.nom,
+                    p.prenom,
+                    p.matricule,
+                    COUNT(poly.id) as total_poly,
+                    SUM(CASE WHEN poly.niveau = 4 THEN 1 ELSE 0 END) as n4,
+                    SUM(CASE WHEN poly.niveau = 3 THEN 1 ELSE 0 END) as n3,
+                    SUM(CASE WHEN poly.niveau = 2 THEN 1 ELSE 0 END) as n2,
+                    SUM(CASE WHEN poly.niveau = 1 THEN 1 ELSE 0 END) as n1,
+                    SUM(
+                        CASE
+                            WHEN poly.prochaine_evaluation IS NULL THEN 1
+                            WHEN poly.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1
+                            ELSE 0
+                        END
+                    ) as a_planifier,
 
-                        SUM(
-                            CASE
-                                WHEN poly.prochaine_evaluation < CURDATE() THEN 1
-                                ELSE 0
-                            END
-                        ) as retard
-                    FROM personnel p
-                    INNER JOIN polyvalence poly ON poly.operateur_id = p.id
-                    WHERE p.statut = 'ACTIF'
-                    GROUP BY p.id, p.nom, p.prenom, p.matricule
-                    HAVING COUNT(poly.id) > 0
-                    ORDER BY p.nom, p.prenom
-                """
+                    SUM(
+                        CASE
+                            WHEN poly.prochaine_evaluation < CURDATE() THEN 1
+                            ELSE 0
+                        END
+                    ) as retard
+                FROM personnel p
+                INNER JOIN polyvalence poly ON poly.operateur_id = p.id
+                WHERE p.statut = 'ACTIF'
+                GROUP BY p.id, p.nom, p.prenom, p.matricule
+                HAVING COUNT(poly.id) > 0
+                ORDER BY p.nom, p.prenom
+            """
 
-                cursor.execute(query)
-                rows = cursor.fetchall()
+            rows = QueryExecutor.fetch_all(query)
 
             # Stocker toutes les données
             self.all_evaluations = []
@@ -1354,67 +1333,60 @@ class GestionEvaluationDialog(QDialog):
         date_iso = qdate.toString("yyyy-MM-dd")
 
         try:
-            with DatabaseConnection() as conn:
-                cursor = conn.cursor()
+            # Récupérer l'ancienne valeur et les infos pour le log
+            # ✅ SÉCURITÉ: Construction sécurisée de la requête avec whitelist
+            if field == "date_evaluation":
+                query_select = """
+                    SELECT pv.date_evaluation, p.nom, p.prenom, po.poste_code, po.id
+                    FROM polyvalence pv
+                    JOIN personnel p ON p.id = pv.operateur_id
+                    JOIN postes po ON po.id = pv.poste_id
+                    WHERE pv.id = %s
+                """
+            else:  # prochaine_evaluation
+                query_select = """
+                    SELECT pv.prochaine_evaluation, p.nom, p.prenom, po.poste_code, po.id
+                    FROM polyvalence pv
+                    JOIN personnel p ON p.id = pv.operateur_id
+                    JOIN postes po ON po.id = pv.poste_id
+                    WHERE pv.id = %s
+                """
 
-                # Récupérer l'ancienne valeur et les infos pour le log
-                # ✅ SÉCURITÉ: Construction sécurisée de la requête avec whitelist
+            result = QueryExecutor.fetch_one(query_select, (poly_id,))
+
+            if result:
+                old_date = result[0]
+                nom = result[1]
+                prenom = result[2]
+                poste_code = result[3]
+                poste_id = result[4]
+
+                # Mettre à jour la date
+                # ✅ SÉCURITÉ: Construction sécurisée de la requête UPDATE
                 if field == "date_evaluation":
-                    query_select = """
-                        SELECT pv.date_evaluation, p.nom, p.prenom, po.poste_code, po.id
-                        FROM polyvalence pv
-                        JOIN personnel p ON p.id = pv.operateur_id
-                        JOIN postes po ON po.id = pv.poste_id
-                        WHERE pv.id = %s
-                    """
+                    query_update = "UPDATE polyvalence SET date_evaluation = %s WHERE id = %s"
                 else:  # prochaine_evaluation
-                    query_select = """
-                        SELECT pv.prochaine_evaluation, p.nom, p.prenom, po.poste_code, po.id
-                        FROM polyvalence pv
-                        JOIN personnel p ON p.id = pv.operateur_id
-                        JOIN postes po ON po.id = pv.poste_id
-                        WHERE pv.id = %s
-                    """
+                    query_update = "UPDATE polyvalence SET prochaine_evaluation = %s WHERE id = %s"
 
-                cursor.execute(query_select, (poly_id,))
-                result = cursor.fetchone()
+                QueryExecutor.execute_write(query_update, (date_iso, poly_id))
 
-                if result:
-                    old_date = result[0]
-                    nom = result[1]
-                    prenom = result[2]
-                    poste_code = result[3]
-                    poste_id = result[4]
-
-                    # Mettre à jour la date
-                    # ✅ SÉCURITÉ: Construction sécurisée de la requête UPDATE
-                    if field == "date_evaluation":
-                        query_update = "UPDATE polyvalence SET date_evaluation = %s WHERE id = %s"
-                    else:  # prochaine_evaluation
-                        query_update = "UPDATE polyvalence SET prochaine_evaluation = %s WHERE id = %s"
-
-                    cursor.execute(query_update, (date_iso, poly_id))
-                    conn.commit()
-
-                    # Logger l'action
-                    log_hist(
-                        action="UPDATE",
-                        table_name="polyvalence",
-                        record_id=poly_id,
-                        operateur_id=None,
-                        poste_id=poste_id,
-                        description=json.dumps({
-                            "operateur": f"{prenom} {nom}",
-                            "poste": poste_code,
-                            "field": field_display,
-                            "old_value": str(old_date) if old_date else "Non défini",
-                            "new_value": date_iso,
-                            "type": "modification_date_evaluation"
-                        }, ensure_ascii=False),
-                        source="GUI/gestion_evaluation"
-                    )
-
-                cursor.close()
+                # Logger l'action
+                log_hist(
+                    action="UPDATE",
+                    table_name="polyvalence",
+                    record_id=poly_id,
+                    operateur_id=None,
+                    poste_id=poste_id,
+                    description=json.dumps({
+                        "operateur": f"{prenom} {nom}",
+                        "poste": poste_code,
+                        "field": field_display,
+                        "old_value": str(old_date) if old_date else "Non défini",
+                        "new_value": date_iso,
+                        "type": "modification_date_evaluation"
+                    }, ensure_ascii=False),
+                    source="GUI/gestion_evaluation"
+                )
 
             QMessageBox.information(self, "Succès", "Date mise à jour avec succès.")
 

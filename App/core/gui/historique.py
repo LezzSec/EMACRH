@@ -6,15 +6,17 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QPalette, QCursor
 
-from core.db.configbd import DatabaseCursor
+from core.db.configbd import DatabaseConnection
+from core.db.query_executor import QueryExecutor
 from core.services.log_exporter import export_day
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
+from core.utils.logging_config import get_logger
 
 import json
-import logging
-logger = logging.getLogger(__name__)
 import datetime as dt
 import os
+
+logger = get_logger(__name__)
 
 # --- Fonctions utilitaires (garder vos fonctions existantes) ---
 ACTION_LABEL = {
@@ -32,17 +34,22 @@ def get_entity_name(entity_type: str, entity_id) -> str:
         return ""
 
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            if entity_type == "operateur":
-                cur.execute("SELECT nom, prenom FROM personnel WHERE id = %s", (entity_id,))
-                row = cur.fetchone()
-                if row:
-                    return f"{row['prenom']} {row['nom']}"
-            elif entity_type == "poste":
-                cur.execute("SELECT poste_code FROM postes WHERE id = %s", (entity_id,))
-                row = cur.fetchone()
-                if row:
-                    return row['poste_code']
+        if entity_type == "operateur":
+            row = QueryExecutor.fetch_one(
+                "SELECT nom, prenom FROM personnel WHERE id = %s",
+                (entity_id,),
+                dictionary=True
+            )
+            if row:
+                return f"{row['prenom']} {row['nom']}"
+        elif entity_type == "poste":
+            row = QueryExecutor.fetch_one(
+                "SELECT poste_code FROM postes WHERE id = %s",
+                (entity_id,),
+                dictionary=True
+            )
+            if row:
+                return row['poste_code']
     except Exception:
         pass
 
@@ -739,9 +746,7 @@ class HistoriqueDialog(QDialog):
             "ORDER BY date_time DESC, id DESC"
         )
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(sql, params)
-            return cur.fetchall() or []
+        return QueryExecutor.fetch_all(sql, tuple(params), dictionary=True)
 
     # ---------- UI Reload ----------
     def reload(self):
@@ -835,15 +840,16 @@ class HistoriqueDialog(QDialog):
             return
 
         try:
-            from core.db.configbd import DatabaseConnection
             sql = (
                 "DELETE FROM historique "
                 "WHERE date_time >= %s AND date_time <= %s"
             )
-            params = [
+            params = (
                 dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
                 dt.datetime(d_to.year(),   d_to.month(),   d_to.day(),   23, 59, 59)
-            ]
+            )
+
+            # Exécuter la suppression et récupérer le nombre de lignes affectées
             with DatabaseConnection() as conn:
                 cur = conn.cursor()
                 cur.execute(sql, params)

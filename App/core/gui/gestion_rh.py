@@ -24,23 +24,36 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QDate
 from PyQt5.QtGui import QFont, QColor
 
 from core.gui.ui_theme import EmacTheme, EmacCard, EmacButton
-from core.gui.emac_ui_kit import EmacBadge, EmacAlert, EmacChip, add_custom_title_bar
-from core.services.rh_service import (
+from core.gui.emac_ui_kit import EmacBadge, EmacAlert, EmacChip, add_custom_title_bar, show_error_message
+from core.gui.emac_dialog import EmacFormDialog
+from core.db.query_executor import QueryExecutor
+# ✅ MIGRATION COMPLÈTE VERS VERSION REFACTORISÉE (2026-02-10)
+from core.services.rh_service_refactored import (
     rechercher_operateurs,
     get_operateur_by_id,
     get_donnees_domaine,
+    DomaineRH,
+    update_infos_generales,
+    create_contrat,
+    update_contrat,
+    delete_contrat,
+    create_formation,
+    update_formation,
+    delete_formation,
+    create_declaration,
+    update_declaration,
+    delete_declaration,
+    get_types_declaration,
+    get_catalogue_competences,
+    create_competence_personnel,
+    update_competence_personnel,
+    delete_competence_personnel,
     get_documents_domaine,
     get_documents_archives_operateur,
     get_resume_operateur,
     get_domaines_rh,
-    DomaineRH,
-    update_infos_generales,
-    create_contrat, update_contrat, delete_contrat,
-    create_declaration, update_declaration, delete_declaration,
-    create_formation, update_formation, delete_formation,
-    get_types_declaration,
-    get_catalogue_competences,
-    create_competence_personnel, update_competence_personnel, delete_competence_personnel
+    get_categories_documents,
+    CATEGORIE_TO_DOMAINE,
 )
 from core.services.medical_service import (
     get_visites, create_visite, update_visite, delete_visite,
@@ -62,20 +75,21 @@ from core.services.permission_manager import can
 # FORMULAIRES D'ÉDITION
 # ============================================================
 
-class EditInfosGeneralesDialog(QDialog):
+class EditInfosGeneralesDialog(EmacFormDialog):
     """Formulaire d'édition des informations générales."""
 
     def __init__(self, operateur_id: int, donnees: dict, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
         self.donnees = donnees
-        self.setWindowTitle("Modifier les informations générales")
-        self.setMinimumWidth(500)
-        self._setup_ui()
+        super().__init__(
+            title="Modifier les informations générales",
+            min_width=500,
+            min_height=500,
+            add_title_bar=False,
+            parent=parent
+        )
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(12)
 
@@ -83,23 +97,19 @@ class EditInfosGeneralesDialog(QDialog):
         identite_group = QGroupBox("Identité")
         identite_layout = QFormLayout(identite_group)
 
-        # Nom
         self.nom = QLineEdit(self.donnees.get('nom') or '')
         identite_layout.addRow("Nom:", self.nom)
 
-        # Prénom
         self.prenom = QLineEdit(self.donnees.get('prenom') or '')
         identite_layout.addRow("Prénom:", self.prenom)
 
-        # Matricule
         self.matricule = QLineEdit(self.donnees.get('matricule') or '')
         self.matricule.setPlaceholderText("Ex: M000001")
         identite_layout.addRow("Matricule:", self.matricule)
 
-        layout.addWidget(identite_group)
+        self.content_layout.addWidget(identite_group)
 
         # --- Section Informations personnelles ---
-        # Sexe
         self.sexe_combo = QComboBox()
         self.sexe_combo.addItems(['', 'M', 'F'])
         if self.donnees.get('sexe'):
@@ -108,7 +118,6 @@ class EditInfosGeneralesDialog(QDialog):
                 self.sexe_combo.setCurrentIndex(idx)
         form.addRow("Sexe:", self.sexe_combo)
 
-        # Date de naissance
         self.date_naissance = QDateEdit()
         self.date_naissance.setCalendarPopup(True)
         self.date_naissance.setDisplayFormat("dd/MM/yyyy")
@@ -118,7 +127,6 @@ class EditInfosGeneralesDialog(QDialog):
             self.date_naissance.setDate(QDate(d.year, d.month, d.day))
         form.addRow("Date de naissance:", self.date_naissance)
 
-        # Date d'entrée
         self.date_entree = QDateEdit()
         self.date_entree.setCalendarPopup(True)
         self.date_entree.setDisplayFormat("dd/MM/yyyy")
@@ -128,23 +136,19 @@ class EditInfosGeneralesDialog(QDialog):
             self.date_entree.setDate(QDate(d.year, d.month, d.day))
         form.addRow("Date d'entrée:", self.date_entree)
 
-        # Nationalité
         self.nationalite = QLineEdit(self.donnees.get('nationalite') or '')
         form.addRow("Nationalité:", self.nationalite)
 
-        # Numéro de sécurité sociale
         self.numero_ss = QLineEdit(self.donnees.get('numero_ss') or '')
         self.numero_ss.setPlaceholderText("Ex: 1 93 02 75 108 136 23")
         form.addRow("N° Sécurité Sociale:", self.numero_ss)
 
-        # Adresse
         self.adresse1 = QLineEdit(self.donnees.get('adresse1') or '')
         form.addRow("Adresse:", self.adresse1)
 
         self.adresse2 = QLineEdit(self.donnees.get('adresse2') or '')
         form.addRow("Adresse (suite):", self.adresse2)
 
-        # CP + Ville
         cp_ville = QHBoxLayout()
         self.cp = QLineEdit(self.donnees.get('cp_adresse') or '')
         self.cp.setMaximumWidth(80)
@@ -153,15 +157,12 @@ class EditInfosGeneralesDialog(QDialog):
         cp_ville.addWidget(self.ville)
         form.addRow("CP / Ville:", cp_ville)
 
-        # Téléphone
         self.telephone = QLineEdit(self.donnees.get('telephone') or '')
         form.addRow("Téléphone:", self.telephone)
 
-        # Email
         self.email = QLineEdit(self.donnees.get('email') or '')
         form.addRow("Email:", self.email)
 
-        # Pays (de l'adresse)
         self.pays_adresse = QLineEdit(self.donnees.get('pays_adresse') or '')
         self.pays_adresse.setPlaceholderText("Ex: France")
         form.addRow("Pays:", self.pays_adresse)
@@ -170,64 +171,41 @@ class EditInfosGeneralesDialog(QDialog):
         naissance_group = QGroupBox("Lieu de naissance")
         naissance_layout = QFormLayout(naissance_group)
 
-        # Ville de naissance
         self.ville_naissance = QLineEdit(self.donnees.get('ville_naissance') or '')
         self.ville_naissance.setPlaceholderText("Ex: Paris")
         naissance_layout.addRow("Ville:", self.ville_naissance)
 
-        # Pays de naissance
         self.pays_naissance = QLineEdit(self.donnees.get('pays_naissance') or '')
         self.pays_naissance.setPlaceholderText("Ex: France")
         naissance_layout.addRow("Pays:", self.pays_naissance)
 
-        layout.addWidget(naissance_group)
-        layout.addLayout(form)
+        self.content_layout.addWidget(naissance_group)
+        self.content_layout.addLayout(form)
 
-        # Boutons
-        buttons = QHBoxLayout()
-        buttons.addStretch()
+    def validate(self):
+        if not self.nom.text().strip():
+            return False, "Le nom est obligatoire."
+        if not self.prenom.text().strip():
+            return False, "Le prénom est obligatoire."
 
-        btn_cancel = EmacButton("Annuler", variant="ghost")
-        btn_cancel.clicked.connect(self.reject)
-        buttons.addWidget(btn_cancel)
-
-        btn_save = EmacButton("Enregistrer", variant="primary")
-        btn_save.clicked.connect(self._save)
-        buttons.addWidget(btn_save)
-
-        layout.addLayout(buttons)
-
-    def _save(self):
-        # Validation des champs obligatoires
-        nouveau_nom = self.nom.text().strip()
-        nouveau_prenom = self.prenom.text().strip()
+        # Validation unicité matricule
         nouveau_matricule = self.matricule.text().strip()
-
-        if not nouveau_nom:
-            QMessageBox.warning(self, "Champ obligatoire", "Le nom est obligatoire.")
-            return
-
-        if not nouveau_prenom:
-            QMessageBox.warning(self, "Champ obligatoire", "Le prénom est obligatoire.")
-            return
-
-        # Validation du matricule (unicité)
         if nouveau_matricule:
-            from core.db.configbd import DatabaseCursor
-            with DatabaseCursor(dictionary=True) as cur:
-                cur.execute(
-                    "SELECT id FROM personnel WHERE matricule = %s AND id != %s",
-                    (nouveau_matricule, self.operateur_id)
-                )
-                if cur.fetchone():
-                    QMessageBox.warning(self, "Matricule existant",
-                        f"Le matricule '{nouveau_matricule}' est déjà utilisé par un autre opérateur.")
-                    return
+            existing = QueryExecutor.fetch_one(
+                "SELECT id FROM personnel WHERE matricule = %s AND id != %s",
+                (nouveau_matricule, self.operateur_id),
+                dictionary=True
+            )
+            if existing:
+                return False, f"Le matricule '{nouveau_matricule}' est déjà utilisé par un autre opérateur."
 
+        return True, ""
+
+    def save_to_db(self):
         data = {
-            'nom': nouveau_nom,
-            'prenom': nouveau_prenom,
-            'matricule': nouveau_matricule or None,
+            'nom': self.nom.text().strip(),
+            'prenom': self.prenom.text().strip(),
+            'matricule': self.matricule.text().strip() or None,
             'sexe': self.sexe_combo.currentText() or None,
             'date_naissance': self.date_naissance.date().toPyDate() if self.date_naissance.date().year() > 1900 else None,
             'date_entree': self.date_entree.date().toPyDate() if self.date_entree.date().year() > 1900 else None,
@@ -245,32 +223,24 @@ class EditInfosGeneralesDialog(QDialog):
         }
 
         success, message = update_infos_generales(self.operateur_id, data)
-        if success:
-            QMessageBox.information(self, "Succès", message)
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
-class EditContratDialog(QDialog):
+class EditContratDialog(EmacFormDialog):
     """Formulaire d'édition/création de contrat."""
 
     def __init__(self, operateur_id: int, contrat: dict = None, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
         self.contrat = contrat
         self.is_edit = contrat is not None
-        self.setWindowTitle("Modifier le contrat" if self.is_edit else "Nouveau contrat")
-        self.setMinimumWidth(450)
-        self._setup_ui()
+        title = "Modifier le contrat" if self.is_edit else "Nouveau contrat"
+        super().__init__(title=title, min_width=450, min_height=400, add_title_bar=False, parent=parent)
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(12)
 
-        # Type de contrat
         self.type_combo = QComboBox()
         self.type_combo.addItems([
             'CDI', 'CDD', 'Intérimaire', 'Apprentissage', 'Stagiaire',
@@ -283,7 +253,6 @@ class EditContratDialog(QDialog):
                 self.type_combo.setCurrentIndex(idx)
         form.addRow("Type de contrat:", self.type_combo)
 
-        # Date début
         self.date_debut = QDateEdit()
         self.date_debut.setCalendarPopup(True)
         self.date_debut.setDisplayFormat("dd/MM/yyyy")
@@ -293,7 +262,6 @@ class EditContratDialog(QDialog):
             self.date_debut.setDate(QDate(d.year, d.month, d.day))
         form.addRow("Date de début:", self.date_debut)
 
-        # Date fin
         self.date_fin = QDateEdit()
         self.date_fin.setCalendarPopup(True)
         self.date_fin.setDisplayFormat("dd/MM/yyyy")
@@ -306,22 +274,18 @@ class EditContratDialog(QDialog):
             self.date_fin.setDate(QDate(1900, 1, 1))
         form.addRow("Date de fin:", self.date_fin)
 
-        # ETP
         self.etp = QDoubleSpinBox()
         self.etp.setRange(0.01, 1.0)
         self.etp.setSingleStep(0.1)
         self.etp.setValue(float(self.contrat.get('etp', 1.0)) if self.contrat else 1.0)
         form.addRow("ETP:", self.etp)
 
-        # Catégorie
         self.categorie = QLineEdit(self.contrat.get('categorie', '') if self.contrat else '')
         form.addRow("Catégorie:", self.categorie)
 
-        # Emploi
         self.emploi = QLineEdit(self.contrat.get('emploi', '') if self.contrat else '')
         form.addRow("Emploi:", self.emploi)
 
-        # Salaire
         self.salaire = QDoubleSpinBox()
         self.salaire.setRange(0, 999999.99)
         self.salaire.setSuffix(" €")
@@ -329,23 +293,9 @@ class EditContratDialog(QDialog):
             self.salaire.setValue(float(self.contrat['salaire']))
         form.addRow("Salaire brut:", self.salaire)
 
-        layout.addLayout(form)
+        self.content_layout.addLayout(form)
 
-        # Boutons
-        buttons = QHBoxLayout()
-        buttons.addStretch()
-
-        btn_cancel = EmacButton("Annuler", variant="ghost")
-        btn_cancel.clicked.connect(self.reject)
-        buttons.addWidget(btn_cancel)
-
-        btn_save = EmacButton("Enregistrer", variant="primary")
-        btn_save.clicked.connect(self._save)
-        buttons.addWidget(btn_save)
-
-        layout.addLayout(buttons)
-
-    def _save(self):
+    def save_to_db(self):
         date_fin = self.date_fin.date()
         data = {
             'type_contrat': self.type_combo.currentText(),
@@ -362,32 +312,24 @@ class EditContratDialog(QDialog):
         else:
             success, message, _ = create_contrat(self.operateur_id, data)
 
-        if success:
-            QMessageBox.information(self, "Succès", message)
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
-class EditDeclarationDialog(QDialog):
+class EditDeclarationDialog(EmacFormDialog):
     """Formulaire d'édition/création de déclaration."""
 
     def __init__(self, operateur_id: int, declaration: dict = None, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
         self.declaration = declaration
         self.is_edit = declaration is not None
-        self.setWindowTitle("Modifier la déclaration" if self.is_edit else "Nouvelle déclaration")
-        self.setMinimumWidth(400)
-        self._setup_ui()
+        title = "Modifier la déclaration" if self.is_edit else "Nouvelle déclaration"
+        super().__init__(title=title, min_width=400, min_height=350, add_title_bar=False, parent=parent)
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(12)
 
-        # Type
         self.type_combo = QComboBox()
         self.type_combo.addItems(get_types_declaration())
         if self.declaration and self.declaration.get('type_declaration'):
@@ -396,7 +338,6 @@ class EditDeclarationDialog(QDialog):
                 self.type_combo.setCurrentIndex(idx)
         form.addRow("Type:", self.type_combo)
 
-        # Date début
         self.date_debut = QDateEdit()
         self.date_debut.setCalendarPopup(True)
         self.date_debut.setDisplayFormat("dd/MM/yyyy")
@@ -406,7 +347,6 @@ class EditDeclarationDialog(QDialog):
             self.date_debut.setDate(QDate(d.year, d.month, d.day))
         form.addRow("Date de début:", self.date_debut)
 
-        # Date fin
         self.date_fin = QDateEdit()
         self.date_fin.setCalendarPopup(True)
         self.date_fin.setDisplayFormat("dd/MM/yyyy")
@@ -416,30 +356,15 @@ class EditDeclarationDialog(QDialog):
             self.date_fin.setDate(QDate(d.year, d.month, d.day))
         form.addRow("Date de fin:", self.date_fin)
 
-        # Motif
         self.motif = QTextEdit()
         self.motif.setMaximumHeight(80)
         if self.declaration and self.declaration.get('motif'):
             self.motif.setText(self.declaration['motif'])
         form.addRow("Motif:", self.motif)
 
-        layout.addLayout(form)
+        self.content_layout.addLayout(form)
 
-        # Boutons
-        buttons = QHBoxLayout()
-        buttons.addStretch()
-
-        btn_cancel = EmacButton("Annuler", variant="ghost")
-        btn_cancel.clicked.connect(self.reject)
-        buttons.addWidget(btn_cancel)
-
-        btn_save = EmacButton("Enregistrer", variant="primary")
-        btn_save.clicked.connect(self._save)
-        buttons.addWidget(btn_save)
-
-        layout.addLayout(buttons)
-
-    def _save(self):
+    def save_to_db(self):
         data = {
             'type_declaration': self.type_combo.currentText(),
             'date_debut': self.date_debut.date().toPyDate(),
@@ -452,41 +377,31 @@ class EditDeclarationDialog(QDialog):
         else:
             success, message, _ = create_declaration(self.operateur_id, data)
 
-        if success:
-            QMessageBox.information(self, "Succès", message)
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
-class EditCompetenceDialog(QDialog):
+class EditCompetenceDialog(EmacFormDialog):
     """Formulaire d'édition/création d'une compétence assignée."""
 
     def __init__(self, operateur_id: int, competence: dict = None, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
         self.competence = competence
         self.is_edit = competence is not None
-        self.setWindowTitle("Modifier la compétence" if self.is_edit else "Nouvelle compétence")
-        self.setMinimumWidth(450)
-        self._setup_ui()
+        title = "Modifier la compétence" if self.is_edit else "Nouvelle compétence"
+        super().__init__(title=title, min_width=450, min_height=400, add_title_bar=False, parent=parent)
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(12)
 
-        # Sélection de la compétence (catalogue)
         self.competence_combo = QComboBox()
         self.competence_combo.setMinimumWidth(300)
         self._charger_catalogue()
         self.competence_combo.currentIndexChanged.connect(self._on_competence_changed)
 
         if self.is_edit:
-            # En mode édition, désactiver le changement de compétence
             self.competence_combo.setEnabled(False)
-            # Sélectionner la compétence actuelle
             for i in range(self.competence_combo.count()):
                 if self.competence_combo.itemData(i) and \
                    self.competence_combo.itemData(i).get('id') == self.competence.get('competence_id'):
@@ -495,7 +410,6 @@ class EditCompetenceDialog(QDialog):
 
         form.addRow("Compétence:", self.competence_combo)
 
-        # Date d'acquisition
         self.date_acquisition = QDateEdit()
         self.date_acquisition.setCalendarPopup(True)
         self.date_acquisition.setDisplayFormat("dd/MM/yyyy")
@@ -505,7 +419,6 @@ class EditCompetenceDialog(QDialog):
             self.date_acquisition.setDate(QDate(d.year, d.month, d.day))
         form.addRow("Date d'acquisition:", self.date_acquisition)
 
-        # Date d'expiration
         self.date_expiration = QDateEdit()
         self.date_expiration.setCalendarPopup(True)
         self.date_expiration.setDisplayFormat("dd/MM/yyyy")
@@ -518,12 +431,10 @@ class EditCompetenceDialog(QDialog):
             self.date_expiration.setDate(QDate(1900, 1, 1))
         form.addRow("Date d'expiration:", self.date_expiration)
 
-        # Info sur la validité (label informatif)
         self.validite_info = QLabel("")
         self.validite_info.setStyleSheet("color: #64748b; font-style: italic;")
         form.addRow("", self.validite_info)
 
-        # Commentaire
         self.commentaire = QTextEdit()
         self.commentaire.setMaximumHeight(80)
         self.commentaire.setPlaceholderText("Commentaire optionnel...")
@@ -531,23 +442,7 @@ class EditCompetenceDialog(QDialog):
             self.commentaire.setText(self.competence['commentaire'])
         form.addRow("Commentaire:", self.commentaire)
 
-        layout.addLayout(form)
-
-        # Boutons
-        buttons = QHBoxLayout()
-        buttons.addStretch()
-
-        btn_cancel = EmacButton("Annuler", variant="ghost")
-        btn_cancel.clicked.connect(self.reject)
-        buttons.addWidget(btn_cancel)
-
-        btn_save = EmacButton("Enregistrer", variant="primary")
-        btn_save.clicked.connect(self._save)
-        buttons.addWidget(btn_save)
-
-        layout.addLayout(buttons)
-
-        # Mettre à jour l'info validité
+        self.content_layout.addLayout(form)
         self._on_competence_changed()
 
     def _charger_catalogue(self):
@@ -557,7 +452,6 @@ class EditCompetenceDialog(QDialog):
 
         catalogue = get_catalogue_competences(actif_only=True)
 
-        # Grouper par catégorie
         categories = {}
         for comp in catalogue:
             cat = comp.get('categorie') or 'Autre'
@@ -566,10 +460,8 @@ class EditCompetenceDialog(QDialog):
             categories[cat].append(comp)
 
         for cat in sorted(categories.keys()):
-            # Ajouter un séparateur/titre de catégorie
             self.competence_combo.addItem(f"── {cat} ──", None)
             idx = self.competence_combo.count() - 1
-            # Désactiver l'item séparateur
             self.competence_combo.model().item(idx).setEnabled(False)
 
             for comp in categories[cat]:
@@ -585,7 +477,6 @@ class EditCompetenceDialog(QDialog):
             mois = comp_data['duree_validite_mois']
             self.validite_info.setText(f"Validité standard: {mois} mois")
 
-            # Pré-remplir la date d'expiration si pas en mode édition
             if not self.is_edit:
                 date_acq = self.date_acquisition.date().toPyDate()
                 from dateutil.relativedelta import relativedelta
@@ -596,12 +487,13 @@ class EditCompetenceDialog(QDialog):
             if not self.is_edit:
                 self.date_expiration.setDate(QDate(1900, 1, 1))
 
-    def _save(self):
-        comp_data = self.competence_combo.currentData()
-        if not comp_data:
-            QMessageBox.warning(self, "Attention", "Veuillez sélectionner une compétence")
-            return
+    def validate(self):
+        if not self.competence_combo.currentData():
+            return False, "Veuillez sélectionner une compétence"
+        return True, ""
 
+    def save_to_db(self):
+        comp_data = self.competence_combo.currentData()
         date_exp = self.date_expiration.date()
         data = {
             'competence_id': comp_data['id'],
@@ -615,40 +507,30 @@ class EditCompetenceDialog(QDialog):
         else:
             success, message, _ = create_competence_personnel(self.operateur_id, data)
 
-        if success:
-            QMessageBox.information(self, "Succès", message)
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
-class EditFormationDialog(QDialog):
+class EditFormationDialog(EmacFormDialog):
     """Formulaire d'édition/création de formation."""
 
     def __init__(self, operateur_id: int, formation: dict = None, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
         self.formation = formation
         self.is_edit = formation is not None
-        self.setWindowTitle("Modifier la formation" if self.is_edit else "Nouvelle formation")
-        self.setMinimumWidth(450)
-        self._setup_ui()
+        title = "Modifier la formation" if self.is_edit else "Nouvelle formation"
+        super().__init__(title=title, min_width=450, min_height=450, add_title_bar=False, parent=parent)
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(12)
 
-        # Intitulé
         self.intitule = QLineEdit(self.formation.get('intitule', '') if self.formation else '')
         form.addRow("Intitulé:", self.intitule)
 
-        # Organisme
         self.organisme = QLineEdit(self.formation.get('organisme', '') if self.formation else '')
         form.addRow("Organisme:", self.organisme)
 
-        # Date début
         self.date_debut = QDateEdit()
         self.date_debut.setCalendarPopup(True)
         self.date_debut.setDisplayFormat("dd/MM/yyyy")
@@ -658,7 +540,6 @@ class EditFormationDialog(QDialog):
             self.date_debut.setDate(QDate(d.year, d.month, d.day))
         form.addRow("Date de début:", self.date_debut)
 
-        # Date fin
         self.date_fin = QDateEdit()
         self.date_fin.setCalendarPopup(True)
         self.date_fin.setDisplayFormat("dd/MM/yyyy")
@@ -671,7 +552,6 @@ class EditFormationDialog(QDialog):
             self.date_fin.setDate(QDate(1900, 1, 1))
         form.addRow("Date de fin:", self.date_fin)
 
-        # Durée
         self.duree = QDoubleSpinBox()
         self.duree.setRange(0, 9999)
         self.duree.setSuffix(" h")
@@ -679,7 +559,6 @@ class EditFormationDialog(QDialog):
             self.duree.setValue(float(self.formation['duree_heures']))
         form.addRow("Durée:", self.duree)
 
-        # Statut
         self.statut_combo = QComboBox()
         self.statut_combo.addItems(['Planifiée', 'En cours', 'Terminée', 'Annulée'])
         if self.formation and self.formation.get('statut'):
@@ -688,40 +567,25 @@ class EditFormationDialog(QDialog):
                 self.statut_combo.setCurrentIndex(idx)
         form.addRow("Statut:", self.statut_combo)
 
-        # Certificat
         self.certificat = QCheckBox("Certificat obtenu")
         if self.formation and self.formation.get('certificat_obtenu'):
             self.certificat.setChecked(True)
         form.addRow("", self.certificat)
 
-        # Commentaire
         self.commentaire = QTextEdit()
         self.commentaire.setMaximumHeight(80)
         if self.formation and self.formation.get('commentaire'):
             self.commentaire.setText(self.formation['commentaire'])
         form.addRow("Commentaire:", self.commentaire)
 
-        layout.addLayout(form)
+        self.content_layout.addLayout(form)
 
-        # Boutons
-        buttons = QHBoxLayout()
-        buttons.addStretch()
-
-        btn_cancel = EmacButton("Annuler", variant="ghost")
-        btn_cancel.clicked.connect(self.reject)
-        buttons.addWidget(btn_cancel)
-
-        btn_save = EmacButton("Enregistrer", variant="primary")
-        btn_save.clicked.connect(self._save)
-        buttons.addWidget(btn_save)
-
-        layout.addLayout(buttons)
-
-    def _save(self):
+    def validate(self):
         if not self.intitule.text().strip():
-            QMessageBox.warning(self, "Attention", "L'intitulé est obligatoire")
-            return
+            return False, "L'intitulé est obligatoire"
+        return True, ""
 
+    def save_to_db(self):
         date_fin = self.date_fin.date()
         data = {
             'intitule': self.intitule.text().strip(),
@@ -739,37 +603,28 @@ class EditFormationDialog(QDialog):
         else:
             success, message, _ = create_formation(self.operateur_id, data)
 
-        if success:
-            QMessageBox.information(self, "Succès", message)
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
 # ============================================================
 # FORMULAIRES MEDICAL
 # ============================================================
 
-class EditVisiteDialog(QDialog):
+class EditVisiteDialog(EmacFormDialog):
     """Formulaire pour ajouter/modifier une visite médicale."""
 
     def __init__(self, operateur_id: int, visite: dict = None, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
         self.visite = visite
         self.is_edit = visite is not None
-        self.setWindowTitle("Modifier la visite" if self.is_edit else "Nouvelle visite médicale")
-        self.setMinimumWidth(450)
-        self._setup_ui()
+        title = "Modifier la visite" if self.is_edit else "Nouvelle visite médicale"
+        super().__init__(title=title, min_width=450, min_height=450, add_title_bar=False, parent=parent)
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(10)
 
-        # Date visite
         self.date_visite = QDateEdit()
         self.date_visite.setCalendarPopup(True)
         self.date_visite.setDisplayFormat("dd/MM/yyyy")
@@ -780,7 +635,6 @@ class EditVisiteDialog(QDialog):
             self.date_visite.setDate(QDate.currentDate())
         form.addRow("Date de visite:", self.date_visite)
 
-        # Type visite
         self.type_combo = QComboBox()
         self.type_combo.addItems(['Embauche', 'Périodique', 'Reprise', 'À la demande', 'Pré-reprise'])
         if self.is_edit and self.visite.get('type_visite'):
@@ -789,7 +643,6 @@ class EditVisiteDialog(QDialog):
                 self.type_combo.setCurrentIndex(idx)
         form.addRow("Type de visite:", self.type_combo)
 
-        # Résultat
         self.resultat_combo = QComboBox()
         self.resultat_combo.addItems(['', 'Apte', 'Apte avec restrictions', 'Inapte temporaire', 'Inapte définitif'])
         if self.is_edit and self.visite.get('resultat'):
@@ -798,7 +651,6 @@ class EditVisiteDialog(QDialog):
                 self.resultat_combo.setCurrentIndex(idx)
         form.addRow("Résultat:", self.resultat_combo)
 
-        # Restrictions
         self.restrictions = QTextEdit()
         self.restrictions.setMaximumHeight(60)
         self.restrictions.setPlaceholderText("Détail des restrictions si applicable")
@@ -806,14 +658,12 @@ class EditVisiteDialog(QDialog):
             self.restrictions.setText(self.visite.get('restrictions') or '')
         form.addRow("Restrictions:", self.restrictions)
 
-        # Médecin
         self.medecin = QLineEdit()
         self.medecin.setPlaceholderText("Nom du médecin")
         if self.is_edit:
             self.medecin.setText(self.visite.get('medecin') or '')
         form.addRow("Médecin:", self.medecin)
 
-        # Prochaine visite
         self.prochaine_visite = QDateEdit()
         self.prochaine_visite.setCalendarPopup(True)
         self.prochaine_visite.setDisplayFormat("dd/MM/yyyy")
@@ -823,27 +673,15 @@ class EditVisiteDialog(QDialog):
             self.prochaine_visite.setDate(QDate(d.year, d.month, d.day))
         form.addRow("Prochaine visite:", self.prochaine_visite)
 
-        # Commentaire
         self.commentaire = QTextEdit()
         self.commentaire.setMaximumHeight(60)
         if self.is_edit:
             self.commentaire.setText(self.visite.get('commentaire') or '')
         form.addRow("Commentaire:", self.commentaire)
 
-        layout.addLayout(form)
+        self.content_layout.addLayout(form)
 
-        # Boutons
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        btn_cancel = EmacButton("Annuler", variant="ghost")
-        btn_cancel.clicked.connect(self.reject)
-        btn_layout.addWidget(btn_cancel)
-        btn_save = EmacButton("Enregistrer", variant="primary")
-        btn_save.clicked.connect(self._save)
-        btn_layout.addWidget(btn_save)
-        layout.addLayout(btn_layout)
-
-    def _save(self):
+    def save_to_db(self):
         prochaine = self.prochaine_visite.date()
         data = {
             'date_visite': self.date_visite.date().toPyDate(),
@@ -860,32 +698,24 @@ class EditVisiteDialog(QDialog):
         else:
             success, message, _ = create_visite(self.operateur_id, data)
 
-        if success:
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
-class EditAccidentDialog(QDialog):
+class EditAccidentDialog(EmacFormDialog):
     """Formulaire pour ajouter/modifier un accident du travail."""
 
     def __init__(self, operateur_id: int, accident: dict = None, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
         self.accident = accident
         self.is_edit = accident is not None
-        self.setWindowTitle("Modifier l'accident" if self.is_edit else "Nouvel accident du travail")
-        self.setMinimumWidth(500)
-        self._setup_ui()
+        title = "Modifier l'accident" if self.is_edit else "Nouvel accident du travail"
+        super().__init__(title=title, min_width=500, min_height=500, add_title_bar=False, parent=parent)
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(10)
 
-        # Date accident
         self.date_accident = QDateEdit()
         self.date_accident.setCalendarPopup(True)
         self.date_accident.setDisplayFormat("dd/MM/yyyy")
@@ -896,13 +726,11 @@ class EditAccidentDialog(QDialog):
             self.date_accident.setDate(QDate.currentDate())
         form.addRow("Date de l'accident:", self.date_accident)
 
-        # Avec arrêt
         self.avec_arret = QCheckBox("Accident avec arrêt de travail")
         if self.is_edit:
             self.avec_arret.setChecked(self.accident.get('avec_arret', False))
         form.addRow("", self.avec_arret)
 
-        # Circonstances
         self.circonstances = QTextEdit()
         self.circonstances.setMaximumHeight(80)
         self.circonstances.setPlaceholderText("Décrivez les circonstances de l'accident")
@@ -910,21 +738,18 @@ class EditAccidentDialog(QDialog):
             self.circonstances.setText(self.accident.get('circonstances') or '')
         form.addRow("Circonstances:", self.circonstances)
 
-        # Siège des lésions
         self.siege_lesions = QLineEdit()
         self.siege_lesions.setPlaceholderText("Ex: Main droite, Dos, Pied gauche")
         if self.is_edit:
             self.siege_lesions.setText(self.accident.get('siege_lesions') or '')
         form.addRow("Siège des lésions:", self.siege_lesions)
 
-        # Nature des lésions
         self.nature_lesions = QLineEdit()
         self.nature_lesions.setPlaceholderText("Ex: Fracture, Brûlure, Contusion")
         if self.is_edit:
             self.nature_lesions.setText(self.accident.get('nature_lesions') or '')
         form.addRow("Nature des lésions:", self.nature_lesions)
 
-        # Nombre de jours d'absence
         self.nb_jours = QDoubleSpinBox()
         self.nb_jours.setRange(0, 365)
         self.nb_jours.setDecimals(0)
@@ -933,27 +758,15 @@ class EditAccidentDialog(QDialog):
             self.nb_jours.setValue(self.accident['nb_jours_absence'])
         form.addRow("Jours d'absence:", self.nb_jours)
 
-        # Commentaire
         self.commentaire = QTextEdit()
         self.commentaire.setMaximumHeight(60)
         if self.is_edit:
             self.commentaire.setText(self.accident.get('commentaire') or '')
         form.addRow("Commentaire:", self.commentaire)
 
-        layout.addLayout(form)
+        self.content_layout.addLayout(form)
 
-        # Boutons
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        btn_cancel = EmacButton("Annuler", variant="ghost")
-        btn_cancel.clicked.connect(self.reject)
-        btn_layout.addWidget(btn_cancel)
-        btn_save = EmacButton("Enregistrer", variant="primary")
-        btn_save.clicked.connect(self._save)
-        btn_layout.addWidget(btn_save)
-        layout.addLayout(btn_layout)
-
-    def _save(self):
+    def save_to_db(self):
         data = {
             'date_accident': self.date_accident.date().toPyDate(),
             'avec_arret': self.avec_arret.isChecked(),
@@ -969,36 +782,28 @@ class EditAccidentDialog(QDialog):
         else:
             success, message, _ = create_accident(self.operateur_id, data)
 
-        if success:
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
 # ============================================================
 # FORMULAIRES VIE DU SALARIE
 # ============================================================
 
-class EditSanctionDialog(QDialog):
+class EditSanctionDialog(EmacFormDialog):
     """Formulaire pour ajouter/modifier une sanction."""
 
     def __init__(self, operateur_id: int, sanction: dict = None, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
         self.sanction = sanction
         self.is_edit = sanction is not None
-        self.setWindowTitle("Modifier la sanction" if self.is_edit else "Nouvelle sanction")
-        self.setMinimumWidth(450)
-        self._setup_ui()
+        title = "Modifier la sanction" if self.is_edit else "Nouvelle sanction"
+        super().__init__(title=title, min_width=450, min_height=400, add_title_bar=False, parent=parent)
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(10)
 
-        # Date sanction
         self.date_sanction = QDateEdit()
         self.date_sanction.setCalendarPopup(True)
         self.date_sanction.setDisplayFormat("dd/MM/yyyy")
@@ -1009,7 +814,6 @@ class EditSanctionDialog(QDialog):
             self.date_sanction.setDate(QDate.currentDate())
         form.addRow("Date:", self.date_sanction)
 
-        # Type sanction
         self.type_combo = QComboBox()
         self.type_combo.addItems(get_types_sanction())
         if self.is_edit and self.sanction.get('type_sanction'):
@@ -1018,7 +822,6 @@ class EditSanctionDialog(QDialog):
                 self.type_combo.setCurrentIndex(idx)
         form.addRow("Type:", self.type_combo)
 
-        # Durée (pour mise à pied)
         self.duree = QDoubleSpinBox()
         self.duree.setRange(0, 30)
         self.duree.setDecimals(0)
@@ -1027,7 +830,6 @@ class EditSanctionDialog(QDialog):
             self.duree.setValue(self.sanction['duree_jours'])
         form.addRow("Durée (mise à pied):", self.duree)
 
-        # Motif
         self.motif = QTextEdit()
         self.motif.setMaximumHeight(80)
         self.motif.setPlaceholderText("Motif de la sanction")
@@ -1035,27 +837,15 @@ class EditSanctionDialog(QDialog):
             self.motif.setText(self.sanction.get('motif') or '')
         form.addRow("Motif:", self.motif)
 
-        # Commentaire
         self.commentaire = QTextEdit()
         self.commentaire.setMaximumHeight(60)
         if self.is_edit:
             self.commentaire.setText(self.sanction.get('commentaire') or '')
         form.addRow("Commentaire:", self.commentaire)
 
-        layout.addLayout(form)
+        self.content_layout.addLayout(form)
 
-        # Boutons
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        btn_cancel = EmacButton("Annuler", variant="ghost")
-        btn_cancel.clicked.connect(self.reject)
-        btn_layout.addWidget(btn_cancel)
-        btn_save = EmacButton("Enregistrer", variant="primary")
-        btn_save.clicked.connect(self._save)
-        btn_layout.addWidget(btn_save)
-        layout.addLayout(btn_layout)
-
-    def _save(self):
+    def save_to_db(self):
         data = {
             'date_sanction': self.date_sanction.date().toPyDate(),
             'type_sanction': self.type_combo.currentText(),
@@ -1069,43 +859,32 @@ class EditSanctionDialog(QDialog):
         else:
             success, message, _ = create_sanction(self.operateur_id, data)
 
-        if success:
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
-class EditControleAlcoolDialog(QDialog):
+class EditControleAlcoolDialog(EmacFormDialog):
     """Formulaire pour ajouter un contrôle d'alcoolémie."""
 
     def __init__(self, operateur_id: int, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
-        self.setWindowTitle("Nouveau contrôle d'alcoolémie")
-        self.setMinimumWidth(400)
-        self._setup_ui()
+        super().__init__(title="Nouveau contrôle d'alcoolémie", min_width=400, min_height=350, add_title_bar=False, parent=parent)
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(10)
 
-        # Date/heure contrôle
         self.date_controle = QDateEdit()
         self.date_controle.setCalendarPopup(True)
         self.date_controle.setDisplayFormat("dd/MM/yyyy")
         self.date_controle.setDate(QDate.currentDate())
         form.addRow("Date:", self.date_controle)
 
-        # Résultat
         self.resultat_combo = QComboBox()
         self.resultat_combo.addItems(['Négatif', 'Positif'])
         self.resultat_combo.currentTextChanged.connect(self._on_resultat_change)
         form.addRow("Résultat:", self.resultat_combo)
 
-        # Taux (si positif)
         self.taux = QDoubleSpinBox()
         self.taux.setRange(0, 5)
         self.taux.setDecimals(2)
@@ -1113,33 +892,20 @@ class EditControleAlcoolDialog(QDialog):
         self.taux.setEnabled(False)
         form.addRow("Taux:", self.taux)
 
-        # Type contrôle
         self.type_combo = QComboBox()
         self.type_combo.addItems(['Aléatoire', 'Ciblé', 'Accident'])
         form.addRow("Type de contrôle:", self.type_combo)
 
-        # Commentaire
         self.commentaire = QTextEdit()
         self.commentaire.setMaximumHeight(60)
         form.addRow("Commentaire:", self.commentaire)
 
-        layout.addLayout(form)
-
-        # Boutons
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        btn_cancel = EmacButton("Annuler", variant="ghost")
-        btn_cancel.clicked.connect(self.reject)
-        btn_layout.addWidget(btn_cancel)
-        btn_save = EmacButton("Enregistrer", variant="primary")
-        btn_save.clicked.connect(self._save)
-        btn_layout.addWidget(btn_save)
-        layout.addLayout(btn_layout)
+        self.content_layout.addLayout(form)
 
     def _on_resultat_change(self, text):
         self.taux.setEnabled(text == 'Positif')
 
-    def _save(self):
+    def save_to_db(self):
         from datetime import datetime
         date_val = self.date_controle.date().toPyDate()
         data = {
@@ -1151,65 +917,42 @@ class EditControleAlcoolDialog(QDialog):
         }
 
         success, message, _ = create_controle_alcool(self.operateur_id, data)
-        if success:
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
-class EditTestSalivaireDialog(QDialog):
+class EditTestSalivaireDialog(EmacFormDialog):
     """Formulaire pour ajouter un test salivaire."""
 
     def __init__(self, operateur_id: int, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
-        self.setWindowTitle("Nouveau test salivaire")
-        self.setMinimumWidth(400)
-        self._setup_ui()
+        super().__init__(title="Nouveau test salivaire", min_width=400, min_height=300, add_title_bar=False, parent=parent)
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(10)
 
-        # Date test
         self.date_test = QDateEdit()
         self.date_test.setCalendarPopup(True)
         self.date_test.setDisplayFormat("dd/MM/yyyy")
         self.date_test.setDate(QDate.currentDate())
         form.addRow("Date:", self.date_test)
 
-        # Résultat
         self.resultat_combo = QComboBox()
         self.resultat_combo.addItems(['Négatif', 'Positif', 'Non concluant'])
         form.addRow("Résultat:", self.resultat_combo)
 
-        # Type contrôle
         self.type_combo = QComboBox()
         self.type_combo.addItems(['Aléatoire', 'Ciblé', 'Accident'])
         form.addRow("Type de contrôle:", self.type_combo)
 
-        # Commentaire
         self.commentaire = QTextEdit()
         self.commentaire.setMaximumHeight(60)
         form.addRow("Commentaire:", self.commentaire)
 
-        layout.addLayout(form)
+        self.content_layout.addLayout(form)
 
-        # Boutons
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        btn_cancel = EmacButton("Annuler", variant="ghost")
-        btn_cancel.clicked.connect(self.reject)
-        btn_layout.addWidget(btn_cancel)
-        btn_save = EmacButton("Enregistrer", variant="primary")
-        btn_save.clicked.connect(self._save)
-        btn_layout.addWidget(btn_save)
-        layout.addLayout(btn_layout)
-
-    def _save(self):
+    def save_to_db(self):
         from datetime import datetime
         date_val = self.date_test.date().toPyDate()
         data = {
@@ -1220,32 +963,24 @@ class EditTestSalivaireDialog(QDialog):
         }
 
         success, message, _ = create_test_salivaire(self.operateur_id, data)
-        if success:
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
-class EditEntretienDialog(QDialog):
+class EditEntretienDialog(EmacFormDialog):
     """Formulaire pour ajouter/modifier un entretien professionnel."""
 
     def __init__(self, operateur_id: int, entretien: dict = None, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
         self.entretien = entretien
         self.is_edit = entretien is not None
-        self.setWindowTitle("Modifier l'entretien" if self.is_edit else "Nouvel entretien")
-        self.setMinimumWidth(500)
-        self._setup_ui()
+        title = "Modifier l'entretien" if self.is_edit else "Nouvel entretien"
+        super().__init__(title=title, min_width=500, min_height=500, add_title_bar=False, parent=parent)
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(12)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(10)
 
-        # Date entretien
         self.date_entretien = QDateEdit()
         self.date_entretien.setCalendarPopup(True)
         self.date_entretien.setDisplayFormat("dd/MM/yyyy")
@@ -1256,7 +991,6 @@ class EditEntretienDialog(QDialog):
             self.date_entretien.setDate(QDate.currentDate())
         form.addRow("Date:", self.date_entretien)
 
-        # Type entretien
         self.type_combo = QComboBox()
         self.type_combo.addItems(get_types_entretien())
         if self.is_edit and self.entretien.get('type_entretien'):
@@ -1265,7 +999,6 @@ class EditEntretienDialog(QDialog):
                 self.type_combo.setCurrentIndex(idx)
         form.addRow("Type:", self.type_combo)
 
-        # Manager
         self.manager_combo = QComboBox()
         self.manager_combo.addItem("-- Sélectionner --", None)
         managers = get_managers_liste()
@@ -1278,7 +1011,6 @@ class EditEntretienDialog(QDialog):
                     break
         form.addRow("Manager:", self.manager_combo)
 
-        # Objectifs atteints
         self.objectifs_atteints = QTextEdit()
         self.objectifs_atteints.setMaximumHeight(60)
         self.objectifs_atteints.setPlaceholderText("Évaluation des objectifs précédents")
@@ -1286,7 +1018,6 @@ class EditEntretienDialog(QDialog):
             self.objectifs_atteints.setText(self.entretien.get('objectifs_atteints') or '')
         form.addRow("Objectifs atteints:", self.objectifs_atteints)
 
-        # Objectifs fixés
         self.objectifs_fixes = QTextEdit()
         self.objectifs_fixes.setMaximumHeight(60)
         self.objectifs_fixes.setPlaceholderText("Objectifs pour la période à venir")
@@ -1294,14 +1025,12 @@ class EditEntretienDialog(QDialog):
             self.objectifs_fixes.setText(self.entretien.get('objectifs_fixes') or '')
         form.addRow("Objectifs fixés:", self.objectifs_fixes)
 
-        # Besoins formation
         self.besoins_formation = QTextEdit()
         self.besoins_formation.setMaximumHeight(50)
         if self.is_edit:
             self.besoins_formation.setText(self.entretien.get('besoins_formation') or '')
         form.addRow("Besoins formation:", self.besoins_formation)
 
-        # Prochaine date
         self.prochaine_date = QDateEdit()
         self.prochaine_date.setCalendarPopup(True)
         self.prochaine_date.setDisplayFormat("dd/MM/yyyy")
@@ -1311,20 +1040,9 @@ class EditEntretienDialog(QDialog):
             self.prochaine_date.setDate(QDate(d.year, d.month, d.day))
         form.addRow("Prochain entretien:", self.prochaine_date)
 
-        layout.addLayout(form)
+        self.content_layout.addLayout(form)
 
-        # Boutons
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-        btn_cancel = EmacButton("Annuler", variant="ghost")
-        btn_cancel.clicked.connect(self.reject)
-        btn_layout.addWidget(btn_cancel)
-        btn_save = EmacButton("Enregistrer", variant="primary")
-        btn_save.clicked.connect(self._save)
-        btn_layout.addWidget(btn_save)
-        layout.addLayout(btn_layout)
-
-    def _save(self):
+    def save_to_db(self):
         prochaine = self.prochaine_date.date()
         data = {
             'date_entretien': self.date_entretien.date().toPyDate(),
@@ -1341,34 +1059,20 @@ class EditEntretienDialog(QDialog):
         else:
             success, message, _ = create_entretien(self.operateur_id, data)
 
-        if success:
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
-class AjouterDocumentDialog(QDialog):
+class AjouterDocumentDialog(EmacFormDialog):
     """Formulaire pour ajouter un document à un opérateur."""
 
     def __init__(self, operateur_id: int, domaine: 'DomaineRH' = None, parent=None):
-        super().__init__(parent)
         self.operateur_id = operateur_id
         self.domaine = domaine
         self.fichier_path = None
-        self.setWindowTitle("Ajouter un document")
-        self.setMinimumWidth(500)
-        self._setup_ui()
+        super().__init__(title="Ajouter un document", min_width=500, min_height=400, add_title_bar=False, parent=parent)
 
-    def _setup_ui(self):
-        layout = QVBoxLayout(self)
-        layout.setSpacing(15)
-
-        # Titre
-        title = QLabel("Ajouter un document")
-        title.setFont(QFont("Segoe UI", 14, QFont.Bold))
-        title.setStyleSheet("color: #1e293b;")
-        layout.addWidget(title)
-
+    def init_ui(self):
         form = QFormLayout()
         form.setSpacing(12)
 
@@ -1379,17 +1083,15 @@ class AjouterDocumentDialog(QDialog):
         self.file_label.setPlaceholderText("Aucun fichier sélectionné...")
         file_layout.addWidget(self.file_label)
 
-        btn_parcourir = QPushButton("Parcourir...")
+        btn_parcourir = EmacButton("Parcourir...", variant="ghost")
         btn_parcourir.clicked.connect(self._parcourir_fichier)
         file_layout.addWidget(btn_parcourir)
         form.addRow("Fichier:", file_layout)
 
-        # Nom d'affichage
         self.nom_affichage = QLineEdit()
         self.nom_affichage.setPlaceholderText("Nom qui sera affiché (optionnel)")
         form.addRow("Nom d'affichage:", self.nom_affichage)
 
-        # Catégorie
         self.categorie_combo = QComboBox()
         self._charger_categories()
         form.addRow("Catégorie:", self.categorie_combo)
@@ -1410,73 +1112,40 @@ class AjouterDocumentDialog(QDialog):
         exp_layout.addWidget(self.chk_expiration)
         form.addRow("Expiration:", exp_layout)
 
-        # Notes
         self.notes = QTextEdit()
         self.notes.setMaximumHeight(80)
         self.notes.setPlaceholderText("Notes ou commentaires (optionnel)")
         form.addRow("Notes:", self.notes)
 
-        layout.addLayout(form)
-
-        # Boutons
-        btn_layout = QHBoxLayout()
-        btn_layout.addStretch()
-
-        btn_annuler = QPushButton("Annuler")
-        btn_annuler.clicked.connect(self.reject)
-        btn_layout.addWidget(btn_annuler)
-
-        btn_ajouter = QPushButton("Ajouter")
-        btn_ajouter.setStyleSheet("""
-            QPushButton {
-                background-color: #3b82f6;
-                color: white;
-                font-weight: bold;
-                padding: 8px 20px;
-                border-radius: 6px;
-            }
-            QPushButton:hover {
-                background-color: #2563eb;
-            }
-        """)
-        btn_ajouter.clicked.connect(self._ajouter)
-        btn_layout.addWidget(btn_ajouter)
-
-        layout.addLayout(btn_layout)
+        self.content_layout.addLayout(form)
 
     def _charger_categories(self):
         """Charge les catégories de documents."""
-        from core.services.rh_service import get_categories_documents, CATEGORIE_TO_DOMAINE
         from core.services.contrat_service import get_contract_types
 
         self.categorie_combo.clear()
 
-        # Si domaine CONTRAT, afficher les types de contrats
         if self.domaine == DomaineRH.CONTRAT:
             types_contrat = get_contract_types()
             for type_contrat in types_contrat:
                 self.categorie_combo.addItem(type_contrat, type_contrat)
             return
 
-        # Sinon, charger les catégories de documents normales
         categories = get_categories_documents()
 
         for cat in categories:
-            # Si un domaine est spécifié, ne montrer que les catégories liées
             if self.domaine:
                 cat_domaine = CATEGORIE_TO_DOMAINE.get(cat['nom'], DomaineRH.GENERAL)
                 if cat_domaine != self.domaine:
                     continue
             self.categorie_combo.addItem(cat['nom'], cat['id'])
 
-        # Si aucune catégorie pour le domaine, afficher toutes
         if self.categorie_combo.count() == 0:
             for cat in categories:
                 self.categorie_combo.addItem(cat['nom'], cat['id'])
 
     def _parcourir_fichier(self):
         """Ouvre le dialogue de sélection de fichier."""
-        from PyQt5.QtWidgets import QFileDialog
         fichier, _ = QFileDialog.getOpenFileName(
             self,
             "Sélectionner un document",
@@ -1486,32 +1155,27 @@ class AjouterDocumentDialog(QDialog):
         if fichier:
             self.fichier_path = fichier
             self.file_label.setText(fichier)
-            # Pré-remplir le nom d'affichage si vide
             if not self.nom_affichage.text():
                 import os
                 self.nom_affichage.setText(os.path.basename(fichier))
 
-    def _ajouter(self):
-        """Ajoute le document."""
+    def validate(self):
         if not self.fichier_path:
-            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un fichier")
-            return
-
+            return False, "Veuillez sélectionner un fichier"
         if self.categorie_combo.currentIndex() < 0:
-            QMessageBox.warning(self, "Attention", "Veuillez sélectionner une catégorie")
-            return
+            return False, "Veuillez sélectionner une catégorie"
+        return True, ""
 
+    def save_to_db(self):
         categorie_id = self.categorie_combo.currentData()
         nom = self.nom_affichage.text().strip() or None
 
-        # Date d'expiration
         date_exp = None
         if self.chk_expiration.isChecked() and self.date_expiration.date().year() > 1900:
             date_exp = self.date_expiration.date().toPyDate()
 
         notes = self.notes.toPlainText().strip() or None
 
-        # Ajouter via le service
         from core.services.document_service import DocumentService
         from core.services.auth_service import get_current_user
 
@@ -1529,11 +1193,8 @@ class AjouterDocumentDialog(QDialog):
             uploaded_by=uploaded_by
         )
 
-        if success:
-            QMessageBox.information(self, "Succès", message)
-            self.accept()
-        else:
-            QMessageBox.critical(self, "Erreur", message)
+        if not success:
+            raise Exception(message)
 
 
 class GestionRHDialog(QDialog):

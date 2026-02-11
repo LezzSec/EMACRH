@@ -16,12 +16,13 @@ from PyQt5.QtGui import QFont, QColor
 from datetime import datetime, date
 
 from core.services import absence_service
-from core.db.configbd import get_connection, DatabaseCursor, DatabaseConnection
+from core.db.configbd import get_connection, DatabaseConnection
+from core.db.query_executor import QueryExecutor
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.gui.db_worker import DbWorker, DbThreadPool
+from core.utils.logging_config import get_logger
 
-import logging
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class GestionAbsencesDialog(QDialog):
@@ -485,24 +486,25 @@ class GestionAbsencesDialog(QDialog):
 
         def fetch_demandes(progress_callback=None):
             """Fonction exécutée en background"""
-            with DatabaseCursor(dictionary=True) as cur:
-                cur.execute("""
-                    SELECT
-                        da.id,
-                        CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                        ta.libelle as type_libelle,
-                        da.date_debut,
-                        da.date_fin,
-                        da.nb_jours,
-                        da.motif
-                    FROM demande_absence da
-                    JOIN personnel p ON da.personnel_id = p.id
-                    JOIN type_absence ta ON da.type_absence_id = ta.id
-                    WHERE da.statut = 'EN_ATTENTE'
-                    AND p.statut = 'ACTIF'
-                    ORDER BY da.date_creation ASC
-                """)
-                return cur.fetchall()
+            return QueryExecutor.fetch_all(
+                """
+                SELECT
+                    da.id,
+                    CONCAT(p.prenom, ' ', p.nom) as nom_complet,
+                    ta.libelle as type_libelle,
+                    da.date_debut,
+                    da.date_fin,
+                    da.nb_jours,
+                    da.motif
+                FROM demande_absence da
+                JOIN personnel p ON da.personnel_id = p.id
+                JOIN type_absence ta ON da.type_absence_id = ta.id
+                WHERE da.statut = 'EN_ATTENTE'
+                AND p.statut = 'ACTIF'
+                ORDER BY da.date_creation ASC
+                """,
+                dictionary=True
+            )
 
         def on_success(demandes):
             """Callback UI avec les résultats"""
@@ -614,11 +616,10 @@ class GestionAbsencesDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             try:
-                with DatabaseConnection() as conn:
-                    cur = conn.cursor()
-                    cur.execute("UPDATE demande_absence SET statut = 'ANNULEE' WHERE id = %s", (demande_id,))
-                    conn.commit()
-                    cur.close()
+                QueryExecutor.execute_write(
+                    "UPDATE demande_absence SET statut = 'ANNULEE' WHERE id = %s",
+                    (demande_id,)
+                )
 
                 QMessageBox.information(self, "Succès", "Demande annulée")
                 self.load_mes_demandes()
@@ -675,10 +676,9 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # Test avec le premier personnel actif
-    with DatabaseCursor() as cur:
-        cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
-        result = cur.fetchone()
-        personnel_id = result[0] if result else None
+    personnel_id = QueryExecutor.fetch_scalar(
+        "SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1"
+    )
 
     dialog = GestionAbsencesDialog(personnel_id=personnel_id)
     dialog.show()

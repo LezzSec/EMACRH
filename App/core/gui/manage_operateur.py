@@ -1,6 +1,5 @@
 import json
 import datetime
-import logging
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox,
@@ -10,11 +9,13 @@ from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 
 from core.gui.historique import HistoriqueDialog
-from core.db.configbd import DatabaseConnection, DatabaseCursor
+from core.db.configbd import DatabaseConnection
+from core.db.query_executor import QueryExecutor
 from core.services.matricule_service import generer_prochain_matricule
 from core.gui.emac_ui_kit import show_error_message
+from core.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # -------- Logger compatible avec votre historique --------
 def log_to_historique(connection, cursor, action: str, operateur_id=None, poste_id=None, description_data: dict = None):
@@ -140,13 +141,12 @@ class EvaluationDateDialog(QDialog):
     def _charger_postes(self):
         """Remplit le combo avec les postes visibles (id + poste_code)."""
         try:
-            with DatabaseCursor(dictionary=True) as cursor:
-                cursor.execute(
-                    "SELECT id, poste_code FROM postes "
-                    "WHERE COALESCE(visible, 1) = 1 "
-                    "ORDER BY poste_code;"
-                )
-                rows = cursor.fetchall()
+            rows = QueryExecutor.fetch_all(
+                "SELECT id, poste_code FROM postes "
+                "WHERE COALESCE(visible, 1) = 1 "
+                "ORDER BY poste_code",
+                dictionary=True
+            )
 
             self.poste_combo.clear()
             if not rows:
@@ -400,8 +400,11 @@ class ManageOperatorsDialog(QDialog):
 
                 # Récupérer le nom du poste pour le log
                 if poste_id:
-                    cursor.execute("SELECT poste_code FROM postes WHERE id = %s", (poste_id,))
-                    poste_row = cursor.fetchone()
+                    poste_row = QueryExecutor.fetch_one(
+                        "SELECT poste_code FROM postes WHERE id = %s",
+                        (poste_id,),
+                        dictionary=True
+                    )
                     poste_name = poste_row["poste_code"] if poste_row else f"Poste #{poste_id}"
 
                 # Insertion(s)

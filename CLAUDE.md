@@ -93,6 +93,153 @@ Database schema is located in [App/database/schema/bddemac.sql](App/database/sch
 
 **Full documentation**: [docs/dev/optimisation-database.md](docs/dev/optimisation-database.md)
 
+### 🔧 Refactoring Patterns - Code Duplication Elimination (2026-02-09)
+
+**IMPORTANT**: Nouveaux patterns pour éliminer le code dupliqué (-650 lignes) et améliorer la maintenabilité.
+
+#### 1. **QueryExecutor** - Accès base de données centralisé ([App/core/db/query_executor.py](App/core/db/query_executor.py))
+
+✅ **UTILISER** `QueryExecutor` pour tous les accès DB au lieu de `with DatabaseCursor`:
+
+```python
+from core.db.query_executor import QueryExecutor
+
+# ✅ BON: Récupérer des données
+personnels = QueryExecutor.fetch_all(
+    "SELECT * FROM personnel WHERE statut = %s",
+    ('ACTIF',),
+    dictionary=True
+)
+
+# ✅ BON: Insérer/Modifier
+new_id = QueryExecutor.execute_write(
+    "INSERT INTO personnel (nom, prenom) VALUES (%s, %s)",
+    ('Dupont', 'Jean')
+)
+
+# ✅ BON: Compter / Vérifier existence
+count = QueryExecutor.count('personnel', {'statut': 'ACTIF'})
+exists = QueryExecutor.exists('personnel', {'id': 1})
+
+# ❌ ÉVITER: Code boilerplate avec try/finally
+# with DatabaseCursor() as cur:
+#     cur.execute(...)
+#     result = cur.fetchall()
+```
+
+**Méthodes disponibles**: `fetch_all()`, `fetch_one()`, `fetch_scalar()`, `execute_write()`, `execute_many()`, `exists()`, `count()`
+
+#### 2. **Services CRUD** - Services métier standardisés
+
+✅ **UTILISER** les services CRUD au lieu de requêtes SQL manuelles:
+
+```python
+from core.services.personnel_service import PersonnelService
+from core.services.formation_service_crud import FormationServiceCRUD
+from core.services.contrat_service_crud import ContratServiceCRUD
+from core.services.polyvalence_service_crud import PolyvalenceServiceCRUD
+from core.services.absence_service_crud import AbsenceServiceCRUD
+
+# ✅ BON: Créer avec logging automatique
+success, msg, new_id = PersonnelService.create(
+    nom="Dupont",
+    prenom="Jean",
+    statut="ACTIF"
+)
+
+# ✅ BON: Mettre à jour
+PersonnelService.update(record_id=1, statut="INACTIF")
+
+# ✅ BON: Récupérer avec filtres
+actifs = PersonnelService.get_actifs()
+formations = FormationServiceCRUD.get_by_operateur(operateur_id=1)
+
+# ❌ ÉVITER: SQL manuel avec logging manuel
+# with DatabaseConnection() as conn:
+#     cur = conn.cursor()
+#     cur.execute("INSERT INTO personnel ...")
+#     log_hist("CREATION_PERSONNEL", ...)
+```
+
+**Services disponibles**:
+- `PersonnelService` - Gestion personnel
+- `FormationServiceCRUD` - Gestion formations
+- `ContratServiceCRUD` - Gestion contrats
+- `PolyvalenceServiceCRUD` - Gestion compétences
+- `AbsenceServiceCRUD` - Gestion absences
+
+**Avantages**: Logging automatique, validation des champs, méthodes utilitaires
+
+#### 3. **EmacDialog** - Dialogs standardisés ([App/core/gui/emac_dialog.py](App/core/gui/emac_dialog.py))
+
+✅ **UTILISER** `EmacDialog` ou `EmacFormDialog` pour tous les nouveaux dialogs:
+
+```python
+from core.gui.emac_dialog import EmacFormDialog
+
+class MyFormDialog(EmacFormDialog):
+    def __init__(self, parent=None):
+        super().__init__(title="Mon Formulaire", parent=parent)
+
+    def init_ui(self):
+        # Ajouter vos widgets au self.content_layout
+        self.name_input = QLineEdit()
+        self.content_layout.addWidget(self.name_input)
+
+    def validate(self):
+        if not self.name_input.text():
+            return False, "Le nom est obligatoire"
+        return True, ""
+
+    def save_to_db(self):
+        PersonnelService.create(nom=self.name_input.text(), ...)
+
+# ❌ ÉVITER: Dupliquer le code boilerplate de QDialog
+# class MyDialog(QDialog):
+#     def __init__(self):
+#         super().__init__()
+#         self.setWindowTitle(...)
+#         layout = QVBoxLayout(self)
+#         scroll = QScrollArea()  # ... 50+ lignes de setup
+```
+
+**Classes disponibles**:
+- `EmacDialog` - Base générique
+- `EmacFormDialog` - Formulaire avec scroll + boutons + validation
+- `EmacTableDialog` - Dialog avec table
+
+**Avantages**: Structure standardisée, validation automatique, -80 lignes de code par dialog
+
+#### 4. **CRUDService Base Class** - Pour créer de nouveaux services
+
+✅ **CRÉER** de nouveaux services en héritant de `CRUDService`:
+
+```python
+from core.services.crud_service import CRUDService
+
+class MonNouveauService(CRUDService):
+    TABLE_NAME = "ma_table"
+    ACTION_PREFIX = "MA_TABLE_"
+    ALLOWED_FIELDS = ['champ1', 'champ2', 'champ3']
+
+# Méthodes disponibles automatiquement:
+# - create(), update(), delete()
+# - get_by_id(), get_all(), exists(), count()
+# - Logging automatique dans historique
+```
+
+#### 📚 Documentation complète
+
+- **Guide de refactoring**: [docs/dev/refactoring-guide-2026-02-09.md](docs/dev/refactoring-guide-2026-02-09.md)
+- **Script de test**: `py -m scripts.test_new_patterns`
+
+#### ✅ Règles pour nouveaux développements (OBLIGATOIRE)
+
+1. ❌ **NE PLUS** créer de code avec `with DatabaseCursor` en try/finally → ✅ Utiliser `QueryExecutor`
+2. ❌ **NE PLUS** dupliquer le code de création de dialogs → ✅ Hériter de `EmacFormDialog`
+3. ❌ **NE PLUS** écrire CRUD + logging manuellement → ✅ Hériter de `CRUDService`
+4. ✅ **TOUJOURS** utiliser les services existants (PersonnelService, FormationServiceCRUD, etc.)
+
 ### ⚡ UI / Threads Optimizations (2026-01-07)
 
 **IMPORTANT**: UI responsiveness optimizations to prevent freezes:

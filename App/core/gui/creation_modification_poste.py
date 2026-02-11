@@ -3,7 +3,8 @@ from PyQt5.QtWidgets import (
     QMessageBox, QComboBox
 )
 
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+from core.db.configbd import DatabaseConnection
+from core.db.query_executor import QueryExecutor
 from .besoin_poste_dialog import BesoinPosteDialog
 from core.services.logger import log_hist
 from core.gui.historique import HistoriqueDialog
@@ -50,13 +51,14 @@ class CreationModificationPosteDialog(QDialog):
     def load_posts(self):
         """Charge les postes existants dans le combobox de suppression."""
         try:
-            with DatabaseCursor(dictionary=True) as cursor:
-                cursor.execute("SELECT poste_code FROM postes ORDER BY poste_code ASC")
-                rows = cursor.fetchall()
+            rows = QueryExecutor.fetch_all(
+                "SELECT poste_code FROM postes ORDER BY poste_code ASC",
+                dictionary=True
+            )
 
-                self.delete_combobox.clear()
-                for r in rows:
-                    self.delete_combobox.addItem(str(r["poste_code"]))
+            self.delete_combobox.clear()
+            for r in rows:
+                self.delete_combobox.addItem(str(r["poste_code"]))
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur",
@@ -77,13 +79,15 @@ class CreationModificationPosteDialog(QDialog):
             with DatabaseConnection() as connection:
                 cursor = connection.cursor(dictionary=True)
 
-                cursor.execute("SELECT id FROM postes WHERE poste_code = %s", (post_name,))
-                exists = cursor.fetchone()
+                exists = QueryExecutor.exists('postes', {'poste_code': post_name})
                 if exists:
                     QMessageBox.warning(self, "Attention", f"Le poste '{post_name}' existe déjà.")
                     return
 
-                cursor.execute("INSERT INTO postes (poste_code, visible, besoins_postes) VALUES (%s, 1, 0)", (post_name,))
+                QueryExecutor.execute_write(
+                    "INSERT INTO postes (poste_code, visible, besoins_postes) VALUES (%s, 1, 0)",
+                    (post_name,)
+                )
 
                 dlg = BesoinPosteDialog(parent=self, titre_poste=post_name)
                 if dlg.exec_() != dlg.Accepted:
@@ -138,13 +142,11 @@ class CreationModificationPosteDialog(QDialog):
             return
 
         try:
-            with DatabaseConnection() as connection:
-                cursor = connection.cursor(dictionary=True)
-
-                # Suppression (⚠️ laisse la contrainte d'intégrité référentielle décider si relié à polyvalence)
-                cursor.execute("DELETE FROM postes WHERE poste_code = %s", (post_name,))
-                connection.commit()
-                cursor.close()
+            # Suppression (⚠️ laisse la contrainte d'intégrité référentielle décider si relié à polyvalence)
+            QueryExecutor.execute_write(
+                "DELETE FROM postes WHERE poste_code = %s",
+                (post_name,)
+            )
 
             # Logger la suppression du poste
             import json

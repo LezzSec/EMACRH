@@ -18,8 +18,10 @@ from datetime import datetime, date
 
 from core.services import formation_service
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
-import logging
-logger = logging.getLogger(__name__)
+from core.utils.logging_config import get_logger
+from core.db.query_executor import QueryExecutor
+
+logger = get_logger(__name__)
 
 # Import des composants modernes EMAC
 try:
@@ -881,14 +883,15 @@ class AddEditFormationDialog(QDialog):
             return
 
         try:
-            from core.db.configbd import DatabaseCursor
             import os
             import sys
             import subprocess
 
-            with DatabaseCursor(dictionary=True) as cur:
-                cur.execute("SELECT chemin_fichier FROM documents WHERE id = %s", (self.document_id,))
-                result = cur.fetchone()
+            result = QueryExecutor.fetch_one(
+                "SELECT chemin_fichier FROM documents WHERE id = %s",
+                (self.document_id,),
+                dictionary=True
+            )
 
             if result and result['chemin_fichier']:
                 file_path = result['chemin_fichier']
@@ -924,10 +927,11 @@ class AddEditFormationDialog(QDialog):
         """Met à jour l'affichage de l'attestation"""
         if self.document_id:
             try:
-                from core.db.configbd import DatabaseCursor
-                with DatabaseCursor(dictionary=True) as cur:
-                    cur.execute("SELECT nom_fichier FROM documents WHERE id = %s", (self.document_id,))
-                    result = cur.fetchone()
+                result = QueryExecutor.fetch_one(
+                    "SELECT nom_fichier FROM documents WHERE id = %s",
+                    (self.document_id,),
+                    dictionary=True
+                )
 
                 if result:
                     self.attestation_label.setText(f"📄 {result['nom_fichier']}")

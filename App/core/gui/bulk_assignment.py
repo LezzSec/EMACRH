@@ -4,7 +4,6 @@ Module de gestion des opérations en masse.
 Permet d'assigner des formations, absences, visites médicales à plusieurs employés.
 """
 
-import logging
 from datetime import date, datetime
 from typing import List, Dict, Optional, Callable
 
@@ -20,9 +19,10 @@ from PyQt5.QtGui import QColor, QFont
 
 from core.gui.db_worker import DbWorker, DbThreadPool
 from core.gui.loading_components import LoadingPlaceholder, ProgressWidget
-from core.db.configbd import DatabaseCursor
+from core.db.query_executor import QueryExecutor
+from core.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # ============================================================
 # SÉCURITÉ: VALIDATION DES FICHIERS UPLOADÉS
@@ -242,14 +242,15 @@ class PersonnelSelectionWidget(QWidget):
     def _load_personnel(self):
         """Charge la liste du personnel depuis la base de données."""
         try:
-            with DatabaseCursor(dictionary=True) as cur:
-                cur.execute("""
-                    SELECT id, nom, prenom, matricule, statut
-                    FROM personnel
-                    ORDER BY nom, prenom
-                """)
-                self._personnel_data = cur.fetchall()
-                self._populate_table()
+            self._personnel_data = QueryExecutor.fetch_all(
+                """
+                SELECT id, nom, prenom, matricule, statut
+                FROM personnel
+                ORDER BY nom, prenom
+                """,
+                dictionary=True
+            )
+            self._populate_table()
         except Exception as e:
             logger.error(f"Erreur chargement personnel: {e}")
 
@@ -865,14 +866,15 @@ class AbsenceBulkTab(QWidget):
     def _load_types_absence(self):
         """Charge les types d'absence depuis la base de données."""
         def fetch(progress_callback=None):
-            with DatabaseCursor(dictionary=True) as cur:
-                cur.execute("""
-                    SELECT id, code, libelle
-                    FROM type_absence
-                    WHERE actif = TRUE
-                    ORDER BY code
-                """)
-                return cur.fetchall()
+            return QueryExecutor.fetch_all(
+                """
+                SELECT id, code, libelle
+                FROM type_absence
+                WHERE actif = TRUE
+                ORDER BY code
+                """,
+                dictionary=True
+            )
 
         def on_result(data):
             self._types_absence = data
@@ -1366,14 +1368,15 @@ class CompetenceBulkTab(QWidget):
     def _load_catalogue(self):
         """Charge le catalogue des compétences."""
         def fetch(progress_callback=None):
-            with DatabaseCursor(dictionary=True) as cur:
-                cur.execute("""
-                    SELECT id, code, libelle, categorie, duree_validite_mois
-                    FROM competences_catalogue
-                    WHERE actif = 1
-                    ORDER BY categorie, libelle
-                """)
-                return cur.fetchall()
+            return QueryExecutor.fetch_all(
+                """
+                SELECT id, code, libelle, categorie, duree_validite_mois
+                FROM competences_catalogue
+                WHERE actif = 1
+                ORDER BY categorie, libelle
+                """,
+                dictionary=True
+            )
 
         def on_result(data):
             self._catalogue = data
@@ -1647,15 +1650,18 @@ class BulkOperationResultsDialog(QDialog):
         personnel_ids = [d['personnel_id'] for d in self.details]
 
         if personnel_ids:
-            with DatabaseCursor(dictionary=True) as cur:
-                placeholders = ','.join(['%s'] * len(personnel_ids))
-                cur.execute(f"""
-                    SELECT id, nom, prenom
-                    FROM personnel
-                    WHERE id IN ({placeholders})
-                """, tuple(personnel_ids))
-                for row in cur.fetchall():
-                    personnel_names[row['id']] = (row['nom'], row['prenom'])
+            placeholders = ','.join(['%s'] * len(personnel_ids))
+            rows = QueryExecutor.fetch_all(
+                f"""
+                SELECT id, nom, prenom
+                FROM personnel
+                WHERE id IN ({placeholders})
+                """,
+                tuple(personnel_ids),
+                dictionary=True
+            )
+            for row in rows:
+                personnel_names[row['id']] = (row['nom'], row['prenom'])
 
         # Remplir la table
         self.table.setRowCount(len(self.details))

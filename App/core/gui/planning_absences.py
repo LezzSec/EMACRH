@@ -15,7 +15,7 @@ from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QBrush
 from datetime import datetime, date, timedelta
 
 from core.services import absence_service
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+from core.db.query_executor import QueryExecutor
 from core.gui.emac_ui_kit import add_custom_title_bar
 from core.services.permission_manager import can
 
@@ -293,25 +293,22 @@ class PlanningAbsencesDialog(QDialog):
         first_day = QDate(year, month, 1)
         last_day = QDate(year, month, first_day.daysInMonth())
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT
-                    da.date_debut,
-                    da.date_fin,
-                    CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                    ta.libelle as type_libelle,
-                    da.statut
-                FROM demande_absence da
-                JOIN personnel p ON da.personnel_id = p.id
-                JOIN type_absence ta ON da.type_absence_id = ta.id
-                WHERE da.statut = 'VALIDEE'
-                  AND p.statut = 'ACTIF'
-                  AND da.date_debut <= %s
-                  AND da.date_fin >= %s
-                ORDER BY da.date_debut
-            """, (last_day.toString("yyyy-MM-dd"), first_day.toString("yyyy-MM-dd")))
-
-            absences = cur.fetchall()
+        absences = QueryExecutor.fetch_all("""
+            SELECT
+                da.date_debut,
+                da.date_fin,
+                CONCAT(p.prenom, ' ', p.nom) as nom_complet,
+                ta.libelle as type_libelle,
+                da.statut
+            FROM demande_absence da
+            JOIN personnel p ON da.personnel_id = p.id
+            JOIN type_absence ta ON da.type_absence_id = ta.id
+            WHERE da.statut = 'VALIDEE'
+              AND p.statut = 'ACTIF'
+              AND da.date_debut <= %s
+              AND da.date_fin >= %s
+            ORDER BY da.date_debut
+        """, (last_day.toString("yyyy-MM-dd"), first_day.toString("yyyy-MM-dd")), dictionary=True)
 
         self.absences_by_date = {}
 
@@ -345,23 +342,20 @@ class PlanningAbsencesDialog(QDialog):
         first_day = QDate(year, month, 1)
         last_day = QDate(year, month, first_day.daysInMonth())
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT
-                    poly.prochaine_evaluation,
-                    CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                    pos.poste_code,
-                    poly.niveau
-                FROM polyvalence poly
-                JOIN personnel p ON poly.operateur_id = p.id
-                JOIN postes pos ON poly.poste_id = pos.id
-                WHERE p.statut = 'ACTIF'
-                  AND poly.prochaine_evaluation >= %s
-                  AND poly.prochaine_evaluation <= %s
-                ORDER BY poly.prochaine_evaluation
-            """, (first_day.toString("yyyy-MM-dd"), last_day.toString("yyyy-MM-dd")))
-
-            evaluations = cur.fetchall()
+        evaluations = QueryExecutor.fetch_all("""
+            SELECT
+                poly.prochaine_evaluation,
+                CONCAT(p.prenom, ' ', p.nom) as nom_complet,
+                pos.poste_code,
+                poly.niveau
+            FROM polyvalence poly
+            JOIN personnel p ON poly.operateur_id = p.id
+            JOIN postes pos ON poly.poste_id = pos.id
+            WHERE p.statut = 'ACTIF'
+              AND poly.prochaine_evaluation >= %s
+              AND poly.prochaine_evaluation <= %s
+            ORDER BY poly.prochaine_evaluation
+        """, (first_day.toString("yyyy-MM-dd"), last_day.toString("yyyy-MM-dd")), dictionary=True)
 
         self.evaluations_by_date = {}
 
@@ -769,11 +763,7 @@ class MesDemandesDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             try:
-                with DatabaseConnection() as conn:
-                    cur = conn.cursor()
-                    cur.execute("UPDATE demande_absence SET statut = 'ANNULEE' WHERE id = %s", (demande_id,))
-                    conn.commit()
-                    cur.close()
+                QueryExecutor.execute_write("UPDATE demande_absence SET statut = 'ANNULEE' WHERE id = %s", (demande_id,))
 
                 QMessageBox.information(self, "Succès", "Demande annulée")
                 self.load_demandes()
@@ -789,10 +779,8 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # Test avec le premier personnel actif
-    with DatabaseCursor() as cur:
-        cur.execute("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
-        result = cur.fetchone()
-        personnel_id = result[0] if result else None
+    result = QueryExecutor.fetch_one("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
+    personnel_id = result[0] if result else None
 
     dialog = PlanningAbsencesDialog(personnel_id=personnel_id)
     dialog.show()

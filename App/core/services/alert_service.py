@@ -16,15 +16,15 @@ Usage:
     stats = AlertService.get_statistics()
 """
 
-import logging
 from datetime import date, timedelta
 from typing import List, Dict, Any, Optional
 
-from core.db.configbd import DatabaseCursor
+from core.db.query_executor import QueryExecutor
 from core.models import Alert, StatistiquesAlertes
 from core.utils.performance_monitor import monitor_query
+from core.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 # ===========================
@@ -81,29 +81,29 @@ class AlertService:
             ORDER BY c.date_fin ASC
         """
 
+        rows = QueryExecutor.fetch_all(query, dictionary=True)
+
         alerts = []
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query)
-            for row in cur.fetchall():
-                alerts.append(Alert(
-                    id=row['id'],
-                    categorie="CONTRAT",
-                    type_alerte=TypeAlerte.CONTRAT_EXPIRE,
-                    urgence="CRITIQUE",
-                    titre=f"Contrat expiré ({row['type_contrat']})",
-                    description=f"Contrat expiré depuis {row['jours_expires']} jour(s)",
-                    personnel_id=row['operateur_id'],
-                    personnel_nom=row['nom'],
-                    personnel_prenom=row['prenom'],
-                    date_alerte=date.today(),
-                    date_echeance=row['date_fin'],
-                    jours_restants=-row['jours_expires'],
-                    data={
-                        'type_contrat': row['type_contrat'],
-                        'date_debut': row['date_debut'].isoformat() if row['date_debut'] else None,
-                        'matricule': row['matricule']
-                    }
-                ))
+        for row in rows:
+            alerts.append(Alert(
+                id=row['id'],
+                categorie="CONTRAT",
+                type_alerte=TypeAlerte.CONTRAT_EXPIRE,
+                urgence="CRITIQUE",
+                titre=f"Contrat expiré ({row['type_contrat']})",
+                description=f"Contrat expiré depuis {row['jours_expires']} jour(s)",
+                personnel_id=row['operateur_id'],
+                personnel_nom=row['nom'],
+                personnel_prenom=row['prenom'],
+                date_alerte=date.today(),
+                date_echeance=row['date_fin'],
+                jours_restants=-row['jours_expires'],
+                data={
+                    'type_contrat': row['type_contrat'],
+                    'date_debut': row['date_debut'].isoformat() if row['date_debut'] else None,
+                    'matricule': row['matricule']
+                }
+            ))
 
         return alerts
 
@@ -134,39 +134,39 @@ class AlertService:
             ORDER BY c.date_fin ASC
         """
 
+        rows = QueryExecutor.fetch_all(query, (date_limite,), dictionary=True)
+
         alerts = []
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (date_limite,))
-            for row in cur.fetchall():
-                jours_restants = row['jours_restants']
+        for row in rows:
+            jours_restants = row['jours_restants']
 
-                # Déterminer l'urgence
-                if jours_restants <= 7:
-                    urgence = "CRITIQUE"
-                    type_alerte = TypeAlerte.CONTRAT_EXPIRE_7J
-                else:
-                    urgence = "AVERTISSEMENT"
-                    type_alerte = TypeAlerte.CONTRAT_EXPIRE_30J
+            # Déterminer l'urgence
+            if jours_restants <= 7:
+                urgence = "CRITIQUE"
+                type_alerte = TypeAlerte.CONTRAT_EXPIRE_7J
+            else:
+                urgence = "AVERTISSEMENT"
+                type_alerte = TypeAlerte.CONTRAT_EXPIRE_30J
 
-                alerts.append(Alert(
-                    id=row['id'],
-                    categorie="CONTRAT",
-                    type_alerte=type_alerte,
-                    urgence=urgence,
-                    titre=f"Contrat {row['type_contrat']} expire bientôt",
-                    description=f"Expire dans {jours_restants} jour(s)",
-                    personnel_id=row['operateur_id'],
-                    personnel_nom=row['nom'],
-                    personnel_prenom=row['prenom'],
-                    date_alerte=date.today(),
-                    date_echeance=row['date_fin'],
-                    jours_restants=jours_restants,
-                    data={
-                        'type_contrat': row['type_contrat'],
-                        'date_debut': row['date_debut'].isoformat() if row['date_debut'] else None,
-                        'matricule': row['matricule']
-                    }
-                ))
+            alerts.append(Alert(
+                id=row['id'],
+                categorie="CONTRAT",
+                type_alerte=type_alerte,
+                urgence=urgence,
+                titre=f"Contrat {row['type_contrat']} expire bientôt",
+                description=f"Expire dans {jours_restants} jour(s)",
+                personnel_id=row['operateur_id'],
+                personnel_nom=row['nom'],
+                personnel_prenom=row['prenom'],
+                date_alerte=date.today(),
+                date_echeance=row['date_fin'],
+                jours_restants=jours_restants,
+                data={
+                    'type_contrat': row['type_contrat'],
+                    'date_debut': row['date_debut'].isoformat() if row['date_debut'] else None,
+                    'matricule': row['matricule']
+                }
+            ))
 
         return alerts
 
@@ -197,28 +197,28 @@ class AlertService:
             ORDER BY p.nom, p.prenom;
         """
 
+        rows = QueryExecutor.fetch_all(query, dictionary=True)
+
         alerts = []
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query)
-            for row in cur.fetchall():
-                alerts.append(Alert(
-                    id=row['id'],
-                    categorie="PERSONNEL",
-                    type_alerte=TypeAlerte.PERSONNEL_SANS_CONTRAT,
-                    urgence="AVERTISSEMENT",
-                    titre="Personnel sans contrat",
-                    description="Aucun contrat actif trouvé",
-                    personnel_id=row['id'],
-                    personnel_nom=row['nom'],
-                    personnel_prenom=row['prenom'],
-                    date_alerte=date.today(),
-                    date_echeance=None,
-                    jours_restants=None,
-                    data={
-                        'matricule': row['matricule'],
-                        'date_entree': row['date_entree'].isoformat() if row['date_entree'] else None
-                    }
-                ))
+        for row in rows:
+            alerts.append(Alert(
+                id=row['id'],
+                categorie="PERSONNEL",
+                type_alerte=TypeAlerte.PERSONNEL_SANS_CONTRAT,
+                urgence="AVERTISSEMENT",
+                titre="Personnel sans contrat",
+                description="Aucun contrat actif trouvé",
+                personnel_id=row['id'],
+                personnel_nom=row['nom'],
+                personnel_prenom=row['prenom'],
+                date_alerte=date.today(),
+                date_echeance=None,
+                jours_restants=None,
+                data={
+                    'matricule': row['matricule'],
+                    'date_entree': row['date_entree'].isoformat() if row['date_entree'] else None
+                }
+            ))
 
         return alerts
 
@@ -245,28 +245,28 @@ class AlertService:
             ORDER BY pi.date_entree DESC, p.nom
         """
 
+        rows = QueryExecutor.fetch_all(query, dictionary=True)
+
         alerts = []
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query)
-            for row in cur.fetchall():
-                alerts.append(Alert(
-                    id=row['id'],
-                    categorie="PERSONNEL",
-                    type_alerte=TypeAlerte.PERSONNEL_SANS_COMPETENCES,
-                    urgence="INFO",
-                    titre="Personnel sans compétences",
-                    description="Aucune polyvalence assignée",
-                    personnel_id=row['id'],
-                    personnel_nom=row['nom'],
-                    personnel_prenom=row['prenom'],
-                    date_alerte=date.today(),
-                    date_echeance=None,
-                    jours_restants=None,
-                    data={
-                        'matricule': row['matricule'],
-                        'date_entree': row['date_entree'].isoformat() if row['date_entree'] else None
-                    }
-                ))
+        for row in rows:
+            alerts.append(Alert(
+                id=row['id'],
+                categorie="PERSONNEL",
+                type_alerte=TypeAlerte.PERSONNEL_SANS_COMPETENCES,
+                urgence="INFO",
+                titre="Personnel sans compétences",
+                description="Aucune polyvalence assignée",
+                personnel_id=row['id'],
+                personnel_nom=row['nom'],
+                personnel_prenom=row['prenom'],
+                date_alerte=date.today(),
+                date_echeance=None,
+                jours_restants=None,
+                data={
+                    'matricule': row['matricule'],
+                    'date_entree': row['date_entree'].isoformat() if row['date_entree'] else None
+                }
+            ))
 
         return alerts
 
@@ -297,29 +297,29 @@ class AlertService:
             ORDER BY pi.date_entree DESC
         """
 
+        rows = QueryExecutor.fetch_all(query, (date_limite,), dictionary=True)
+
         alerts = []
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (date_limite,))
-            for row in cur.fetchall():
-                alerts.append(Alert(
-                    id=row['id'],
-                    categorie="PERSONNEL",
-                    type_alerte=TypeAlerte.PERSONNEL_NOUVEAU_SANS_AFFECTATION,
-                    urgence="INFO",
-                    titre="Nouveau sans affectation",
-                    description=f"Arrivé il y a {row['jours_depuis_entree']} jour(s), aucune compétence",
-                    personnel_id=row['id'],
-                    personnel_nom=row['nom'],
-                    personnel_prenom=row['prenom'],
-                    date_alerte=date.today(),
-                    date_echeance=None,
-                    jours_restants=None,
-                    data={
-                        'matricule': row['matricule'],
-                        'date_entree': row['date_entree'].isoformat() if row['date_entree'] else None,
-                        'jours_depuis_entree': row['jours_depuis_entree']
-                    }
-                ))
+        for row in rows:
+            alerts.append(Alert(
+                id=row['id'],
+                categorie="PERSONNEL",
+                type_alerte=TypeAlerte.PERSONNEL_NOUVEAU_SANS_AFFECTATION,
+                urgence="INFO",
+                titre="Nouveau sans affectation",
+                description=f"Arrivé il y a {row['jours_depuis_entree']} jour(s), aucune compétence",
+                personnel_id=row['id'],
+                personnel_nom=row['nom'],
+                personnel_prenom=row['prenom'],
+                date_alerte=date.today(),
+                date_echeance=None,
+                jours_restants=None,
+                data={
+                    'matricule': row['matricule'],
+                    'date_entree': row['date_entree'].isoformat() if row['date_entree'] else None,
+                    'jours_depuis_entree': row['jours_depuis_entree']
+                }
+            ))
 
         return alerts
 
@@ -444,49 +444,43 @@ class AlertService:
         """
         counts = {'critiques': 0, 'avertissements': 0, 'infos': 0}
 
-        with DatabaseCursor(dictionary=True) as cur:
-            # Contrats expirés (CRITIQUE)
-            cur.execute("""
-                SELECT COUNT(*) as count FROM contrat c
-                JOIN personnel p ON c.operateur_id = p.id
-                WHERE c.actif = 1 AND c.date_fin < CURDATE() AND p.statut = 'ACTIF'
-            """)
-            counts['critiques'] += cur.fetchone()['count']
+        # Contrats expirés (CRITIQUE)
+        counts['critiques'] += QueryExecutor.fetch_scalar("""
+            SELECT COUNT(*) FROM contrat c
+            JOIN personnel p ON c.operateur_id = p.id
+            WHERE c.actif = 1 AND c.date_fin < CURDATE() AND p.statut = 'ACTIF'
+        """, default=0)
 
-            # Contrats expirant < 7j (CRITIQUE)
-            cur.execute("""
-                SELECT COUNT(*) as count FROM contrat c
-                JOIN personnel p ON c.operateur_id = p.id
-                WHERE c.actif = 1
-                  AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
-                  AND p.statut = 'ACTIF'
-            """)
-            counts['critiques'] += cur.fetchone()['count']
+        # Contrats expirant < 7j (CRITIQUE)
+        counts['critiques'] += QueryExecutor.fetch_scalar("""
+            SELECT COUNT(*) FROM contrat c
+            JOIN personnel p ON c.operateur_id = p.id
+            WHERE c.actif = 1
+              AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+              AND p.statut = 'ACTIF'
+        """, default=0)
 
-            # Contrats expirant 8-30j (AVERTISSEMENT)
-            cur.execute("""
-                SELECT COUNT(*) as count FROM contrat c
-                JOIN personnel p ON c.operateur_id = p.id
-                WHERE c.actif = 1
-                  AND c.date_fin BETWEEN DATE_ADD(CURDATE(), INTERVAL 8 DAY) AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                  AND p.statut = 'ACTIF'
-            """)
-            counts['avertissements'] += cur.fetchone()['count']
+        # Contrats expirant 8-30j (AVERTISSEMENT)
+        counts['avertissements'] += QueryExecutor.fetch_scalar("""
+            SELECT COUNT(*) FROM contrat c
+            JOIN personnel p ON c.operateur_id = p.id
+            WHERE c.actif = 1
+              AND c.date_fin BETWEEN DATE_ADD(CURDATE(), INTERVAL 8 DAY) AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+              AND p.statut = 'ACTIF'
+        """, default=0)
 
-            # Personnel sans contrat (AVERTISSEMENT)
-            cur.execute("""
-                SELECT COUNT(*) as count FROM personnel p
-                LEFT JOIN contrat c ON c.operateur_id = p.id AND c.actif = 1
-                WHERE p.statut = 'ACTIF' AND c.id IS NULL
-            """)
-            counts['avertissements'] += cur.fetchone()['count']
+        # Personnel sans contrat (AVERTISSEMENT)
+        counts['avertissements'] += QueryExecutor.fetch_scalar("""
+            SELECT COUNT(*) FROM personnel p
+            LEFT JOIN contrat c ON c.operateur_id = p.id AND c.actif = 1
+            WHERE p.statut = 'ACTIF' AND c.id IS NULL
+        """, default=0)
 
-            # Personnel sans compétences (INFO)
-            cur.execute("""
-                SELECT COUNT(*) as count FROM personnel p
-                LEFT JOIN polyvalence poly ON poly.operateur_id = p.id
-                WHERE p.statut = 'ACTIF' AND poly.id IS NULL
-            """)
-            counts['infos'] += cur.fetchone()['count']
+        # Personnel sans compétences (INFO)
+        counts['infos'] += QueryExecutor.fetch_scalar("""
+            SELECT COUNT(*) FROM personnel p
+            LEFT JOIN polyvalence poly ON poly.operateur_id = p.id
+            WHERE p.statut = 'ACTIF' AND poly.id IS NULL
+        """, default=0)
 
         return counts

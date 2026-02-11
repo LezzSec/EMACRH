@@ -17,11 +17,12 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor
 
-from core.db.configbd import DatabaseCursor
+from core.db.query_executor import QueryExecutor
 from core.services.polyvalence_logger import log_polyvalence_action
 from core.gui.emac_ui_kit import show_error_message
+from core.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class ImportHistoriquePolyvalenceDialog(QDialog):
@@ -271,13 +272,14 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
     def _load_operateurs(self):
         """Charge la liste des opérateurs."""
         try:
-            with DatabaseCursor(dictionary=True) as cur:
-                cur.execute("""
-                    SELECT id, nom, prenom, matricule
-                    FROM personnel
-                    ORDER BY nom, prenom
-                """)
-                operateurs = cur.fetchall()
+            operateurs = QueryExecutor.fetch_all(
+                """
+                SELECT id, nom, prenom, matricule
+                FROM personnel
+                ORDER BY nom, prenom
+                """,
+                dictionary=True
+            )
 
             self.operateurs_map = {}
             for op in operateurs:
@@ -294,14 +296,15 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
     def _load_postes(self):
         """Charge la liste des postes."""
         try:
-            with DatabaseCursor(dictionary=True) as cur:
-                cur.execute("""
-                    SELECT id, poste_code
-                    FROM postes
-                    WHERE visible = 1
-                    ORDER BY poste_code
-                """)
-                postes = cur.fetchall()
+            postes = QueryExecutor.fetch_all(
+                """
+                SELECT id, poste_code
+                FROM postes
+                WHERE visible = 1
+                ORDER BY poste_code
+                """,
+                dictionary=True
+            )
 
             self.postes_map = {}
             for poste in postes:
