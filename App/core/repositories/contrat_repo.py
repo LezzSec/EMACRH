@@ -36,7 +36,8 @@ class ContratRepository(BaseRepository[Contrat]):
     MODEL = Contrat
     COLUMNS = [
         "id", "operateur_id", "type_contrat", "date_debut", "date_fin",
-        "etp", "categorie", "coefficient", "actif", "commentaire"
+        "etp", "categorie", "coefficient", "actif", "motif",
+        "date_sortie", "motif_sortie"
     ]
 
     # ===========================
@@ -212,7 +213,8 @@ class ContratRepository(BaseRepository[Contrat]):
                 return False, f"Le champ '{field}' est obligatoire", None
 
         allowed = ["operateur_id", "type_contrat", "date_debut", "date_fin",
-                   "etp", "categorie", "coefficient", "actif", "commentaire"]
+                   "etp", "categorie", "coefficient", "actif", "motif",
+                   "date_sortie", "motif_sortie"]
 
         insert_data = {k: v for k, v in data.items() if k in allowed and v is not None}
         insert_data.setdefault("actif", True)
@@ -264,7 +266,8 @@ class ContratRepository(BaseRepository[Contrat]):
 
         # SÉCURITÉ: Whitelist stricte des colonnes autorisées (frozenset immuable)
         ALLOWED_COLUMNS = frozenset(["type_contrat", "date_debut", "date_fin", "etp",
-                                     "categorie", "coefficient", "actif", "commentaire"])
+                                     "categorie", "coefficient", "actif", "motif",
+                                     "date_sortie", "motif_sortie"])
 
         update_data = {k: v for k, v in data.items() if k in ALLOWED_COLUMNS}
 

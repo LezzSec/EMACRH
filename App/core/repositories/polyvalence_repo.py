@@ -47,7 +47,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
     def get_by_operateur(cls, operateur_id: int) -> List[Polyvalence]:
         """Récupère toutes les compétences d'un opérateur."""
         query = """
-            SELECT p.*, pos.poste_code, pos.nom as poste_nom
+            SELECT p.*, pos.poste_code, pos.poste_code as poste_nom
             FROM polyvalence p
             JOIN postes pos ON p.poste_id = pos.id
             WHERE p.operateur_id = %s
@@ -89,7 +89,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 pers.nom as operateur_nom,
                 pers.prenom as operateur_prenom,
                 pos.poste_code,
-                pos.nom as poste_nom,
+                pos.poste_code as poste_nom,
                 p.niveau,
                 p.prochaine_evaluation,
                 DATEDIFF(CURDATE(), p.prochaine_evaluation) as jours_retard
@@ -131,7 +131,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 pers.nom as operateur_nom,
                 pers.prenom as operateur_prenom,
                 pos.poste_code,
-                pos.nom as poste_nom,
+                pos.poste_code as poste_nom,
                 p.niveau,
                 p.prochaine_evaluation,
                 DATEDIFF(p.prochaine_evaluation, CURDATE()) as jours_restants
@@ -194,7 +194,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             SELECT
                 pos.id as poste_id,
                 pos.poste_code,
-                pos.nom as poste_nom,
+                pos.poste_code as poste_nom,
                 a.nom as atelier_nom,
                 COALESCE(p.niveau, 0) as niveau,
                 p.date_evaluation,

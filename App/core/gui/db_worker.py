@@ -15,14 +15,14 @@ Permet d'exécuter des requêtes DB en background sans bloquer l'UI.
 """
 
 import traceback
-import logging
 import threading
 import time
-from typing import Callable, Any, Optional, Set
+from typing import Callable, Optional
 from PyQt5.QtCore import QObject, pyqtSignal, QRunnable, QThreadPool
 from weakref import WeakSet
+from core.utils.logging_config import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Timeout par défaut pour les opérations DB (30 secondes)
 DEFAULT_OPERATION_TIMEOUT = 30.0
@@ -336,10 +336,11 @@ class DbThreadPool:
 
         Example:
             def fetch_personnel():
-                from core.db.configbd import DatabaseCursor
-                with DatabaseCursor(dictionary=True) as cur:
-                    cur.execute("SELECT * FROM personnel WHERE statut = 'ACTIF'")
-                    return cur.fetchall()
+                from core.db.query_executor import QueryExecutor
+                return QueryExecutor.fetch_all(
+                    "SELECT * FROM personnel WHERE statut = 'ACTIF'",
+                    dictionary=True
+                )
 
             def on_success(results):
                 print(f"Chargé {len(results)} personnes")
@@ -476,9 +477,11 @@ def async_db_operation(on_result: Optional[Callable] = None,
     Example:
         @async_db_operation(on_result=lambda x: print(f"Résultat: {x}"))
         def fetch_personnel():
-            with DatabaseCursor(dictionary=True) as cur:
-                cur.execute("SELECT * FROM personnel")
-                return cur.fetchall()
+            from core.db.query_executor import QueryExecutor
+            return QueryExecutor.fetch_all(
+                "SELECT * FROM personnel",
+                dictionary=True
+            )
 
         # Appel direct lance en background
         fetch_personnel()

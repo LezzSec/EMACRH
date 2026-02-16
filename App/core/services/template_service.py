@@ -23,16 +23,33 @@ logger = get_logger(__name__)
 
 
 def get_templates_dir() -> Path:
-    """Retourne le répertoire des templates."""
-    # En développement: App/templates/
-    # En production (.exe): %APPDATA%/EMAC/templates/
+    """
+    Retourne le répertoire des templates.
+
+    Priorité de résolution :
+    1. Variable d'environnement EMAC_TEMPLATES_DIR (chemin réseau ou local)
+       Ex: EMAC_TEMPLATES_DIR=\\\\serveur\\partage\\EMAC\\templates
+    2. En production (.exe): %APPDATA%/EMAC/templates/
+    3. En développement: App/templates/
+    """
+    # 1. Variable d'environnement (chemin réseau partagé ou custom)
+    custom_dir = os.environ.get('EMAC_TEMPLATES_DIR')
+    if custom_dir:
+        custom_path = Path(custom_dir)
+        if custom_path.exists():
+            return custom_path
+        else:
+            logger.warning(
+                f"EMAC_TEMPLATES_DIR pointe vers un chemin inaccessible: {custom_dir}"
+            )
+
+    # 2. Mode .exe
     if getattr(sys, 'frozen', False):
-        # Mode .exe
         app_data = os.environ.get('APPDATA', os.path.expanduser('~'))
         return Path(app_data) / 'EMAC' / 'templates'
-    else:
-        # Mode développement
-        return Path(__file__).parent.parent.parent / 'templates'
+
+    # 3. Mode développement
+    return Path(__file__).parent.parent.parent / 'templates'
 
 
 def get_temp_dir() -> Path:

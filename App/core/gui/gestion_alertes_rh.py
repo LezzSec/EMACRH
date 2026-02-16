@@ -1,22 +1,21 @@
 # -*- coding: utf-8 -*-
 """
-Gestion des Alertes RH - Dialog principal
+Gestion des Alertes RH - Dialog principal (v2 - Card-based design)
 
-Ce module fournit une interface centralisée pour visualiser et gérer
-toutes les alertes RH (contrats, personnel).
+Vue unifiee avec cartes groupees par urgence (Critique > Avertissement > Info).
 """
 
 import logging
 from datetime import date
-from typing import List, Set, Optional
+from typing import List, Dict, Set, Optional
 
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QTabWidget,
-    QTableWidget, QTableWidgetItem, QHeaderView, QPushButton, QComboBox,
-    QLineEdit, QCheckBox, QAbstractItemView, QFileDialog, QFrame, QMessageBox
+    QDialog, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFrame,
+    QPushButton, QComboBox, QLineEdit, QCheckBox, QScrollArea,
+    QFileDialog, QMessageBox, QSizePolicy
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
-from PyQt5.QtGui import QColor, QFont
+from PyQt5.QtGui import QFont, QCursor
 
 from core.services.alert_service import AlertService, TypeAlerte
 from core.models import Alert
@@ -24,10 +23,11 @@ from core.services.permission_manager import can
 
 logger = logging.getLogger(__name__)
 
-# Import du thème et des composants
 try:
-    from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
+    from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message, EmacBadge
+    from core.gui.ui_theme import EmacButton
     from core.gui.db_worker import DbWorker, DbThreadPool
+    from core.gui.loading_components import EmptyStatePlaceholder
     THEME_AVAILABLE = True
 except ImportError as e:
     logger.warning(f"Theme components not available: {e}")
@@ -36,15 +36,57 @@ except ImportError as e:
 
 
 # ===========================
-# Styles communs
+# Constantes
 # ===========================
 
-FILTER_INPUT_STYLE = """
+URGENCY_CONFIG = {
+    "CRITIQUE": {
+        "accent": "#dc2626",
+        "accent_hover": "#b91c1c",
+        "bg_light": "#fef2f2",
+        "text": "#991b1b",
+        "icon": "!!",
+        "label": "Critiques",
+        "order": 0,
+        "badge_variant": "error",
+    },
+    "AVERTISSEMENT": {
+        "accent": "#f59e0b",
+        "accent_hover": "#d97706",
+        "bg_light": "#fffbeb",
+        "text": "#92400e",
+        "icon": "!",
+        "label": "Avertissements",
+        "order": 1,
+        "badge_variant": "warning",
+    },
+    "INFO": {
+        "accent": "#3b82f6",
+        "accent_hover": "#2563eb",
+        "bg_light": "#eff6ff",
+        "text": "#1e40af",
+        "icon": "i",
+        "label": "Informations",
+        "order": 2,
+        "badge_variant": "info",
+    },
+}
+
+TYPE_LABELS = {
+    TypeAlerte.CONTRAT_EXPIRE: "Contrat expire",
+    TypeAlerte.CONTRAT_EXPIRE_7J: "Expire < 7j",
+    TypeAlerte.CONTRAT_EXPIRE_30J: "Expire < 30j",
+    TypeAlerte.PERSONNEL_SANS_CONTRAT: "Sans contrat",
+    TypeAlerte.PERSONNEL_SANS_COMPETENCES: "Sans competences",
+    TypeAlerte.PERSONNEL_NOUVEAU_SANS_AFFECTATION: "Nouveau arrivant",
+}
+
+FILTER_STYLE = """
     QLineEdit, QComboBox {
         background: #ffffff;
         border: 1px solid #d1d5db;
-        border-radius: 4px;
-        padding: 6px 10px;
+        border-radius: 6px;
+        padding: 7px 12px;
         font-size: 13px;
         color: #374151;
     }
@@ -58,533 +100,423 @@ FILTER_INPUT_STYLE = """
         selection-background-color: #3b82f6;
         selection-color: white;
     }
-"""
-
-FILTER_LABEL_STYLE = """
-    QLabel {
-        color: #6b7280;
-        font-size: 13px;
-    }
-"""
-
-CHECKBOX_STYLE = """
     QCheckBox {
         color: #6b7280;
         font-size: 13px;
+        spacing: 6px;
     }
 """
 
 
 # ===========================
-# Onglet de base pour alertes
+# KPICard - Grande carte KPI
 # ===========================
 
-class AlertTabBase(QWidget):
-    """Widget de base pour un onglet d'alertes."""
+class KPICard(QFrame):
+    """Grande carte cliquable affichant un compteur par urgence."""
 
-    row_double_clicked = pyqtSignal(int, dict)
-    data_changed = pyqtSignal()
+    clicked = pyqtSignal(str)
 
-    def __init__(self, columns: List[str], parent=None):
+    def __init__(self, urgency_key: str, parent=None):
         super().__init__(parent)
-        self.columns = columns
-        self._alerts: List[Alert] = []
-        self._handled_ids: Set[str] = set()
-        self._show_handled = False
-        self._setup_ui()
+        self._urgency = urgency_key
+        self._selected = False
+        cfg = URGENCY_CONFIG[urgency_key]
 
-    def _setup_ui(self):
+        self.setObjectName(f"kpi_{urgency_key}")
+        self.setCursor(QCursor(Qt.PointingHandCursor))
+        self.setMinimumHeight(100)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(18)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(4)
 
-        # Barre de filtres
-        self.filter_bar = self._create_filter_bar()
-        layout.addWidget(self.filter_bar)
+        self._count_label = QLabel("0")
+        self._count_label.setAlignment(Qt.AlignLeft)
+        self._count_label.setStyleSheet("background: transparent; border: none;")
+        font = QFont()
+        font.setPixelSize(36)
+        font.setBold(True)
+        self._count_label.setFont(font)
+        layout.addWidget(self._count_label)
 
-        # Cartes résumé
-        self.summary_frame = self._create_summary_frame()
-        layout.addWidget(self.summary_frame)
+        self._title_label = QLabel(cfg["label"])
+        self._title_label.setStyleSheet("background: transparent; border: none;")
+        title_font = QFont()
+        title_font.setPixelSize(14)
+        title_font.setBold(True)
+        self._title_label.setFont(title_font)
+        layout.addWidget(self._title_label)
 
-        # Table des alertes
-        self.table = self._create_table()
-        layout.addWidget(self.table, 1)
+        self._apply_style()
 
-        # Placeholder amélioré
-        self.empty_placeholder = self._create_empty_placeholder()
-        self.empty_placeholder.hide()
-        layout.addWidget(self.empty_placeholder)
+    def set_count(self, count: int):
+        self._count_label.setText(str(count))
 
-    def _create_empty_placeholder(self) -> QWidget:
-        """Cree un placeholder pour l'etat vide."""
-        label = QLabel("Aucune alerte a afficher")
-        label.setAlignment(Qt.AlignCenter)
-        label.setStyleSheet("color: #9ca3af; font-size: 14px; padding: 40px;")
-        return label
+    def set_selected(self, selected: bool):
+        self._selected = selected
+        self._apply_style()
 
-    def _create_filter_bar(self) -> QWidget:
-        bar = QWidget()
-        bar.setStyleSheet(FILTER_INPUT_STYLE + FILTER_LABEL_STYLE + CHECKBOX_STYLE)
-
-        bar_layout = QHBoxLayout(bar)
-        bar_layout.setContentsMargins(0, 0, 0, 0)
-        bar_layout.setSpacing(12)
-
-        lbl_urgence = QLabel("Urgence:")
-        bar_layout.addWidget(lbl_urgence)
-
-        self.urgency_filter = QComboBox()
-        self.urgency_filter.addItems(["Toutes", "Critique", "Avertissement", "Info"])
-        self.urgency_values = ["", "CRITIQUE", "AVERTISSEMENT", "INFO"]
-        self.urgency_filter.currentIndexChanged.connect(self._apply_filters)
-        self.urgency_filter.setMinimumWidth(130)
-        self.urgency_filter.setFixedHeight(32)
-        bar_layout.addWidget(self.urgency_filter)
-
-        bar_layout.addSpacing(8)
-
-        lbl_recherche = QLabel("Recherche:")
-        bar_layout.addWidget(lbl_recherche)
-
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("Nom, prenom...")
-        self.search_input.textChanged.connect(self._apply_filters)
-        self.search_input.setMinimumWidth(200)
-        self.search_input.setFixedHeight(32)
-        bar_layout.addWidget(self.search_input)
-
-        bar_layout.addStretch()
-
-        self.show_handled_cb = QCheckBox("Afficher masques")
-        self.show_handled_cb.stateChanged.connect(self._on_show_handled_changed)
-        bar_layout.addWidget(self.show_handled_cb)
-
-        return bar
-
-    def _create_summary_frame(self) -> QWidget:
-        frame = QWidget()
-        frame.setStyleSheet("background: transparent;")
-        layout = QHBoxLayout(frame)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
-
-        self.card_critique = self._create_summary_card("Critiques", "0", "#dc2626")
-        layout.addWidget(self.card_critique)
-
-        self.card_avert = self._create_summary_card("Avertissements", "0", "#f59e0b")
-        layout.addWidget(self.card_avert)
-
-        self.card_info = self._create_summary_card("Infos", "0", "#3b82f6")
-        layout.addWidget(self.card_info)
-
-        layout.addStretch()
-        return frame
-
-    def _create_summary_card(self, title: str, value: str, accent_color: str) -> QFrame:
-        card = QFrame()
-        card.setFixedSize(150, 70)
-        card.setStyleSheet(f"""
-            QFrame {{
-                background: #ffffff;
-                border: 1px solid #e5e7eb;
-                border-left: 3px solid {accent_color};
-                border-radius: 6px;
+    def _apply_style(self):
+        cfg = URGENCY_CONFIG[self._urgency]
+        border = "3px solid #ffffff" if self._selected else "none"
+        opacity_bg = cfg["accent"] if not self._selected else cfg["accent_hover"]
+        self.setStyleSheet(f"""
+            QFrame#{self.objectName()} {{
+                background: {opacity_bg};
+                border-radius: 12px;
+                border: {border};
+            }}
+            QFrame#{self.objectName()} QLabel {{
+                color: #ffffff;
             }}
         """)
 
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(12, 10, 12, 10)
-        layout.setSpacing(4)
+    def mousePressEvent(self, event):
+        if event.button() == Qt.LeftButton:
+            self.clicked.emit(self._urgency)
+        super().mousePressEvent(event)
 
-        title_lbl = QLabel(title)
-        title_lbl.setStyleSheet("""
-            color: #6b7280;
-            font-size: 12px;
-            font-weight: 500;
-            border: none;
-            background: transparent;
+    def enterEvent(self, event):
+        cfg = URGENCY_CONFIG[self._urgency]
+        border = "3px solid #ffffff" if self._selected else "none"
+        self.setStyleSheet(f"""
+            QFrame#{self.objectName()} {{
+                background: {cfg['accent_hover']};
+                border-radius: 12px;
+                border: {border};
+            }}
+            QFrame#{self.objectName()} QLabel {{
+                color: #ffffff;
+            }}
         """)
-        layout.addWidget(title_lbl)
+        super().enterEvent(event)
 
-        value_lbl = QLabel(value)
-        value_lbl.setObjectName("value_label")
-        value_lbl.setStyleSheet("""
-            color: #1f2937;
-            font-size: 24px;
-            font-weight: 700;
-            border: none;
-            background: transparent;
-        """)
-        layout.addWidget(value_lbl)
+    def leaveEvent(self, event):
+        self._apply_style()
+        super().leaveEvent(event)
 
-        return card
 
-    def _create_table(self) -> QTableWidget:
-        table = QTableWidget()
-        table.setColumnCount(len(self.columns) + 1)
-        table.setHorizontalHeaderLabels(self.columns + ["Actions"])
+# ===========================
+# AlertCard - Carte d'alerte
+# ===========================
 
-        header = table.horizontalHeader()
-        header.setSectionResizeMode(QHeaderView.Stretch)
-        header.setSectionResizeMode(len(self.columns), QHeaderView.ResizeToContents)
+class AlertCard(QFrame):
+    """Carte individuelle representant une alerte."""
 
-        table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        table.setAlternatingRowColors(True)
-        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        table.doubleClicked.connect(self._on_table_double_click)
-        table.verticalHeader().setVisible(False)
-        table.verticalHeader().setDefaultSectionSize(48)
+    view_clicked = pyqtSignal(object)
+    # Note: handle_clicked retiré - fonctionnalité "masquer" non implémentée dans la vue cartes
 
-        table.setStyleSheet("""
-            QTableWidget {
+    def __init__(self, alert: Alert, is_handled: bool = False, parent=None):
+        super().__init__(parent)
+        self._alert = alert
+        self._is_handled = is_handled
+        cfg = URGENCY_CONFIG.get(alert.urgence, URGENCY_CONFIG["INFO"])
+
+        self.setObjectName("alert_card")
+        self.setFixedHeight(76)
+        self.setStyleSheet(f"""
+            QFrame#alert_card {{
                 background: #ffffff;
                 border: 1px solid #e5e7eb;
-                gridline-color: #f3f4f6;
-                font-size: 13px;
-            }
-            QTableWidget::item {
-                padding: 6px 10px;
-                border-bottom: 1px solid #f3f4f6;
-            }
-            QTableWidget::item:selected {
-                background: #3b82f6;
-                color: white;
-            }
-            QHeaderView::section {
+                border-left: 5px solid {cfg['accent']};
+                border-radius: 10px;
+            }}
+            QFrame#alert_card:hover {{
                 background: #f9fafb;
-                color: #374151;
-                padding: 10px 8px;
-                border: none;
-                border-bottom: 1px solid #e5e7eb;
-                font-weight: 600;
-                font-size: 12px;
-            }
+                border-color: {cfg['accent']};
+                border-left: 5px solid {cfg['accent']};
+            }}
         """)
-        return table
 
-    def set_alerts(self, alerts: List[Alert]):
-        self._alerts = alerts
-        self._apply_filters()
-        self._update_summary()
+        main_layout = QHBoxLayout(self)
+        main_layout.setContentsMargins(16, 10, 12, 10)
+        main_layout.setSpacing(12)
 
-    def _apply_filters(self):
-        idx = self.urgency_filter.currentIndex()
-        urgency = self.urgency_values[idx] if idx < len(self.urgency_values) else ""
-        search = self.search_input.text().lower().strip()
+        # Info section (gauche)
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(4)
 
-        filtered = []
-        for alert in self._alerts:
-            alert_key = f"{alert.categorie}_{alert.type_alerte}_{alert.id}"
-            if alert_key in self._handled_ids and not self._show_handled:
-                continue
-            if urgency and alert.urgence != urgency:
-                continue
-            if search:
-                searchable = f"{alert.personnel_nom} {alert.personnel_prenom}".lower()
-                if search not in searchable:
-                    continue
-            filtered.append(alert)
-        self._display_alerts(filtered)
+        # Ligne 1 : Nom + badge type
+        top_row = QHBoxLayout()
+        top_row.setSpacing(8)
 
-    def _display_alerts(self, alerts: List[Alert]):
-        self.table.setRowCount(0)
-        if not alerts:
-            self.table.hide()
-            self.empty_placeholder.show()
-            return
+        name = f"{alert.personnel_nom or ''} {alert.personnel_prenom or ''}".strip()
+        name_label = QLabel(name)
+        name_font = QFont()
+        name_font.setPixelSize(14)
+        name_font.setBold(True)
+        name_label.setFont(name_font)
+        name_label.setStyleSheet("color: #111827; background: transparent; border: none;")
+        top_row.addWidget(name_label)
 
-        self.empty_placeholder.hide()
-        self.table.show()
-        self.table.setRowCount(len(alerts))
-
-        for row, alert in enumerate(alerts):
-            self._populate_row(row, alert)
-
-    def _populate_row(self, row: int, alert: Alert):
-        pass
-
-    def _add_action_buttons(self, row: int, alert: Alert):
-        """Ajoute les boutons d'action."""
-        widget = QWidget()
-        widget.setStyleSheet("background: transparent;")
-        layout = QHBoxLayout(widget)
-        layout.setContentsMargins(4, 2, 4, 2)
-        layout.setSpacing(6)
-
-        # Bouton Voir
-        btn_view = QPushButton("Voir")
-        btn_view.setCursor(Qt.PointingHandCursor)
-        btn_view.setFixedSize(60, 28)
-        btn_view.setStyleSheet("""
-            QPushButton {
-                background: #3b82f6;
-                color: white;
-                border-radius: 4px;
-                border: none;
-                font-size: 12px;
-            }
-            QPushButton:hover { background: #2563eb; }
-        """)
-        btn_view.clicked.connect(lambda checked, a=alert: self._on_view_click(a))
-        layout.addWidget(btn_view)
-
-        # Bouton Masquer/Afficher
-        alert_key = f"{alert.categorie}_{alert.type_alerte}_{alert.id}"
-        is_handled = alert_key in self._handled_ids
-
-        btn_handle = QPushButton("Afficher" if is_handled else "Masquer")
-        btn_handle.setCursor(Qt.PointingHandCursor)
-        btn_handle.setFixedSize(70, 28)
-
-        if is_handled:
-            btn_handle.setStyleSheet("""
-                QPushButton {
-                    background: #10b981;
-                    color: white;
-                    border-radius: 4px;
-                    border: none;
-                    font-size: 12px;
-                }
-                QPushButton:hover { background: #059669; }
-            """)
+        type_text = TYPE_LABELS.get(alert.type_alerte, alert.type_alerte)
+        if THEME_AVAILABLE:
+            badge = EmacBadge(type_text, variant=cfg["badge_variant"])
+            top_row.addWidget(badge)
         else:
-            btn_handle.setStyleSheet("""
-                QPushButton {
-                    background: #6b7280;
-                    color: white;
-                    border-radius: 4px;
-                    border: none;
-                    font-size: 12px;
-                }
-                QPushButton:hover { background: #4b5563; }
-            """)
+            type_label = QLabel(type_text)
+            type_label.setStyleSheet(f"color: {cfg['text']}; font-size: 11px; font-weight: bold; background: transparent; border: none;")
+            top_row.addWidget(type_label)
 
-        btn_handle.clicked.connect(lambda checked, a=alert: self._toggle_handled(a))
-        layout.addWidget(btn_handle)
+        top_row.addStretch()
+        info_layout.addLayout(top_row)
 
-        layout.setAlignment(Qt.AlignCenter)
-        self.table.setCellWidget(row, len(self.columns), widget)
+        # Ligne 2 : Details
+        detail_text = self._build_detail_text(alert)
+        detail_label = QLabel(detail_text)
+        detail_label.setStyleSheet("color: #6b7280; font-size: 13px; background: transparent; border: none;")
+        info_layout.addWidget(detail_label)
 
-    def _update_summary(self):
-        critiques = len([a for a in self._alerts if a.urgence == "CRITIQUE"])
-        avertissements = len([a for a in self._alerts if a.urgence == "AVERTISSEMENT"])
-        infos = len([a for a in self._alerts if a.urgence == "INFO"])
+        main_layout.addLayout(info_layout, 1)
 
-        self.card_critique.findChild(QLabel, "value_label").setText(str(critiques))
-        self.card_avert.findChild(QLabel, "value_label").setText(str(avertissements))
-        self.card_info.findChild(QLabel, "value_label").setText(str(infos))
-
-    def _on_table_double_click(self, index):
-        row = index.row()
-        visible_alerts = self.get_visible_alerts()
-        if 0 <= row < len(visible_alerts):
-            self._on_view_click(visible_alerts[row])
-
-    def _on_view_click(self, alert: Alert):
-        self.row_double_clicked.emit(alert.id, alert.to_dict())
-
-    def _toggle_handled(self, alert: Alert):
-        alert_key = f"{alert.categorie}_{alert.type_alerte}_{alert.id}"
-        if alert_key in self._handled_ids:
-            self._handled_ids.discard(alert_key)
-        else:
-            self._handled_ids.add(alert_key)
-        self._apply_filters()
-        self.data_changed.emit()
-
-    def _on_show_handled_changed(self, state):
-        self._show_handled = state == Qt.Checked
-        self._apply_filters()
-
-    def get_visible_alerts(self) -> List[Alert]:
-        idx = self.urgency_filter.currentIndex()
-        urgency = self.urgency_values[idx] if idx < len(self.urgency_values) else ""
-        search = self.search_input.text().lower().strip()
-
-        filtered = []
-        for alert in self._alerts:
-            alert_key = f"{alert.categorie}_{alert.type_alerte}_{alert.id}"
-            if alert_key in self._handled_ids and not self._show_handled:
-                continue
-            if urgency and alert.urgence != urgency:
-                continue
-            if search:
-                searchable = f"{alert.personnel_nom} {alert.personnel_prenom}".lower()
-                if search not in searchable:
-                    continue
-            filtered.append(alert)
-        return filtered
-
-
-# ===========================
-# Onglet Contrats
-# ===========================
-
-class ContratsAlertTab(AlertTabBase):
-    def __init__(self, parent=None):
-        columns = ["Nom", "Prenom", "Type", "Echeance", "Jours restants", "Urgence"]
-        super().__init__(columns, parent)
-
-    def _create_filter_bar(self) -> QWidget:
-        bar = super()._create_filter_bar()
-        layout = bar.layout()
-
-        type_label = QLabel("Type:")
-        self.type_filter = QComboBox()
-        self.type_filter.addItems(["Tous", "CDI", "CDD", "INTERIM", "ALTERNANCE"])
-        self.type_values = ["", "CDI", "CDD", "INTERIM", "ALTERNANCE"]
-        self.type_filter.currentIndexChanged.connect(self._apply_filters)
-        self.type_filter.setMinimumWidth(120)
-        self.type_filter.setFixedHeight(36)
-
-        layout.insertWidget(5, type_label)
-        layout.insertWidget(6, self.type_filter)
-        return bar
-
-    def _apply_filters(self):
-        super()._apply_filters()
-        
-        idx_urg = self.urgency_filter.currentIndex()
-        urgency = self.urgency_values[idx_urg] if idx_urg < len(self.urgency_values) else ""
-        idx_type = self.type_filter.currentIndex()
-        type_contrat = self.type_values[idx_type] if idx_type < len(self.type_values) else ""
-        search = self.search_input.text().lower().strip()
-
-        filtered = []
-        for alert in self._alerts:
-            alert_key = f"{alert.categorie}_{alert.type_alerte}_{alert.id}"
-            if alert_key in self._handled_ids and not self._show_handled: continue
-            if urgency and alert.urgence != urgency: continue
-            if search:
-                if search not in f"{alert.personnel_nom} {alert.personnel_prenom}".lower(): continue
-            if type_contrat and alert.data.get('type_contrat') != type_contrat:
-                 if alert.type_alerte != TypeAlerte.PERSONNEL_SANS_CONTRAT: continue
-            
-            filtered.append(alert)
-        self._display_alerts(filtered)
-
-    def _populate_row(self, row: int, alert: Alert):
-        self.table.setItem(row, 0, QTableWidgetItem(alert.personnel_nom or ""))
-        self.table.setItem(row, 1, QTableWidgetItem(alert.personnel_prenom or ""))
-        
-        type_c = alert.data.get('type_contrat')
-        item_type = QTableWidgetItem(type_c if type_c else "-")
-        item_type.setTextAlignment(Qt.AlignCenter)
-        self.table.setItem(row, 2, item_type)
-
-        date_txt = alert.date_echeance.strftime('%d/%m/%Y') if alert.date_echeance else "-"
-        item_date = QTableWidgetItem(date_txt)
-        item_date.setTextAlignment(Qt.AlignCenter)
-        self.table.setItem(row, 3, item_date)
-
-        jours_txt = "-"
+        # Jours restants (centre-droit, si applicable)
         if alert.jours_restants is not None:
-            if alert.jours_restants < 0: days = f"{abs(alert.jours_restants)}j expiré"
-            elif alert.jours_restants == 0: days = "Aujourd'hui"
-            else: days = f"{alert.jours_restants}j"
-            jours_txt = days
-        
-        item_jours = QTableWidgetItem(jours_txt)
-        item_jours.setTextAlignment(Qt.AlignCenter)
-        self.table.setItem(row, 4, item_jours)
+            days_text, days_color = self._format_days(alert.jours_restants)
+            days_label = QLabel(days_text)
+            days_font = QFont()
+            days_font.setPixelSize(14)
+            days_font.setBold(True)
+            days_label.setFont(days_font)
+            days_label.setStyleSheet(f"color: {days_color}; background: transparent; border: none;")
+            days_label.setAlignment(Qt.AlignCenter)
+            days_label.setMinimumWidth(80)
+            main_layout.addWidget(days_label)
 
-        # Gestion des couleurs d'urgence
-        colors = {
-            'CRITIQUE': {'fg': '#991b1b', 'bg': '#fee2e2', 'label': 'Critique'},
-            'AVERTISSEMENT': {'fg': '#92400e', 'bg': '#fef3c7', 'label': 'Avertissement'},
-            'INFO': {'fg': '#1e40af', 'bg': '#dbeafe', 'label': 'Info'},
-        }.get(alert.urgence, {})
-        
-        item_urg = QTableWidgetItem(colors.get('label', alert.urgence))
-        item_urg.setTextAlignment(Qt.AlignCenter)
-        item_urg.setForeground(QColor(colors.get('fg', '#000')))
-        item_urg.setBackground(QColor(colors.get('bg', '#fff')))
-        font = QFont()
-        font.setBold(True)
-        item_urg.setFont(font)
-        self.table.setItem(row, 5, item_urg)
+        # Boutons (droite)
+        btn_layout = QVBoxLayout()
+        btn_layout.setSpacing(4)
 
-        self._add_action_buttons(row, alert)
+        btn_voir = QPushButton("Voir")
+        btn_voir.setCursor(Qt.PointingHandCursor)
+        btn_voir.setFixedSize(65, 30)
+        btn_voir.setStyleSheet(f"""
+            QPushButton {{
+                background: {cfg['accent']};
+                color: white;
+                border-radius: 6px;
+                border: none;
+                font-size: 12px;
+                font-weight: 600;
+            }}
+            QPushButton:hover {{ background: {cfg['accent_hover']}; }}
+        """)
+        btn_voir.clicked.connect(lambda: self.view_clicked.emit(self._alert))
+        btn_layout.addWidget(btn_voir)
+
+        main_layout.addLayout(btn_layout)
+
+    @staticmethod
+    def _build_detail_text(alert: Alert) -> str:
+        parts = []
+        type_contrat = alert.data.get('type_contrat')
+        if type_contrat:
+            parts.append(type_contrat)
+        if alert.date_echeance:
+            parts.append(f"Echeance: {alert.date_echeance.strftime('%d/%m/%Y')}")
+        matricule = alert.data.get('matricule')
+        if matricule:
+            parts.append(f"Mat. {matricule}")
+        if alert.description and not type_contrat:
+            parts.append(alert.description)
+        return "  ·  ".join(parts) if parts else alert.description or ""
+
+    @staticmethod
+    def _format_days(jours: int) -> tuple:
+        if jours < 0:
+            return f"{abs(jours)}j expire", "#dc2626"
+        elif jours == 0:
+            return "Aujourd'hui", "#dc2626"
+        elif jours <= 7:
+            return f"{jours}j", "#dc2626"
+        elif jours <= 30:
+            return f"{jours}j", "#f59e0b"
+        else:
+            return f"{jours}j", "#3b82f6"
 
 
 # ===========================
-# Onglet Personnel
+# UrgencyGroupWidget
 # ===========================
 
-class PersonnelAlertTab(AlertTabBase):
-    def __init__(self, parent=None):
-        columns = ["Nom", "Prenom", "Matricule", "Type alerte", "Detail", "Urgence"]
-        super().__init__(columns, parent)
+class UrgencyGroupWidget(QWidget):
+    """Section groupant les alertes d'un meme niveau d'urgence."""
 
-    def _create_filter_bar(self) -> QWidget:
-        bar = super()._create_filter_bar()
-        layout = bar.layout()
+    view_clicked = pyqtSignal(object)
 
-        type_label = QLabel("Type:")
-        layout.insertWidget(5, type_label)
+    def __init__(self, urgency_key: str, parent=None):
+        super().__init__(parent)
+        self._urgency = urgency_key
+        self._cards: List[AlertCard] = []
+        cfg = URGENCY_CONFIG[urgency_key]
 
-        self.alert_type_filter = QComboBox()
-        self.alert_type_filter.addItem("Tous", "")
-        self.alert_type_filter.addItem("Sans contrat", TypeAlerte.PERSONNEL_SANS_CONTRAT)
-        self.alert_type_filter.addItem("Sans competences", TypeAlerte.PERSONNEL_SANS_COMPETENCES)
-        self.alert_type_filter.addItem("Nouveau arrivant", TypeAlerte.PERSONNEL_NOUVEAU_SANS_AFFECTATION)
-        self.alert_type_filter.currentIndexChanged.connect(self._apply_filters)
-        self.alert_type_filter.setMinimumWidth(160)
-        self.alert_type_filter.setFixedHeight(36)
-        layout.insertWidget(6, self.alert_type_filter)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
 
-        return bar
+        # Header
+        self._header = QFrame()
+        self._header.setFixedHeight(40)
+        self._header.setStyleSheet(f"""
+            QFrame {{
+                background: {cfg['bg_light']};
+                border-radius: 8px;
+            }}
+        """)
+        header_layout = QHBoxLayout(self._header)
+        header_layout.setContentsMargins(16, 0, 16, 0)
 
-    def _apply_filters(self):
-        idx_urg = self.urgency_filter.currentIndex()
-        urgency = self.urgency_values[idx_urg] if idx_urg < len(self.urgency_values) else ""
-        alert_type = self.alert_type_filter.currentData()
-        search = self.search_input.text().lower().strip()
+        self._header_label = QLabel(f"{cfg['label']}")
+        header_font = QFont()
+        header_font.setPixelSize(14)
+        header_font.setBold(True)
+        self._header_label.setFont(header_font)
+        self._header_label.setStyleSheet(f"color: {cfg['text']}; background: transparent; border: none;")
+        header_layout.addWidget(self._header_label)
 
-        filtered = []
-        for alert in self._alerts:
+        header_layout.addStretch()
+
+        self._count_badge = QLabel("0")
+        self._count_badge.setAlignment(Qt.AlignCenter)
+        self._count_badge.setFixedSize(28, 22)
+        self._count_badge.setStyleSheet(f"""
+            QLabel {{
+                background: {cfg['accent']};
+                color: white;
+                border-radius: 11px;
+                font-size: 12px;
+                font-weight: bold;
+            }}
+        """)
+        header_layout.addWidget(self._count_badge)
+
+        layout.addWidget(self._header)
+
+        # Container pour les cartes
+        self._cards_layout = QVBoxLayout()
+        self._cards_layout.setSpacing(6)
+        self._cards_layout.setContentsMargins(0, 0, 0, 0)
+        layout.addLayout(self._cards_layout)
+
+    def set_alerts(self, alerts: List[Alert], handled_ids: Set[str]):
+        # Nettoyer
+        while self._cards_layout.count():
+            item = self._cards_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+        self._cards.clear()
+
+        count = len(alerts)
+        self._count_badge.setText(str(count))
+        cfg = URGENCY_CONFIG[self._urgency]
+        plural = "s" if count > 1 else ""
+        self._header_label.setText(f"{cfg['label']} — {count} alerte{plural}")
+
+        self.setVisible(count > 0)
+
+        for alert in alerts:
             alert_key = f"{alert.categorie}_{alert.type_alerte}_{alert.id}"
-            if alert_key in self._handled_ids and not self._show_handled: continue
-            if urgency and alert.urgence != urgency: continue
-            if alert_type and alert.type_alerte != alert_type: continue
-            if search:
-                if search not in f"{alert.personnel_nom} {alert.personnel_prenom}".lower(): continue
-            filtered.append(alert)
-        self._display_alerts(filtered)
+            is_handled = alert_key in handled_ids
+            card = AlertCard(alert, is_handled=is_handled)
+            card.view_clicked.connect(lambda a: self.view_clicked.emit(a))
+            self._cards.append(card)
+            self._cards_layout.addWidget(card)
 
-    def _populate_row(self, row: int, alert: Alert):
-        self.table.setItem(row, 0, QTableWidgetItem(alert.personnel_nom or ""))
-        self.table.setItem(row, 1, QTableWidgetItem(alert.personnel_prenom or ""))
-        
-        mat = alert.data.get('matricule')
-        item_mat = QTableWidgetItem(mat if mat else "-")
-        item_mat.setTextAlignment(Qt.AlignCenter)
-        self.table.setItem(row, 2, item_mat)
 
-        type_map = {
-            TypeAlerte.PERSONNEL_SANS_CONTRAT: "Sans contrat",
-            TypeAlerte.PERSONNEL_SANS_COMPETENCES: "Sans compétences",
-            TypeAlerte.PERSONNEL_NOUVEAU_SANS_AFFECTATION: "Nouveau arrivant"
+# ===========================
+# FilterBar
+# ===========================
+
+class FilterBar(QWidget):
+    """Barre de filtres unifiee."""
+
+    filters_changed = pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setStyleSheet(FILTER_STYLE)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        # Recherche
+        self.search_input = QLineEdit()
+        self.search_input.setPlaceholderText("Rechercher par nom...")
+        self.search_input.setMinimumWidth(220)
+        self.search_input.setFixedHeight(34)
+        self._search_timer = QTimer()
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(300)
+        self._search_timer.timeout.connect(self.filters_changed.emit)
+        self.search_input.textChanged.connect(lambda: self._search_timer.start())
+        layout.addWidget(self.search_input)
+
+        # Categorie
+        lbl_cat = QLabel("Categorie:")
+        lbl_cat.setStyleSheet("color: #6b7280; font-size: 13px;")
+        layout.addWidget(lbl_cat)
+
+        self.category_combo = QComboBox()
+        self.category_combo.addItem("Tous", "")
+        self.category_combo.addItem("Contrats", "CONTRAT")
+        self.category_combo.addItem("Personnel", "PERSONNEL")
+        self.category_combo.setFixedHeight(34)
+        self.category_combo.setMinimumWidth(120)
+        self.category_combo.currentIndexChanged.connect(self._on_category_changed)
+        layout.addWidget(self.category_combo)
+
+        # Type
+        lbl_type = QLabel("Type:")
+        lbl_type.setStyleSheet("color: #6b7280; font-size: 13px;")
+        layout.addWidget(lbl_type)
+
+        self.type_combo = QComboBox()
+        self.type_combo.setFixedHeight(34)
+        self.type_combo.setMinimumWidth(160)
+        self.type_combo.currentIndexChanged.connect(lambda: self.filters_changed.emit())
+        layout.addWidget(self.type_combo)
+        self._populate_type_combo("")
+
+        layout.addStretch()
+
+        # Masques
+        self.show_handled_cb = QCheckBox("Afficher masques")
+        self.show_handled_cb.stateChanged.connect(lambda: self.filters_changed.emit())
+        layout.addWidget(self.show_handled_cb)
+
+    def _on_category_changed(self):
+        cat = self.category_combo.currentData()
+        self._populate_type_combo(cat)
+        self.filters_changed.emit()
+
+    def _populate_type_combo(self, category: str):
+        self.type_combo.blockSignals(True)
+        self.type_combo.clear()
+        self.type_combo.addItem("Tous", "")
+
+        if category in ("", None):
+            for key, label in TYPE_LABELS.items():
+                self.type_combo.addItem(label, key)
+        elif category == "CONTRAT":
+            self.type_combo.addItem("Contrat expire", TypeAlerte.CONTRAT_EXPIRE)
+            self.type_combo.addItem("Expire < 7j", TypeAlerte.CONTRAT_EXPIRE_7J)
+            self.type_combo.addItem("Expire < 30j", TypeAlerte.CONTRAT_EXPIRE_30J)
+            self.type_combo.addItem("Sans contrat", TypeAlerte.PERSONNEL_SANS_CONTRAT)
+        elif category == "PERSONNEL":
+            self.type_combo.addItem("Sans competences", TypeAlerte.PERSONNEL_SANS_COMPETENCES)
+            self.type_combo.addItem("Nouveau arrivant", TypeAlerte.PERSONNEL_NOUVEAU_SANS_AFFECTATION)
+
+        self.type_combo.blockSignals(False)
+
+    def get_filters(self) -> dict:
+        return {
+            "search": self.search_input.text().lower().strip(),
+            "category": self.category_combo.currentData() or "",
+            "type": self.type_combo.currentData() or "",
+            "show_handled": self.show_handled_cb.isChecked(),
         }
-        self.table.setItem(row, 3, QTableWidgetItem(type_map.get(alert.type_alerte, alert.type_alerte)))
-        self.table.setItem(row, 4, QTableWidgetItem(alert.description))
-
-        colors = {
-            'CRITIQUE': {'fg': '#991b1b', 'bg': '#fee2e2', 'label': 'Critique'},
-            'AVERTISSEMENT': {'fg': '#92400e', 'bg': '#fef3c7', 'label': 'Avertissement'},
-            'INFO': {'fg': '#1e40af', 'bg': '#dbeafe', 'label': 'Info'},
-        }.get(alert.urgence, {})
-
-        item_urg = QTableWidgetItem(colors.get('label', alert.urgence))
-        item_urg.setTextAlignment(Qt.AlignCenter)
-        item_urg.setForeground(QColor(colors.get('fg', '#000')))
-        item_urg.setBackground(QColor(colors.get('bg', '#fff')))
-        font = QFont()
-        font.setBold(True)
-        item_urg.setFont(font)
-        self.table.setItem(row, 5, item_urg)
-
-        self._add_action_buttons(row, alert)
 
 
 # ===========================
@@ -592,200 +524,153 @@ class PersonnelAlertTab(AlertTabBase):
 # ===========================
 
 class GestionAlertesRHDialog(QDialog):
+    """Dialog principal des Alertes RH - Vue unifiee par cartes."""
+
     data_changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Gestion des Alertes RH")
-        self.resize(1150, 750)
+        self.setWindowTitle("Alertes RH")
+        self.resize(1200, 800)
+
+        self._all_alerts: List[Alert] = []
+        self._handled_ids: Set[str] = set()
+        self._active_urgency_filter: Optional[str] = None
+        self._can_view_contrats = True
+        self._can_view_personnel = True
+
         self._setup_ui()
         self._check_permissions()
         QTimer.singleShot(100, self._load_data_async)
 
     def _setup_ui(self):
         if THEME_AVAILABLE:
-            add_custom_title_bar(self, "Gestion des Alertes RH")
+            add_custom_title_bar(self, "Alertes RH")
 
-        # Style global du dialog
-        self.setStyleSheet("QDialog { background: #f9fafb; }")
+        self.setStyleSheet("QDialog { background: #f6f7fb; }")
 
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(24, 24, 24, 20)
-        main_layout.setSpacing(18)
+        main_layout.setContentsMargins(24, 20, 24, 16)
+        main_layout.setSpacing(20)
 
-        self.global_summary = self._create_global_summary()
-        main_layout.addWidget(self.global_summary)
-
-        self.tabs = QTabWidget()
-        self.tabs.setStyleSheet("""
-            QTabWidget::pane {
-                border: 1px solid #e5e7eb;
-                border-radius: 6px;
-                background: #ffffff;
-                top: -1px;
-            }
-            QTabBar::tab {
-                background: #f3f4f6;
-                color: #6b7280;
-                padding: 10px 24px;
-                border: 1px solid #e5e7eb;
-                border-bottom: none;
-                margin-right: 2px;
-                border-top-left-radius: 6px;
-                border-top-right-radius: 6px;
-                font-size: 13px;
-            }
-            QTabBar::tab:hover:!selected {
-                background: #e5e7eb;
-            }
-            QTabBar::tab:selected {
-                background: #ffffff;
-                color: #1f2937;
-                font-weight: 600;
-            }
-        """)
-
-        self.tab_contrats = ContratsAlertTab()
-        self.tab_contrats.row_double_clicked.connect(self._on_view_contract_detail)
-        self.tab_contrats.data_changed.connect(self._on_tab_data_changed)
-        self.tabs.addTab(self.tab_contrats, "Contrats")
-
-        self.tab_personnel = PersonnelAlertTab()
-        self.tab_personnel.row_double_clicked.connect(self._on_view_personnel_detail)
-        self.tab_personnel.data_changed.connect(self._on_tab_data_changed)
-        self.tabs.addTab(self.tab_personnel, "Personnel")
-
-        main_layout.addWidget(self.tabs, 1)
-
-        btn_bar = self._create_button_bar()
-        main_layout.addWidget(btn_bar)
-
-    def _create_global_summary(self) -> QWidget:
-        frame = QFrame()
-        frame.setObjectName("HeaderBanner")
-        frame.setStyleSheet("""
-            #HeaderBanner {
-                background: #1e293b;
-                border-radius: 8px;
-            }
-            #HeaderBanner QLabel {
-                color: #ffffff;
-                background: transparent;
-                border: none;
-            }
-        """)
-        frame.setFixedHeight(70)
-
-        layout = QHBoxLayout(frame)
-        layout.setContentsMargins(24, 0, 24, 0)
-        layout.setSpacing(0)
+        # Header
+        header = QHBoxLayout()
+        header.setSpacing(10)
 
         title = QLabel("Alertes RH")
-        title.setStyleSheet("font-size: 16px; font-weight: 700;")
-        layout.addWidget(title)
+        title_font = QFont()
+        title_font.setPixelSize(24)
+        title_font.setBold(True)
+        title.setFont(title_font)
+        title.setStyleSheet("color: #111827;")
+        header.addWidget(title)
 
-        layout.addStretch()
+        header.addStretch()
 
-        def create_stat(label, value_attr):
-            container = QWidget()
-            container.setStyleSheet("background: transparent;")
-            l = QHBoxLayout(container)
-            l.setContentsMargins(20, 0, 20, 0)
-            l.setSpacing(8)
+        if THEME_AVAILABLE:
+            btn_export = EmacButton("Exporter PDF", variant='ghost')
+            btn_export.setFixedHeight(36)
+            btn_export.clicked.connect(self._export_pdf)
+            header.addWidget(btn_export)
 
-            lbl_txt = QLabel(label)
-            lbl_txt.setStyleSheet("color: #94a3b8; font-size: 13px;")
-            l.addWidget(lbl_txt)
+            btn_refresh = EmacButton("Actualiser", variant='primary')
+            btn_refresh.setFixedHeight(36)
+            btn_refresh.clicked.connect(self._load_data_async)
+            header.addWidget(btn_refresh)
 
-            lbl_val = QLabel("0")
-            lbl_val.setStyleSheet("color: #ffffff; font-size: 20px; font-weight: 700;")
-            setattr(self, value_attr, lbl_val)
-            l.addWidget(lbl_val)
+            btn_close = EmacButton("Fermer", variant='ghost')
+            btn_close.setFixedHeight(36)
+            btn_close.clicked.connect(self.accept)
+            header.addWidget(btn_close)
+        else:
+            for text, slot in [("Exporter PDF", self._export_pdf), ("Actualiser", self._load_data_async), ("Fermer", self.accept)]:
+                btn = QPushButton(text)
+                btn.clicked.connect(slot)
+                header.addWidget(btn)
 
-            return container
+        main_layout.addLayout(header)
 
-        layout.addWidget(create_stat("Critiques:", "lbl_critiques"))
-        layout.addWidget(create_stat("Avertissements:", "lbl_avertissements"))
-        layout.addWidget(create_stat("Infos:", "lbl_infos"))
+        # KPI Cards
+        kpi_row = QHBoxLayout()
+        kpi_row.setSpacing(16)
 
-        return frame
+        self._kpi_cards: Dict[str, KPICard] = {}
+        for urgency_key in ["CRITIQUE", "AVERTISSEMENT", "INFO"]:
+            card = KPICard(urgency_key)
+            card.clicked.connect(self._on_kpi_clicked)
+            self._kpi_cards[urgency_key] = card
+            kpi_row.addWidget(card)
 
-    def _create_button_bar(self) -> QWidget:
-        bar = QWidget()
-        layout = QHBoxLayout(bar)
-        layout.setContentsMargins(0, 8, 0, 0)
-        layout.setSpacing(10)
+        main_layout.addLayout(kpi_row)
 
-        # Bouton Export PDF
-        btn_export = QPushButton("Exporter PDF")
-        btn_export.setCursor(Qt.PointingHandCursor)
-        btn_export.setFixedHeight(36)
-        btn_export.setStyleSheet("""
-            QPushButton {
-                background: #10b981;
-                color: white;
-                border: none;
-                padding: 0 20px;
+        # Filter bar
+        self._filter_bar = FilterBar()
+        self._filter_bar.filters_changed.connect(self._apply_filters)
+        main_layout.addWidget(self._filter_bar)
+
+        # Scroll area avec les groupes d'urgence
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("""
+            QScrollArea { background: transparent; border: none; }
+            QScrollBar:vertical {
+                background: #f1f1f1;
+                width: 8px;
                 border-radius: 4px;
-                font-size: 13px;
             }
-            QPushButton:hover { background: #059669; }
-        """)
-        btn_export.clicked.connect(self._export_pdf)
-        layout.addWidget(btn_export)
-
-        layout.addStretch()
-
-        # Bouton Actualiser
-        btn_refresh = QPushButton("Actualiser")
-        btn_refresh.setCursor(Qt.PointingHandCursor)
-        btn_refresh.setFixedHeight(36)
-        btn_refresh.setStyleSheet("""
-            QPushButton {
-                background: #3b82f6;
-                color: white;
-                border: none;
-                padding: 0 20px;
+            QScrollBar::handle:vertical {
+                background: #c1c1c1;
                 border-radius: 4px;
-                font-size: 13px;
+                min-height: 30px;
             }
-            QPushButton:hover { background: #2563eb; }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
         """)
-        btn_refresh.clicked.connect(self._load_data_async)
-        layout.addWidget(btn_refresh)
 
-        # Bouton Fermer
-        btn_close = QPushButton("Fermer")
-        btn_close.setCursor(Qt.PointingHandCursor)
-        btn_close.setFixedHeight(36)
-        btn_close.setStyleSheet("""
-            QPushButton {
-                background: #f3f4f6;
-                color: #374151;
-                border: 1px solid #d1d5db;
-                padding: 0 20px;
-                border-radius: 4px;
-                font-size: 13px;
-            }
-            QPushButton:hover {
-                background: #e5e7eb;
-            }
-        """)
-        btn_close.clicked.connect(self.accept)
-        layout.addWidget(btn_close)
+        scroll_content = QWidget()
+        scroll_content.setStyleSheet("background: transparent;")
+        self._scroll_layout = QVBoxLayout(scroll_content)
+        self._scroll_layout.setContentsMargins(0, 0, 4, 0)
+        self._scroll_layout.setSpacing(20)
 
-        return bar
+        self._urgency_groups: Dict[str, UrgencyGroupWidget] = {}
+        for urgency_key in ["CRITIQUE", "AVERTISSEMENT", "INFO"]:
+            group = UrgencyGroupWidget(urgency_key)
+            group.view_clicked.connect(self._on_view_alert)
+            self._urgency_groups[urgency_key] = group
+            self._scroll_layout.addWidget(group)
+
+        # Empty state
+        if THEME_AVAILABLE:
+            self._empty_placeholder = EmptyStatePlaceholder(
+                icon="✅",
+                title="Aucune alerte",
+                subtitle="Tout est en ordre, aucune alerte a afficher."
+            )
+        else:
+            self._empty_placeholder = QLabel("Aucune alerte a afficher")
+            self._empty_placeholder.setAlignment(Qt.AlignCenter)
+            self._empty_placeholder.setStyleSheet("color: #9ca3af; font-size: 14px; padding: 60px;")
+        self._empty_placeholder.hide()
+        self._scroll_layout.addWidget(self._empty_placeholder)
+
+        self._scroll_layout.addStretch()
+
+        scroll.setWidget(scroll_content)
+        main_layout.addWidget(scroll, 1)
+
+    # ------- Permissions -------
 
     def _check_permissions(self):
-        can_view_contrats = can('rh.contrats.view')
-        can_view_personnel = can('rh.personnel.view')
+        self._can_view_contrats = can('rh.contrats.view')
+        self._can_view_personnel = can('rh.personnel.view')
 
-        if not can_view_contrats: self.tabs.setTabEnabled(0, False)
-        if not can_view_personnel: self.tabs.setTabEnabled(1, False)
-
-        if not can_view_contrats and not can_view_personnel:
-            QMessageBox.warning(self, "Accès refusé", "Permissions insuffisantes.")
+        if not self._can_view_contrats and not self._can_view_personnel:
+            QMessageBox.warning(self, "Acces refuse", "Permissions insuffisantes.")
             QTimer.singleShot(0, self.reject)
+
+    # ------- Chargement async -------
 
     def _load_data_async(self):
         if THEME_AVAILABLE:
@@ -800,53 +685,127 @@ class GestionAlertesRHDialog(QDialog):
                 self._on_load_error(str(e))
 
     def _fetch_all_alerts(self, progress_callback=None):
-        return {
-            'contrats': AlertService.get_all_contract_alerts(),
-            'personnel': AlertService.get_all_personnel_alerts(),
-            'stats': AlertService.get_quick_counts()
-        }
+        contract_alerts = AlertService.get_all_contract_alerts() if self._can_view_contrats else []
+        personnel_alerts = AlertService.get_all_personnel_alerts() if self._can_view_personnel else []
 
-    def _on_data_loaded(self, data):
-        self.tab_contrats.set_alerts(data['contrats'])
-        self.tab_personnel.set_alerts(data['personnel'])
-        stats = data['stats']
-        self.lbl_critiques.setText(str(stats['critiques']))
-        self.lbl_avertissements.setText(str(stats['avertissements']))
-        self.lbl_infos.setText(str(stats['infos']))
+        # Deduplication
+        seen = set()
+        merged = []
+        for alert in contract_alerts + personnel_alerts:
+            key = (alert.personnel_id, alert.type_alerte)
+            if key not in seen:
+                seen.add(key)
+                merged.append(alert)
+
+        return sorted(merged, key=lambda a: a.urgence_ordre)
+
+    def _on_data_loaded(self, alerts: List[Alert]):
+        self._all_alerts = alerts
+        self._update_kpi_counts()
+        self._apply_filters()
 
     def _on_load_error(self, error_msg):
         logger.error(f"Erreur chargement alertes: {error_msg}")
         if show_error_message:
             show_error_message(self, "Erreur", "Impossible de charger les alertes", Exception(error_msg))
         else:
-            QMessageBox.critical(self, "Erreur", error_msg)
+            QMessageBox.critical(self, "Erreur", str(error_msg))
 
-    def _on_tab_data_changed(self):
-        self.data_changed.emit()
+    # ------- KPI -------
 
-    def _on_view_contract_detail(self, alert_id: int, alert_data: dict):
-        """Ouvre la fenetre de gestion des contrats pour l'operateur."""
-        pid = alert_data.get('personnel_id')
+    def _update_kpi_counts(self):
+        counts = {"CRITIQUE": 0, "AVERTISSEMENT": 0, "INFO": 0}
+        for alert in self._all_alerts:
+            if alert.urgence in counts:
+                counts[alert.urgence] += 1
+        for key, card in self._kpi_cards.items():
+            card.set_count(counts.get(key, 0))
+
+    def _on_kpi_clicked(self, urgency: str):
+        if self._active_urgency_filter == urgency:
+            self._active_urgency_filter = None
+        else:
+            self._active_urgency_filter = urgency
+
+        for key, card in self._kpi_cards.items():
+            card.set_selected(key == self._active_urgency_filter)
+
+        self._apply_filters()
+
+    # ------- Filtrage -------
+
+    def _apply_filters(self):
+        filters = self._filter_bar.get_filters()
+        search = filters["search"]
+        category = filters["category"]
+        type_filter = filters["type"]
+        show_handled = filters["show_handled"]
+
+        grouped: Dict[str, List[Alert]] = {"CRITIQUE": [], "AVERTISSEMENT": [], "INFO": []}
+
+        for alert in self._all_alerts:
+            # Filtre urgence (KPI click)
+            if self._active_urgency_filter and alert.urgence != self._active_urgency_filter:
+                continue
+
+            # Filtre masques
+            alert_key = f"{alert.categorie}_{alert.type_alerte}_{alert.id}"
+            if alert_key in self._handled_ids and not show_handled:
+                continue
+
+            # Filtre categorie
+            if category and alert.categorie != category:
+                continue
+
+            # Filtre type
+            if type_filter and alert.type_alerte != type_filter:
+                continue
+
+            # Filtre recherche
+            if search:
+                searchable = f"{alert.personnel_nom} {alert.personnel_prenom}".lower()
+                if search not in searchable:
+                    continue
+
+            if alert.urgence in grouped:
+                grouped[alert.urgence].append(alert)
+
+        total_visible = sum(len(v) for v in grouped.values())
+
+        for urgency_key, group_widget in self._urgency_groups.items():
+            group_widget.set_alerts(grouped.get(urgency_key, []), self._handled_ids)
+
+        self._empty_placeholder.setVisible(total_visible == 0)
+
+    # ------- Actions -------
+
+    def _on_view_alert(self, alert: Alert):
+        if alert.categorie == "CONTRAT":
+            self._on_view_contract_detail(alert)
+        else:
+            self._on_view_personnel_detail(alert)
+
+    def _on_view_contract_detail(self, alert: Alert):
+        pid = alert.personnel_id
         if pid:
             try:
                 from core.gui.contract_management import ContractManagementDialog
                 dialog = ContractManagementDialog(parent=self, operateur_id=pid)
-                dialog.data_changed.connect(self._load_data_async)
+                dialog.data_changed.connect(self._on_sub_dialog_changed)
                 dialog.exec_()
             except ImportError as e:
                 logger.error(f"Erreur import ContractManagementDialog: {e}")
                 QMessageBox.information(self, "Info", f"Contrat pour ID {pid}")
 
-    def _on_view_personnel_detail(self, alert_id: int, alert_data: dict):
-        """Ouvre la fenetre de details du personnel."""
-        pid = alert_data.get('personnel_id')
+    def _on_view_personnel_detail(self, alert: Alert):
+        pid = alert.personnel_id
         if pid:
             try:
                 from core.gui.gestion_personnel import DetailOperateurDialog
                 dialog = DetailOperateurDialog(
                     pid,
-                    alert_data.get('personnel_nom', ''),
-                    alert_data.get('personnel_prenom', ''),
+                    alert.personnel_nom or '',
+                    alert.personnel_prenom or '',
                     'ACTIF',
                     parent=self
                 )
@@ -855,6 +814,13 @@ class GestionAlertesRHDialog(QDialog):
                 logger.error(f"Erreur import DetailOperateurDialog: {e}")
                 QMessageBox.information(self, "Info", f"Detail ID {pid}")
 
+    def _on_sub_dialog_changed(self):
+        """Recharge les alertes et notifie le parent."""
+        self._load_data_async()
+        self.data_changed.emit()
+
+    # ------- Export PDF -------
+
     def _export_pdf(self):
         try:
             from reportlab.lib.pagesizes import A4, landscape
@@ -862,52 +828,93 @@ class GestionAlertesRHDialog(QDialog):
             from reportlab.lib import colors
             from reportlab.lib.styles import getSampleStyleSheet
 
-            file_path, _ = QFileDialog.getSaveFileName(self, "Exporter PDF", f"alertes_{date.today()}.pdf", "PDF Files (*.pdf)")
-            if not file_path: return
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, "Exporter PDF", f"alertes_rh_{date.today()}.pdf", "PDF Files (*.pdf)"
+            )
+            if not file_path:
+                return
 
             doc = SimpleDocTemplate(file_path, pagesize=landscape(A4))
             elements = []
             styles = getSampleStyleSheet()
 
-            elements.append(Paragraph(f"Rapport Alertes RH - {date.today()}", styles['Title']))
+            elements.append(Paragraph(f"Rapport Alertes RH - {date.today().strftime('%d/%m/%Y')}", styles['Title']))
             elements.append(Spacer(1, 20))
 
-            idx = self.tabs.currentIndex()
-            tab_obj = self.tab_contrats if idx == 0 else self.tab_personnel
-            alerts = tab_obj.get_visible_alerts()
-            
-            headers = ["Nom", "Prénom", "Info", "Détail", "Urgence"]
+            # Recuperer les alertes filtrees visibles
+            filtered = self._get_filtered_alerts()
+
+            headers = ["Nom", "Prenom", "Categorie", "Type", "Detail", "Urgence"]
             data = [headers]
-            
-            for a in alerts:
-                if idx == 0:
-                    info = a.data.get('type_contrat', '-')
-                    detail = f"Fin: {a.date_echeance} ({a.jours_restants}j)"
-                else:
-                    info = a.data.get('matricule', '-')
+
+            for a in filtered:
+                type_text = TYPE_LABELS.get(a.type_alerte, a.type_alerte)
+                detail = ""
+                if a.date_echeance:
+                    jours = f" ({a.jours_restants}j)" if a.jours_restants is not None else ""
+                    detail = f"Fin: {a.date_echeance.strftime('%d/%m/%Y')}{jours}"
+                elif a.description:
                     detail = a.description
-                
+
                 data.append([
-                    a.personnel_nom, 
-                    a.personnel_prenom, 
-                    info, 
-                    detail, 
-                    a.urgence
+                    a.personnel_nom or "",
+                    a.personnel_prenom or "",
+                    a.categorie,
+                    type_text,
+                    detail,
+                    URGENCY_CONFIG.get(a.urgence, {}).get("label", a.urgence),
                 ])
 
             if len(data) > 1:
                 t = Table(data)
                 t.setStyle(TableStyle([
-                    ('BACKGROUND', (0,0), (-1,0), colors.HexColor('#2c3e50')),
-                    ('TEXTCOLOR', (0,0), (-1,0), colors.white),
-                    ('GRID', (0,0), (-1,-1), 1, colors.black)
+                    ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e293b')),
+                    ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                    ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                    ('FONTSIZE', (0, 0), (-1, 0), 10),
+                    ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#d1d5db')),
+                    ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9fafb')]),
+                    ('FONTSIZE', (0, 1), (-1, -1), 9),
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('TOPPADDING', (0, 0), (-1, -1), 6),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
                 ]))
                 elements.append(t)
             else:
-                elements.append(Paragraph("Aucune donnée", styles['Normal']))
+                elements.append(Paragraph("Aucune alerte a afficher", styles['Normal']))
 
             doc.build(elements)
-            QMessageBox.information(self, "Succès", "Export terminé")
+            QMessageBox.information(self, "Succes", f"Export termine:\n{file_path}")
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur Export", str(e))
+            logger.exception(f"Erreur export PDF: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur Export", "Impossible d'exporter le PDF", e)
+            else:
+                QMessageBox.critical(self, "Erreur Export", str(e))
+
+    def _get_filtered_alerts(self) -> List[Alert]:
+        """Retourne la liste des alertes actuellement visibles apres filtrage."""
+        filters = self._filter_bar.get_filters()
+        search = filters["search"]
+        category = filters["category"]
+        type_filter = filters["type"]
+        show_handled = filters["show_handled"]
+
+        result = []
+        for alert in self._all_alerts:
+            if self._active_urgency_filter and alert.urgence != self._active_urgency_filter:
+                continue
+            alert_key = f"{alert.categorie}_{alert.type_alerte}_{alert.id}"
+            if alert_key in self._handled_ids and not show_handled:
+                continue
+            if category and alert.categorie != category:
+                continue
+            if type_filter and alert.type_alerte != type_filter:
+                continue
+            if search:
+                searchable = f"{alert.personnel_nom} {alert.personnel_prenom}".lower()
+                if search not in searchable:
+                    continue
+            result.append(alert)
+        return result

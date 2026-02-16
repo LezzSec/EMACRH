@@ -1,6 +1,12 @@
-from configbd import get_db_connection
+# -*- coding: utf-8 -*-
+"""
+Script legacy de peuplement initial de la table personnel.
 
-# Liste des opérateurs
+Usage: py -m core.db.insert_operateurs
+"""
+from core.db.configbd import get_connection
+
+# Liste des opérateurs (format: "NOM Prenom")
 operateurs = [
     "ACEDO Sebastien",
     "AGUERRE Stéphane",
@@ -55,28 +61,31 @@ operateurs = [
     "VASSEUR Joffrey",
     "VERGE Olivier"
 ]
+
+
 def insert_operateurs():
+    """Insère les opérateurs dans la table personnel (nom + prenom séparés)."""
     try:
-        # Obtenir une connexion à la base de données
-        connection = get_db_connection()
+        connection = get_connection()
         cursor = connection.cursor()
 
-        # Insérer chaque opérateur dans la table 'personnel'
         for operateur in operateurs:
-            query = "INSERT INTO personnel (nom_prenom) VALUES (%s)"
-            cursor.execute(query, (operateur,))
+            parts = operateur.split(" ", 1)
+            nom = parts[0]
+            prenom = parts[1] if len(parts) > 1 else ""
+            query = "INSERT INTO personnel (nom, prenom, statut) VALUES (%s, %s, 'ACTIF')"
+            cursor.execute(query, (nom, prenom))
 
-        # Valider les modifications
         connection.commit()
-        print(f"{cursor.rowcount} opérateurs ont été insérés dans la table 'personnel'.")
+        print(f"{len(operateurs)} opérateurs ont été insérés dans la table 'personnel'.")
     except Exception as e:
         print(f"Une erreur est survenue : {e}")
     finally:
-        if connection.is_connected():
+        if connection and connection.is_connected():
             cursor.close()
             connection.close()
             print("Connexion à la base de données fermée.")
 
-# Exécuter le script
+
 if __name__ == "__main__":
     insert_operateurs()

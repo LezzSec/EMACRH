@@ -25,7 +25,9 @@ from core.repositories.personnel_repo import PersonnelRepository
 from core.repositories.contrat_repo import ContratRepository
 from core.repositories.polyvalence_repo import PolyvalenceRepository
 from core.repositories.poste_repo import PosteRepository, AtelierRepository
-from core.repositories.absence_repo import AbsenceRepository
+
+# Note: AbsenceRepository supprimé - utilisait la table inexistante 'absences'.
+# Utiliser absence_service.py ou absence_service_crud.py (table 'demande_absence').
 
 __all__ = [
     # Base
@@ -37,5 +39,4 @@ __all__ = [
     'PolyvalenceRepository',
     'PosteRepository',
     'AtelierRepository',
-    'AbsenceRepository',
 ]

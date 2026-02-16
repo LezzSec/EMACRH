@@ -30,8 +30,8 @@ class PosteRepository(BaseRepository[Poste]):
     TABLE = "postes"
     MODEL = Poste
     COLUMNS = [
-        "id", "poste_code", "nom", "description",
-        "atelier_id", "visible", "besoin"
+        "id", "poste_code", "besoins_postes",
+        "visible", "atelier_id"
     ]
 
     # ===========================
@@ -99,14 +99,14 @@ class PosteRepository(BaseRepository[Poste]):
 
     @classmethod
     def search(cls, terme: str, limit: int = 20) -> List[Poste]:
-        """Recherche des postes par code ou nom."""
+        """Recherche des postes par code ou nom d'atelier."""
         pattern = f"%{terme}%"
         query = """
             SELECT p.*, a.nom as atelier_nom
             FROM postes p
             LEFT JOIN atelier a ON p.atelier_id = a.id
             WHERE p.visible = 1
-              AND (p.poste_code LIKE %s OR p.nom LIKE %s)
+              AND (p.poste_code LIKE %s OR a.nom LIKE %s)
             ORDER BY p.poste_code
             LIMIT %s
         """
@@ -149,7 +149,7 @@ class PosteRepository(BaseRepository[Poste]):
         """
         query = """
             SELECT
-                p.id, p.poste_code, p.nom, p.besoin,
+                p.id, p.poste_code, p.besoins_postes,
                 a.nom as atelier_nom,
                 COUNT(DISTINCT poly.operateur_id) as nb_competents,
                 SUM(CASE WHEN poly.niveau >= 3 THEN 1 ELSE 0 END) as nb_confirmes
@@ -158,7 +158,7 @@ class PosteRepository(BaseRepository[Poste]):
             LEFT JOIN polyvalence poly ON p.id = poly.poste_id
             LEFT JOIN personnel pers ON poly.operateur_id = pers.id AND pers.statut = 'ACTIF'
             WHERE p.visible = 1
-            GROUP BY p.id, p.poste_code, p.nom, p.besoin, a.nom
+            GROUP BY p.id, p.poste_code, p.besoins_postes, a.nom
             ORDER BY a.nom, p.poste_code
         """
         with DatabaseCursor(dictionary=True) as cur:
@@ -179,10 +179,10 @@ class PosteRepository(BaseRepository[Poste]):
         if cls.get_by_code(data['poste_code']):
             return False, f"Le code '{data['poste_code']}' existe déjà", None
 
-        allowed = ["poste_code", "nom", "description", "atelier_id", "visible", "besoin"]
+        allowed = ["poste_code", "atelier_id", "visible", "besoins_postes"]
         insert_data = {k: v for k, v in data.items() if k in allowed and v is not None}
         insert_data.setdefault("visible", True)
-        insert_data.setdefault("besoin", 0)
+        insert_data.setdefault("besoins_postes", 0)
 
         columns = list(insert_data.keys())
         placeholders = ", ".join(["%s"] * len(columns))
@@ -211,7 +211,7 @@ class PosteRepository(BaseRepository[Poste]):
             return False, "Poste non trouvé"
 
         # SÉCURITÉ: Whitelist stricte des colonnes autorisées (frozenset immuable)
-        ALLOWED_COLUMNS = frozenset(["poste_code", "nom", "description", "atelier_id", "visible", "besoin"])
+        ALLOWED_COLUMNS = frozenset(["poste_code", "atelier_id", "visible", "besoins_postes"])
         update_data = {k: v for k, v in data.items() if k in ALLOWED_COLUMNS}
 
         if not update_data:
@@ -250,7 +250,7 @@ class PosteRepository(BaseRepository[Poste]):
         """Met à jour le besoin en effectif d'un poste."""
         if besoin < 0:
             return False, "Le besoin ne peut pas être négatif"
-        return cls.update(id, {"besoin": besoin})
+        return cls.update(id, {"besoins_postes": besoin})
 
 
 class AtelierRepository(BaseRepository[Atelier]):
@@ -258,7 +258,7 @@ class AtelierRepository(BaseRepository[Atelier]):
 
     TABLE = "atelier"
     MODEL = Atelier
-    COLUMNS = ["id", "nom", "description"]
+    COLUMNS = ["id", "nom"]
 
     @classmethod
     def get_all(cls, limit: int = 100) -> List[Atelier]:

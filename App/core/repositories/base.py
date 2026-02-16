@@ -93,11 +93,22 @@ class SafeQueryBuilder:
         cur.execute(query, params)
     """
 
-    # Tables autorisées (whitelist globale)
+    # Tables autorisées (whitelist globale - alignée avec emac_structure.sql)
     ALLOWED_TABLES = {
-        "personnel", "operateurs", "postes", "atelier", "polyvalence",
-        "contrat", "absences", "formations", "historique", "documents",
-        "users", "roles", "permissions", "categories_documents"
+        "personnel", "personnel_infos", "postes", "atelier", "polyvalence",
+        "contrat", "demande_absence", "declaration", "formation", "historique",
+        "historique_polyvalence", "documents", "categories_documents",
+        "documents_templates", "document_event_rules",
+        "utilisateurs", "roles", "permissions", "permissions_utilisateur",
+        "features", "role_features", "user_features",
+        "medical", "medical_visite", "medical_accident_travail",
+        "medical_prolongation_arret", "medical_maladie_pro", "validite",
+        "vie_salarie_sanction", "vie_salarie_entretien",
+        "vie_salarie_alcoolemie", "vie_salarie_test_salivaire",
+        "competences_catalogue", "personnel_competences",
+        "type_absence", "solde_conges", "jours_feries",
+        "batch_operations", "batch_operation_details",
+        "logs_connexion", "services", "ref_motif_sortie",
     }
 
     def __init__(self, table: str, allowed_columns: Optional[List[str]] = None):

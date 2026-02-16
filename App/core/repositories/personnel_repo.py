@@ -42,7 +42,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
     MODEL = Personnel
     COLUMNS = [
         "id", "nom", "prenom", "matricule", "statut",
-        "sexe", "date_entree", "atelier_id", "email", "telephone"
+        "service_id", "numposte"
     ]
 
     # ===========================
@@ -151,12 +151,18 @@ class PersonnelRepository(BaseRepository[Personnel]):
 
     @classmethod
     def get_by_atelier(cls, atelier_id: int) -> List[Personnel]:
-        """Récupère les employés d'un atelier."""
-        query, params = (cls._get_builder()
-            .where("atelier_id", "=", atelier_id)
-            .where("statut", "=", "ACTIF")
-            .order_by("nom")
-            .build())
+        """Récupère les employés d'un atelier via les postes rattachés."""
+        # Note: personnel n'a pas de atelier_id directement
+        # On passe par polyvalence -> postes -> atelier
+        query = """
+            SELECT DISTINCT p.id, p.nom, p.prenom, p.matricule, p.statut, p.service_id, p.numposte
+            FROM personnel p
+            JOIN polyvalence pv ON pv.operateur_id = p.id
+            JOIN postes po ON po.id = pv.poste_id
+            WHERE po.atelier_id = %s AND p.statut = 'ACTIF'
+            ORDER BY p.nom
+        """
+        params = (atelier_id,)
 
         with DatabaseCursor(dictionary=True) as cur:
             cur.execute(query, params)
@@ -239,9 +245,8 @@ class PersonnelRepository(BaseRepository[Personnel]):
             if not data.get(field):
                 return False, f"Le champ '{field}' est obligatoire", None
 
-        # Colonnes autorisées pour l'insertion
-        allowed_columns = ["nom", "prenom", "matricule", "statut", "sexe",
-                          "date_entree", "atelier_id", "email", "telephone"]
+        # Colonnes autorisées pour l'insertion (colonnes réelles de la table personnel)
+        allowed_columns = ["nom", "prenom", "matricule", "statut", "service_id", "numposte"]
 
         # Filtrer les données
         insert_data = {k: v for k, v in data.items() if k in allowed_columns and v is not None}
@@ -298,8 +303,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
             return False, "Employé non trouvé"
 
         # SÉCURITÉ: Whitelist stricte des colonnes autorisées (frozenset immuable)
-        ALLOWED_COLUMNS = frozenset(["nom", "prenom", "matricule", "statut", "sexe",
-                                     "date_entree", "atelier_id", "email", "telephone"])
+        ALLOWED_COLUMNS = frozenset(["nom", "prenom", "matricule", "statut", "service_id", "numposte"])
 
         # Filtrer les données
         update_data = {k: v for k, v in data.items() if k in ALLOWED_COLUMNS}
@@ -437,7 +441,11 @@ class PersonnelRepository(BaseRepository[Personnel]):
             where_clauses.append("p.matricule IS NOT NULL AND p.matricule != ''")
 
         if filters.get("atelier_id"):
-            where_clauses.append("p.atelier_id = %s")
+            where_clauses.append("""p.id IN (
+                SELECT DISTINCT pv.operateur_id FROM polyvalence pv
+                JOIN postes po ON po.id = pv.poste_id
+                WHERE po.atelier_id = %s
+            )""")
             params.append(filters["atelier_id"])
 
         where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
@@ -513,7 +521,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
 
         # Données
         query = f"""
-            SELECT id, nom, prenom, matricule, statut, sexe, date_entree, atelier_id, email, telephone
+            SELECT id, nom, prenom, matricule, statut, service_id, numposte
             FROM personnel
             WHERE (nom LIKE %s OR prenom LIKE %s OR matricule LIKE %s)
             {where_extra}

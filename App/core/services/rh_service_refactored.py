@@ -315,7 +315,16 @@ def _get_donnees_declaration(operateur_id: int) -> Dict:
 
 def _get_donnees_competences(operateur_id: int) -> Dict:
     """Utilise le service competences existant (déjà optimisé)."""
-    return competences_service.get_competences_personnel(operateur_id)
+    try:
+        competences = competences_service.get_competences_personnel(operateur_id)
+        statistiques = competences_service.get_stats_personnel(operateur_id)
+        return {
+            'competences': competences,
+            'statistiques': statistiques
+        }
+    except Exception as e:
+        logger.exception(f"Erreur _get_donnees_competences: {e}")
+        return {'competences': [], 'statistiques': {}}
 
 
 def _get_donnees_medical(operateur_id: int) -> Dict:
@@ -758,7 +767,7 @@ def get_documents_domaine(
 
         sql = f"""
             SELECT
-                d.id, d.operateur_id, d.categorie_id,
+                d.id, d.personnel_id, d.categorie_id,
                 d.nom_fichier, d.nom_affichage, d.chemin_fichier,
                 d.type_mime, d.taille_octets, d.date_upload,
                 d.date_expiration, d.statut, d.notes, d.uploaded_by,
@@ -772,7 +781,7 @@ def get_documents_domaine(
                 DATEDIFF(d.date_expiration, CURDATE()) as jours_avant_expiration
             FROM documents d
             JOIN categories_documents c ON d.categorie_id = c.id
-            WHERE d.operateur_id = %s
+            WHERE d.personnel_id = %s
               AND d.categorie_id IN ({placeholders})
         """
 
@@ -796,14 +805,14 @@ def get_documents_archives_operateur(operateur_id: int) -> List[Dict]:
         return QueryExecutor.fetch_all(
             """
             SELECT
-                d.id, d.operateur_id, d.categorie_id,
+                d.id, d.personnel_id, d.categorie_id,
                 d.nom_fichier, d.nom_affichage, d.chemin_fichier,
                 d.type_mime, d.taille_octets, d.date_upload,
                 d.date_expiration, d.statut, d.notes, d.uploaded_by,
                 c.nom as categorie_nom, c.couleur as categorie_couleur
             FROM documents d
             JOIN categories_documents c ON d.categorie_id = c.id
-            WHERE d.operateur_id = %s AND d.statut = 'archive'
+            WHERE d.personnel_id = %s AND d.statut = 'archive'
             ORDER BY d.date_upload DESC
             """,
             (operateur_id,),
@@ -917,7 +926,7 @@ def get_resume_operateur(operateur_id: int) -> Dict[str, Any]:
                             AND date_expiration <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
                             AND date_expiration > CURDATE() THEN 1 ELSE 0 END) as expire_bientot
             FROM documents
-            WHERE operateur_id = %s AND statut != 'archive'
+            WHERE personnel_id = %s AND statut != 'archive'
             """,
             (operateur_id,),
             dictionary=True
@@ -1038,13 +1047,13 @@ def get_alertes_rh_dashboard(jours: int = 30) -> Dict:
         alertes["documents"] = QueryExecutor.fetch_all(
             """
             SELECT
-                d.id, d.operateur_id, d.nom_affichage, d.nom_original,
+                d.id, d.personnel_id, d.nom_affichage, d.nom_fichier,
                 d.date_expiration, p.nom, p.prenom, p.matricule,
                 c.nom as categorie,
                 DATEDIFF(d.date_expiration, CURDATE()) as jours_restants
             FROM documents d
-            INNER JOIN personnel p ON p.id = d.operateur_id
-            LEFT JOIN documents_categories c ON c.id = d.categorie_id
+            INNER JOIN personnel p ON p.id = d.personnel_id
+            LEFT JOIN categories_documents c ON c.id = d.categorie_id
             WHERE d.statut = 'actif'
               AND d.date_expiration IS NOT NULL
               AND d.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
@@ -1083,7 +1092,7 @@ def get_alertes_rh_count(jours: int = 30) -> Dict:
         counts["documents_count"] = QueryExecutor.fetch_scalar(
             """
             SELECT COUNT(*) FROM documents d
-            INNER JOIN personnel p ON p.id = d.operateur_id
+            INNER JOIN personnel p ON p.id = d.personnel_id
             WHERE d.statut = 'actif' AND d.date_expiration IS NOT NULL
               AND d.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
               AND p.statut = 'ACTIF'

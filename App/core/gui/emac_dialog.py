@@ -33,7 +33,8 @@ from PyQt5.QtWidgets import (
     QScrollArea, QPushButton
 )
 from PyQt5.QtCore import Qt
-from core.gui.emac_ui_kit import EmacButton, add_custom_title_bar
+from core.gui.ui_theme import EmacButton
+from core.gui.emac_ui_kit import add_custom_title_bar
 from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)

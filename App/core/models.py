@@ -39,12 +39,17 @@ class StatutPersonnel(Enum):
 
 
 class TypeContrat(Enum):
-    """Types de contrats possibles"""
+    """Types de contrats possibles (alignés avec l'enum DB)"""
     CDI = "CDI"
     CDD = "CDD"
-    INTERIM = "INTERIM"
-    APPRENTISSAGE = "APPRENTISSAGE"
-    STAGE = "STAGE"
+    STAGIAIRE = "Stagiaire"
+    APPRENTISSAGE = "Apprentissage"
+    INTERIMAIRE = "Interimaire"
+    MISE_A_DISPOSITION_GE = "Mise a disposition GE"
+    ETRANGER_HORS_UE = "Etranger hors UE"
+    TEMPS_PARTIEL = "Temps partiel"
+    CIFRE = "CIFRE"
+    AVENANT_CONTRAT = "Avenant contrat"
 
 
 class NiveauPolyvalence(Enum):
@@ -150,16 +155,19 @@ class Personnel(ModelMixin):
     """
     Représente un membre du personnel (opérateur).
 
-    Correspond à la table 'personnel' (anciennement 'operateurs').
+    Correspond à la table 'personnel'.
+    Les infos étendues (sexe, date_entree, email, telephone) sont dans personnel_infos.
     """
     id: int
     nom: str
     prenom: str
     statut: str = "ACTIF"  # ACTIF ou INACTIF
     matricule: Optional[str] = None
-    sexe: Optional[str] = None  # 'M' ou 'F'
+    service_id: Optional[int] = None
+    numposte: Optional[str] = None
+    # Champs de jointure avec personnel_infos (optionnels)
+    sexe: Optional[str] = None
     date_entree: Optional[date] = None
-    atelier_id: Optional[int] = None
     email: Optional[str] = None
     telephone: Optional[str] = None
 
@@ -211,10 +219,9 @@ class PersonnelResume(ModelMixin):
 
 @dataclass
 class Atelier(ModelMixin):
-    """Représente un atelier (groupe de postes)"""
+    """Représente un atelier (groupe de postes). Table: atelier (id, nom)"""
     id: int
     nom: str
-    description: Optional[str] = None
 
 
 @dataclass
@@ -222,22 +229,18 @@ class Poste(ModelMixin):
     """
     Représente un poste de travail.
 
-    Correspond à la table 'postes'.
+    Correspond à la table 'postes' (id, poste_code, besoins_postes, visible, atelier_id).
     """
     id: int
     poste_code: str
-    nom: Optional[str] = None
-    description: Optional[str] = None
     atelier_id: Optional[int] = None
     atelier_nom: Optional[str] = None  # Jointure fréquente
     visible: bool = True
-    besoin: int = 0  # Nombre d'opérateurs requis
+    besoins_postes: int = 0
 
     @property
     def label(self) -> str:
         """Label pour affichage"""
-        if self.nom:
-            return f"{self.poste_code} - {self.nom}"
         return self.poste_code
 
 
@@ -254,14 +257,16 @@ class Contrat(ModelMixin):
     """
     id: int
     operateur_id: int
-    type_contrat: str  # CDI, CDD, INTERIM, etc.
+    type_contrat: str  # CDI, CDD, Interimaire, etc.
     date_debut: date
     date_fin: Optional[date] = None
     etp: float = 1.0  # Equivalent Temps Plein (0-1)
     categorie: Optional[str] = None
-    coefficient: Optional[float] = None
+    coefficient: Optional[int] = None
     actif: bool = True
-    commentaire: Optional[str] = None
+    motif: Optional[str] = None
+    date_sortie: Optional[date] = None
+    motif_sortie: Optional[str] = None
 
     # Champs de jointure (optionnels)
     personnel_nom: Optional[str] = None
@@ -366,33 +371,39 @@ class Polyvalence(ModelMixin):
 @dataclass
 class Absence(ModelMixin):
     """
-    Représente une absence.
+    Représente une demande d'absence.
 
-    Correspond à la table 'absences'.
+    Correspond à la table 'demande_absence'.
     """
     id: int
-    operateur_id: int
-    type_absence: str
+    personnel_id: int
+    type_absence_id: int
     date_debut: date
     date_fin: date
-    statut: str = "VALIDEE"  # EN_ATTENTE, VALIDEE, REFUSEE
-    commentaire: Optional[str] = None
-    justificatif: Optional[str] = None  # Chemin fichier
+    nb_jours: float = 1.0
+    statut: str = "EN_ATTENTE"  # EN_ATTENTE, VALIDEE, REFUSEE, ANNULEE
+    motif: Optional[str] = None
+    demi_journee_debut: str = "JOURNEE"  # MATIN, APRES_MIDI, JOURNEE
+    demi_journee_fin: str = "JOURNEE"
+    validateur_id: Optional[int] = None
+    date_validation: Optional[datetime] = None
+    commentaire_validation: Optional[str] = None
 
     # Champs de jointure
     operateur_nom: Optional[str] = None
     operateur_prenom: Optional[str] = None
+    type_absence_libelle: Optional[str] = None
 
     @property
-    def duree_jours(self) -> int:
-        """Durée en jours (inclus)"""
-        return (self.date_fin - self.date_debut).days + 1
+    def duree_jours(self) -> float:
+        """Durée en jours"""
+        return self.nb_jours
 
     @property
     def est_en_cours(self) -> bool:
         """L'absence est-elle en cours aujourd'hui?"""
         today = date.today()
-        return self.date_debut <= today <= self.date_fin
+        return self.date_debut <= today <= self.date_fin and self.statut == "VALIDEE"
 
     @property
     def est_future(self) -> bool:
@@ -409,18 +420,20 @@ class Formation(ModelMixin):
     """
     Représente une formation suivie par un employé.
 
-    Correspond à la table 'formations'.
+    Correspond à la table 'formation'.
     """
     id: int
     operateur_id: int
-    titre: str
+    intitule: str
     date_debut: date
     date_fin: Optional[date] = None
     organisme: Optional[str] = None
-    type_formation: Optional[str] = None
-    statut: str = "PLANIFIEE"  # PLANIFIEE, EN_COURS, TERMINEE, ANNULEE
+    duree_heures: Optional[float] = None
+    statut: str = "Planifiee"  # Planifiee, En cours, Terminee, Annulee
+    certificat_obtenu: bool = False
     commentaire: Optional[str] = None
     cout: Optional[float] = None
+    document_id: Optional[int] = None
 
     # Champs de jointure
     operateur_nom: Optional[str] = None

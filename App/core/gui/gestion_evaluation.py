@@ -360,47 +360,41 @@ class DetailOperateurDialog(QDialog):
             self.poly_table.blockSignals(True)
             self.poly_table.setRowCount(len(polyvalences))
 
-                for row_idx, poly in enumerate(polyvalences):
-                    # Colonne 0 : Poste (non éditable)
-                    poste_item = QTableWidgetItem(poly['poste_code'])
-                    poste_item.setFlags(poste_item.flags() & ~Qt.ItemIsEditable)
-                    self.poly_table.setItem(row_idx, 0, poste_item)
-
-                    # Colonne 1 : Niveau (éditable - seulement les chiffres 1-4)
-                    niveau_item = QTableWidgetItem(str(poly['niveau']))
-                    niveau_item.setTextAlignment(Qt.AlignCenter)
-                    self.poly_table.setItem(row_idx, 1, niveau_item)
-
-                    # Colonne 2 : Date évaluation (éditable)
-                    date_eval = poly['date_evaluation'].strftime('%d/%m/%Y') if poly['date_evaluation'] else "N/A"
-                    date_eval_item = QTableWidgetItem(date_eval)
-                    self.poly_table.setItem(row_idx, 2, date_eval_item)
-
-                    # Colonne 3 : Prochaine évaluation (NON éditable - calculée automatiquement)
-                    date_next = poly['prochaine_evaluation'].strftime('%d/%m/%Y') if poly['prochaine_evaluation'] else "N/A"
-                    date_next_item = QTableWidgetItem(date_next)
-                    date_next_item.setFlags(date_next_item.flags() & ~Qt.ItemIsEditable)
-                    self.poly_table.setItem(row_idx, 3, date_next_item)
-
-                    # Colonne 4 : Statut (non éditable)
-                    if poly['prochaine_evaluation']:
-                        from datetime import date as dt_date
-                        today = dt_date.today()
-                        if poly['prochaine_evaluation'] < today:
-                            statut = "⚠️ En retard"
-                        elif (poly['prochaine_evaluation'] - today).days <= 30:
-                            statut = "📅 À planifier"
-                        else:
-                            statut = "✅ À jour"
+            for row_idx, poly in enumerate(polyvalences):
+                # Colonne 0 : Poste (non éditable)
+                poste_item = QTableWidgetItem(poly['poste_code'])
+                poste_item.setFlags(poste_item.flags() & ~Qt.ItemIsEditable)
+                self.poly_table.setItem(row_idx, 0, poste_item)
+                # Colonne 1 : Niveau (éditable - seulement les chiffres 1-4)
+                niveau_item = QTableWidgetItem(str(poly['niveau']))
+                niveau_item.setTextAlignment(Qt.AlignCenter)
+                self.poly_table.setItem(row_idx, 1, niveau_item)
+                # Colonne 2 : Date évaluation (éditable)
+                date_eval = poly['date_evaluation'].strftime('%d/%m/%Y') if poly['date_evaluation'] else "N/A"
+                date_eval_item = QTableWidgetItem(date_eval)
+                self.poly_table.setItem(row_idx, 2, date_eval_item)
+                # Colonne 3 : Prochaine évaluation (NON éditable - calculée automatiquement)
+                date_next = poly['prochaine_evaluation'].strftime('%d/%m/%Y') if poly['prochaine_evaluation'] else "N/A"
+                date_next_item = QTableWidgetItem(date_next)
+                date_next_item.setFlags(date_next_item.flags() & ~Qt.ItemIsEditable)
+                self.poly_table.setItem(row_idx, 3, date_next_item)
+                # Colonne 4 : Statut (non éditable)
+                if poly['prochaine_evaluation']:
+                    from datetime import date as dt_date
+                    today = dt_date.today()
+                    if poly['prochaine_evaluation'] < today:
+                        statut = "⚠️ En retard"
+                    elif (poly['prochaine_evaluation'] - today).days <= 30:
+                        statut = "📅 À planifier"
                     else:
-                        statut = "N/A"
-
-                    statut_item = QTableWidgetItem(statut)
-                    statut_item.setFlags(statut_item.flags() & ~Qt.ItemIsEditable)
-                    self.poly_table.setItem(row_idx, 4, statut_item)
-
-                    # Colonne 5 : ID (caché)
-                    self.poly_table.setItem(row_idx, 5, QTableWidgetItem(str(poly['id'])))
+                        statut = "✅ À jour"
+                else:
+                    statut = "N/A"
+                statut_item = QTableWidgetItem(statut)
+                statut_item.setFlags(statut_item.flags() & ~Qt.ItemIsEditable)
+                self.poly_table.setItem(row_idx, 4, statut_item)
+                # Colonne 5 : ID (caché)
+                self.poly_table.setItem(row_idx, 5, QTableWidgetItem(str(poly['id'])))
 
             # Réactiver les signaux
             self.poly_table.blockSignals(False)

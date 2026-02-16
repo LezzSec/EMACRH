@@ -17,26 +17,17 @@ from core.utils.logging_config import get_logger
 logger = get_logger(__name__)
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 
-try:
-    from core.services.audit_logger import log_insert, log_action
-except ImportError:
-    def log_action(action, table_name="", description="", details=None, connection=None, cursor=None):
-        try:
-            if cursor is None and connection is not None:
-                cursor = connection.cursor()
-            if cursor is None:
-                return
-            cursor.execute(
-                "INSERT INTO historique (action, table_name, description, details, source) "
-                "VALUES (%s, %s, %s, %s, %s)",
-                (action, table_name or "", description or "", str(details or {}), "planning"),
-            )
-        except Exception:
-            pass
+# Fonctions de logging legacy redirigées vers log_hist
+def log_action(action, table_name="", description="", details=None, connection=None, cursor=None):
+    """Fallback legacy - redirige vers log_hist."""
+    try:
+        log_hist(action, description=description, table_name=table_name)
+    except Exception:
+        pass
 
-    def log_insert(table_name, description="", record_id=None, details=None, connection=None, cursor=None):
-        log_action("INSERT", table_name, description, {**(details or {}), "record_id": record_id},
-                   connection=connection, cursor=cursor)
+def log_insert(table_name, description="", record_id=None, details=None, connection=None, cursor=None):
+    """Fallback legacy - redirige vers log_hist."""
+    log_action("INSERT", table_name, description)
 
 
 class RegularisationDialog(QDialog):
