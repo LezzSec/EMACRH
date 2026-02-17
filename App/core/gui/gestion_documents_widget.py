@@ -237,22 +237,21 @@ class DocumentWidget(QWidget):
             self.documents_changed.emit()
     
     def open_document(self):
-        """Ouvre le document sélectionné"""
+        """Ouvre le document selectionne (extrait depuis la base si BLOB)"""
         current_row = self.table.currentRow()
         if current_row < 0:
             return
-        
+
         doc_id = int(self.table.item(current_row, 0).text())
         file_path = self.doc_service.get_document_path(doc_id)
-        
+
         if file_path and file_path.exists():
-            # Ouvrir avec l'application par défaut
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(file_path)))
         else:
             QMessageBox.warning(
                 self,
                 "Fichier introuvable",
-                "Le fichier n'existe plus sur le disque."
+                "Impossible de recuperer le contenu du document."
             )
     
     def show_context_menu(self, position):
@@ -261,17 +260,20 @@ class DocumentWidget(QWidget):
             return
         
         menu = QMenu()
-        
-        action_open = menu.addAction("📂 Ouvrir")
-        action_edit = menu.addAction("✏️ Modifier les informations")
+
+        action_open = menu.addAction("Ouvrir")
+        action_download = menu.addAction("Telecharger")
+        action_edit = menu.addAction("Modifier les informations")
         menu.addSeparator()
-        action_archive = menu.addAction("📦 Archiver")
-        action_delete = menu.addAction("🗑️ Supprimer")
-        
+        action_archive = menu.addAction("Archiver")
+        action_delete = menu.addAction("Supprimer")
+
         action = menu.exec_(self.table.viewport().mapToGlobal(position))
-        
+
         if action == action_open:
             self.open_document()
+        elif action == action_download:
+            self.download_document()
         elif action == action_edit:
             self.edit_document()
         elif action == action_archive:
@@ -349,6 +351,31 @@ class DocumentWidget(QWidget):
                 QMessageBox.information(self, "Succès", message)
                 self.load_documents()
                 self.documents_changed.emit()
+            else:
+                QMessageBox.warning(self, "Erreur", message)
+
+
+    def download_document(self):
+        """Telecharge le document selectionne vers un emplacement choisi"""
+        current_row = self.table.currentRow()
+        if current_row < 0:
+            return
+
+        doc_id = int(self.table.item(current_row, 0).text())
+        nom = self.table.item(current_row, 2).text()
+
+        # Ouvrir le dialogue de sauvegarde
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Telecharger le document",
+            nom,
+            "Tous les fichiers (*.*)"
+        )
+
+        if file_path:
+            success, message = self.doc_service.download_document(doc_id, file_path)
+            if success:
+                QMessageBox.information(self, "Succes", message)
             else:
                 QMessageBox.warning(self, "Erreur", message)
 

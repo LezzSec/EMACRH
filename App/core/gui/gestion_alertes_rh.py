@@ -206,7 +206,7 @@ class AlertCard(QFrame):
     """Carte individuelle representant une alerte."""
 
     view_clicked = pyqtSignal(object)
-    # Note: handle_clicked retiré - fonctionnalité "masquer" non implémentée dans la vue cartes
+    handle_clicked = pyqtSignal(object)
 
     def __init__(self, alert: Alert, is_handled: bool = False, parent=None):
         super().__init__(parent)
@@ -215,7 +215,7 @@ class AlertCard(QFrame):
         cfg = URGENCY_CONFIG.get(alert.urgence, URGENCY_CONFIG["INFO"])
 
         self.setObjectName("alert_card")
-        self.setFixedHeight(76)
+        self.setFixedHeight(82)
         self.setStyleSheet(f"""
             QFrame#alert_card {{
                 background: #ffffff;
@@ -305,6 +305,23 @@ class AlertCard(QFrame):
         btn_voir.clicked.connect(lambda: self.view_clicked.emit(self._alert))
         btn_layout.addWidget(btn_voir)
 
+        handle_text = "Afficher" if is_handled else "Masquer"
+        btn_handle = QPushButton(handle_text)
+        btn_handle.setCursor(Qt.PointingHandCursor)
+        btn_handle.setFixedSize(65, 26)
+        btn_handle.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #6b7280;
+                border: 1px solid #d1d5db;
+                border-radius: 5px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background: #f3f4f6; color: #374151; }
+        """)
+        btn_handle.clicked.connect(lambda: self.handle_clicked.emit(self._alert))
+        btn_layout.addWidget(btn_handle)
+
         main_layout.addLayout(btn_layout)
 
     @staticmethod
@@ -344,6 +361,7 @@ class UrgencyGroupWidget(QWidget):
     """Section groupant les alertes d'un meme niveau d'urgence."""
 
     view_clicked = pyqtSignal(object)
+    handle_clicked = pyqtSignal(object)
 
     def __init__(self, urgency_key: str, parent=None):
         super().__init__(parent)
@@ -420,6 +438,7 @@ class UrgencyGroupWidget(QWidget):
             is_handled = alert_key in handled_ids
             card = AlertCard(alert, is_handled=is_handled)
             card.view_clicked.connect(lambda a: self.view_clicked.emit(a))
+            card.handle_clicked.connect(lambda a: self.handle_clicked.emit(a))
             self._cards.append(card)
             self._cards_layout.addWidget(card)
 
@@ -638,6 +657,7 @@ class GestionAlertesRHDialog(QDialog):
         for urgency_key in ["CRITIQUE", "AVERTISSEMENT", "INFO"]:
             group = UrgencyGroupWidget(urgency_key)
             group.view_clicked.connect(self._on_view_alert)
+            group.handle_clicked.connect(self._on_handle_alert)
             self._urgency_groups[urgency_key] = group
             self._scroll_layout.addWidget(group)
 
@@ -813,6 +833,15 @@ class GestionAlertesRHDialog(QDialog):
             except ImportError as e:
                 logger.error(f"Erreur import DetailOperateurDialog: {e}")
                 QMessageBox.information(self, "Info", f"Detail ID {pid}")
+
+    def _on_handle_alert(self, alert: Alert):
+        """Masque ou affiche une alerte."""
+        alert_key = f"{alert.categorie}_{alert.type_alerte}_{alert.id}"
+        if alert_key in self._handled_ids:
+            self._handled_ids.discard(alert_key)
+        else:
+            self._handled_ids.add(alert_key)
+        self._apply_filters()
 
     def _on_sub_dialog_changed(self):
         """Recharge les alertes et notifie le parent."""

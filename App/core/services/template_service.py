@@ -2,8 +2,11 @@
 """
 Service de gestion des documents templates.
 
-Ce service gère les templates de documents (formulaires d'évaluation, consignes, etc.)
-qui peuvent être pré-remplis avec les informations de l'opérateur et ouverts pour impression.
+Ce service gere les templates de documents (formulaires d'evaluation, consignes, etc.)
+qui peuvent etre pre-remplis avec les informations de l'operateur et ouverts pour impression.
+
+Stockage : Les templates sont stockes en BLOB dans la base de donnees MySQL.
+Les anciens templates sur filesystem (legacy) restent accessibles via fichier_source.
 """
 
 import os
@@ -11,28 +14,32 @@ import sys
 import json
 import shutil
 import tempfile
+import mimetypes
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 
 from core.db.query_executor import QueryExecutor
+from core.db.configbd import get_connection
 from core.services.logger import log_hist
 from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 
+# Taille max recommandee pour un template (16 Mo)
+MAX_TEMPLATE_SIZE_BYTES = 16 * 1024 * 1024
+
+
 def get_templates_dir() -> Path:
     """
-    Retourne le répertoire des templates.
+    Retourne le repertoire des templates (pour legacy filesystem).
 
-    Priorité de résolution :
-    1. Variable d'environnement EMAC_TEMPLATES_DIR (chemin réseau ou local)
-       Ex: EMAC_TEMPLATES_DIR=\\\\serveur\\partage\\EMAC\\templates
+    Priorite de resolution :
+    1. Variable d'environnement EMAC_TEMPLATES_DIR
     2. En production (.exe): %APPDATA%/EMAC/templates/
-    3. En développement: App/templates/
+    3. En developpement: App/templates/
     """
-    # 1. Variable d'environnement (chemin réseau partagé ou custom)
     custom_dir = os.environ.get('EMAC_TEMPLATES_DIR')
     if custom_dir:
         custom_path = Path(custom_dir)
@@ -43,39 +50,34 @@ def get_templates_dir() -> Path:
                 f"EMAC_TEMPLATES_DIR pointe vers un chemin inaccessible: {custom_dir}"
             )
 
-    # 2. Mode .exe
     if getattr(sys, 'frozen', False):
         app_data = os.environ.get('APPDATA', os.path.expanduser('~'))
         return Path(app_data) / 'EMAC' / 'templates'
 
-    # 3. Mode développement
     return Path(__file__).parent.parent.parent / 'templates'
 
 
 def get_temp_dir() -> Path:
-    """Retourne le répertoire temporaire pour les fichiers générés."""
+    """Retourne le repertoire temporaire pour les fichiers generes."""
     temp_base = Path(tempfile.gettempdir()) / 'EMAC_templates'
     temp_base.mkdir(parents=True, exist_ok=True)
     return temp_base
 
 
-import sys
-
-
 def get_all_templates(actif_only: bool = True) -> List[Dict]:
     """
-    Récupère tous les templates.
+    Recupere tous les templates (metadonnees, sans le BLOB).
 
     Args:
         actif_only: Si True, ne retourne que les templates actifs
 
     Returns:
-        Liste des templates avec leurs métadonnées
+        Liste des templates avec leurs metadonnees
     """
     query = """
         SELECT id, nom, fichier_source, contexte, postes_associes,
                champ_operateur, champ_auditeur, champ_date,
-               obligatoire, description, ordre_affichage, actif
+               obligatoire, description, ordre_affichage, actif, stockage_type
         FROM documents_templates
     """
     if actif_only:
@@ -84,7 +86,6 @@ def get_all_templates(actif_only: bool = True) -> List[Dict]:
 
     templates = QueryExecutor.fetch_all(query, dictionary=True)
 
-    # Parser le JSON des postes_associes
     for t in templates:
         if t['postes_associes']:
             try:
@@ -99,18 +100,15 @@ def get_all_templates(actif_only: bool = True) -> List[Dict]:
 
 def get_templates_by_contexte(contexte: str) -> List[Dict]:
     """
-    Récupère les templates pour un contexte donné.
+    Recupere les templates pour un contexte donne.
 
     Args:
         contexte: 'NOUVEL_OPERATEUR', 'NIVEAU_3', ou 'POSTE'
-
-    Returns:
-        Liste des templates pour ce contexte
     """
     query = """
         SELECT id, nom, fichier_source, contexte, postes_associes,
                champ_operateur, champ_auditeur, champ_date,
-               obligatoire, description, ordre_affichage
+               obligatoire, description, ordre_affichage, stockage_type
         FROM documents_templates
         WHERE contexte = %s AND actif = TRUE
         ORDER BY ordre_affichage
@@ -131,19 +129,9 @@ def get_templates_by_contexte(contexte: str) -> List[Dict]:
 
 
 def get_templates_for_poste(code_poste: str) -> List[Dict]:
-    """
-    Récupère les templates associés à un poste spécifique.
-
-    Args:
-        code_poste: Code du poste (ex: "506")
-
-    Returns:
-        Liste des templates pour ce poste
-    """
-    # Récupérer tous les templates de type POSTE
+    """Recupere les templates associes a un poste specifique."""
     all_poste_templates = get_templates_by_contexte('POSTE')
 
-    # Filtrer ceux qui contiennent le code poste
     matching = []
     for t in all_poste_templates:
         if code_poste in t['postes_associes']:
@@ -153,13 +141,60 @@ def get_templates_for_poste(code_poste: str) -> List[Dict]:
 
 
 def get_templates_for_nouvel_operateur() -> List[Dict]:
-    """Récupère les templates pour un nouvel opérateur."""
+    """Recupere les templates pour un nouvel operateur."""
     return get_templates_by_contexte('NOUVEL_OPERATEUR')
 
 
 def get_templates_for_niveau_3() -> List[Dict]:
-    """Récupère les templates pour le passage au niveau 3."""
+    """Recupere les templates pour le passage au niveau 3."""
     return get_templates_by_contexte('NIVEAU_3')
+
+
+def _get_template_content(template: Dict) -> Optional[Tuple[bytes, str]]:
+    """
+    Recupere le contenu binaire d'un template.
+
+    Args:
+        template: Dict avec au minimum 'id', 'stockage_type', 'fichier_source'
+
+    Returns:
+        Tuple (contenu_bytes, extension) ou None si introuvable
+    """
+    # BLOB: lire depuis la base
+    if template.get('stockage_type') == 'BLOB':
+        row = QueryExecutor.fetch_one(
+            "SELECT contenu_fichier, fichier_source FROM documents_templates WHERE id = %s",
+            (template['id'],),
+            dictionary=True
+        )
+        if row and row['contenu_fichier']:
+            ext = Path(row['fichier_source']).suffix
+            return (row['contenu_fichier'], ext)
+
+    # FILESYSTEM (legacy): lire depuis le disque
+    fichier_source = template['fichier_source']
+    templates_dir = get_templates_dir()
+
+    # Nettoyer le chemin
+    fichier_clean = fichier_source.replace('templates/', '').replace('\\', '/').strip('/')
+
+    if '..' in fichier_clean or fichier_clean.startswith('/'):
+        logger.warning(f"Tentative de path traversal detectee: {fichier_source}")
+        return None
+
+    source_path = (templates_dir / fichier_clean).resolve()
+
+    try:
+        source_path.relative_to(templates_dir.resolve())
+    except ValueError:
+        logger.warning(f"Path traversal bloque: {source_path} hors de {templates_dir}")
+        return None
+
+    if not source_path.exists():
+        return None
+
+    with open(source_path, 'rb') as f:
+        return (f.read(), source_path.suffix)
 
 
 def generate_filled_template(
@@ -170,19 +205,21 @@ def generate_filled_template(
     date_str: str = None
 ) -> Tuple[bool, str, Optional[str]]:
     """
-    Génère une copie du template pré-remplie avec les informations fournies.
+    Genere une copie du template pre-remplie avec les informations fournies.
+
+    Fonctionne avec les templates BLOB (en base) et FILESYSTEM (legacy).
 
     Args:
         template_id: ID du template
-        operateur_nom: Nom de l'opérateur
-        operateur_prenom: Prénom de l'opérateur
-        auditeur_nom: Nom de l'auditeur/évaluateur
-        date_str: Date au format DD/MM/YYYY (par défaut: aujourd'hui)
+        operateur_nom: Nom de l'operateur
+        operateur_prenom: Prenom de l'operateur
+        auditeur_nom: Nom de l'auditeur/evaluateur
+        date_str: Date au format DD/MM/YYYY (par defaut: aujourd'hui)
 
     Returns:
-        Tuple (succès, message, chemin_fichier_généré)
+        Tuple (succes, message, chemin_fichier_genere)
     """
-    # Récupérer les infos du template
+    # Recuperer les infos du template
     template = QueryExecutor.fetch_one(
         "SELECT * FROM documents_templates WHERE id = %s",
         (template_id,),
@@ -190,56 +227,38 @@ def generate_filled_template(
     )
 
     if not template:
-        return False, "Template non trouvé", None
+        return False, "Template non trouve", None
 
-    # Construire le chemin source
-    templates_dir = get_templates_dir()
+    # Recuperer le contenu du template
+    content_result = _get_template_content(template)
+    if not content_result:
+        return False, "Fichier template non trouve ou inaccessible", None
 
-    # SECURITE: Validation contre path traversal
-    # Nettoyer le chemin et verifier qu'il reste dans templates_dir
-    fichier_source = template['fichier_source'].replace('templates/', '').replace('\\', '/').strip('/')
+    contenu, extension = content_result
 
-    # Rejeter les chemins suspects
-    if '..' in fichier_source or fichier_source.startswith('/'):
-        logger.warning(f"Tentative de path traversal detectee: {template['fichier_source']}")
-        return False, "Chemin de fichier invalide", None
-
-    source_path = (templates_dir / fichier_source).resolve()
-
-    # Verifier que le chemin resolu est bien dans templates_dir
-    try:
-        source_path.relative_to(templates_dir.resolve())
-    except ValueError:
-        logger.warning(f"Path traversal bloque: {source_path} hors de {templates_dir}")
-        return False, "Acces au fichier refuse", None
-
-    if not source_path.exists():
-        return False, "Fichier template non trouve", None
-
-    # Date par défaut
+    # Date par defaut
     if not date_str:
         date_str = datetime.now().strftime('%d/%m/%Y')
 
-    # Nom complet de l'opérateur
+    # Nom complet de l'operateur
     operateur_complet = f"{operateur_prenom} {operateur_nom}".strip()
 
-    # Créer le nom du fichier de sortie
-    extension = source_path.suffix
+    # Creer le nom du fichier de sortie
     safe_name = f"{template['nom']}_{operateur_complet}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     safe_name = "".join(c for c in safe_name if c.isalnum() or c in (' ', '_', '-')).strip()
     output_filename = f"{safe_name}{extension}"
 
-    # Répertoire temporaire
+    # Ecrire dans le repertoire temporaire
     temp_dir = get_temp_dir()
     output_path = temp_dir / output_filename
 
-    # Copier le fichier
-    shutil.copy2(source_path, output_path)
+    with open(output_path, 'wb') as f:
+        f.write(contenu)
 
-    # Pré-remplir si c'est un Excel
+    # Pre-remplir si c'est un Excel
     if extension.lower() in ('.xlsx', '.xlsm', '.xls'):
         try:
-            success, msg = _fill_excel_template(
+            _fill_excel_template(
                 output_path,
                 template['champ_operateur'],
                 template['champ_auditeur'],
@@ -248,19 +267,155 @@ def generate_filled_template(
                 auditeur_nom,
                 date_str
             )
-            if not success:
-                return False, msg, None
         except Exception as e:
-            # Si le pré-remplissage échoue, on garde le fichier non rempli
-            pass
+            # Si le pre-remplissage echoue, on garde le fichier non rempli
+            logger.warning(f"Pre-remplissage echoue pour {template['nom']}: {e}")
 
     # Logger l'action
     log_hist(
         "GENERATION_TEMPLATE",
-        f"Génération du template '{template['nom']}' pour {operateur_complet}"
+        f"Generation du template '{template['nom']}' pour {operateur_complet}"
     )
 
-    return True, "Fichier généré avec succès", str(output_path)
+    return True, "Fichier genere avec succes", str(output_path)
+
+
+def upload_template(
+    template_id: int,
+    fichier_source: str
+) -> Tuple[bool, str]:
+    """
+    Upload un fichier template dans la base de donnees (BLOB).
+
+    Args:
+        template_id: ID du template existant a mettre a jour
+        fichier_source: Chemin du fichier a uploader
+
+    Returns:
+        (succes, message)
+    """
+    source_path = Path(fichier_source)
+    if not source_path.exists():
+        return False, f"Fichier introuvable: {fichier_source}"
+
+    taille = source_path.stat().st_size
+    if taille > MAX_TEMPLATE_SIZE_BYTES:
+        taille_mo = taille / (1024 * 1024)
+        return False, f"Fichier trop volumineux ({taille_mo:.1f} Mo). Maximum: 16 Mo"
+
+    try:
+        with open(source_path, 'rb') as f:
+            contenu = f.read()
+
+        type_mime, _ = mimetypes.guess_type(str(source_path))
+        if type_mime is None:
+            type_mime = "application/octet-stream"
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """UPDATE documents_templates
+               SET contenu_fichier = %s,
+                   type_mime = %s,
+                   taille_octets = %s,
+                   stockage_type = 'BLOB',
+                   fichier_source = %s
+               WHERE id = %s""",
+            (contenu, type_mime, taille, source_path.name, template_id)
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        logger.info(f"Template ID {template_id} uploade en BLOB ({taille} octets)")
+        return True, f"Template mis a jour avec succes ({source_path.name})"
+
+    except Exception as e:
+        logger.exception(f"Erreur upload template: {e}")
+        return False, f"Erreur lors de l'upload: {str(e)}"
+
+
+def add_template(
+    nom: str,
+    fichier_source: str,
+    contexte: str,
+    postes_associes: List[str] = None,
+    champ_operateur: str = None,
+    champ_auditeur: str = None,
+    champ_date: str = None,
+    obligatoire: bool = False,
+    description: str = None,
+    ordre_affichage: int = 0
+) -> Tuple[bool, str, Optional[int]]:
+    """
+    Ajoute un nouveau template avec son fichier stocke en BLOB.
+
+    Args:
+        nom: Nom affiche du template
+        fichier_source: Chemin du fichier a uploader
+        contexte: 'NOUVEL_OPERATEUR', 'NIVEAU_3', ou 'POSTE'
+        postes_associes: Liste des codes postes (pour contexte POSTE)
+        champ_operateur: Cellule Excel pour le nom operateur (ex: "D7")
+        champ_auditeur: Cellule Excel pour le nom auditeur
+        champ_date: Cellule Excel pour la date
+        obligatoire: Document obligatoire
+        description: Description du template
+        ordre_affichage: Ordre d'affichage
+
+    Returns:
+        (succes, message, template_id)
+    """
+    source_path = Path(fichier_source)
+    if not source_path.exists():
+        return False, f"Fichier introuvable: {fichier_source}", None
+
+    taille = source_path.stat().st_size
+    if taille > MAX_TEMPLATE_SIZE_BYTES:
+        taille_mo = taille / (1024 * 1024)
+        return False, f"Fichier trop volumineux ({taille_mo:.1f} Mo). Maximum: 16 Mo", None
+
+    try:
+        with open(source_path, 'rb') as f:
+            contenu = f.read()
+
+        type_mime, _ = mimetypes.guess_type(str(source_path))
+        if type_mime is None:
+            type_mime = "application/octet-stream"
+
+        postes_json = json.dumps(postes_associes) if postes_associes else None
+
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """INSERT INTO documents_templates (
+                nom, fichier_source, contenu_fichier, type_mime, taille_octets,
+                stockage_type, contexte, postes_associes,
+                champ_operateur, champ_auditeur, champ_date,
+                obligatoire, description, ordre_affichage
+            ) VALUES (
+                %s, %s, %s, %s, %s, 'BLOB', %s, %s, %s, %s, %s, %s, %s, %s
+            )""",
+            (
+                nom, source_path.name, contenu, type_mime, taille,
+                contexte, postes_json,
+                champ_operateur, champ_auditeur, champ_date,
+                obligatoire, description, ordre_affichage
+            )
+        )
+
+        template_id = cursor.lastrowid
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        logger.info(f"Nouveau template '{nom}' ajoute en BLOB (ID: {template_id})")
+        return True, f"Template '{nom}' ajoute avec succes", template_id
+
+    except Exception as e:
+        logger.exception(f"Erreur ajout template: {e}")
+        return False, f"Erreur lors de l'ajout: {str(e)}", None
 
 
 def _fill_excel_template(
@@ -273,90 +428,57 @@ def _fill_excel_template(
     date_str: str
 ) -> Tuple[bool, str]:
     """
-    Remplit les cellules d'un fichier Excel avec les données fournies.
-
-    Args:
-        file_path: Chemin du fichier Excel
-        cell_operateur: Référence de la cellule pour l'opérateur (ex: "D7")
-        cell_auditeur: Référence de la cellule pour l'auditeur
-        cell_date: Référence de la cellule pour la date
-        operateur_nom: Nom complet de l'opérateur
-        auditeur_nom: Nom de l'auditeur
-        date_str: Date formatée
-
-    Returns:
-        Tuple (succès, message)
+    Remplit les cellules d'un fichier Excel avec les donnees fournies.
     """
     file_path = Path(file_path)
     extension = file_path.suffix.lower()
 
-    # Fichiers .xls (ancien format Excel 97-2003)
-    # ⚠️ Le pré-remplissage n'est pas supporté pour les fichiers .xls
-    # Le fichier est copié mais non pré-rempli. Pour le pré-remplissage automatique,
-    # convertissez le template en .xlsx (Excel > Enregistrer sous > .xlsx)
     if extension == '.xls':
-        # Retourner succès mais avec un message indiquant que le pré-remplissage n'est pas fait
-        return True, "Fichier .xls copié (pré-remplissage non supporté pour ce format - convertir en .xlsx recommandé)"
+        return True, "Fichier .xls copie (pre-remplissage non supporte pour ce format)"
 
-    # Fichiers .xlsx et .xlsm (format moderne)
-    else:
-        try:
-            import openpyxl
+    try:
+        import openpyxl
 
-            # Charger le fichier (keep_vba pour les .xlsm)
-            wb = openpyxl.load_workbook(file_path, keep_vba=True)
-            ws = wb.active
+        wb = openpyxl.load_workbook(file_path, keep_vba=True)
+        ws = wb.active
 
-            # Remplir les cellules si spécifiées
-            if cell_operateur and operateur_nom:
-                ws[cell_operateur] = operateur_nom
+        if cell_operateur and operateur_nom:
+            ws[cell_operateur] = operateur_nom
 
-            if cell_auditeur and auditeur_nom:
-                ws[cell_auditeur] = auditeur_nom
+        if cell_auditeur and auditeur_nom:
+            ws[cell_auditeur] = auditeur_nom
 
-            if cell_date and date_str:
-                ws[cell_date] = date_str
+        if cell_date and date_str:
+            ws[cell_date] = date_str
 
-            # Sauvegarder
-            wb.save(file_path)
-            wb.close()
+        wb.save(file_path)
+        wb.close()
 
-            return True, "Fichier rempli avec succès"
+        return True, "Fichier rempli avec succes"
 
-        except Exception as e:
-            return False, f"Erreur lors du remplissage: {str(e)}"
+    except Exception as e:
+        return False, f"Erreur lors du remplissage: {str(e)}"
 
 
 def open_template_file(file_path: str) -> Tuple[bool, str]:
     """
-    Ouvre un fichier template avec l'application par défaut du système.
+    Ouvre un fichier template avec l'application par defaut du systeme.
 
-    SECURITE: Valide le chemin avant ouverture pour eviter les injections.
-
-    Args:
-        file_path: Chemin du fichier à ouvrir
-
-    Returns:
-        Tuple (succès, message)
+    SECURITE: Valide le chemin avant ouverture.
     """
     import subprocess
     import platform
-    from pathlib import Path
 
     try:
-        # SECURITE: Convertir en Path et resoudre pour eviter les injections
         path = Path(file_path).resolve()
 
-        # Verifier que le fichier existe
         if not path.exists():
             return False, "Fichier non trouve"
 
-        # Verifier que c'est bien un fichier (pas un repertoire ou lien symbolique suspect)
         if not path.is_file():
             return False, "Chemin invalide"
 
         # SECURITE: Verifier que le chemin est dans un repertoire autorise
-        # (temp_dir ou templates_dir)
         temp_dir = get_temp_dir().resolve()
         templates_dir = get_templates_dir().resolve()
 
@@ -377,14 +499,13 @@ def open_template_file(file_path: str) -> Tuple[bool, str]:
             logger.warning(f"Tentative d'ouverture de fichier hors zone autorisee: {path}")
             return False, "Acces au fichier refuse"
 
-        # Ouvrir le fichier avec le chemin resolu (securise)
         file_str = str(path)
 
         if platform.system() == 'Windows':
             os.startfile(file_str)
-        elif platform.system() == 'Darwin':  # macOS
+        elif platform.system() == 'Darwin':
             subprocess.run(['open', file_str], check=True)
-        else:  # Linux
+        else:
             subprocess.run(['xdg-open', file_str], check=True)
 
         return True, "Fichier ouvert"
@@ -395,7 +516,7 @@ def open_template_file(file_path: str) -> Tuple[bool, str]:
 
 
 def check_templates_table_exists() -> bool:
-    """Vérifie si la table documents_templates existe."""
+    """Verifie si la table documents_templates existe."""
     try:
         count = QueryExecutor.fetch_scalar("""
             SELECT COUNT(*) FROM information_schema.tables
@@ -408,9 +529,12 @@ def check_templates_table_exists() -> bool:
 
 
 def get_template_by_id(template_id: int) -> Optional[Dict]:
-    """Récupère un template par son ID."""
+    """Recupere un template par son ID."""
     template = QueryExecutor.fetch_one(
-        "SELECT * FROM documents_templates WHERE id = %s",
+        """SELECT id, nom, fichier_source, contexte, postes_associes,
+                  champ_operateur, champ_auditeur, champ_date,
+                  obligatoire, description, ordre_affichage, actif, stockage_type
+           FROM documents_templates WHERE id = %s""",
         (template_id,),
         dictionary=True
     )
@@ -425,15 +549,7 @@ def get_template_by_id(template_id: int) -> Optional[Dict]:
 
 
 def get_postes_for_operateur(operateur_id: int) -> List[str]:
-    """
-    Récupère les codes de tous les postes auxquels un opérateur est affecté.
-
-    Args:
-        operateur_id: ID de l'opérateur
-
-    Returns:
-        Liste des codes postes
-    """
+    """Recupere les codes de tous les postes auxquels un operateur est affecte."""
     results = QueryExecutor.fetch_all("""
         SELECT DISTINCT p.numposte
         FROM polyvalence pv
@@ -445,25 +561,15 @@ def get_postes_for_operateur(operateur_id: int) -> List[str]:
 
 
 def get_all_templates_for_operateur(operateur_id: int) -> Dict[str, List[Dict]]:
-    """
-    Récupère tous les templates applicables à un opérateur, groupés par contexte.
-
-    Args:
-        operateur_id: ID de l'opérateur
-
-    Returns:
-        Dict avec clés 'NOUVEL_OPERATEUR', 'NIVEAU_3', 'POSTE'
-    """
+    """Recupere tous les templates applicables a un operateur, groupes par contexte."""
     result = {
         'NOUVEL_OPERATEUR': get_templates_for_nouvel_operateur(),
         'NIVEAU_3': get_templates_for_niveau_3(),
         'POSTE': []
     }
 
-    # Récupérer les postes de l'opérateur
     postes = get_postes_for_operateur(operateur_id)
 
-    # Récupérer les templates pour chaque poste
     seen_ids = set()
     for code_poste in postes:
         templates = get_templates_for_poste(code_poste)

@@ -1,10 +1,14 @@
+# -*- coding: utf-8 -*-
 """
 Service de gestion documentaire
-Gère le stockage, la récupération et la manipulation des documents des opérateurs
+Gere le stockage, la recuperation et la manipulation des documents des operateurs.
+
+Stockage : Les fichiers sont stockes en BLOB dans la base de donnees MySQL.
+Les anciens documents sur filesystem (legacy) restent accessibles via chemin_fichier.
 """
 
 import os
-import shutil
+import tempfile
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,54 +18,24 @@ from typing import Optional, List, Dict, Tuple
 import mimetypes
 
 from core.db.configbd import get_connection
-from core.utils.app_paths import get_documents_dir
+
+
+# Taille max recommandee pour un fichier (16 Mo)
+MAX_FILE_SIZE_BYTES = 16 * 1024 * 1024
 
 
 class DocumentService:
-    """Service de gestion des documents des opérateurs"""
+    """Service de gestion des documents des operateurs (stockage BLOB en base)"""
 
-    def __init__(self, base_path: str = None):
-        """
-        Initialise le service documentaire
+    def __init__(self):
+        """Initialise le service documentaire"""
+        # Repertoire temporaire pour extraire les BLOBs a ouvrir
+        self._temp_dir = Path(tempfile.gettempdir()) / "emac_documents"
+        self._temp_dir.mkdir(parents=True, exist_ok=True)
 
-        Args:
-            base_path: Chemin de base pour le stockage des documents
-                      Par défaut: Utilise get_documents_dir() (compatible .exe)
-        """
-        if base_path is None:
-            # Chemin par défaut compatible dev et .exe
-            self.base_path = get_documents_dir()
-        else:
-            self.base_path = Path(base_path)
-
-        # Créer le répertoire de base s'il n'existe pas
-        self.base_path.mkdir(parents=True, exist_ok=True)
-    
-    def _get_operateur_path(self, nom_dossier: str) -> Path:
-        """Retourne le chemin du dossier d'un opérateur (Nom Prenom)"""
-        # Nettoyer le nom du dossier pour éviter les caractères problématiques
-        nom_clean = self._sanitize_filename(nom_dossier)
-        operateur_dir = self.base_path / "operateurs" / nom_clean
-        operateur_dir.mkdir(parents=True, exist_ok=True)
-        return operateur_dir
-    
-    def _get_categorie_subdir(self, categorie_nom: str) -> str:
-        """Retourne le nom du sous-dossier pour une catégorie"""
-        mapping = {
-            "Contrats de travail": "contrats",
-            "Certificats médicaux": "medicaux",
-            "Diplômes et formations": "formations",
-            "Autorisations de travail": "autorisations",
-            "Pièces d'identité": "identite",
-            "Attestations diverses": "attestations",
-            "Documents administratifs": "administratifs",
-            "Autres": "autres"
-        }
-        return mapping.get(categorie_nom, "autres")
-    
-    def _sanitize_filename(self, filename: str) -> str:
-        """Nettoie un nom de fichier pour éviter les problèmes"""
-        # Garder uniquement les caractères alphanumériques, points, tirets et underscores
+    @staticmethod
+    def _sanitize_filename(filename: str) -> str:
+        """Nettoie un nom de fichier pour eviter les problemes"""
         safe_chars = []
         for char in filename:
             if char.isalnum() or char in ['.', '-', '_', ' ']:
@@ -69,7 +43,7 @@ class DocumentService:
             else:
                 safe_chars.append('_')
         return ''.join(safe_chars)
-    
+
     def add_document(
         self,
         personnel_id: int,
@@ -78,118 +52,113 @@ class DocumentService:
         nom_affichage: str = None,
         date_expiration: date = None,
         notes: str = None,
-        uploaded_by: str = "Système"
+        uploaded_by: str = "Systeme"
     ) -> Tuple[bool, str, Optional[int]]:
         """
-        Ajoute un document pour un opérateur
-        
+        Ajoute un document pour un operateur (stocke en BLOB dans la base).
+
         Args:
-            personnel_id: ID de l'opérateur
-            categorie_id: ID de la catégorie
-            fichier_source: Chemin du fichier à ajouter
+            personnel_id: ID de l'operateur
+            categorie_id: ID de la categorie
+            fichier_source: Chemin du fichier a ajouter
             nom_affichage: Nom d'affichage (optionnel, sinon nom du fichier)
             date_expiration: Date d'expiration (optionnel)
             notes: Notes sur le document
             uploaded_by: Nom de l'utilisateur qui uploade
-        
-        Returns:
-            (succès, message, document_id)
-        """
-        try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            # Récupérer les infos de l'opérateur
-            cursor.execute(
-                "SELECT nom, prenom FROM personnel WHERE id = %s",
-                (personnel_id,)
-            )
-            operateur = cursor.fetchone()
-            if not operateur:
-                return False, f"Opérateur ID {personnel_id} introuvable", None
 
-            # Créer le nom du dossier: "Nom Prenom"
-            nom_dossier = f"{operateur['nom']} {operateur['prenom']}"
-            
-            # Récupérer les infos de la catégorie
-            cursor.execute(
-                "SELECT nom FROM categories_documents WHERE id = %s",
-                (categorie_id,)
-            )
-            categorie = cursor.fetchone()
-            if not categorie:
-                return False, f"Catégorie ID {categorie_id} introuvable", None
-            
-            # Vérifier que le fichier source existe
+        Returns:
+            (succes, message, document_id)
+        """
+        conn = None
+        try:
+            # Verifier que le fichier source existe
             source_path = Path(fichier_source)
             if not source_path.exists():
                 return False, f"Fichier source introuvable: {fichier_source}", None
-            
-            # Préparer le nom de fichier
+
+            # Verifier la taille du fichier
+            taille_octets = source_path.stat().st_size
+            if taille_octets > MAX_FILE_SIZE_BYTES:
+                taille_mo = taille_octets / (1024 * 1024)
+                return False, f"Fichier trop volumineux ({taille_mo:.1f} Mo). Maximum: 16 Mo", None
+
+            conn = get_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            # Verifier que l'operateur existe
+            cursor.execute(
+                "SELECT id FROM personnel WHERE id = %s",
+                (personnel_id,)
+            )
+            if not cursor.fetchone():
+                cursor.close()
+                conn.close()
+                return False, f"Operateur ID {personnel_id} introuvable", None
+
+            # Verifier que la categorie existe
+            cursor.execute(
+                "SELECT id FROM categories_documents WHERE id = %s",
+                (categorie_id,)
+            )
+            if not cursor.fetchone():
+                cursor.close()
+                conn.close()
+                return False, f"Categorie ID {categorie_id} introuvable", None
+
+            # Preparer le nom de fichier
             nom_fichier_original = source_path.name
             nom_fichier_clean = self._sanitize_filename(nom_fichier_original)
-            
+
             if nom_affichage is None:
                 nom_affichage = nom_fichier_original
-            
-            # Créer le chemin de destination
-            operateur_dir = self._get_operateur_path(nom_dossier)
-            categorie_subdir = self._get_categorie_subdir(categorie['nom'])
-            dest_dir = operateur_dir / categorie_subdir
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            
-            # Gérer les doublons de noms de fichiers
-            dest_path = dest_dir / nom_fichier_clean
-            counter = 1
-            while dest_path.exists():
-                stem = source_path.stem
-                suffix = source_path.suffix
-                nom_fichier_clean = f"{stem}_{counter}{suffix}"
-                dest_path = dest_dir / nom_fichier_clean
-                counter += 1
-            
-            # Copier le fichier
-            shutil.copy2(source_path, dest_path)
-            
-            # Déterminer le type MIME
-            type_mime, _ = mimetypes.guess_type(str(dest_path))
+
+            # Lire le contenu du fichier en binaire
+            with open(source_path, 'rb') as f:
+                contenu_fichier = f.read()
+
+            # Determiner le type MIME
+            type_mime, _ = mimetypes.guess_type(str(source_path))
             if type_mime is None:
                 type_mime = "application/octet-stream"
-            
-            # Obtenir la taille du fichier
-            taille_octets = dest_path.stat().st_size
-            
-            # Chemin relatif pour la BDD
-            chemin_relatif = str(dest_path.relative_to(self.base_path))
-            
-            # Insérer dans la base de données
+
+            # Inserer dans la base de donnees avec le BLOB
             sql = """
                 INSERT INTO documents (
                     personnel_id, categorie_id, nom_fichier, nom_affichage,
-                    chemin_fichier, type_mime, taille_octets, date_expiration,
+                    chemin_fichier, contenu_fichier, stockage_type,
+                    type_mime, taille_octets, date_expiration,
                     notes, uploaded_by
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, 'BLOB', %s, %s, %s, %s, %s
                 )
             """
-            
+
             cursor.execute(sql, (
                 personnel_id, categorie_id, nom_fichier_clean, nom_affichage,
-                chemin_relatif, type_mime, taille_octets, date_expiration,
+                nom_fichier_clean,  # chemin_fichier = nom du fichier (pour reference)
+                contenu_fichier,
+                type_mime, taille_octets, date_expiration,
                 notes, uploaded_by
             ))
-            
+
             document_id = cursor.lastrowid
             conn.commit()
-            
+
             cursor.close()
             conn.close()
-            
-            return True, f"Document '{nom_affichage}' ajouté avec succès", document_id
-            
+
+            logger.info(f"Document '{nom_affichage}' ajoute en BLOB (ID: {document_id}, {taille_octets} octets)")
+            return True, f"Document '{nom_affichage}' ajoute avec succes", document_id
+
         except Exception as e:
+            logger.exception(f"Erreur lors de l'ajout du document: {e}")
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
             return False, f"Erreur lors de l'ajout du document: {str(e)}", None
-    
+
     def get_documents_operateur(
         self,
         personnel_id: int,
@@ -197,111 +166,225 @@ class DocumentService:
         statut: str = None
     ) -> List[Dict]:
         """
-        Récupère les documents d'un opérateur
-        
+        Recupere les documents d'un operateur (metadonnees uniquement, sans le BLOB).
+
         Args:
-            personnel_id: ID de l'opérateur
-            categorie_id: Filtrer par catégorie (optionnel)
+            personnel_id: ID de l'operateur
+            categorie_id: Filtrer par categorie (optionnel)
             statut: Filtrer par statut (optionnel)
-        
+
         Returns:
-            Liste des documents
+            Liste des documents (sans contenu_fichier)
         """
         try:
             conn = get_connection()
             cursor = conn.cursor(dictionary=True)
-            
+
             sql = "SELECT * FROM v_documents_complet WHERE personnel_id = %s"
             params = [personnel_id]
-            
+
             if categorie_id is not None:
                 sql += " AND categorie_id = %s"
                 params.append(categorie_id)
-            
+
             if statut is not None:
                 sql += " AND statut = %s"
                 params.append(statut)
-            
+
             sql += " ORDER BY date_upload DESC"
-            
+
             cursor.execute(sql, tuple(params))
             documents = cursor.fetchall()
-            
+
             cursor.close()
             conn.close()
-            
+
             return documents
-            
+
         except Exception as e:
-            logger.error(f"Erreur lors de la récupération des documents: {e}")
+            logger.error(f"Erreur lors de la recuperation des documents: {e}")
             return []
-    
-    def get_document_path(self, document_id: int) -> Optional[Path]:
-        """Retourne le chemin complet d'un document"""
-        try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-            
-            cursor.execute(
-                "SELECT chemin_fichier FROM documents WHERE id = %s",
-                (document_id,)
-            )
-            doc = cursor.fetchone()
-            
-            cursor.close()
-            conn.close()
-            
-            if doc:
-                return self.base_path / doc['chemin_fichier']
-            return None
-            
-        except Exception as e:
-            logger.error(f"Erreur lors de la récupération du chemin: {e}")
-            return None
-    
-    def delete_document(self, document_id: int) -> Tuple[bool, str]:
+
+    def get_document_content(self, document_id: int) -> Optional[Tuple[bytes, str, str]]:
         """
-        Supprime un document (fichier + entrée BDD)
-        
+        Recupere le contenu binaire d'un document depuis la base.
+
         Args:
             document_id: ID du document
-        
+
         Returns:
-            (succès, message)
+            Tuple (contenu_bytes, nom_fichier, type_mime) ou None si introuvable
         """
         try:
             conn = get_connection()
             cursor = conn.cursor(dictionary=True)
-            
-            # Récupérer les infos du document
+
             cursor.execute(
-                "SELECT chemin_fichier, nom_affichage FROM documents WHERE id = %s",
+                "SELECT contenu_fichier, stockage_type, chemin_fichier, nom_fichier, type_mime "
+                "FROM documents WHERE id = %s",
                 (document_id,)
             )
             doc = cursor.fetchone()
-            
+
+            cursor.close()
+            conn.close()
+
+            if not doc:
+                return None
+
+            # Document stocke en BLOB
+            if doc['stockage_type'] == 'BLOB' and doc['contenu_fichier']:
+                return (doc['contenu_fichier'], doc['nom_fichier'], doc['type_mime'])
+
+            # Legacy: document sur filesystem
+            if doc['chemin_fichier']:
+                legacy_path = self._resolve_legacy_path(doc['chemin_fichier'])
+                if legacy_path and legacy_path.exists():
+                    with open(legacy_path, 'rb') as f:
+                        return (f.read(), doc['nom_fichier'], doc['type_mime'])
+
+            logger.warning(f"Document ID {document_id}: contenu introuvable")
+            return None
+
+        except Exception as e:
+            logger.error(f"Erreur lors de la recuperation du contenu: {e}")
+            return None
+
+    def extract_to_temp_file(self, document_id: int) -> Optional[Path]:
+        """
+        Extrait un document BLOB vers un fichier temporaire pour ouverture.
+
+        Args:
+            document_id: ID du document
+
+        Returns:
+            Path vers le fichier temporaire, ou None si erreur
+        """
+        result = self.get_document_content(document_id)
+        if not result:
+            return None
+
+        contenu, nom_fichier, type_mime = result
+
+        # Creer un sous-dossier par document pour eviter les conflits
+        doc_temp_dir = self._temp_dir / str(document_id)
+        doc_temp_dir.mkdir(parents=True, exist_ok=True)
+
+        temp_path = doc_temp_dir / self._sanitize_filename(nom_fichier)
+
+        with open(temp_path, 'wb') as f:
+            f.write(contenu)
+
+        return temp_path
+
+    def get_document_path(self, document_id: int) -> Optional[Path]:
+        """
+        Retourne un chemin accessible pour un document.
+        Pour les BLOBs, extrait vers un fichier temporaire.
+        Pour les legacy filesystem, retourne le chemin direct.
+        """
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            cursor.execute(
+                "SELECT stockage_type, chemin_fichier FROM documents WHERE id = %s",
+                (document_id,)
+            )
+            doc = cursor.fetchone()
+
+            cursor.close()
+            conn.close()
+
+            if not doc:
+                return None
+
+            # BLOB: extraire vers fichier temporaire
+            if doc['stockage_type'] == 'BLOB':
+                return self.extract_to_temp_file(document_id)
+
+            # Legacy filesystem
+            legacy_path = self._resolve_legacy_path(doc['chemin_fichier'])
+            if legacy_path and legacy_path.exists():
+                return legacy_path
+
+            return None
+
+        except Exception as e:
+            logger.error(f"Erreur lors de la recuperation du chemin: {e}")
+            return None
+
+    def _resolve_legacy_path(self, chemin_fichier: str) -> Optional[Path]:
+        """Resout un chemin legacy (fichier sur filesystem)."""
+        try:
+            # Essayer d'abord avec get_documents_dir
+            from core.utils.app_paths import get_documents_dir
+            base = get_documents_dir()
+            full_path = base / chemin_fichier
+            if full_path.exists():
+                return full_path
+
+            # Essayer comme chemin absolu
+            abs_path = Path(chemin_fichier)
+            if abs_path.exists():
+                return abs_path
+
+            return None
+        except Exception:
+            return None
+
+    def delete_document(self, document_id: int) -> Tuple[bool, str]:
+        """
+        Supprime un document (BLOB en base + entree BDD).
+
+        Args:
+            document_id: ID du document
+
+        Returns:
+            (succes, message)
+        """
+        try:
+            conn = get_connection()
+            cursor = conn.cursor(dictionary=True)
+
+            # Recuperer les infos du document
+            cursor.execute(
+                "SELECT stockage_type, chemin_fichier, nom_affichage FROM documents WHERE id = %s",
+                (document_id,)
+            )
+            doc = cursor.fetchone()
+
             if not doc:
                 cursor.close()
                 conn.close()
                 return False, "Document introuvable"
-            
-            # Supprimer le fichier physique
-            file_path = self.base_path / doc['chemin_fichier']
-            if file_path.exists():
-                file_path.unlink()
-            
-            # Supprimer de la BDD
+
+            # Si legacy filesystem, supprimer le fichier physique
+            if doc['stockage_type'] == 'FILESYSTEM' and doc['chemin_fichier']:
+                legacy_path = self._resolve_legacy_path(doc['chemin_fichier'])
+                if legacy_path and legacy_path.exists():
+                    legacy_path.unlink()
+
+            # Nettoyer le fichier temporaire s'il existe
+            temp_path = self._temp_dir / str(document_id)
+            if temp_path.exists():
+                import shutil
+                shutil.rmtree(temp_path, ignore_errors=True)
+
+            # Supprimer de la BDD (le BLOB est supprime avec la ligne)
             cursor.execute("DELETE FROM documents WHERE id = %s", (document_id,))
             conn.commit()
-            
+
             cursor.close()
             conn.close()
-            
-            return True, f"Document '{doc['nom_affichage']}' supprimé avec succès"
-            
+
+            logger.info(f"Document '{doc['nom_affichage']}' supprime (ID: {document_id})")
+            return True, f"Document '{doc['nom_affichage']}' supprime avec succes"
+
         except Exception as e:
+            logger.exception(f"Erreur lors de la suppression: {e}")
             return False, f"Erreur lors de la suppression: {str(e)}"
-    
+
     def archive_document(self, document_id: int) -> Tuple[bool, str]:
         """Archive un document (change son statut)"""
         try:
@@ -317,13 +400,13 @@ class DocumentService:
             cursor.close()
             conn.close()
 
-            return True, "Document archivé avec succès"
+            return True, "Document archive avec succes"
 
         except Exception as e:
             return False, f"Erreur lors de l'archivage: {str(e)}"
 
     def restore_document(self, document_id: int) -> Tuple[bool, str]:
-        """Restaure un document archivé (remet son statut à actif)"""
+        """Restaure un document archive (remet son statut a actif)"""
         try:
             conn = get_connection()
             cursor = conn.cursor()
@@ -337,52 +420,52 @@ class DocumentService:
             cursor.close()
             conn.close()
 
-            return True, "Document restauré avec succès"
+            return True, "Document restaure avec succes"
 
         except Exception as e:
             return False, f"Erreur lors de la restauration: {str(e)}"
 
     def get_categories(self) -> List[Dict]:
-        """Récupère toutes les catégories de documents"""
+        """Recupere toutes les categories de documents"""
         try:
             conn = get_connection()
             cursor = conn.cursor(dictionary=True)
-            
+
             cursor.execute(
                 "SELECT * FROM categories_documents ORDER BY ordre_affichage"
             )
             categories = cursor.fetchall()
-            
+
             cursor.close()
             conn.close()
-            
+
             return categories
-            
+
         except Exception as e:
-            logger.error(f"Erreur lors de la récupération des catégories: {e}")
+            logger.error(f"Erreur lors de la recuperation des categories: {e}")
             return []
-    
+
     def get_documents_expiring_soon(self, jours: int = 30) -> List[Dict]:
-        """Récupère les documents qui expirent bientôt"""
+        """Recupere les documents qui expirent bientot"""
         try:
             conn = get_connection()
             cursor = conn.cursor(dictionary=True)
-            
+
             cursor.execute(
                 "SELECT * FROM v_documents_expiration_proche WHERE jours_restants <= %s",
                 (jours,)
             )
             documents = cursor.fetchall()
-            
+
             cursor.close()
             conn.close()
-            
+
             return documents
-            
+
         except Exception as e:
-            logger.error(f"Erreur lors de la récupération des documents expirant: {e}")
+            logger.error(f"Erreur lors de la recuperation des documents expirant: {e}")
             return []
-    
+
     def update_document_info(
         self,
         document_id: int,
@@ -391,12 +474,12 @@ class DocumentService:
         notes: str = None,
         categorie_id: int = None
     ) -> Tuple[bool, str]:
-        """Met à jour les informations d'un document"""
+        """Met a jour les informations d'un document"""
         try:
             conn = get_connection()
             cursor = conn.cursor()
-            
-            # SÉCURITÉ: Construction sécurisée - seules les clauses prédéfinies sont utilisées
+
+            # SECURITE: Construction securisee - seules les clauses predefinies sont utilisees
             updates = []
             params = []
 
@@ -417,20 +500,46 @@ class DocumentService:
                 params.append(categorie_id)
 
             if not updates:
-                return False, "Aucune modification à effectuer"
+                return False, "Aucune modification a effectuer"
 
             params.append(document_id)
-            # SÉCURITÉ: Les clauses dans 'updates' sont des constantes littérales définies ci-dessus
-            # Pas d'input utilisateur dans la construction SQL
             sql = "UPDATE documents SET " + ", ".join(updates) + " WHERE id = %s"
 
             cursor.execute(sql, tuple(params))
             conn.commit()
-            
+
             cursor.close()
             conn.close()
-            
-            return True, "Document mis à jour avec succès"
-            
+
+            return True, "Document mis a jour avec succes"
+
         except Exception as e:
-            return False, f"Erreur lors de la mise à jour: {str(e)}"
+            return False, f"Erreur lors de la mise a jour: {str(e)}"
+
+    def download_document(self, document_id: int, destination: str) -> Tuple[bool, str]:
+        """
+        Telecharge un document depuis la base vers un fichier sur le disque.
+
+        Args:
+            document_id: ID du document
+            destination: Chemin de destination sur le disque
+
+        Returns:
+            (succes, message)
+        """
+        result = self.get_document_content(document_id)
+        if not result:
+            return False, "Document introuvable ou contenu indisponible"
+
+        contenu, nom_fichier, type_mime = result
+
+        try:
+            dest_path = Path(destination)
+            with open(dest_path, 'wb') as f:
+                f.write(contenu)
+
+            logger.info(f"Document ID {document_id} telecharge vers {destination}")
+            return True, f"Document telecharge avec succes vers:\n{destination}"
+        except Exception as e:
+            logger.exception(f"Erreur telechargement document: {e}")
+            return False, f"Erreur lors du telechargement: {str(e)}"

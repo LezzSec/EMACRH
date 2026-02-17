@@ -9,7 +9,7 @@ Permet de visualiser, générer et ouvrir les templates de documents
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QComboBox, QLineEdit, QWidget,
-    QMessageBox, QGroupBox, QCheckBox, QGridLayout, QFrame
+    QMessageBox, QGroupBox, QCheckBox, QGridLayout, QFrame, QFileDialog
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
@@ -233,9 +233,9 @@ class GestionTemplatesDialog(QDialog):
     def _create_table(self, layout):
         """Crée la table des templates."""
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
+        self.table.setColumnCount(7)
         self.table.setHorizontalHeaderLabels([
-            "ID", "Nom du document", "Contexte", "Postes associés", "Obligatoire", "Actions"
+            "ID", "Nom du document", "Contexte", "Postes associés", "Obligatoire", "Stockage", "Actions"
         ])
 
         # Style de la table
@@ -271,8 +271,9 @@ class GestionTemplatesDialog(QDialog):
         header.setSectionResizeMode(2, QHeaderView.ResizeToContents)  # Contexte
         header.setSectionResizeMode(3, QHeaderView.ResizeToContents)  # Postes
         header.setSectionResizeMode(4, QHeaderView.ResizeToContents)  # Obligatoire
-        header.setSectionResizeMode(5, QHeaderView.Fixed)  # Actions
-        self.table.setColumnWidth(5, 150)
+        header.setSectionResizeMode(5, QHeaderView.ResizeToContents)  # Stockage
+        header.setSectionResizeMode(6, QHeaderView.Fixed)  # Actions
+        self.table.setColumnWidth(6, 220)
 
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setAlternatingRowColors(True)
@@ -453,12 +454,35 @@ class GestionTemplatesDialog(QDialog):
                 oblig_item.setForeground(QColor('#dc2626'))
             self.table.setItem(row, 4, oblig_item)
 
-            # Bouton d'action
+            # Stockage (BLOB ou FILESYSTEM)
+            stockage = template.get('stockage_type', 'FILESYSTEM')
+            stockage_label = QLabel("En base" if stockage == 'BLOB' else "Fichier")
+            stockage_label.setAlignment(Qt.AlignCenter)
+            if stockage == 'BLOB':
+                stockage_label.setStyleSheet("""
+                    background-color: #10b98120;
+                    color: #10b981;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-weight: 600;
+                """)
+            else:
+                stockage_label.setStyleSheet("""
+                    background-color: #f59e0b20;
+                    color: #f59e0b;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-weight: 600;
+                """)
+            self.table.setCellWidget(row, 5, stockage_label)
+
+            # Boutons d'action
             action_widget = QWidget()
             action_layout = QHBoxLayout(action_widget)
             action_layout.setContentsMargins(5, 2, 5, 2)
+            action_layout.setSpacing(4)
 
-            btn_generate = QPushButton("Générer")
+            btn_generate = QPushButton("Generer")
             btn_generate.setStyleSheet("""
                 QPushButton {
                     background-color: #3b82f6;
@@ -472,9 +496,54 @@ class GestionTemplatesDialog(QDialog):
             btn_generate.clicked.connect(lambda checked, t=template: self.generate_template(t))
             action_layout.addWidget(btn_generate)
 
-            self.table.setCellWidget(row, 5, action_widget)
+            btn_upload = QPushButton("Importer")
+            btn_upload.setToolTip("Importer/remplacer le fichier template depuis votre PC")
+            btn_upload.setStyleSheet("""
+                QPushButton {
+                    background-color: #10b981;
+                    color: white;
+                    padding: 5px 10px;
+                    border-radius: 4px;
+                    font-weight: 500;
+                }
+                QPushButton:hover { background-color: #059669; }
+            """)
+            btn_upload.clicked.connect(lambda checked, t=template: self.upload_template_file(t))
+            action_layout.addWidget(btn_upload)
+
+            self.table.setCellWidget(row, 6, action_widget)
 
             self.table.setRowHeight(row, 45)
+
+    def upload_template_file(self, template):
+        """Importe un fichier template depuis le PC et le stocke en BLOB dans la base."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            f"Importer le fichier pour '{template['nom']}'",
+            "",
+            "Fichiers Excel (*.xlsx *.xlsm *.xls);;Fichiers Word (*.docx);;Tous les fichiers (*.*)"
+        )
+
+        if not file_path:
+            return
+
+        try:
+            from core.services.template_service import upload_template
+
+            success, message = upload_template(template['id'], file_path)
+
+            if success:
+                QMessageBox.information(self, "Succes", message)
+                self.load_templates()
+            else:
+                QMessageBox.warning(self, "Erreur", message)
+
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                "Erreur",
+                f"Erreur lors de l'import:\n{str(e)}"
+            )
 
     def generate_template(self, template):
         """Génère un template individuel."""

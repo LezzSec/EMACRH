@@ -1,7 +1,5 @@
 # 📦 EMAC - Application de Gestion de Polyvalence
 
-> **E**valuation - **M**anagement - **A**bsences - **C**ontrats
-
 Application PyQt5 de bureau pour la gestion des compétences, évaluations, absences et contrats du personnel dans un environnement industriel.
 
 ---

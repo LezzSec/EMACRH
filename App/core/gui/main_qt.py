@@ -1033,6 +1033,16 @@ class MainWindow(QMainWindow):
 # ===========================
 
 if __name__ == "__main__":
+    # Crash handler global - ecrit dans crash.log meme si la console ferme
+    def _crash_handler(exc_type, exc_value, exc_tb):
+        crash_msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        crash_file = os.path.join(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else '.', 'crash.log')
+        with open(crash_file, 'a', encoding='utf-8') as f:
+            f.write(f"\n{'='*60}\n{dt.datetime.now()}\n{crash_msg}\n")
+        print(crash_msg, file=sys.stderr)
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
+    sys.excepthook = _crash_handler
+
     # Handler silencieux pour les messages Qt
     qInstallMessageHandler(lambda *_: None)
 
