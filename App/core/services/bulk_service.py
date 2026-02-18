@@ -619,21 +619,52 @@ def add_competence_batch(
         return 0, 0, []
 
     competence_id = competence_data.get('competence_id')
+    competence_libelle = competence_data.get('competence_libelle', 'Compétence')
+
+    # Si pas d'ID mais un libellé libre, créer la compétence dans le catalogue
+    if not competence_id and competence_libelle:
+        from core.services.competences_service import create_competence
+        import re
+        # Générer un code à partir du libellé
+        code = re.sub(r'[^A-Z0-9]', '', competence_libelle.upper().replace(' ', '_'))[:20]
+        code = f"LIBRE_{code}" if code else f"LIBRE_{id(competence_libelle)}"
+        success, msg, new_id = create_competence(
+            code=code,
+            libelle=competence_libelle,
+            categorie="Autre",
+            description="Compétence ajoutée via saisie libre"
+        )
+        if success and new_id:
+            competence_id = new_id
+            competence_data['competence_id'] = new_id
+        else:
+            # Si le code existe déjà, chercher par libellé
+            existing = QueryExecutor.fetch_one(
+                "SELECT id FROM competences_catalogue WHERE libelle = %s AND actif = 1",
+                (competence_libelle,),
+                dictionary=True
+            )
+            if existing:
+                competence_id = existing['id']
+                competence_data['competence_id'] = existing['id']
+            else:
+                return 0, len(personnel_ids), [{'personnel_id': pid, 'status': 'ERREUR', 'error': f"Impossible de créer la compétence: {msg}"} for pid in personnel_ids]
+
     if not competence_id:
         return 0, len(personnel_ids), [{'personnel_id': pid, 'status': 'ERREUR', 'error': "Compétence non spécifiée"} for pid in personnel_ids]
 
     # Récupérer le libellé de la compétence pour le tracking
-    competence_libelle = "Compétence"
-    try:
-        row = QueryExecutor.fetch_one(
-            "SELECT libelle FROM competences_catalogue WHERE id = %s",
-            (competence_id,),
-            dictionary=True
-        )
-        if row:
-            competence_libelle = row['libelle']
-    except Exception as e:
-        logger.error(f"Erreur récupération libellé compétence: {e}")
+    if not competence_libelle or competence_libelle == 'Compétence':
+        try:
+            row = QueryExecutor.fetch_one(
+                "SELECT libelle FROM competences_catalogue WHERE id = %s",
+                (competence_id,),
+                dictionary=True
+            )
+            if row:
+                competence_libelle = row['libelle']
+        except Exception as e:
+            logger.error(f"Erreur récupération libellé compétence: {e}")
 
     # Créer le tracking batch
     batch_id = create_batch_operation(

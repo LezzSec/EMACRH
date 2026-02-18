@@ -1235,8 +1235,14 @@ class CompetenceBulkTab(QWidget):
         lbl_competence.setStyleSheet(required_style)
         form_layout.addWidget(lbl_competence, 0, 0)
         self.competence_combo = QComboBox()
+        self.competence_combo.setEditable(True)
         self.competence_combo.setMinimumWidth(300)
         self.competence_combo.setStyleSheet(input_style)
+        self.competence_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.competence_combo.completer().setCompletionMode(
+            self.competence_combo.completer().PopupCompletion
+        )
+        self.competence_combo.lineEdit().setPlaceholderText("Saisir ou sélectionner une compétence...")
         self.competence_combo.currentIndexChanged.connect(self._on_competence_changed)
         form_layout.addWidget(self.competence_combo, 0, 1, 1, 3)
 
@@ -1381,7 +1387,8 @@ class CompetenceBulkTab(QWidget):
         def on_result(data):
             self._catalogue = data
             self.competence_combo.clear()
-            self.competence_combo.addItem("-- Sélectionner une compétence --", None)
+            self.competence_combo.setCurrentIndex(-1)
+            self.competence_combo.lineEdit().clear()
 
             # Grouper par catégorie
             categories = {}
@@ -1414,7 +1421,7 @@ class CompetenceBulkTab(QWidget):
     def _on_competence_changed(self):
         """Met à jour l'info validité quand la compétence change."""
         comp_data = self.competence_combo.currentData()
-        if comp_data and comp_data.get('duree_validite_mois'):
+        if isinstance(comp_data, dict) and comp_data.get('duree_validite_mois'):
             mois = comp_data['duree_validite_mois']
             self.validite_info.setText(f"Validité standard: {mois} mois")
             self._update_expiration_date()
@@ -1425,7 +1432,7 @@ class CompetenceBulkTab(QWidget):
     def _update_expiration_date(self):
         """Calcule automatiquement la date d'expiration."""
         comp_data = self.competence_combo.currentData()
-        if comp_data and comp_data.get('duree_validite_mois'):
+        if isinstance(comp_data, dict) and comp_data.get('duree_validite_mois'):
             from dateutil.relativedelta import relativedelta
             date_acq = self.date_acquisition.date().toPyDate()
             date_exp = date_acq + relativedelta(months=comp_data['duree_validite_mois'])
@@ -1434,11 +1441,21 @@ class CompetenceBulkTab(QWidget):
     def get_data(self) -> Dict:
         """Retourne les données du formulaire."""
         comp_data = self.competence_combo.currentData()
+        free_text = self.competence_combo.currentText().strip()
         date_exp = self.date_expiration.date()
 
+        # Si une compétence du catalogue est sélectionnée
+        if comp_data and isinstance(comp_data, dict):
+            comp_id = comp_data['id']
+            comp_libelle = comp_data['libelle']
+        else:
+            # Saisie libre
+            comp_id = None
+            comp_libelle = free_text if free_text else None
+
         return {
-            'competence_id': comp_data['id'] if comp_data else None,
-            'competence_libelle': comp_data['libelle'] if comp_data else None,
+            'competence_id': comp_id,
+            'competence_libelle': comp_libelle,
             'date_acquisition': self.date_acquisition.date().toPyDate(),
             'date_expiration': date_exp.toPyDate() if date_exp.year() > 1900 else None,
             'commentaire': self.commentaire_input.toPlainText().strip() or None,
@@ -1449,8 +1466,8 @@ class CompetenceBulkTab(QWidget):
         """Valide les données du formulaire."""
         data = self.get_data()
 
-        if not data['competence_id']:
-            return False, "Veuillez sélectionner une compétence"
+        if not data['competence_id'] and not data['competence_libelle']:
+            return False, "Veuillez sélectionner ou saisir une compétence"
 
         return True, ""
 

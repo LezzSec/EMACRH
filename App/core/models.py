@@ -208,8 +208,6 @@ class PersonnelResume(ModelMixin):
     @property
     def label(self) -> str:
         """Label pour affichage dans combo/liste"""
-        if self.matricule:
-            return f"{self.nom_complet} ({self.matricule})"
         return self.nom_complet
 
 

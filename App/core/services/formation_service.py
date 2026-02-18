@@ -10,6 +10,7 @@ from typing import Optional, List, Dict, Tuple, Any
 
 from core.db.query_executor import QueryExecutor
 from core.services.logger import log_hist
+from core.services.permission_manager import require
 from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -154,6 +155,7 @@ def add_formation(
     Returns:
         (succès, message, formation_id)
     """
+    require('rh.formations.edit')
     try:
         formation_id = QueryExecutor.execute_write("""
             INSERT INTO formation (
@@ -191,6 +193,7 @@ def update_formation(formation_id: int, **kwargs) -> Tuple[bool, str]:
     Returns:
         (succès, message)
     """
+    require('rh.formations.edit')
     # SÉCURITÉ: Whitelist stricte des colonnes autorisées (frozenset = immutable)
     ALLOWED_FIELDS = frozenset([
         'operateur_id', 'intitule', 'organisme', 'date_debut', 'date_fin',
@@ -243,6 +246,7 @@ def delete_formation(formation_id: int) -> Tuple[bool, str]:
     Returns:
         (succès, message)
     """
+    require('rh.formations.delete')
     try:
         # Récupérer les infos avant suppression pour le log
         formation = get_formation_by_id(formation_id)

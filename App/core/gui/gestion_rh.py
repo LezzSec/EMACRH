@@ -1303,6 +1303,7 @@ class GestionRHDialog(QDialog):
             }
         """)
         btn_bulk.clicked.connect(self._open_bulk_assignment_dialog)
+        btn_bulk.setVisible(can("rh.personnel.edit"))
         header_layout.addWidget(btn_bulk)
 
         layout.addLayout(header_layout)
@@ -1788,6 +1789,7 @@ class GestionRHDialog(QDialog):
         header_layout = QHBoxLayout()
         header_layout.addStretch()
         btn_edit = EmacButton("Modifier", variant="ghost")
+        btn_edit.setVisible(can("rh.personnel.edit"))
         btn_edit.clicked.connect(self._edit_infos_generales)
         header_layout.addWidget(btn_edit)
         card.body.addLayout(header_layout)
@@ -1879,6 +1881,7 @@ class GestionRHDialog(QDialog):
         actions_layout = QHBoxLayout()
         actions_layout.addStretch()
         btn_add = EmacButton("+ Nouveau contrat", variant="primary")
+        btn_add.setVisible(can("rh.contrats.edit"))
         btn_add.clicked.connect(self._add_contrat)
         actions_layout.addWidget(btn_add)
         layout.addLayout(actions_layout)
@@ -1904,6 +1907,7 @@ class GestionRHDialog(QDialog):
             header = QHBoxLayout()
             header.addStretch()
             btn_edit = EmacButton("Modifier", variant="ghost")
+            btn_edit.setVisible(can("rh.contrats.edit"))
             btn_edit.clicked.connect(lambda: self._edit_contrat(contrat))
             header.addWidget(btn_edit)
             card.body.addLayout(header)
@@ -2020,6 +2024,7 @@ class GestionRHDialog(QDialog):
 
         # Bouton ajouter en haut
         btn_add = EmacButton("+ Nouvelle déclaration", variant="primary")
+        btn_add.setVisible(can("rh.declarations.edit"))
         btn_add.clicked.connect(self._add_declaration)
         layout.addWidget(btn_add, alignment=Qt.AlignLeft)
 
@@ -2058,9 +2063,11 @@ class GestionRHDialog(QDialog):
                 row.addWidget(QLabel(info_text))
                 row.addStretch()
                 btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setVisible(can("rh.declarations.edit"))
                 btn_edit.clicked.connect(lambda checked, d=decl: self._edit_declaration(d))
                 row.addWidget(btn_edit)
                 btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete.setVisible(can("rh.declarations.edit"))
                 btn_delete.clicked.connect(lambda checked, d=decl: self._delete_declaration(d))
                 row.addWidget(btn_delete)
                 card.body.addLayout(row)
@@ -2079,6 +2086,7 @@ class GestionRHDialog(QDialog):
 
         # Bouton ajouter en haut
         btn_add = EmacButton("+ Nouvelle compétence", variant="primary")
+        btn_add.setVisible(can("rh.competences.edit"))
         btn_add.clicked.connect(self._add_competence)
         layout.addWidget(btn_add, alignment=Qt.AlignLeft)
 
@@ -2186,10 +2194,12 @@ class GestionRHDialog(QDialog):
 
                 # Boutons
                 btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setVisible(can("rh.competences.edit"))
                 btn_edit.clicked.connect(lambda checked, c=comp: self._edit_competence(c))
                 row.addWidget(btn_edit)
 
                 btn_delete = EmacButton("Retirer", variant="ghost")
+                btn_delete.setVisible(can("rh.competences.delete"))
                 btn_delete.clicked.connect(lambda checked, c=comp: self._delete_competence(c))
                 row.addWidget(btn_delete)
 
@@ -2248,6 +2258,7 @@ class GestionRHDialog(QDialog):
 
         # Bouton ajouter en haut
         btn_add = EmacButton("+ Nouvelle formation", variant="primary")
+        btn_add.setVisible(can("rh.formations.edit"))
         btn_add.clicked.connect(self._add_formation)
         layout.addWidget(btn_add, alignment=Qt.AlignLeft)
 
@@ -2292,9 +2303,11 @@ class GestionRHDialog(QDialog):
                 row.addWidget(QLabel(info_text))
                 row.addStretch()
                 btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setVisible(can("rh.formations.edit"))
                 btn_edit.clicked.connect(lambda checked, f=form: self._edit_formation(f))
                 row.addWidget(btn_edit)
                 btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete.setVisible(can("rh.formations.delete"))
                 btn_delete.clicked.connect(lambda checked, f=form: self._delete_formation(f))
                 row.addWidget(btn_delete)
                 card_list.body.addLayout(row)
@@ -2419,6 +2432,7 @@ class GestionRHDialog(QDialog):
         card_visites = EmacCard(f"Visites médicales ({len(visites)})")
 
         btn_add_visite = EmacButton("+ Nouvelle visite", variant="primary")
+        btn_add_visite.setVisible(can("rh.medical.edit"))
         btn_add_visite.clicked.connect(self._add_visite)
         card_visites.body.addWidget(btn_add_visite, alignment=Qt.AlignLeft)
 
@@ -2446,11 +2460,13 @@ class GestionRHDialog(QDialog):
 
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setFixedHeight(28)
+                btn_edit.setVisible(can("rh.medical.edit"))
                 btn_edit.clicked.connect(lambda checked, v=visite: self._edit_visite(v))
                 btn_layout_inner.addWidget(btn_edit)
 
                 btn_del = EmacButton("Suppr.", variant="ghost")
                 btn_del.setFixedHeight(28)
+                btn_del.setVisible(can("rh.medical.edit"))
                 btn_del.clicked.connect(lambda checked, v=visite: self._delete_visite(v))
                 btn_layout_inner.addWidget(btn_del)
 
@@ -2467,6 +2483,7 @@ class GestionRHDialog(QDialog):
         card_accidents = EmacCard(f"Accidents du travail ({len(accidents)})")
 
         btn_add_accident = EmacButton("+ Nouvel accident", variant="primary")
+        btn_add_accident.setVisible(can("rh.medical.edit"))
         btn_add_accident.clicked.connect(self._add_accident)
         card_accidents.body.addWidget(btn_add_accident, alignment=Qt.AlignLeft)
 
@@ -2494,11 +2511,13 @@ class GestionRHDialog(QDialog):
 
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setFixedHeight(28)
+                btn_edit.setVisible(can("rh.medical.edit"))
                 btn_edit.clicked.connect(lambda checked, a=acc: self._edit_accident(a))
                 btn_layout_inner.addWidget(btn_edit)
 
                 btn_del = EmacButton("Suppr.", variant="ghost")
                 btn_del.setFixedHeight(28)
+                btn_del.setVisible(can("rh.medical.edit"))
                 btn_del.clicked.connect(lambda checked, a=acc: self._delete_accident(a))
                 btn_layout_inner.addWidget(btn_del)
 
@@ -2608,6 +2627,7 @@ class GestionRHDialog(QDialog):
         card_sanctions = EmacCard(f"Sanctions disciplinaires ({len(sanctions_list)})")
 
         btn_add_sanction = EmacButton("+ Nouvelle sanction", variant="primary")
+        btn_add_sanction.setVisible(can("rh.vie_salarie.edit"))
         btn_add_sanction.clicked.connect(self._add_sanction)
         card_sanctions.body.addWidget(btn_add_sanction, alignment=Qt.AlignLeft)
 
@@ -2637,11 +2657,13 @@ class GestionRHDialog(QDialog):
 
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setFixedHeight(28)
+                btn_edit.setVisible(can("rh.vie_salarie.edit"))
                 btn_edit.clicked.connect(lambda checked, s=sanc: self._edit_sanction(s))
                 btn_layout_inner.addWidget(btn_edit)
 
                 btn_del = EmacButton("Suppr.", variant="ghost")
                 btn_del.setFixedHeight(28)
+                btn_del.setVisible(can("rh.vie_salarie.edit"))
                 btn_del.clicked.connect(lambda checked, s=sanc: self._delete_sanction(s))
                 btn_layout_inner.addWidget(btn_del)
 
@@ -2662,10 +2684,12 @@ class GestionRHDialog(QDialog):
 
         btn_layout_ctrl = QHBoxLayout()
         btn_add_alcool = EmacButton("+ Contrôle alcool", variant="primary")
+        btn_add_alcool.setVisible(can("rh.vie_salarie.edit"))
         btn_add_alcool.clicked.connect(self._add_controle_alcool)
         btn_layout_ctrl.addWidget(btn_add_alcool)
 
         btn_add_salivaire = EmacButton("+ Test salivaire", variant="primary")
+        btn_add_salivaire.setVisible(can("rh.vie_salarie.edit"))
         btn_add_salivaire.clicked.connect(self._add_test_salivaire)
         btn_layout_ctrl.addWidget(btn_add_salivaire)
         btn_layout_ctrl.addStretch()
@@ -2716,6 +2740,7 @@ class GestionRHDialog(QDialog):
         card_entretiens = EmacCard(f"Entretiens professionnels ({len(entretiens_liste)})")
 
         btn_add_entretien = EmacButton("+ Nouvel entretien", variant="primary")
+        btn_add_entretien.setVisible(can("rh.vie_salarie.edit"))
         btn_add_entretien.clicked.connect(self._add_entretien)
         card_entretiens.body.addWidget(btn_add_entretien, alignment=Qt.AlignLeft)
 
@@ -2742,11 +2767,13 @@ class GestionRHDialog(QDialog):
 
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setFixedHeight(28)
+                btn_edit.setVisible(can("rh.vie_salarie.edit"))
                 btn_edit.clicked.connect(lambda checked, e=ent: self._edit_entretien(e))
                 btn_layout_inner.addWidget(btn_edit)
 
                 btn_del = EmacButton("Suppr.", variant="ghost")
                 btn_del.setFixedHeight(28)
+                btn_del.setVisible(can("rh.vie_salarie.edit"))
                 btn_del.clicked.connect(lambda checked, e=ent: self._delete_entretien(e))
                 btn_layout_inner.addWidget(btn_del)
 
@@ -2922,6 +2949,7 @@ class GestionRHDialog(QDialog):
         btn_layout.setContentsMargins(0, 0, 0, 10)
 
         btn_ajouter = EmacButton("+ Ajouter un document", variant="primary")
+        btn_ajouter.setVisible(can("rh.documents.edit"))
         btn_ajouter.clicked.connect(self._ajouter_document)
         btn_layout.addWidget(btn_ajouter)
 
@@ -2975,6 +3003,7 @@ class GestionRHDialog(QDialog):
 
                 # Bouton Archiver
                 btn_archiver = QPushButton("📦 Archiver")
+                btn_archiver.setVisible(can("rh.documents.edit"))
                 btn_archiver.setCursor(Qt.PointingHandCursor)
                 btn_archiver.setStyleSheet("""
                     QPushButton {
@@ -3150,6 +3179,7 @@ class GestionRHDialog(QDialog):
 
                 # Bouton Restaurer
                 btn_restaurer = QPushButton("🔄 Restaurer")
+                btn_restaurer.setVisible(can("rh.documents.edit"))
                 btn_restaurer.setCursor(Qt.PointingHandCursor)
                 btn_restaurer.setStyleSheet("""
                     QPushButton {
@@ -3269,6 +3299,7 @@ class GestionRHDialog(QDialog):
             }
         """)
         btn_bulk.clicked.connect(self._open_bulk_assignment_dialog)
+        btn_bulk.setVisible(can("rh.personnel.edit"))
         layout.addWidget(btn_bulk)
 
         layout.addStretch()
@@ -3402,6 +3433,7 @@ class GestionRHWidget(QWidget):
             }
         """)
         btn_bulk.clicked.connect(self._open_bulk_assignment_dialog)
+        btn_bulk.setVisible(can("rh.personnel.edit"))
         header_layout.addWidget(btn_bulk)
 
         layout.addLayout(header_layout)
@@ -3887,6 +3919,7 @@ class GestionRHWidget(QWidget):
         header_layout = QHBoxLayout()
         header_layout.addStretch()
         btn_edit = EmacButton("Modifier", variant="ghost")
+        btn_edit.setVisible(can("rh.personnel.edit"))
         btn_edit.clicked.connect(self._edit_infos_generales)
         header_layout.addWidget(btn_edit)
         card.body.addLayout(header_layout)
@@ -3978,6 +4011,7 @@ class GestionRHWidget(QWidget):
         actions_layout = QHBoxLayout()
         actions_layout.addStretch()
         btn_add = EmacButton("+ Nouveau contrat", variant="primary")
+        btn_add.setVisible(can("rh.contrats.edit"))
         btn_add.clicked.connect(self._add_contrat)
         actions_layout.addWidget(btn_add)
         layout.addLayout(actions_layout)
@@ -4003,6 +4037,7 @@ class GestionRHWidget(QWidget):
             header = QHBoxLayout()
             header.addStretch()
             btn_edit = EmacButton("Modifier", variant="ghost")
+            btn_edit.setVisible(can("rh.contrats.edit"))
             btn_edit.clicked.connect(lambda: self._edit_contrat(contrat))
             header.addWidget(btn_edit)
             card.body.addLayout(header)
@@ -4119,6 +4154,7 @@ class GestionRHWidget(QWidget):
 
         # Bouton ajouter en haut
         btn_add = EmacButton("+ Nouvelle déclaration", variant="primary")
+        btn_add.setVisible(can("rh.declarations.edit"))
         btn_add.clicked.connect(self._add_declaration)
         layout.addWidget(btn_add, alignment=Qt.AlignLeft)
 
@@ -4157,9 +4193,11 @@ class GestionRHWidget(QWidget):
                 row.addWidget(QLabel(info_text))
                 row.addStretch()
                 btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setVisible(can("rh.declarations.edit"))
                 btn_edit.clicked.connect(lambda checked, d=decl: self._edit_declaration(d))
                 row.addWidget(btn_edit)
                 btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete.setVisible(can("rh.declarations.edit"))
                 btn_delete.clicked.connect(lambda checked, d=decl: self._delete_declaration(d))
                 row.addWidget(btn_delete)
                 card.body.addLayout(row)
@@ -4178,6 +4216,7 @@ class GestionRHWidget(QWidget):
 
         # Bouton ajouter en haut
         btn_add = EmacButton("+ Nouvelle compétence", variant="primary")
+        btn_add.setVisible(can("rh.competences.edit"))
         btn_add.clicked.connect(self._add_competence)
         layout.addWidget(btn_add, alignment=Qt.AlignLeft)
 
@@ -4285,10 +4324,12 @@ class GestionRHWidget(QWidget):
 
                 # Boutons
                 btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setVisible(can("rh.competences.edit"))
                 btn_edit.clicked.connect(lambda checked, c=comp: self._edit_competence(c))
                 row.addWidget(btn_edit)
 
                 btn_delete = EmacButton("Retirer", variant="ghost")
+                btn_delete.setVisible(can("rh.competences.delete"))
                 btn_delete.clicked.connect(lambda checked, c=comp: self._delete_competence(c))
                 row.addWidget(btn_delete)
 
@@ -4347,6 +4388,7 @@ class GestionRHWidget(QWidget):
 
         # Bouton ajouter en haut
         btn_add = EmacButton("+ Nouvelle formation", variant="primary")
+        btn_add.setVisible(can("rh.formations.edit"))
         btn_add.clicked.connect(self._add_formation)
         layout.addWidget(btn_add, alignment=Qt.AlignLeft)
 
@@ -4391,9 +4433,11 @@ class GestionRHWidget(QWidget):
                 row.addWidget(QLabel(info_text))
                 row.addStretch()
                 btn_edit = EmacButton("Modifier", variant="outline")
+                btn_edit.setVisible(can("rh.formations.edit"))
                 btn_edit.clicked.connect(lambda checked, f=form: self._edit_formation(f))
                 row.addWidget(btn_edit)
                 btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete.setVisible(can("rh.formations.delete"))
                 btn_delete.clicked.connect(lambda checked, f=form: self._delete_formation(f))
                 row.addWidget(btn_delete)
                 card_list.body.addLayout(row)
@@ -4518,6 +4562,7 @@ class GestionRHWidget(QWidget):
         card_visites = EmacCard(f"Visites médicales ({len(visites)})")
 
         btn_add_visite = EmacButton("+ Nouvelle visite", variant="primary")
+        btn_add_visite.setVisible(can("rh.medical.edit"))
         btn_add_visite.clicked.connect(self._add_visite)
         card_visites.body.addWidget(btn_add_visite, alignment=Qt.AlignLeft)
 
@@ -4545,11 +4590,13 @@ class GestionRHWidget(QWidget):
 
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setFixedHeight(28)
+                btn_edit.setVisible(can("rh.medical.edit"))
                 btn_edit.clicked.connect(lambda checked, v=visite: self._edit_visite(v))
                 btn_layout_inner.addWidget(btn_edit)
 
                 btn_del = EmacButton("Suppr.", variant="ghost")
                 btn_del.setFixedHeight(28)
+                btn_del.setVisible(can("rh.medical.edit"))
                 btn_del.clicked.connect(lambda checked, v=visite: self._delete_visite(v))
                 btn_layout_inner.addWidget(btn_del)
 
@@ -4566,6 +4613,7 @@ class GestionRHWidget(QWidget):
         card_accidents = EmacCard(f"Accidents du travail ({len(accidents)})")
 
         btn_add_accident = EmacButton("+ Nouvel accident", variant="primary")
+        btn_add_accident.setVisible(can("rh.medical.edit"))
         btn_add_accident.clicked.connect(self._add_accident)
         card_accidents.body.addWidget(btn_add_accident, alignment=Qt.AlignLeft)
 
@@ -4593,11 +4641,13 @@ class GestionRHWidget(QWidget):
 
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setFixedHeight(28)
+                btn_edit.setVisible(can("rh.medical.edit"))
                 btn_edit.clicked.connect(lambda checked, a=acc: self._edit_accident(a))
                 btn_layout_inner.addWidget(btn_edit)
 
                 btn_del = EmacButton("Suppr.", variant="ghost")
                 btn_del.setFixedHeight(28)
+                btn_del.setVisible(can("rh.medical.edit"))
                 btn_del.clicked.connect(lambda checked, a=acc: self._delete_accident(a))
                 btn_layout_inner.addWidget(btn_del)
 
@@ -4707,6 +4757,7 @@ class GestionRHWidget(QWidget):
         card_sanctions = EmacCard(f"Sanctions disciplinaires ({len(sanctions_list)})")
 
         btn_add_sanction = EmacButton("+ Nouvelle sanction", variant="primary")
+        btn_add_sanction.setVisible(can("rh.vie_salarie.edit"))
         btn_add_sanction.clicked.connect(self._add_sanction)
         card_sanctions.body.addWidget(btn_add_sanction, alignment=Qt.AlignLeft)
 
@@ -4736,11 +4787,13 @@ class GestionRHWidget(QWidget):
 
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setFixedHeight(28)
+                btn_edit.setVisible(can("rh.vie_salarie.edit"))
                 btn_edit.clicked.connect(lambda checked, s=sanc: self._edit_sanction(s))
                 btn_layout_inner.addWidget(btn_edit)
 
                 btn_del = EmacButton("Suppr.", variant="ghost")
                 btn_del.setFixedHeight(28)
+                btn_del.setVisible(can("rh.vie_salarie.edit"))
                 btn_del.clicked.connect(lambda checked, s=sanc: self._delete_sanction(s))
                 btn_layout_inner.addWidget(btn_del)
 
@@ -4761,10 +4814,12 @@ class GestionRHWidget(QWidget):
 
         btn_layout_ctrl = QHBoxLayout()
         btn_add_alcool = EmacButton("+ Contrôle alcool", variant="primary")
+        btn_add_alcool.setVisible(can("rh.vie_salarie.edit"))
         btn_add_alcool.clicked.connect(self._add_controle_alcool)
         btn_layout_ctrl.addWidget(btn_add_alcool)
 
         btn_add_salivaire = EmacButton("+ Test salivaire", variant="primary")
+        btn_add_salivaire.setVisible(can("rh.vie_salarie.edit"))
         btn_add_salivaire.clicked.connect(self._add_test_salivaire)
         btn_layout_ctrl.addWidget(btn_add_salivaire)
         btn_layout_ctrl.addStretch()
@@ -4815,6 +4870,7 @@ class GestionRHWidget(QWidget):
         card_entretiens = EmacCard(f"Entretiens professionnels ({len(entretiens_liste)})")
 
         btn_add_entretien = EmacButton("+ Nouvel entretien", variant="primary")
+        btn_add_entretien.setVisible(can("rh.vie_salarie.edit"))
         btn_add_entretien.clicked.connect(self._add_entretien)
         card_entretiens.body.addWidget(btn_add_entretien, alignment=Qt.AlignLeft)
 
@@ -4841,11 +4897,13 @@ class GestionRHWidget(QWidget):
 
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setFixedHeight(28)
+                btn_edit.setVisible(can("rh.vie_salarie.edit"))
                 btn_edit.clicked.connect(lambda checked, e=ent: self._edit_entretien(e))
                 btn_layout_inner.addWidget(btn_edit)
 
                 btn_del = EmacButton("Suppr.", variant="ghost")
                 btn_del.setFixedHeight(28)
+                btn_del.setVisible(can("rh.vie_salarie.edit"))
                 btn_del.clicked.connect(lambda checked, e=ent: self._delete_entretien(e))
                 btn_layout_inner.addWidget(btn_del)
 
@@ -5021,6 +5079,7 @@ class GestionRHWidget(QWidget):
         btn_layout.setContentsMargins(0, 0, 0, 10)
 
         btn_ajouter = EmacButton("+ Ajouter un document", variant="primary")
+        btn_ajouter.setVisible(can("rh.documents.edit"))
         btn_ajouter.clicked.connect(self._ajouter_document)
         btn_layout.addWidget(btn_ajouter)
 
@@ -5074,6 +5133,7 @@ class GestionRHWidget(QWidget):
 
                 # Bouton Archiver
                 btn_archiver = QPushButton("📦 Archiver")
+                btn_archiver.setVisible(can("rh.documents.edit"))
                 btn_archiver.setCursor(Qt.PointingHandCursor)
                 btn_archiver.setStyleSheet("""
                     QPushButton {
@@ -5249,6 +5309,7 @@ class GestionRHWidget(QWidget):
 
                 # Bouton Restaurer
                 btn_restaurer = QPushButton("🔄 Restaurer")
+                btn_restaurer.setVisible(can("rh.documents.edit"))
                 btn_restaurer.setCursor(Qt.PointingHandCursor)
                 btn_restaurer.setStyleSheet("""
                     QPushButton {

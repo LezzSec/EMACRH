@@ -313,6 +313,7 @@ class MainWindow(QMainWindow):
             "personnel_ecriture": can('rh.personnel.edit'),
             "personnel_lecture": can('rh.personnel.view'),
             "postes_ecriture": can('production.postes.edit'),
+            "contrats_lecture": can('rh.contrats.view'),
             "contrats_ecriture": can('rh.contrats.edit'),
             "documentsrh_lecture": can('rh.documents.view'),
             "documentsrh_ecriture": can('rh.documents.edit'),  # Pour alertes RH
@@ -508,14 +509,14 @@ class MainWindow(QMainWindow):
             add_btn("Ajouter du personnel", self.show_manage_operator)
         if perms.get("postes_ecriture"):
             add_btn("Création/Suppression de poste", self.show_poste_form)
-        if perms.get("contrats_ecriture") or perms.get("documentsrh_lecture"):
+        if perms.get("contrats_ecriture") or perms.get("contrats_lecture") or perms.get("documentsrh_lecture"):
             add_btn("Gestion RH", self.show_contract_management)
-        if perms.get("contrats_lecture") or perms.get("documentsrh_lecture"):
+        if perms.get("contrats_ecriture") or perms.get("documentsrh_ecriture"):
             add_btn("Alertes RH", self.show_alertes_rh)
         if perms.get("planning_lecture"):
             add_btn("Planning", self.show_regularisation)
         if perms.get("documentsrh_lecture"):
-            add_btn("Documents Templates", self.show_gestion_templates)
+            add_btn("Documents", self.show_gestion_templates)
         if perms.get("is_admin"):
             add_btn("Historique", self.show_historique)
             drawer_layout.addSpacing(10)

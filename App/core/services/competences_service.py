@@ -19,6 +19,7 @@ from typing import List, Dict, Optional, Tuple, Any
 
 from core.db.query_executor import QueryExecutor
 from core.services.logger import log_hist
+from core.services.permission_manager import require
 from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -134,6 +135,7 @@ def create_competence(
     Returns:
         Tuple (succès, message, id_créé)
     """
+    require('rh.competences.edit')
     if not code or not code.strip():
         return False, "Le code est obligatoire", None
     if not libelle or not libelle.strip():
@@ -174,6 +176,7 @@ def update_competence(competence_id: int, **kwargs) -> Tuple[bool, str]:
     Returns:
         Tuple (succès, message)
     """
+    require('rh.competences.edit')
     updates = {k: v for k, v in kwargs.items() if k in ALLOWED_CATALOGUE_FIELDS}
 
     if not updates:
@@ -215,6 +218,7 @@ def delete_competence(competence_id: int) -> Tuple[bool, str]:
     Returns:
         Tuple (succès, message)
     """
+    require('rh.competences.delete')
     try:
         # Vérifier si des assignations existent
         count = QueryExecutor.fetch_scalar(
@@ -366,6 +370,7 @@ def assign_competence(
     Returns:
         Tuple (succès, message, id_assignation)
     """
+    require('rh.competences.edit')
     try:
         # Vérifier que la compétence existe
         comp = QueryExecutor.fetch_one(
@@ -418,6 +423,7 @@ def update_assignment(assignment_id: int, **kwargs) -> Tuple[bool, str]:
     Returns:
         Tuple (succès, message)
     """
+    require('rh.competences.edit')
     updates = {k: v for k, v in kwargs.items() if k in ALLOWED_ASSIGNMENT_FIELDS}
 
     if not updates:
@@ -458,6 +464,7 @@ def remove_assignment(assignment_id: int) -> Tuple[bool, str]:
     Returns:
         Tuple (succès, message)
     """
+    require('rh.competences.delete')
     try:
         # Récupérer les infos pour le log
         info = QueryExecutor.fetch_one(

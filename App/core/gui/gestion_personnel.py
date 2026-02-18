@@ -19,6 +19,7 @@ from core.services.logger import log_hist
 from core.gui.historique_personnel import HistoriquePersonnelTab
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.services.auth_service import get_current_user
+from core.services.permission_manager import require
 
 import datetime as dt
 
@@ -28,9 +29,10 @@ class DetailOperateurDialog(QDialog):
     
     operateur_status_changed = pyqtSignal(int)  # Signal émis si changement de statut
     
-    def __init__(self, operateur_id, nom, prenom, statut, parent=None):
+    def __init__(self, operateur_id, nom, prenom, statut, parent=None, is_production=True):
         super().__init__(parent)
         self.operateur_id = operateur_id
+        self.is_production = is_production
         self.current_statut = statut.upper()
         self.date_entree = self._load_date_entree()  # Charger la date d'entrée
         self.setWindowTitle(f"Détails - {nom} {prenom}")
@@ -103,9 +105,10 @@ class DetailOperateurDialog(QDialog):
         stats_box.addWidget(self.stat_total)
         poly_layout.addLayout(stats_box)
         
-        tabs.addTab(poly_tab, "Polyvalences")
+        if self.is_production:
+            tabs.addTab(poly_tab, "Polyvalences")
 
-        # Onglet 2 : Infos Complémentaires (disposition en cartes)
+        # Onglet Infos Complémentaires (disposition en cartes)
         infos_tab = QWidget()
         infos_layout = QVBoxLayout(infos_tab)
         infos_layout.setSpacing(0)
@@ -148,14 +151,15 @@ class DetailOperateurDialog(QDialog):
 
         tabs.addTab(infos_tab, "Infos Complémentaires")
 
-        # Onglet 3 : Historique des modifications (nouveau widget complet)
-        self.history_tab = HistoriquePersonnelTab(
-            operateur_id=self.operateur_id,
-            operateur_nom=nom,
-            operateur_prenom=prenom,
-            parent=self
-        )
-        tabs.addTab(self.history_tab, "Historique")
+        # Onglet Historique polyvalences (production uniquement)
+        if self.is_production:
+            self.history_tab = HistoriquePersonnelTab(
+                operateur_id=self.operateur_id,
+                operateur_nom=nom,
+                operateur_prenom=prenom,
+                parent=self
+            )
+            tabs.addTab(self.history_tab, "Historique Polyvalences")
 
         self.tabs_widget = tabs
         layout.addWidget(tabs)
@@ -248,9 +252,10 @@ class DetailOperateurDialog(QDialog):
     
     def load_data(self):
         """Charge toutes les données de l'opérateur."""
-        self.load_polyvalences()
+        if self.is_production:
+            self.load_polyvalences()
         self.load_additional_infos()
-        # L'historique se charge automatiquement via le widget HistoriquePersonnelTab
+        # L'historique polyvalences se charge automatiquement via HistoriquePersonnelTab
 
     
     
@@ -325,7 +330,7 @@ class DetailOperateurDialog(QDialog):
                 contract_items,
                 icon_color="#f59e0b",
                 icon="📋",
-                on_click=self._open_contract_management
+                on_click=self._open_contract_management if contr else None
             )
 
             # -------- Carte Formations --------
@@ -351,7 +356,8 @@ class DetailOperateurDialog(QDialog):
                 "Formations",
                 formation_items,
                 icon_color="#10b981",
-                icon="🎓"
+                icon="🎓",
+                on_click=self._open_formation_rh if formations else None
             )
 
             # -------- Carte Validités --------
@@ -502,11 +508,25 @@ class DetailOperateurDialog(QDialog):
         self.infos_cards_layout.addWidget(card)
 
     def _open_contract_management(self):
-        """Ouvre la fenêtre de gestion RH des contrats pour cet opérateur."""
-        from core.gui.contract_management import ContractManagementDialog
-        dialog = ContractManagementDialog(self, operateur_id=self.operateur_id)
+        """Ouvre la Gestion RH directement sur l'onglet Contrat pour cet opérateur."""
+        from core.gui.gestion_rh import GestionRHDialog
+        from core.services.rh_service import DomaineRH
+        dialog = GestionRHDialog(self)
+        dialog._selectionner_operateur_par_id(self.operateur_id)
+        dialog._on_domaine_change(DomaineRH.CONTRAT.value)
         dialog.exec_()
-        # Recharger les infos après fermeture (au cas où un contrat a été modifié)
+        # Recharger les infos après fermeture
+        self.load_additional_infos()
+
+    def _open_formation_rh(self):
+        """Ouvre la Gestion RH directement sur l'onglet Formation pour cet opérateur."""
+        from core.gui.gestion_rh import GestionRHDialog
+        from core.services.rh_service import DomaineRH
+        dialog = GestionRHDialog(self)
+        dialog._selectionner_operateur_par_id(self.operateur_id)
+        dialog._on_domaine_change(DomaineRH.FORMATION.value)
+        dialog.exec_()
+        # Recharger les infos après fermeture
         self.load_additional_infos()
 
     def _format_column_name(self, col_name: str) -> str:
@@ -634,9 +654,15 @@ class DetailOperateurDialog(QDialog):
 
     def toggle_operateur_status(self):
         """Change le statut de l'opérateur (ACTIF <-> INACTIF)."""
+        try:
+            require('rh.personnel.edit')
+        except PermissionError:
+            QMessageBox.warning(self, "Accès refusé", "Vous n'avez pas les droits pour modifier le statut du personnel.")
+            return
+
         new_statut = "INACTIF" if self.current_statut == "ACTIF" else "ACTIF"
         action = "désactiver" if new_statut == "INACTIF" else "réactiver"
-        
+
         reply = QMessageBox.question(
             self, f"Confirmer {action}",
             f"Êtes-vous sûr de vouloir {action} cet opérateur ?\n\n"
@@ -1280,7 +1306,7 @@ class GestionPersonnelDialog(QDialog):
         header.setAlignment(Qt.AlignCenter)
         layout.addWidget(header)
 
-        subtitle = QLabel("Vue complète de tous les opérateurs")
+        subtitle = QLabel("Vue complète du personnel")
         subtitle.setStyleSheet("color: #6b7280; font-style: italic;")
         subtitle.setAlignment(Qt.AlignCenter)
         layout.addWidget(subtitle)
@@ -1325,13 +1351,8 @@ class GestionPersonnelDialog(QDialog):
             current_user.get('role_nom') == 'gestion_production'
         )
         self.production_only_check.setChecked(is_gestion_production)
-        self.production_only_check.toggled.connect(self.filter_table)
+        self.production_only_check.toggled.connect(self._on_production_toggled)
         statut_layout.addWidget(self.production_only_check)
-
-        self.show_stats_check = QCheckBox("Afficher les statistiques")
-        self.show_stats_check.setChecked(True)
-        self.show_stats_check.toggled.connect(self.toggle_stats_columns)
-        statut_layout.addWidget(self.show_stats_check)
 
         self.refresh_btn = QPushButton("Actualiser")
         self.refresh_btn.clicked.connect(self.load_data)
@@ -1344,12 +1365,16 @@ class GestionPersonnelDialog(QDialog):
         
         # === Table principale ===
         self.table = QTableWidget()
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(10)
         self.table.setHorizontalHeaderLabels([
-            "Nom", "Prénom", "Statut", "Nb Postes", "Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"
+            "Nom", "Prénom", "Matricule", "Type Contrat", "Statut",
+            "Nb Postes", "Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"
         ])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        # Masquer les colonnes polyvalence par défaut (visibles seulement en mode production)
+        for col in range(5, 10):
+            self.table.setColumnHidden(col, True)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.doubleClicked.connect(self.open_detail_dialog)
@@ -1361,7 +1386,7 @@ class GestionPersonnelDialog(QDialog):
         stats_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(stats_label)
         
-        self.total_label = QLabel("Total : 0 opérateur(s)")
+        self.total_label = QLabel("Total : 0 personne(s)")
         self.total_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
         self.total_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.total_label)
@@ -1399,6 +1424,11 @@ class GestionPersonnelDialog(QDialog):
         # Ajouter le widget de contenu au layout principal
         main_layout.addWidget(content_widget)
 
+        # Appliquer l'état initial des colonnes polyvalence
+        if is_gestion_production:
+            for col in range(5, 10):
+                self.table.setColumnHidden(col, False)
+
         # Charger les données
         self.all_data = []
         self.load_data()
@@ -1414,7 +1444,9 @@ class GestionPersonnelDialog(QDialog):
                 o.nom,
                 o.prenom,
                 o.matricule,
+                o.numposte,
                 UPPER(o.statut) AS statut,
+                ct.type_contrat,
                 COUNT(p.id) AS nb_postes,
                 SUM(CASE WHEN p.niveau = 1 THEN 1 ELSE 0 END) AS n1,
                 SUM(CASE WHEN p.niveau = 2 THEN 1 ELSE 0 END) AS n2,
@@ -1422,7 +1454,8 @@ class GestionPersonnelDialog(QDialog):
                 SUM(CASE WHEN p.niveau = 4 THEN 1 ELSE 0 END) AS n4
             FROM personnel o
             LEFT JOIN polyvalence p ON o.id = p.operateur_id
-            GROUP BY o.id, o.nom, o.prenom, o.matricule, o.statut
+            LEFT JOIN contrat ct ON ct.operateur_id = o.id AND ct.actif = 1
+            GROUP BY o.id, o.nom, o.prenom, o.matricule, o.numposte, o.statut, ct.type_contrat
             ORDER BY o.nom, o.prenom;
             """, dictionary=True)
 
@@ -1466,10 +1499,10 @@ class GestionPersonnelDialog(QDialog):
             nom = data.get("nom", "").lower()
             prenom = data.get("prenom", "").lower()
             statut = data.get("statut", "").upper()
-            matricule = data.get("matricule") or ""
+            numposte = data.get("numposte") or ""
 
             # Filtre production uniquement
-            if production_only and not matricule.strip():
+            if production_only and numposte != "Production":
                 continue
 
             # Filtre de recherche
@@ -1479,19 +1512,26 @@ class GestionPersonnelDialog(QDialog):
             # Filtre de statut
             if statut_filter and statut != statut_filter:
                 continue
-            
+
             row = self.table.rowCount()
             self.table.insertRow(row)
-            
-            # Stocker l'ID et le statut en UserRole
+
+            # Col 0 : Nom (avec ID et statut en UserRole)
             nom_item = QTableWidgetItem(data.get("nom", ""))
             nom_item.setData(Qt.UserRole, data.get("id"))
             nom_item.setData(Qt.UserRole + 1, statut)
             self.table.setItem(row, 0, nom_item)
-            
+
+            # Col 1 : Prénom
             self.table.setItem(row, 1, QTableWidgetItem(data.get("prenom", "")))
-            
-            # Colonne Statut avec couleur
+
+            # Col 2 : Matricule
+            self.table.setItem(row, 2, QTableWidgetItem(data.get("matricule") or "-"))
+
+            # Col 3 : Type Contrat
+            self.table.setItem(row, 3, QTableWidgetItem(data.get("type_contrat") or "-"))
+
+            # Col 4 : Statut avec couleur
             statut_item = QTableWidgetItem(statut)
             statut_item.setTextAlignment(Qt.AlignCenter)
             if statut == "ACTIF":
@@ -1502,47 +1542,49 @@ class GestionPersonnelDialog(QDialog):
                 statut_item.setBackground(QColor("#fee2e2"))
                 statut_item.setForeground(QColor("#991b1b"))
                 count_inactifs += 1
-            self.table.setItem(row, 2, statut_item)
-            
-            self.table.setItem(row, 3, QTableWidgetItem(str(data.get("nb_postes", 0))))
-            
-            # Colonnes stats avec couleurs
+            self.table.setItem(row, 4, statut_item)
+
+            # Col 5 : Nb Postes
+            self.table.setItem(row, 5, QTableWidgetItem(str(data.get("nb_postes", 0))))
+
+            # Col 6-9 : Stats polyvalence avec couleurs
             n1_item = QTableWidgetItem(str(data.get("n1", 0)))
             n1_item.setBackground(QColor("#fef2f2"))
             n1_item.setForeground(QColor("#dc2626"))
             n1_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, 4, n1_item)
-            
+            self.table.setItem(row, 6, n1_item)
+
             n2_item = QTableWidgetItem(str(data.get("n2", 0)))
             n2_item.setBackground(QColor("#fffbeb"))
             n2_item.setForeground(QColor("#d97706"))
             n2_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, 5, n2_item)
-            
+            self.table.setItem(row, 7, n2_item)
+
             n3_item = QTableWidgetItem(str(data.get("n3", 0)))
             n3_item.setBackground(QColor("#f0fdf4"))
             n3_item.setForeground(QColor("#059669"))
             n3_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, 6, n3_item)
-            
+            self.table.setItem(row, 8, n3_item)
+
             n4_item = QTableWidgetItem(str(data.get("n4", 0)))
             n4_item.setBackground(QColor("#eff6ff"))
             n4_item.setForeground(QColor("#2563eb"))
             n4_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, 7, n4_item)
-            
+            self.table.setItem(row, 9, n4_item)
+
             count += 1
         
         # Mise à jour du label total
-        total_text = f"Total : {count} opérateur(s)"
+        total_text = f"Total : {count} personne(s)"
         if self.radio_tous.isChecked():
             total_text += f" ({count_actifs} actifs, {count_inactifs} inactifs)"
         self.total_label.setText(total_text)
-    
-    def toggle_stats_columns(self, checked):
-        """Affiche/masque les colonnes de statistiques."""
-        for col in range(3, 8):  # Colonnes Nb Postes, N1, N2, N3, N4
+
+    def _on_production_toggled(self, checked):
+        """Bascule les colonnes polyvalence et re-filtre quand la checkbox Production change."""
+        for col in range(5, 10):
             self.table.setColumnHidden(col, not checked)
+        self.filter_table()
     
     def open_detail_dialog(self):
         """Ouvre la fenêtre de détails pour l'opérateur sélectionné."""
@@ -1554,8 +1596,15 @@ class GestionPersonnelDialog(QDialog):
         statut = selected[0].data(Qt.UserRole + 1)
         nom = selected[0].text()
         prenom = selected[1].text()
-        
-        detail_dialog = DetailOperateurDialog(operateur_id, nom, prenom, statut, self)
+
+        # Déterminer si l'opérateur est en production
+        is_production = False
+        for data in self.all_data:
+            if data.get("id") == operateur_id:
+                is_production = (data.get("numposte") or "") == "Production"
+                break
+
+        detail_dialog = DetailOperateurDialog(operateur_id, nom, prenom, statut, self, is_production=is_production)
         detail_dialog.operateur_status_changed.connect(self.on_operateur_status_changed)
         detail_dialog.exec_()
     
@@ -1604,19 +1653,22 @@ class GestionPersonnelDialog(QDialog):
             ws = wb.active
             ws.title = "Personnel"
             
-            # En-têtes
-            headers = ["Nom", "Prénom", "Statut", "Nb Postes", "Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"]
+            # En-têtes selon le mode
+            production_only = self.production_only_check.isChecked()
+            headers = ["Nom", "Prénom", "Matricule", "Type Contrat", "Statut"]
+            if production_only:
+                headers += ["Nb Postes", "Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"]
             ws.append(headers)
-            
+
             # Style en-têtes
             header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
             header_font = Font(bold=True, color="FFFFFF")
-            
+
             for cell in ws[1]:
                 cell.fill = header_fill
                 cell.font = header_font
                 cell.alignment = Alignment(horizontal="center")
-            
+
             # Données (filtrées selon la vue actuelle)
             search_text = self.search_input.text().lower()
             statut_filter = None
@@ -1624,36 +1676,41 @@ class GestionPersonnelDialog(QDialog):
                 statut_filter = "ACTIF"
             elif self.radio_inactifs.isChecked():
                 statut_filter = "INACTIF"
-            production_only = self.production_only_check.isChecked()
 
             for data in self.all_data:
                 nom = data.get("nom", "").lower()
                 prenom = data.get("prenom", "").lower()
                 statut = data.get("statut", "").upper()
-                matricule = data.get("matricule") or ""
+                numposte = data.get("numposte") or ""
 
                 # Appliquer les mêmes filtres que la table
-                if production_only and not matricule.strip():
+                if production_only and numposte != "Production":
                     continue
                 if search_text and search_text not in nom and search_text not in prenom:
                     continue
                 if statut_filter and statut != statut_filter:
                     continue
-                
-                ws.append([
+
+                row_data = [
                     data.get("nom", ""),
                     data.get("prenom", ""),
+                    data.get("matricule") or "-",
+                    data.get("type_contrat") or "-",
                     statut,
-                    data.get("nb_postes", 0),
-                    data.get("n1", 0),
-                    data.get("n2", 0),
-                    data.get("n3", 0),
-                    data.get("n4", 0)
-                ])
-                
-                # Colorer la colonne statut
+                ]
+                if production_only:
+                    row_data += [
+                        data.get("nb_postes", 0),
+                        data.get("n1", 0),
+                        data.get("n2", 0),
+                        data.get("n3", 0),
+                        data.get("n4", 0),
+                    ]
+                ws.append(row_data)
+
+                # Colorer la colonne statut (colonne 5)
                 row_idx = ws.max_row
-                statut_cell = ws.cell(row=row_idx, column=3)
+                statut_cell = ws.cell(row=row_idx, column=5)
                 if statut == "ACTIF":
                     statut_cell.fill = PatternFill(start_color="D1FAE5", end_color="D1FAE5", fill_type="solid")
                     statut_cell.font = Font(color="065F46", bold=True)

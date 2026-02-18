@@ -18,6 +18,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from decimal import Decimal
 
 from core.db.query_executor import QueryExecutor
+from core.services.permission_manager import require
 from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -130,6 +131,7 @@ def get_sanctions(operateur_id: int) -> List[Dict]:
 
 def create_sanction(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """Crée une nouvelle sanction disciplinaire."""
+    require('rh.vie_salarie.edit')
     try:
         sanction_id = QueryExecutor.execute_write(
             """INSERT INTO vie_salarie_sanction (
@@ -155,6 +157,7 @@ def create_sanction(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
 
 def update_sanction(sanction_id: int, data: Dict) -> Tuple[bool, str]:
     """Met à jour une sanction."""
+    require('rh.vie_salarie.edit')
     try:
         QueryExecutor.execute_write(
             """UPDATE vie_salarie_sanction SET
@@ -181,6 +184,7 @@ def update_sanction(sanction_id: int, data: Dict) -> Tuple[bool, str]:
 
 def delete_sanction(sanction_id: int) -> Tuple[bool, str]:
     """Supprime une sanction."""
+    require('rh.vie_salarie.edit')
     try:
         QueryExecutor.execute_write(
             "DELETE FROM vie_salarie_sanction WHERE id = %s",
@@ -218,6 +222,7 @@ def get_controles_alcool(operateur_id: int) -> List[Dict]:
 
 def create_controle_alcool(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """Crée un nouveau contrôle d'alcoolémie."""
+    require('rh.vie_salarie.edit')
     try:
         controle_id = QueryExecutor.execute_write(
             """INSERT INTO vie_salarie_alcoolemie (
@@ -242,6 +247,7 @@ def create_controle_alcool(operateur_id: int, data: Dict) -> Tuple[bool, str, Op
 
 def delete_controle_alcool(controle_id: int) -> Tuple[bool, str]:
     """Supprime un contrôle d'alcoolémie."""
+    require('rh.vie_salarie.edit')
     try:
         QueryExecutor.execute_write(
             "DELETE FROM vie_salarie_alcoolemie WHERE id = %s",
@@ -274,6 +280,7 @@ def get_tests_salivaires(operateur_id: int) -> List[Dict]:
 
 def create_test_salivaire(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """Crée un nouveau test salivaire."""
+    require('rh.vie_salarie.edit')
     try:
         test_id = QueryExecutor.execute_write(
             """INSERT INTO vie_salarie_test_salivaire (
@@ -297,6 +304,7 @@ def create_test_salivaire(operateur_id: int, data: Dict) -> Tuple[bool, str, Opt
 
 def delete_test_salivaire(test_id: int) -> Tuple[bool, str]:
     """Supprime un test salivaire."""
+    require('rh.vie_salarie.edit')
     try:
         QueryExecutor.execute_write(
             "DELETE FROM vie_salarie_test_salivaire WHERE id = %s",
@@ -348,6 +356,7 @@ def get_entretien_detail(entretien_id: int) -> Optional[Dict]:
 
 def create_entretien(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """Crée un nouvel entretien professionnel."""
+    require('rh.vie_salarie.edit')
     try:
         entretien_id = QueryExecutor.execute_write(
             """INSERT INTO vie_salarie_entretien (
@@ -380,6 +389,7 @@ def create_entretien(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional
 
 def update_entretien(entretien_id: int, data: Dict) -> Tuple[bool, str]:
     """Met à jour un entretien professionnel."""
+    require('rh.vie_salarie.edit')
     try:
         QueryExecutor.execute_write(
             """UPDATE vie_salarie_entretien SET
@@ -413,6 +423,7 @@ def update_entretien(entretien_id: int, data: Dict) -> Tuple[bool, str]:
 
 def delete_entretien(entretien_id: int) -> Tuple[bool, str]:
     """Supprime un entretien professionnel."""
+    require('rh.vie_salarie.edit')
     try:
         QueryExecutor.execute_write(
             "DELETE FROM vie_salarie_entretien WHERE id = %s",

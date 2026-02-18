@@ -13,6 +13,7 @@ from core.db.configbd import DatabaseConnection
 from core.db.query_executor import QueryExecutor
 from core.services.matricule_service import generer_prochain_matricule
 from core.gui.emac_ui_kit import show_error_message
+from core.services.permission_manager import require
 from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -340,12 +341,18 @@ class ManageOperatorsDialog(QDialog):
     # --------------------------- Action UI ---------------------------
 
     def add_operator(self):
+        try:
+            require('rh.personnel.create')
+        except PermissionError:
+            QMessageBox.warning(self, "Accès refusé", "Vous n'avez pas les droits pour créer du personnel.")
+            return
+
         # Demander le type de personnel EN PREMIER
         type_personnel, ok = QInputDialog.getItem(
             self,
             "Type de personnel",
             "Quel type de personnel souhaitez-vous ajouter ?",
-            ["Opérateur de Production (avec matricule)", "Autre Personnel (sans matricule)"],
+            ["Opérateur de Production", "Autre Personnel"],
             0,
             False
         )
@@ -411,14 +418,11 @@ class ManageOperatorsDialog(QDialog):
                 if existing_id:
                     operateur_id = int(existing_id)
                 else:
-                    # Générer le matricule si c'est du personnel de production
-                    matricule = None
-                    if is_production:  # Si production, générer un matricule
-                        matricule = generer_prochain_matricule()
+                    # Générer le matricule pour tout le personnel
+                    matricule = generer_prochain_matricule()
 
                     # ✅ SÉCURITÉ: Requêtes SQL avec colonnes hardcodées
-                    # Insérer avec ou sans matricule et statut
-                    if matricule:
+                    if is_production:
                         cursor.execute(
                             "INSERT INTO personnel (`nom`, `prenom`, `statut`, `matricule`, `numposte`) "
                             "VALUES (%s, %s, 'ACTIF', %s, 'Production')",
@@ -426,9 +430,9 @@ class ManageOperatorsDialog(QDialog):
                         )
                     else:
                         cursor.execute(
-                            "INSERT INTO personnel (`nom`, `prenom`, `statut`) "
-                            "VALUES (%s, %s, 'ACTIF')",
-                            (nom, prenom)
+                            "INSERT INTO personnel (`nom`, `prenom`, `statut`, `matricule`) "
+                            "VALUES (%s, %s, 'ACTIF', %s)",
+                            (nom, prenom, matricule)
                         )
 
                     operateur_id = self._get_or_create_operateur_id(cursor, nom, prenom)
@@ -461,8 +465,8 @@ class ManageOperatorsDialog(QDialog):
                         "type": "creation_operateur",
                         "details": f"Création de l'opérateur {prenom} {nom} (Date d'entrée: {self.add_date_entree.date().toString('dd/MM/yyyy')})"
                     }
-                    if matricule:
-                        log_data["matricule"] = matricule
+                    log_data["matricule"] = matricule
+                    if is_production:
                         log_data["numposte"] = "Production"
                         log_data["details"] += f" (matricule: {matricule}, poste: Production)"
 
@@ -533,8 +537,9 @@ class ManageOperatorsDialog(QDialog):
                     QMessageBox.information(
                         self, "Succès",
                         f"Opérateur '{prenom} {nom}' créé (personnel non-production).\n\n"
+                        f"Matricule : {matricule}\n"
                         f"Cet opérateur n'apparaîtra PAS dans les Listes et Grilles\n"
-                        f"car il n'a pas de matricule."
+                        f"car il n'est pas affecté à la production."
                     )
 
             # Reset + notifier pour rafraîchir la liste ailleurs
@@ -551,7 +556,7 @@ class ManageOperatorsDialog(QDialog):
                         'operateur_id': operateur_id,
                         'nom': nom,
                         'prenom': prenom,
-                        'matricule': matricule if is_production else None,
+                        'matricule': matricule,
                         'is_production': is_production
                     }, source='ManageOperatorsDialog.add_operator')
                 except Exception as evt_err:

@@ -345,3 +345,58 @@ def get_rules_summary() -> List[Dict]:
     except Exception as e:
         logger.error(f"Erreur lecture résumé règles: {e}")
         return []
+
+
+def create_rule(
+    event_name: str,
+    template_id: int,
+    execution_mode: str = 'PROPOSED',
+    condition_json: Optional[Dict] = None,
+    priority: int = 0,
+    description: str = None
+) -> tuple:
+    """
+    Crée une nouvelle règle événement → template.
+
+    Args:
+        event_name: Nom de l'événement déclencheur
+        template_id: ID du template à générer
+        execution_mode: 'AUTO', 'PROPOSED', ou 'SILENT'
+        condition_json: Conditions additionnelles (dict ou None)
+        priority: Ordre de traitement (0 = premier)
+        description: Description de la règle
+
+    Returns:
+        (succès, message, rule_id)
+    """
+    if not event_name or not event_name.strip():
+        return False, "L'événement déclencheur est obligatoire", None
+
+    if execution_mode not in ('AUTO', 'PROPOSED', 'SILENT'):
+        return False, f"Mode d'exécution invalide: {execution_mode}", None
+
+    try:
+        condition_str = json.dumps(condition_json) if condition_json else None
+
+        rule_id = QueryExecutor.execute_write(
+            """INSERT INTO document_event_rules
+               (event_name, template_id, execution_mode, condition_json, priority, actif, description)
+               VALUES (%s, %s, %s, %s, %s, TRUE, %s)""",
+            (event_name.strip(), template_id, execution_mode, condition_str, priority, description)
+        )
+
+        from core.services.logger import log_hist
+        log_hist(
+            action="CREATION_REGLE_EVENEMENT",
+            table_name="document_event_rules",
+            record_id=rule_id,
+            description=f"Règle '{event_name}' → template #{template_id} ({execution_mode})"
+        )
+
+        return True, "Règle créée avec succès", rule_id
+
+    except Exception as e:
+        logger.exception(f"Erreur création règle: {e}")
+        if "Duplicate entry" in str(e):
+            return False, "Cette règle existe déjà (même événement + template)", None
+        return False, "Erreur lors de la création de la règle", None

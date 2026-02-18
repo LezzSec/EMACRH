@@ -278,7 +278,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
                     'nom': data.get('nom', ''),
                     'prenom': data.get('prenom', ''),
                     'matricule': data.get('matricule'),
-                    'is_production': bool(data.get('matricule'))
+                    'is_production': data.get('numposte') == 'Production'
                 }, source='PersonnelRepository.create')
 
                 return True, "Employé créé avec succès", new_id
@@ -438,7 +438,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
             params.extend([search, search, search])
 
         if filters.get("production_only"):
-            where_clauses.append("p.matricule IS NOT NULL AND p.matricule != ''")
+            where_clauses.append("p.numposte = 'Production'")
 
         if filters.get("atelier_id"):
             where_clauses.append("""p.id IN (

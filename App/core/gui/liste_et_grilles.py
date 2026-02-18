@@ -875,12 +875,11 @@ class GrillesDialog(QDialog):
         try:
             # ✅ REQUÊTE 1 : Liste des opérateurs actifs (RAPIDE)
             operateurs_rows = QueryExecutor.fetch_all("""
-                SELECT id, nom, prenom
-                FROM personnel
-                WHERE statut = 'ACTIF'
-                  AND matricule IS NOT NULL
-                  AND matricule != ''
-                ORDER BY nom, prenom
+                SELECT DISTINCT p.id, p.nom, p.prenom
+                FROM personnel p
+                INNER JOIN polyvalence pv ON pv.operateur_id = p.id
+                WHERE p.statut = 'ACTIF'
+                ORDER BY p.nom, p.prenom
             """, dictionary=True)
 
             # ✅ REQUÊTE 2 : Liste des postes visibles (RAPIDE)
@@ -898,10 +897,9 @@ class GrillesDialog(QDialog):
                 SELECT operateur_id, poste_id, niveau
                 FROM polyvalence
                 WHERE operateur_id IN (
-                    SELECT id FROM personnel
-                    WHERE statut = 'ACTIF'
-                      AND matricule IS NOT NULL
-                      AND matricule != ''
+                    SELECT DISTINCT p.id FROM personnel p
+                    INNER JOIN polyvalence pv ON pv.operateur_id = p.id
+                    WHERE p.statut = 'ACTIF'
                 )
                 AND poste_id IN (
                     SELECT id FROM postes WHERE visible = 1
@@ -1211,12 +1209,11 @@ class GrillesDialog(QDialog):
                 elif choice == "Ligne":
                     # Récupérer la liste des opérateurs actifs avec matricule
                     operateurs = QueryExecutor.fetch_all("""
-                        SELECT id, nom, prenom, matricule
-                        FROM personnel
-                        WHERE statut = 'ACTIF'
-                        AND matricule IS NOT NULL
-                        AND matricule != ''
-                        ORDER BY nom, prenom
+                        SELECT DISTINCT p.id, p.nom, p.prenom, p.matricule
+                        FROM personnel p
+                        INNER JOIN polyvalence pv ON pv.operateur_id = p.id
+                        WHERE p.statut = 'ACTIF'
+                        ORDER BY p.nom, p.prenom
                     """, dictionary=True)
 
                     if not operateurs:
@@ -1233,7 +1230,7 @@ class GrillesDialog(QDialog):
                         prenom = op["prenom"]
                         matricule = op["matricule"]
 
-                        display_name = f"{nom} {prenom} ({matricule})"
+                        display_name = f"{nom} {prenom}"
                         operateur_names.append(display_name)
                         operateur_map[display_name] = op_id
 

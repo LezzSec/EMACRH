@@ -290,6 +290,17 @@ class GestionTemplatesDialog(QDialog):
             btn_refresh.clicked.connect(self.load_templates)
             buttons_layout.addWidget(btn_refresh)
 
+            btn_import_new = QPushButton("Importer un template")
+            btn_import_new.setStyleSheet("""
+                QPushButton {
+                    background-color: #10b981; color: white; font-weight: bold;
+                    padding: 10px 20px; border-radius: 6px; font-size: 13px;
+                }
+                QPushButton:hover { background-color: #059669; }
+            """)
+            btn_import_new.clicked.connect(self._open_import_dialog)
+            buttons_layout.addWidget(btn_import_new)
+
             buttons_layout.addStretch()
 
             btn_generate_selected = EmacButton("Générer les sélectionnés", 'primary')
@@ -303,6 +314,17 @@ class GestionTemplatesDialog(QDialog):
             btn_refresh = QPushButton("Actualiser")
             btn_refresh.clicked.connect(self.load_templates)
             buttons_layout.addWidget(btn_refresh)
+
+            btn_import_new = QPushButton("Importer un template")
+            btn_import_new.setStyleSheet("""
+                QPushButton {
+                    background-color: #10b981; color: white; font-weight: bold;
+                    padding: 10px 20px; border-radius: 6px;
+                }
+                QPushButton:hover { background-color: #059669; }
+            """)
+            btn_import_new.clicked.connect(self._open_import_dialog)
+            buttons_layout.addWidget(btn_import_new)
 
             buttons_layout.addStretch()
 
@@ -325,6 +347,12 @@ class GestionTemplatesDialog(QDialog):
             buttons_layout.addWidget(btn_close)
 
         layout.addLayout(buttons_layout)
+
+    def _open_import_dialog(self):
+        """Ouvre le dialog d'import de nouveau template."""
+        dialog = ImportTemplateDialog(parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_templates()
 
     def load_templates(self):
         """Charge les templates depuis la base de données."""
@@ -846,3 +874,311 @@ class TemplateSelectionDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+
+
+class ImportTemplateDialog(QDialog):
+    """Dialog pour importer un nouveau template dans le catalogue."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Importer un nouveau template")
+        self.setMinimumWidth(550)
+        self.setWindowFlags(Qt.Dialog | Qt.WindowCloseButtonHint)
+        self._file_path = None
+        self.created_template_id = None
+        self.init_ui()
+
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setSpacing(12)
+
+        # Titre
+        title = QLabel("Importer un nouveau template")
+        title.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        title.setStyleSheet("color: #1e293b;")
+        layout.addWidget(title)
+
+        # === Informations principales ===
+        main_group = QGroupBox("Informations du document")
+        main_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold; color: #334155;
+                border: 1px solid #e2e8f0; border-radius: 8px;
+                margin-top: 10px; padding-top: 18px;
+            }
+            QGroupBox::title { subcontrol-origin: margin; left: 12px; }
+        """)
+        form = QGridLayout(main_group)
+        form.setVerticalSpacing(8)
+        form.setHorizontalSpacing(10)
+
+        input_style = """
+            QLineEdit, QComboBox {
+                padding: 8px 12px; border: 1px solid #cbd5e1;
+                border-radius: 6px; background: white; font-size: 13px;
+            }
+        """
+
+        # Nom
+        form.addWidget(QLabel("Nom du document *:"), 0, 0)
+        self.nom_input = QLineEdit()
+        self.nom_input.setPlaceholderText("Ex: Fiche sécurité poste 506")
+        self.nom_input.setStyleSheet(input_style)
+        form.addWidget(self.nom_input, 0, 1, 1, 2)
+
+        # Fichier
+        form.addWidget(QLabel("Fichier *:"), 1, 0)
+        self.file_input = QLineEdit()
+        self.file_input.setReadOnly(True)
+        self.file_input.setPlaceholderText("Aucun fichier sélectionné")
+        self.file_input.setStyleSheet(input_style)
+        form.addWidget(self.file_input, 1, 1)
+
+        btn_browse = QPushButton("Parcourir...")
+        btn_browse.setStyleSheet("""
+            QPushButton {
+                background: #f3f4f6; color: #374151; padding: 8px 14px;
+                border: 1px solid #d1d5db; border-radius: 6px; font-weight: 500;
+            }
+            QPushButton:hover { background: #e5e7eb; }
+        """)
+        btn_browse.clicked.connect(self._browse_file)
+        form.addWidget(btn_browse, 1, 2)
+
+        # Contexte
+        form.addWidget(QLabel("Contexte *:"), 2, 0)
+        self.contexte_combo = QComboBox()
+        self.contexte_combo.addItem("Nouvel opérateur", "NOUVEL_OPERATEUR")
+        self.contexte_combo.addItem("Niveau 3", "NIVEAU_3")
+        self.contexte_combo.addItem("Par poste", "POSTE")
+        self.contexte_combo.setStyleSheet(input_style)
+        self.contexte_combo.currentIndexChanged.connect(self._on_contexte_changed)
+        form.addWidget(self.contexte_combo, 2, 1, 1, 2)
+
+        # Postes associés
+        self.lbl_postes = QLabel("Postes associés:")
+        form.addWidget(self.lbl_postes, 3, 0)
+        self.postes_input = QLineEdit()
+        self.postes_input.setPlaceholderText("Codes postes séparés par virgule (506, 507, 901...)")
+        self.postes_input.setStyleSheet(input_style)
+        form.addWidget(self.postes_input, 3, 1, 1, 2)
+
+        # Obligatoire
+        self.obligatoire_cb = QCheckBox("Document obligatoire")
+        self.obligatoire_cb.setStyleSheet("color: #475569;")
+        form.addWidget(self.obligatoire_cb, 4, 1)
+
+        layout.addWidget(main_group)
+
+        # === Règle d'impression (optionnel) ===
+        rule_group = QGroupBox("Règle d'impression automatique (optionnel)")
+        rule_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold; color: #334155;
+                border: 1px solid #e2e8f0; border-radius: 8px;
+                margin-top: 10px; padding-top: 18px;
+            }
+            QGroupBox::title { subcontrol-origin: margin; left: 12px; }
+        """)
+        rule_form = QGridLayout(rule_group)
+        rule_form.setVerticalSpacing(8)
+
+        rule_form.addWidget(QLabel("Événement déclencheur:"), 0, 0)
+        self.event_combo = QComboBox()
+        self.event_combo.addItem("Aucun (pas de règle)", "")
+        self.event_combo.addItem("Nouvel opérateur créé", "personnel.created")
+        self.event_combo.addItem("Passage au niveau 3", "polyvalence.niveau_3_reached")
+        self.event_combo.addItem("Affectation à un poste", "polyvalence.created")
+        self.event_combo.addItem("Niveau changé", "polyvalence.niveau_changed")
+        self.event_combo.addItem("Évaluation terminée", "evaluation.completed")
+        self.event_combo.addItem("Contrat créé", "contrat.created")
+        self.event_combo.addItem("Renouvellement contrat", "contrat.renewed")
+        self.event_combo.setStyleSheet(input_style)
+        self.event_combo.currentIndexChanged.connect(self._on_event_changed)
+        rule_form.addWidget(self.event_combo, 0, 1, 1, 2)
+
+        self.lbl_mode = QLabel("Mode d'exécution:")
+        rule_form.addWidget(self.lbl_mode, 1, 0)
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItem("Proposé (demande confirmation)", "PROPOSED")
+        self.mode_combo.addItem("Automatique (génère directement)", "AUTO")
+        self.mode_combo.addItem("Silencieux (log uniquement)", "SILENT")
+        self.mode_combo.setStyleSheet(input_style)
+        rule_form.addWidget(self.mode_combo, 1, 1, 1, 2)
+
+        self.lbl_condition = QLabel("Condition (JSON):")
+        rule_form.addWidget(self.lbl_condition, 2, 0)
+        self.condition_input = QLineEdit()
+        self.condition_input.setPlaceholderText('Ex: {"niveau": 3} ou laisser vide')
+        self.condition_input.setStyleSheet(input_style)
+        rule_form.addWidget(self.condition_input, 2, 1, 1, 2)
+
+        # Info helper
+        info_label = QLabel(
+            'Exemples: {"niveau": 3}, {"type_contrat": {"in": ["CDD","CDI"]}}, '
+            '{"postes": ["506","507"]}'
+        )
+        info_label.setStyleSheet("color: #94a3b8; font-size: 11px; font-style: italic;")
+        info_label.setWordWrap(True)
+        rule_form.addWidget(info_label, 3, 0, 1, 3)
+
+        layout.addWidget(rule_group)
+
+        # Affichage initial
+        self._on_contexte_changed()
+        self._on_event_changed()
+
+        # === Boutons ===
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+
+        btn_cancel = QPushButton("Annuler")
+        btn_cancel.setStyleSheet("""
+            QPushButton {
+                padding: 10px 20px; border: 1px solid #d1d5db;
+                border-radius: 6px; color: #475569; font-weight: 500;
+            }
+            QPushButton:hover { background: #f3f4f6; }
+        """)
+        btn_cancel.clicked.connect(self.reject)
+        btn_layout.addWidget(btn_cancel)
+
+        btn_import = QPushButton("Importer")
+        btn_import.setStyleSheet("""
+            QPushButton {
+                background-color: #10b981; color: white; padding: 10px 24px;
+                border-radius: 6px; font-weight: bold; font-size: 13px;
+            }
+            QPushButton:hover { background-color: #059669; }
+        """)
+        btn_import.clicked.connect(self._do_import)
+        btn_layout.addWidget(btn_import)
+
+        layout.addLayout(btn_layout)
+
+    def _browse_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Sélectionner le fichier template", "",
+            "Fichiers Excel (*.xlsx *.xlsm *.xls);;Fichiers Word (*.docx);;PDF (*.pdf);;Tous (*.*)"
+        )
+        if file_path:
+            self._file_path = file_path
+            self.file_input.setText(file_path)
+
+    def _on_contexte_changed(self):
+        is_poste = self.contexte_combo.currentData() == "POSTE"
+        self.lbl_postes.setVisible(is_poste)
+        self.postes_input.setVisible(is_poste)
+
+    def _on_event_changed(self):
+        has_event = bool(self.event_combo.currentData())
+        self.lbl_mode.setVisible(has_event)
+        self.mode_combo.setVisible(has_event)
+        self.lbl_condition.setVisible(has_event)
+        self.condition_input.setVisible(has_event)
+
+        # Auto-remplir le contexte selon l'événement
+        event_to_contexte = {
+            'personnel.created': 'NOUVEL_OPERATEUR',
+            'polyvalence.niveau_3_reached': 'NIVEAU_3',
+            'polyvalence.created': 'POSTE',
+            'polyvalence.niveau_changed': 'POSTE',
+            'evaluation.completed': 'POSTE',
+            'contrat.created': 'NOUVEL_OPERATEUR',
+            'contrat.renewed': 'NOUVEL_OPERATEUR',
+        }
+        event_name = self.event_combo.currentData()
+        if event_name and event_name in event_to_contexte:
+            target_contexte = event_to_contexte[event_name]
+            idx = self.contexte_combo.findData(target_contexte)
+            if idx >= 0:
+                self.contexte_combo.setCurrentIndex(idx)
+
+    def _do_import(self):
+        """Valide et importe le template."""
+        # Validation
+        nom = self.nom_input.text().strip()
+        if not nom:
+            QMessageBox.warning(self, "Champ requis", "Le nom du document est obligatoire.")
+            return
+
+        if not self._file_path:
+            QMessageBox.warning(self, "Champ requis", "Veuillez sélectionner un fichier.")
+            return
+
+        contexte = self.contexte_combo.currentData()
+
+        # Postes
+        postes = None
+        if contexte == "POSTE":
+            postes_text = self.postes_input.text().strip()
+            if postes_text:
+                postes = [p.strip() for p in postes_text.split(",") if p.strip()]
+
+        # Condition JSON
+        condition_json = None
+        condition_text = self.condition_input.text().strip()
+        if condition_text:
+            try:
+                import json
+                condition_json = json.loads(condition_text)
+            except json.JSONDecodeError:
+                QMessageBox.warning(
+                    self, "Format invalide",
+                    "La condition JSON est mal formatée.\n"
+                    "Exemple valide: {\"niveau\": 3}"
+                )
+                return
+
+        try:
+            from core.services.template_service import add_template
+
+            success, message, template_id = add_template(
+                nom=nom,
+                fichier_source=self._file_path,
+                contexte=contexte,
+                postes_associes=postes,
+                champ_operateur=None,
+                champ_auditeur=None,
+                champ_date=None,
+                obligatoire=self.obligatoire_cb.isChecked(),
+                description=f"Importé manuellement"
+            )
+
+            if not success:
+                QMessageBox.warning(self, "Erreur", message)
+                return
+
+            self.created_template_id = template_id
+
+            # Créer la règle d'impression si un événement est sélectionné
+            event_name = self.event_combo.currentData()
+            if event_name and template_id:
+                from core.services.event_rule_service import create_rule
+
+                rule_success, rule_msg, rule_id = create_rule(
+                    event_name=event_name,
+                    template_id=template_id,
+                    execution_mode=self.mode_combo.currentData(),
+                    condition_json=condition_json,
+                    description=f"Règle pour '{nom}'"
+                )
+
+                if rule_success:
+                    QMessageBox.information(
+                        self, "Succès",
+                        f"Template '{nom}' importé avec succès.\n"
+                        f"Règle d'impression créée: {event_name} → {self.mode_combo.currentData()}"
+                    )
+                else:
+                    QMessageBox.warning(
+                        self, "Import partiel",
+                        f"Template importé, mais la règle n'a pas pu être créée:\n{rule_msg}"
+                    )
+            else:
+                QMessageBox.information(self, "Succès", f"Template '{nom}' importé avec succès.")
+
+            self.accept()
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'import:\n{str(e)}")
