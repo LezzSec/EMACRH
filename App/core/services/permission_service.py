@@ -383,3 +383,22 @@ def has_user_overrides(user_id: int) -> bool:
     except Exception as e:
         logger.error(f"Erreur has_user_overrides: {e}")
         return False
+
+
+def get_admin_role_id() -> Optional[int]:
+    """
+    Retourne l'ID du rôle admin en base de données.
+
+    Returns:
+        ID du rôle admin, ou None si non trouvé
+    """
+    try:
+        with DatabaseCursor() as cur:
+            cur.execute(
+                "SELECT id FROM roles WHERE LOWER(nom) IN ('admin', 'administrateur') LIMIT 1"
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+    except Exception as e:
+        logger.warning(f"Erreur get_admin_role_id: {e}")
+        return None

@@ -28,9 +28,84 @@ Usage:
     absences = AbsenceServiceCRUD.get_by_personnel(personnel_id=1)
 """
 
-from typing import Dict, List, Optional, Tuple
-from datetime import date
+from typing import Dict, List, Optional, Set, Tuple
+from datetime import date, timedelta
 from core.services.crud_service import CRUDService
+
+
+# =============================================================================
+# UTILITAIRES : CALCUL DES JOURS OUVRÉS
+# =============================================================================
+
+def get_jours_feries(annee_debut: int, annee_fin: int) -> Set[date]:
+    """
+    Retourne l'ensemble des jours fériés entre deux années (incluses).
+
+    Args:
+        annee_debut: Année de début
+        annee_fin: Année de fin
+
+    Returns:
+        Ensemble de dates correspondant aux jours fériés
+    """
+    from core.db.query_executor import QueryExecutor
+    try:
+        rows = QueryExecutor.fetch_all(
+            "SELECT date_ferie FROM jours_feries WHERE YEAR(date_ferie) BETWEEN %s AND %s",
+            (annee_debut, annee_fin),
+        )
+        return {row[0] if isinstance(row, (tuple, list)) else row.get('date_ferie') for row in rows}
+    except Exception:
+        return set()
+
+
+def calculer_jours_ouvres(
+    date_debut: date,
+    date_fin: date,
+    demi_journee_debut: str = 'JOURNEE',
+    demi_journee_fin: str = 'JOURNEE'
+) -> float:
+    """
+    Calcule le nombre de jours ouvrés entre deux dates (incluses).
+
+    Les samedis, dimanches et jours fériés sont exclus.
+    Gère les demi-journées (MATIN / APRES_MIDI / JOURNEE).
+
+    Args:
+        date_debut: Date de début (incluse)
+        date_fin: Date de fin (incluse)
+        demi_journee_debut: 'JOURNEE', 'MATIN' ou 'APRES_MIDI'
+        demi_journee_fin: 'JOURNEE', 'MATIN' ou 'APRES_MIDI'
+
+    Returns:
+        Nombre de jours ouvrés (float, peut être .5 pour demi-journées)
+    """
+    if not date_debut or not date_fin or date_fin < date_debut:
+        return 0.0
+
+    feries = get_jours_feries(date_debut.year, date_fin.year)
+
+    # Cas particulier : même jour
+    if date_debut == date_fin:
+        if date_debut.weekday() >= 5 or date_debut in feries:
+            return 0.0
+        if demi_journee_debut in ('MATIN', 'APRES_MIDI') and demi_journee_fin in ('MATIN', 'APRES_MIDI'):
+            return 0.5
+        return 1.0
+
+    nb_jours = 0.0
+    current = date_debut
+    while current <= date_fin:
+        if current.weekday() < 5 and current not in feries:
+            valeur = 1.0
+            if current == date_debut and demi_journee_debut in ('MATIN', 'APRES_MIDI'):
+                valeur = 0.5
+            elif current == date_fin and demi_journee_fin in ('MATIN', 'APRES_MIDI'):
+                valeur = 0.5
+            nb_jours += valeur
+        current += timedelta(days=1)
+
+    return nb_jours
 
 
 class AbsenceServiceCRUD(CRUDService):
@@ -241,3 +316,119 @@ class AbsenceServiceCRUD(CRUDService):
             >>> nb_en_attente = AbsenceServiceCRUD.count_by_statut('EN_ATTENTE')
         """
         return cls.count(statut=statut)
+
+    @classmethod
+    def get_types_absence(cls) -> list:
+        """Retourne les types d'absence actifs (id, code, libelle)."""
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_all(
+            "SELECT id, code, libelle FROM type_absence WHERE actif = TRUE ORDER BY code",
+            dictionary=True,
+        )
+
+    @classmethod
+    def get_en_attente_with_details(cls) -> list:
+        """
+        Retourne les demandes EN_ATTENTE avec nom complet et libellé du type.
+        Utilisé par la vue de validation manager.
+        """
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_all(
+            """
+            SELECT da.id,
+                   CONCAT(p.prenom, ' ', p.nom) AS nom_complet,
+                   ta.libelle AS type_libelle,
+                   da.date_debut,
+                   da.date_fin,
+                   da.nb_jours,
+                   da.motif
+            FROM demande_absence da
+            JOIN personnel p ON da.personnel_id = p.id
+            JOIN type_absence ta ON da.type_absence_id = ta.id
+            WHERE da.statut = 'EN_ATTENTE'
+              AND p.statut = 'ACTIF'
+            ORDER BY da.date_creation ASC
+            """,
+            dictionary=True,
+        )
+
+    @classmethod
+    def get_demandes_personnel_details(
+        cls,
+        personnel_id: int,
+        annee: int = None,
+        statut: str = None
+    ) -> list:
+        """
+        Retourne les demandes d'un personnel avec détails (type, validateur).
+
+        Args:
+            personnel_id: ID du personnel
+            annee: Filtrer par année (optionnel)
+            statut: Filtrer par statut (optionnel)
+
+        Returns:
+            Liste de dicts avec: id, type_libelle, date_debut, date_fin, nb_jours,
+                                 motif, statut, validateur, date_validation
+        """
+        from core.db.query_executor import QueryExecutor
+
+        conditions = ["da.personnel_id = %s"]
+        params = [personnel_id]
+
+        if annee:
+            conditions.append("YEAR(da.date_debut) = %s")
+            params.append(annee)
+
+        if statut:
+            conditions.append("da.statut = %s")
+            params.append(statut)
+
+        where_clause = " AND ".join(conditions)
+
+        return QueryExecutor.fetch_all(
+            f"""
+            SELECT da.id,
+                   ta.libelle AS type_libelle,
+                   da.date_debut,
+                   da.date_fin,
+                   da.nb_jours,
+                   da.motif,
+                   da.statut,
+                   CONCAT(v.prenom, ' ', v.nom) AS validateur,
+                   da.date_validation
+            FROM demande_absence da
+            JOIN type_absence ta ON da.type_absence_id = ta.id
+            LEFT JOIN personnel v ON da.valideur_id = v.id
+            WHERE {where_clause}
+            ORDER BY da.date_debut DESC
+            """,
+            tuple(params),
+            dictionary=True,
+        )
+
+    @classmethod
+    def get_validees_pour_mois(cls, first_day, last_day) -> list:
+        """
+        Retourne les demandes VALIDEE qui se chevauchent avec la plage donnée.
+        Utilisé par le calendrier de planning pour colorier les jours.
+        """
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_all(
+            """
+            SELECT da.date_debut, da.date_fin,
+                   CONCAT(p.prenom, ' ', p.nom) AS nom_complet,
+                   ta.libelle AS type_libelle,
+                   da.statut
+            FROM demande_absence da
+            JOIN personnel p ON da.personnel_id = p.id
+            JOIN type_absence ta ON da.type_absence_id = ta.id
+            WHERE da.statut = 'VALIDEE'
+              AND p.statut = 'ACTIF'
+              AND da.date_debut <= %s
+              AND da.date_fin >= %s
+            ORDER BY da.date_debut
+            """,
+            (last_day, first_day),
+            dictionary=True,
+        )

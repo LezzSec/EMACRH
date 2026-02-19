@@ -1107,3 +1107,57 @@ def get_alertes_rh_count(jours: int = 30) -> Dict:
         logger.exception(f"Erreur get_alertes_rh_count: {e}")
 
     return counts
+
+
+# ============================================================
+# SÉCURITÉ : ACCÈS AUX DOCUMENTS PAR ENTITÉ
+# ============================================================
+
+# Whitelist des types d'entité autorisés → protection contre l'injection SQL
+_ENTITY_QUERIES = {
+    'contrat': "SELECT id, nom_affichage, nom_fichier, date_expiration FROM documents WHERE contrat_id = %s",
+    'formation': "SELECT id, nom_affichage, nom_fichier, date_expiration FROM documents WHERE formation_id = %s",
+    'declaration': "SELECT id, nom_affichage, nom_fichier, date_expiration FROM documents WHERE declaration_id = %s",
+}
+
+
+def get_documents_entite(entity_type: str, entity_id: int) -> List[Dict]:
+    """
+    Retourne les documents associés à une entité.
+
+    Protection anti-injection SQL : seuls les types de la whitelist sont acceptés.
+    Les types inconnus ou malicieux retournent une liste vide (rejet silencieux).
+
+    Args:
+        entity_type: Type d'entité ('contrat', 'formation', 'declaration')
+        entity_id: ID de l'entité
+
+    Returns:
+        Liste de documents ou [] si type invalide
+    """
+    if not isinstance(entity_type, str) or entity_type not in _ENTITY_QUERIES:
+        logger.warning(f"Type d'entité invalide ou non autorisé: {entity_type!r}")
+        return []
+
+    try:
+        return QueryExecutor.fetch_all(
+            _ENTITY_QUERIES[entity_type],
+            (entity_id,),
+            dictionary=True
+        )
+    except Exception as e:
+        logger.exception(f"Erreur get_documents_entite({entity_type}, {entity_id}): {e}")
+        return []
+
+
+def is_matricule_disponible(matricule: str, exclude_operateur_id: int) -> bool:
+    """
+    Vérifie si un matricule est disponible (non utilisé par un autre opérateur).
+    Retourne True si le matricule est libre, False s'il est déjà pris.
+    """
+    existing = QueryExecutor.fetch_one(
+        "SELECT id FROM personnel WHERE matricule = %s AND id != %s",
+        (matricule, exclude_operateur_id),
+        dictionary=True
+    )
+    return existing is None

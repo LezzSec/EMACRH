@@ -192,3 +192,17 @@ class FormationServiceCRUD(CRUDService):
             >>> nb_planifiees = FormationServiceCRUD.count_by_statut('Planifiée')
         """
         return cls.count(statut=statut)
+
+    @classmethod
+    def get_catalogue_competences(cls) -> list:
+        """Retourne le catalogue des compétences actives (id, code, libelle, categorie, duree_validite_mois)."""
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_all(
+            """
+            SELECT id, code, libelle, categorie, duree_validite_mois
+            FROM competences_catalogue
+            WHERE actif = 1
+            ORDER BY categorie, libelle
+            """,
+            dictionary=True,
+        )

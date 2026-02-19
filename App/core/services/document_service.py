@@ -543,3 +543,44 @@ class DocumentService:
         except Exception as e:
             logger.exception(f"Erreur telechargement document: {e}")
             return False, f"Erreur lors du telechargement: {str(e)}"
+
+    def get_document_nom(self, document_id: int) -> Optional[str]:
+        """Retourne le nom de fichier affiché d'un document (nom_fichier)."""
+        try:
+            from core.db.query_executor import QueryExecutor
+            row = QueryExecutor.fetch_one(
+                "SELECT nom_fichier FROM documents WHERE id = %s",
+                (document_id,),
+                dictionary=True,
+            )
+            return row['nom_fichier'] if row else None
+        except Exception as e:
+            logger.error(f"Erreur get_document_nom {document_id}: {e}")
+            return None
+
+    def check_module_installed(self) -> bool:
+        """Vérifie que les tables du module documentaire existent."""
+        try:
+            from core.db.query_executor import QueryExecutor
+            cat_exists = QueryExecutor.fetch_one("SHOW TABLES LIKE 'categories_documents'")
+            doc_exists = QueryExecutor.fetch_one("SHOW TABLES LIKE 'documents'")
+            return bool(cat_exists and doc_exists)
+        except Exception as e:
+            logger.error(f"Erreur vérification tables documentaires: {e}")
+            return False
+
+    def get_all_non_contrats(self) -> list:
+        """Retourne tous les documents hors catégorie 'Contrats de travail'."""
+        try:
+            from core.db.query_executor import QueryExecutor
+            return QueryExecutor.fetch_all(
+                """
+                SELECT * FROM v_documents_complet
+                WHERE categorie_nom != 'Contrats de travail'
+                ORDER BY date_upload DESC
+                """,
+                dictionary=True,
+            )
+        except Exception as e:
+            logger.exception(f"Erreur get_all_non_contrats: {e}")
+            return []

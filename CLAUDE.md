@@ -239,6 +239,26 @@ class MonNouveauService(CRUDService):
 2. ❌ **NE PLUS** dupliquer le code de création de dialogs → ✅ Hériter de `EmacFormDialog`
 3. ❌ **NE PLUS** écrire CRUD + logging manuellement → ✅ Hériter de `CRUDService`
 4. ✅ **TOUJOURS** utiliser les services existants (PersonnelService, FormationServiceCRUD, etc.)
+5. ❌ **INTERDIT dans `core/gui/`** : importer ou utiliser directement `DatabaseCursor`, `DatabaseConnection`, `QueryExecutor`, `get_connection()` ou tout autre accès DB direct. La couche GUI ne communique **QU'AVEC** `core/services/` ou `core/repositories/`.
+
+#### 🚫 Séparation stricte GUI / Service (Architecture)
+
+```
+❌ INTERDIT dans core/gui/*.py :
+   from core.db.configbd import DatabaseCursor, DatabaseConnection
+   from core.db.query_executor import QueryExecutor
+   conn = get_connection()
+   cur.execute("SELECT ...")
+
+✅ OBLIGATOIRE dans core/gui/*.py :
+   from core.services.personnel_service import PersonnelService
+   from core.services.rh_service_refactored import get_contrats_operateur
+   from core.repositories.personnel_repo import PersonnelRepository
+   # → La GUI appelle les services, les services accèdent à la DB
+```
+
+**Fichier de référence officiel RH** : `rh_service_refactored.py` (1 109 lignes, QueryExecutor)
+❌ `rh_service.py` a été **supprimé** le 2026-02-18 — ne pas recréer.
 
 ### ⚡ UI / Threads Optimizations (2026-01-07)
 

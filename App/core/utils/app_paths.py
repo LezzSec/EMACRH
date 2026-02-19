@@ -48,7 +48,7 @@ def get_data_dir():
     """
     Retourne le répertoire pour les données utilisateur persistantes.
 
-    Windows : %APPDATA%\EMAC
+    Windows : %APPDATA%\\EMAC
     Linux/Mac : ~/.emac
 
     Le dossier est créé automatiquement s'il n'existe pas.
@@ -76,7 +76,7 @@ def get_logs_dir():
     Retourne le répertoire des logs de l'application.
 
     En mode développement : App/logs/
-    En mode .exe : %APPDATA%\EMAC\logs\
+    En mode .exe : %APPDATA%\\EMAC\\logs\\
 
     Le dossier est créé automatiquement s'il n'existe pas.
 
@@ -99,7 +99,7 @@ def get_documents_dir():
     Retourne le répertoire des documents RH de l'application.
 
     En mode développement : App/documents/
-    En mode .exe : %APPDATA%\EMAC\documents\
+    En mode .exe : %APPDATA%\\EMAC\\documents\\
 
     Le dossier est créé automatiquement s'il n'existe pas.
 

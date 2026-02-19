@@ -6,8 +6,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QPalette, QCursor
 
-from core.db.configbd import DatabaseConnection
-from core.db.query_executor import QueryExecutor
+from core.services.historique_service import get_entity_name, fetch_historique, delete_historique_range
 from core.services.log_exporter import export_day
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.utils.logging_config import get_logger
@@ -29,31 +28,7 @@ ACTION_LABEL = {
 def fr_action(a: str) -> str:
     return ACTION_LABEL.get((a or "").upper(), a or "")
 
-def get_entity_name(entity_type: str, entity_id) -> str:
-    if entity_id is None or entity_id == "":
-        return ""
-
-    try:
-        if entity_type == "operateur":
-            row = QueryExecutor.fetch_one(
-                "SELECT nom, prenom FROM personnel WHERE id = %s",
-                (entity_id,),
-                dictionary=True
-            )
-            if row:
-                return f"{row['prenom']} {row['nom']}"
-        elif entity_type == "poste":
-            row = QueryExecutor.fetch_one(
-                "SELECT poste_code FROM postes WHERE id = %s",
-                (entity_id,),
-                dictionary=True
-            )
-            if row:
-                return row['poste_code']
-    except Exception:
-        pass
-
-    return f"#{entity_id}"
+# get_entity_name est importé depuis core.services.historique_service
 
 def get_detailed_action_type(row: dict) -> str:
     action = row.get("action", "")
@@ -707,46 +682,12 @@ class HistoriqueDialog(QDialog):
 
     # ---------- Fetch ----------
     def _fetch_logs(self, d_from: QDate, d_to: QDate, search_text: str, action_filter: str):
-        where = ["date_time >= %s", "date_time <= %s"]
-        params = [
-            dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
-            dt.datetime(d_to.year(),   d_to.month(),   d_to.day(),   23, 59, 59)
-        ]
-
-        action_map = {
-            "Ajout": "INSERT",
-            "Modification": "UPDATE",
-            "Suppression": "DELETE",
-            "Erreur": "ERROR"
-        }
-
-        if action_filter and action_filter != "(Toutes les actions)":
-            sql_action = action_map.get(action_filter, action_filter)
-            where.append("action = %s")
-            params.append(sql_action)
-
-        if search_text:
-            like = f"%{search_text}%"
-            where.append("("
-                         "action LIKE %s OR "
-                         "description LIKE %s OR "
-                         "CAST(operateur_id AS CHAR) LIKE %s OR "
-                         "CAST(poste_id AS CHAR) LIKE %s"
-                         ")")
-            params += [like, like, like, like]
-
-        # SÉCURITÉ: Construction sécurisée de la clause WHERE
-        # Les éléments de 'where' sont des constantes littérales définies dans ce code
-        # Toutes les valeurs utilisateur passent par 'params' (requête paramétrée)
-        where_clause = " AND ".join(where) if where else "1=1"
-        sql = (
-            "SELECT id, date_time, action, operateur_id, poste_id, description, utilisateur "
-            "FROM historique "
-            "WHERE " + where_clause + " "
-            "ORDER BY date_time DESC, id DESC"
+        return fetch_historique(
+            date_from=dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
+            date_to=dt.datetime(d_to.year(), d_to.month(), d_to.day(), 23, 59, 59),
+            search_text=search_text,
+            action_filter=action_filter,
         )
-
-        return QueryExecutor.fetch_all(sql, tuple(params), dictionary=True)
 
     # ---------- UI Reload ----------
     def reload(self):
@@ -840,22 +781,10 @@ class HistoriqueDialog(QDialog):
             return
 
         try:
-            sql = (
-                "DELETE FROM historique "
-                "WHERE date_time >= %s AND date_time <= %s"
+            deleted = delete_historique_range(
+                date_from=dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
+                date_to=dt.datetime(d_to.year(), d_to.month(), d_to.day(), 23, 59, 59),
             )
-            params = (
-                dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
-                dt.datetime(d_to.year(),   d_to.month(),   d_to.day(),   23, 59, 59)
-            )
-
-            # Exécuter la suppression et récupérer le nombre de lignes affectées
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
-                cur.execute(sql, params)
-                deleted = cur.rowcount or 0
-                cur.close()
-
             QMessageBox.information(self, "Archivage terminé",
                                    f"Archivage effectué avec succès.\n"
                                    f"{deleted} ligne(s) supprimée(s) de l'historique.")

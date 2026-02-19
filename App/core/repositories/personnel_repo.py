@@ -389,6 +389,147 @@ class PersonnelRepository(BaseRepository[Personnel]):
         return cls.set_statut(id, "ACTIF")
 
     # ===========================
+    # Méthodes utilitaires (GUI-safe)
+    # ===========================
+
+    @classmethod
+    def get_by_nom_prenom(cls, nom: str, prenom: str) -> Optional[int]:
+        """Retourne l'id d'un personnel si nom+prenom existe, sinon None."""
+        from core.db.query_executor import QueryExecutor
+        row = QueryExecutor.fetch_one(
+            "SELECT id FROM personnel WHERE `nom` = %s AND `prenom` = %s ORDER BY id DESC LIMIT 1",
+            (nom, prenom),
+        )
+        return row[0] if row else None
+
+    @classmethod
+    def get_first_actif_id(cls) -> Optional[int]:
+        """Retourne l'id du premier personnel actif (utilisé pour ouvrir des dialogs)."""
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_scalar(
+            "SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1"
+        )
+
+    @classmethod
+    def save_date_entree(cls, personnel_id: int, date_entree) -> bool:
+        """Upsert la date d'entrée dans personnel_infos."""
+        from core.db.query_executor import QueryExecutor
+        existing = QueryExecutor.exists("personnel_infos", {"personnel_id": personnel_id})
+        if existing:
+            QueryExecutor.execute_write(
+                "UPDATE personnel_infos SET date_entree = %s WHERE personnel_id = %s",
+                (date_entree, personnel_id),
+            )
+        else:
+            QueryExecutor.execute_write(
+                "INSERT INTO personnel_infos (personnel_id, date_entree) VALUES (%s, %s)",
+                (personnel_id, date_entree),
+            )
+        return True
+
+    @classmethod
+    def get_date_entree(cls, personnel_id: int):
+        """Retourne la date d'entrée d'un personnel depuis personnel_infos."""
+        from core.db.query_executor import QueryExecutor
+        row = QueryExecutor.fetch_one(
+            "SELECT date_entree FROM personnel_infos WHERE personnel_id = %s",
+            (personnel_id,),
+            dictionary=True,
+        )
+        return row.get("date_entree") if row else None
+
+    @classmethod
+    def get_info_basique(cls, personnel_id: int) -> Optional[Dict[str, Any]]:
+        """Retourne nom, prenom, matricule, statut pour les exports."""
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_one(
+            "SELECT nom, prenom, COALESCE(matricule,'-') AS matricule, UPPER(statut) AS statut "
+            "FROM personnel WHERE id = %s",
+            (personnel_id,),
+            dictionary=True,
+        )
+
+    @classmethod
+    def get_personnel_infos(cls, personnel_id: int) -> Optional[Dict[str, Any]]:
+        """Retourne l'ensemble des données de personnel_infos."""
+        from core.db.query_executor import QueryExecutor
+        rows = QueryExecutor.fetch_all(
+            "SELECT * FROM personnel_infos WHERE personnel_id = %s",
+            (personnel_id,),
+            dictionary=True,
+        )
+        return rows[0] if rows else None
+
+    @classmethod
+    def get_personnel_avec_stats(cls) -> List[Dict[str, Any]]:
+        """
+        Retourne tous les personnels avec stats polyvalence et contrat actif.
+        Utilisé par la liste principale de GestionPersonnelDialog.
+        """
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_all(
+            """
+            SELECT
+                o.id, o.nom, o.prenom, o.matricule, o.numposte,
+                UPPER(o.statut) AS statut, ct.type_contrat,
+                COUNT(p.id) AS nb_postes,
+                SUM(CASE WHEN p.niveau = 1 THEN 1 ELSE 0 END) AS n1,
+                SUM(CASE WHEN p.niveau = 2 THEN 1 ELSE 0 END) AS n2,
+                SUM(CASE WHEN p.niveau = 3 THEN 1 ELSE 0 END) AS n3,
+                SUM(CASE WHEN p.niveau = 4 THEN 1 ELSE 0 END) AS n4
+            FROM personnel o
+            LEFT JOIN polyvalence p ON o.id = p.operateur_id
+            LEFT JOIN contrat ct ON ct.operateur_id = o.id AND ct.actif = 1
+            GROUP BY o.id, o.nom, o.prenom, o.matricule, o.numposte, o.statut, ct.type_contrat
+            ORDER BY o.nom, o.prenom
+            """,
+            dictionary=True,
+        )
+
+    @classmethod
+    def get_personnel_sans_date_entree(cls) -> List[Dict[str, Any]]:
+        """Retourne les personnels sans date d'entrée (pour régularisation)."""
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_all(
+            """
+            SELECT p.id, p.nom, p.prenom, p.matricule, p.statut, pi.date_entree
+            FROM personnel p
+            LEFT JOIN personnel_infos pi ON p.id = pi.personnel_id
+            WHERE pi.date_entree IS NULL OR pi.personnel_id IS NULL
+            ORDER BY p.nom, p.prenom
+            """,
+            dictionary=True,
+        )
+
+    @classmethod
+    def get_all_as_dicts(cls) -> List[Dict[str, Any]]:
+        """
+        Retourne tout le personnel sous forme de dicts (id, nom, prenom, matricule, statut).
+        Utilisé pour les listes de sélection dans les interfaces.
+        """
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_all(
+            "SELECT id, nom, prenom, matricule, UPPER(statut) AS statut FROM personnel ORDER BY nom, prenom",
+            dictionary=True,
+        )
+
+    @classmethod
+    def get_by_ids(cls, ids: List[int]) -> List[Dict[str, Any]]:
+        """
+        Retourne les personnels correspondant à une liste d'IDs.
+        Utilisé pour résoudre les noms depuis une liste d'identifiants.
+        """
+        if not ids:
+            return []
+        from core.db.query_executor import QueryExecutor
+        placeholders = ','.join(['%s'] * len(ids))
+        return QueryExecutor.fetch_all(
+            f"SELECT id, nom, prenom FROM personnel WHERE id IN ({placeholders})",
+            tuple(ids),
+            dictionary=True,
+        )
+
+    # ===========================
     # Pagination
     # ===========================
 

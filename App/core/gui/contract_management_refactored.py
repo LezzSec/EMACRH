@@ -28,7 +28,7 @@ from PyQt5.QtGui import QColor, QFont
 
 # ✅ NOUVEAUX IMPORTS - Patterns refactorisés
 from core.gui.emac_dialog import EmacFormDialog
-from core.db.query_executor import QueryExecutor
+from core.repositories.personnel_repo import PersonnelRepository
 from core.services.contrat_service_crud import ContratServiceCRUD
 
 # Services existants (pour compatibilité)
@@ -221,20 +221,11 @@ class ContractFormDialog(EmacFormDialog):
         APRÈS: 10 lignes, plus lisible
         """
         try:
-            # ✅ QueryExecutor remplace with DatabaseCursor
-            operators = QueryExecutor.fetch_all(
-                """
-                SELECT id, nom, prenom, matricule
-                FROM personnel
-                WHERE statut = 'ACTIF'
-                ORDER BY nom, prenom
-                """,
-                dictionary=True
-            )
+            operators = PersonnelRepository.get_all_actifs()
 
             for op in operators:
-                display = f"{op['nom']} {op['prenom']} ({op['matricule']})"
-                self.operator_combo.addItem(display, op['id'])
+                display = f"{op.nom} {op.prenom} ({op.matricule})"
+                self.operator_combo.addItem(display, op.id)
 
         except Exception as e:
             logger.exception(f"Erreur chargement opérateurs: {e}")

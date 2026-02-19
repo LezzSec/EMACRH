@@ -41,18 +41,11 @@ def get_admin_role_id() -> int:
         return _admin_role_id_cache
 
     try:
-        from core.db.query_executor import QueryExecutor
+        from core.services.permission_service import get_admin_role_id as _svc_admin_id
 
-        result = QueryExecutor.fetch_one(
-            """
-            SELECT id FROM roles
-            WHERE LOWER(nom) IN ('admin', 'administrateur')
-            LIMIT 1
-            """,
-            dictionary=True
-        )
-        if result:
-            _admin_role_id_cache = result['id']
+        role_id = _svc_admin_id()
+        if role_id:
+            _admin_role_id_cache = role_id
             logger.debug(f"Role admin trouve: ID={_admin_role_id_cache}")
             return _admin_role_id_cache
 

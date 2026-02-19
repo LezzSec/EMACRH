@@ -14,8 +14,9 @@ from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QBrush
 from datetime import datetime, date, timedelta
 
-from core.services import absence_service
-from core.db.query_executor import QueryExecutor
+from core.services.absence_service_crud import AbsenceServiceCRUD, calculer_jours_ouvres
+from core.services.planning_service import get_evaluations_mois
+from core.repositories.personnel_repo import PersonnelRepository
 from core.gui.emac_ui_kit import add_custom_title_bar
 from core.services.permission_manager import can
 
@@ -293,22 +294,10 @@ class PlanningAbsencesDialog(QDialog):
         first_day = QDate(year, month, 1)
         last_day = QDate(year, month, first_day.daysInMonth())
 
-        absences = QueryExecutor.fetch_all("""
-            SELECT
-                da.date_debut,
-                da.date_fin,
-                CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                ta.libelle as type_libelle,
-                da.statut
-            FROM demande_absence da
-            JOIN personnel p ON da.personnel_id = p.id
-            JOIN type_absence ta ON da.type_absence_id = ta.id
-            WHERE da.statut = 'VALIDEE'
-              AND p.statut = 'ACTIF'
-              AND da.date_debut <= %s
-              AND da.date_fin >= %s
-            ORDER BY da.date_debut
-        """, (last_day.toString("yyyy-MM-dd"), first_day.toString("yyyy-MM-dd")), dictionary=True)
+        absences = AbsenceServiceCRUD.get_validees_pour_mois(
+            first_day.toString("yyyy-MM-dd"),
+            last_day.toString("yyyy-MM-dd")
+        )
 
         self.absences_by_date = {}
 
@@ -342,20 +331,10 @@ class PlanningAbsencesDialog(QDialog):
         first_day = QDate(year, month, 1)
         last_day = QDate(year, month, first_day.daysInMonth())
 
-        evaluations = QueryExecutor.fetch_all("""
-            SELECT
-                poly.prochaine_evaluation,
-                CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                pos.poste_code,
-                poly.niveau
-            FROM polyvalence poly
-            JOIN personnel p ON poly.operateur_id = p.id
-            JOIN postes pos ON poly.poste_id = pos.id
-            WHERE p.statut = 'ACTIF'
-              AND poly.prochaine_evaluation >= %s
-              AND poly.prochaine_evaluation <= %s
-            ORDER BY poly.prochaine_evaluation
-        """, (first_day.toString("yyyy-MM-dd"), last_day.toString("yyyy-MM-dd")), dictionary=True)
+        evaluations = get_evaluations_mois(
+            first_day.toString("yyyy-MM-dd"),
+            last_day.toString("yyyy-MM-dd")
+        )
 
         self.evaluations_by_date = {}
 
@@ -588,7 +567,7 @@ class NouvelleDemande(QDialog):
 
     def load_types(self):
         try:
-            types = absence_service.get_types_absence()
+            types = AbsenceServiceCRUD.get_types_absence()
             for t in types:
                 self.type_combo.addItem(f"{t['libelle']}", t['code'])
         except Exception:
@@ -601,7 +580,7 @@ class NouvelleDemande(QDialog):
             demi_debut = self.get_demi_journee(self.demi_debut_group)
             demi_fin = self.get_demi_journee(self.demi_fin_group)
 
-            nb_jours = absence_service.calculer_jours_ouvres(date_debut, date_fin, demi_debut, demi_fin)
+            nb_jours = calculer_jours_ouvres(date_debut, date_fin, demi_debut, demi_fin)
             self.nb_jours_label.setText(str(nb_jours))
         except Exception:
             self.nb_jours_label.setText("0")
@@ -624,10 +603,20 @@ class NouvelleDemande(QDialog):
         motif = self.motif_text.toPlainText()
 
         try:
-            demande_id = absence_service.creer_demande_absence(
-                self.personnel_id, type_code, date_debut, date_fin,
-                demi_debut, demi_fin, motif
+            nb_jours = calculer_jours_ouvres(date_debut, date_fin, demi_debut, demi_fin)
+            success, msg, demande_id = AbsenceServiceCRUD.create(
+                personnel_id=self.personnel_id,
+                type_absence_code=type_code,
+                date_debut=date_debut,
+                date_fin=date_fin,
+                demi_debut=demi_debut,
+                demi_fin=demi_fin,
+                nb_jours=nb_jours,
+                motif=motif,
+                statut='EN_ATTENTE'
             )
+            if not success:
+                raise Exception(msg)
 
             QMessageBox.information(self, "Succès",
                 f"Demande créée avec succès\n\n"
@@ -718,7 +707,7 @@ class MesDemandesDialog(QDialog):
         statut = self.statut_filter.currentData()
 
         try:
-            demandes = absence_service.get_demandes_personnel(self.personnel_id, annee, statut)
+            demandes = AbsenceServiceCRUD.get_demandes_personnel_details(self.personnel_id, annee, statut)
 
             self.table.setRowCount(len(demandes))
 
@@ -763,7 +752,7 @@ class MesDemandesDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             try:
-                QueryExecutor.execute_write("UPDATE demande_absence SET statut = 'ANNULEE' WHERE id = %s", (demande_id,))
+                AbsenceServiceCRUD.annuler(demande_id)
 
                 QMessageBox.information(self, "Succès", "Demande annulée")
                 self.load_demandes()
@@ -779,8 +768,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # Test avec le premier personnel actif
-    result = QueryExecutor.fetch_one("SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1")
-    personnel_id = result[0] if result else None
+    personnel_id = PersonnelRepository.get_first_actif_id()
 
     dialog = PlanningAbsencesDialog(personnel_id=personnel_id)
     dialog.show()

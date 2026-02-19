@@ -808,14 +808,11 @@ class GestionAlertesRHDialog(QDialog):
     def _on_view_contract_detail(self, alert: Alert):
         pid = alert.personnel_id
         if pid:
-            try:
-                from core.gui.contract_management import ContractManagementDialog
-                dialog = ContractManagementDialog(parent=self, operateur_id=pid)
-                dialog.data_changed.connect(self._on_sub_dialog_changed)
-                dialog.exec_()
-            except ImportError as e:
-                logger.error(f"Erreur import ContractManagementDialog: {e}")
-                QMessageBox.information(self, "Info", f"Contrat pour ID {pid}")
+            from core.gui.gestion_rh import GestionRHDialog
+            dialog = GestionRHDialog(parent=self)
+            dialog.data_changed.connect(self._on_sub_dialog_changed)
+            dialog._selectionner_operateur_par_id(pid)
+            dialog.exec_()
 
     def _on_view_personnel_detail(self, alert: Alert):
         pid = alert.personnel_id

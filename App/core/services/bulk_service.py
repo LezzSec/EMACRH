@@ -367,7 +367,7 @@ def add_absence_batch(
             logger.warning("Catégorie 'Documents administratifs' introuvable - justificatifs ne seront pas ajoutés")
 
     # Calculer le nombre de jours
-    from core.services.absence_service import calculer_jours_ouvres
+    from core.services.absence_service_crud import calculer_jours_ouvres
     nb_jours = calculer_jours_ouvres(
         absence_data.get('date_debut'),
         absence_data.get('date_fin'),

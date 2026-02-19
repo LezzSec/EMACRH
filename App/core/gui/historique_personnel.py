@@ -13,7 +13,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QBrush
 
-from core.db.query_executor import QueryExecutor
+from core.repositories.polyvalence_repo import PolyvalenceRepository
 from core.gui.emac_ui_kit import show_error_message
 import json
 import datetime as dt
@@ -422,47 +422,10 @@ class HistoriquePersonnelTab(QWidget):
         """Charge les polyvalences actuelles et anciennes."""
         try:
             # Charger les polyvalences ACTUELLES (table polyvalence)
-            query_actuelles = """
-                SELECT
-                    'ACTUELLE' as type,
-                    p.id,
-                    ps.poste_code,
-                    p.niveau,
-                    p.date_evaluation,
-                    p.prochaine_evaluation,
-                    NULL as commentaire
-                FROM polyvalence p
-                JOIN postes ps ON p.poste_id = ps.id
-                WHERE p.operateur_id = %s
-                ORDER BY ps.poste_code
-            """
-            polyvalences_actuelles = QueryExecutor.fetch_all(
-                query_actuelles,
-                (self.operateur_id,),
-                dictionary=True
-            )
+            polyvalences_actuelles = PolyvalenceRepository.get_actuelles_with_type(self.operateur_id)
 
             # Charger les ANCIENNES polyvalences (table historique_polyvalence avec action_type='IMPORT_MANUEL')
-            query_anciennes = """
-                SELECT
-                    'ANCIENNE' as type,
-                    hp.id,
-                    p.poste_code,
-                    hp.nouveau_niveau as niveau,
-                    hp.nouvelle_date_evaluation as date_evaluation,
-                    NULL as prochaine_evaluation,
-                    hp.commentaire
-                FROM historique_polyvalence hp
-                LEFT JOIN postes p ON hp.poste_id = p.id
-                WHERE hp.operateur_id = %s
-                  AND hp.action_type = 'IMPORT_MANUEL'
-                ORDER BY p.poste_code, hp.date_action DESC
-            """
-            polyvalences_anciennes = QueryExecutor.fetch_all(
-                query_anciennes,
-                (self.operateur_id,),
-                dictionary=True
-            )
+            polyvalences_anciennes = PolyvalenceRepository.get_anciennes_historique(self.operateur_id)
 
             # Stocker toutes les données
             self.all_polyvalences = list(polyvalences_actuelles) + list(polyvalences_anciennes)

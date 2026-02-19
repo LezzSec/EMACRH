@@ -316,3 +316,259 @@ def get_statistiques_evaluations_typed() -> StatistiquesEvaluations:
         en_retard=stats.get('en_retard', 0),
         a_venir_30j=stats.get('a_venir_30j', 0)
     )
+
+
+# ===========================
+# ✅ MÉTHODES POUR DetailOperateurDialog
+# ===========================
+
+def get_operateurs_avec_stats_polyvalences() -> List[tuple]:
+    """
+    Liste des opérateurs actifs avec leurs statistiques de polyvalences.
+    Retourne uniquement les opérateurs ayant au moins une polyvalence.
+    """
+    return QueryExecutor.fetch_all("""
+        SELECT
+            p.id,
+            p.nom,
+            p.prenom,
+            p.matricule,
+            COUNT(poly.id) as total_poly,
+            SUM(CASE WHEN poly.niveau = 4 THEN 1 ELSE 0 END) as n4,
+            SUM(CASE WHEN poly.niveau = 3 THEN 1 ELSE 0 END) as n3,
+            SUM(CASE WHEN poly.niveau = 2 THEN 1 ELSE 0 END) as n2,
+            SUM(CASE WHEN poly.niveau = 1 THEN 1 ELSE 0 END) as n1,
+            SUM(
+                CASE
+                    WHEN poly.prochaine_evaluation IS NULL THEN 1
+                    WHEN poly.prochaine_evaluation BETWEEN CURDATE()
+                         AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1
+                    ELSE 0
+                END
+            ) as a_planifier,
+            SUM(
+                CASE WHEN poly.prochaine_evaluation < CURDATE() THEN 1 ELSE 0 END
+            ) as retard
+        FROM personnel p
+        INNER JOIN polyvalence poly ON poly.operateur_id = p.id
+        WHERE p.statut = 'ACTIF'
+        GROUP BY p.id, p.nom, p.prenom, p.matricule
+        HAVING COUNT(poly.id) > 0
+        ORDER BY p.nom, p.prenom
+    """)
+
+
+def get_postes_liste() -> List[Dict]:
+    """Retourne la liste de tous les postes (id, poste_code) triés par code."""
+    return QueryExecutor.fetch_all(
+        "SELECT id, poste_code FROM postes ORDER BY poste_code",
+        dictionary=True
+    )
+
+
+def get_polyvalence_par_id(poly_id: int) -> Optional[Dict]:
+    """Retourne les données complètes d'une polyvalence par son ID."""
+    return QueryExecutor.fetch_one(
+        """SELECT id, operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation
+           FROM polyvalence WHERE id = %s""",
+        (poly_id,),
+        dictionary=True
+    )
+
+
+def get_stats_polyvalence_operateur(operateur_id: int) -> Optional[Dict]:
+    """Stats niveaux/retard/à planifier pour un opérateur."""
+    return QueryExecutor.fetch_one("""
+        SELECT COUNT(*) as total,
+               SUM(CASE WHEN niveau = 4 THEN 1 ELSE 0 END) as n4,
+               SUM(CASE WHEN niveau = 3 THEN 1 ELSE 0 END) as n3,
+               SUM(CASE WHEN niveau = 2 THEN 1 ELSE 0 END) as n2,
+               SUM(CASE WHEN niveau = 1 THEN 1 ELSE 0 END) as n1,
+               SUM(CASE WHEN prochaine_evaluation < CURDATE() THEN 1 ELSE 0 END) as retard,
+               SUM(CASE WHEN prochaine_evaluation BETWEEN CURDATE()
+                        AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as a_planifier
+        FROM polyvalence
+        WHERE operateur_id = %s
+    """, (operateur_id,), dictionary=True)
+
+
+def get_polyvalences_actuelles_operateur(operateur_id: int) -> List[Dict]:
+    """Polyvalences actuelles (dernière par poste) pour un opérateur."""
+    return QueryExecutor.fetch_all("""
+        SELECT poly.id,
+               ps.poste_code,
+               poly.niveau,
+               poly.date_evaluation,
+               poly.prochaine_evaluation
+        FROM polyvalence poly
+        JOIN postes ps ON poly.poste_id = ps.id
+        WHERE poly.operateur_id = %s
+          AND poly.id = (
+              SELECT MAX(p2.id)
+              FROM polyvalence p2
+              WHERE p2.operateur_id = poly.operateur_id
+                AND p2.poste_id = poly.poste_id
+          )
+        ORDER BY ps.poste_code
+    """, (operateur_id,), dictionary=True)
+
+
+def get_historique_polyvalence_operateur(operateur_id: int) -> List[Dict]:
+    """Historique des imports manuels de polyvalence pour un opérateur."""
+    return QueryExecutor.fetch_all("""
+        SELECT
+            hp.id,
+            p.poste_code,
+            hp.ancien_niveau AS niveau_affiche,
+            hp.ancienne_date_evaluation AS date_eval_affiche,
+            hp.commentaire
+        FROM historique_polyvalence hp
+        LEFT JOIN postes p ON hp.poste_id = p.id
+        WHERE hp.operateur_id = %s
+          AND hp.action_type = 'IMPORT_MANUEL'
+        ORDER BY hp.date_action DESC
+    """, (operateur_id,), dictionary=True)
+
+
+def importer_ancienne_polyvalence(operateur_id: int, poste_id: int, niveau: int,
+                                   date_eval, date_prochaine,
+                                   commentaire: str = None) -> bool:
+    """
+    Importe une ancienne polyvalence (IMPORT_MANUEL) de façon atomique :
+    - INSERT dans historique_polyvalence
+    - INSERT/UPDATE dans polyvalence
+    """
+    try:
+        from core.db.configbd import DatabaseConnection
+        with DatabaseConnection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                INSERT INTO historique_polyvalence
+                (operateur_id, poste_id, action_type, nouveau_niveau,
+                 nouvelle_date_evaluation, commentaire, date_action)
+                VALUES (%s, %s, 'IMPORT_MANUEL', %s, %s, %s, NOW())
+            """, (operateur_id, poste_id, niveau, date_eval, commentaire or None))
+
+            cur.execute("""
+                INSERT INTO polyvalence
+                (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
+                VALUES (%s, %s, %s, %s, %s)
+                ON DUPLICATE KEY UPDATE
+                    niveau = VALUES(niveau),
+                    date_evaluation = VALUES(date_evaluation),
+                    prochaine_evaluation = VALUES(prochaine_evaluation)
+            """, (operateur_id, poste_id, niveau, date_eval, date_prochaine))
+
+        from core.services.logger import log_hist
+        log_hist(
+            action="IMPORT_MANUEL",
+            table_name="polyvalence",
+            record_id=None,
+            description=f"Import manuel polyvalence N{niveau}, date éval: {date_eval}",
+            operateur_id=operateur_id,
+            poste_id=poste_id
+        )
+        return True
+
+    except Exception as e:
+        logger.exception(f"Erreur import ancienne polyvalence opérateur {operateur_id}: {e}")
+        return False
+
+
+def update_date_evaluation_polyvalence(poly_id: int, new_date_eval, prochaine_eval) -> bool:
+    """
+    Met à jour date_evaluation + prochaine_evaluation d'une polyvalence
+    (sans changer le niveau). Utilisé quand l'utilisateur modifie la date dans le tableau.
+    """
+    try:
+        ancien = QueryExecutor.fetch_one(
+            "SELECT operateur_id, poste_id, date_evaluation FROM polyvalence WHERE id = %s",
+            (poly_id,), dictionary=True
+        )
+        operateur_id = ancien['operateur_id'] if ancien else None
+        poste_id = ancien['poste_id'] if ancien else None
+        ancienne_date = ancien['date_evaluation'] if ancien else None
+
+        QueryExecutor.execute_write("""
+            UPDATE polyvalence
+            SET date_evaluation = %s, prochaine_evaluation = %s
+            WHERE id = %s
+        """, (new_date_eval, prochaine_eval, poly_id))
+
+        from core.services.logger import log_hist
+        log_hist(
+            action="UPDATE",
+            table_name="polyvalence",
+            record_id=poly_id,
+            description=(f"Date évaluation modifiée: {ancienne_date} → {new_date_eval}, "
+                         f"prochaine éval: {prochaine_eval}"),
+            operateur_id=operateur_id,
+            poste_id=poste_id
+        )
+        return True
+
+    except Exception as e:
+        logger.exception(f"Erreur update date évaluation polyvalence {poly_id}: {e}")
+        return False
+
+
+def update_date_champ_polyvalence(poly_id: int, field: str, new_date) -> bool:
+    """
+    Met à jour un champ date d'une polyvalence (date_evaluation ou prochaine_evaluation).
+    Whitelist de champs pour prévenir les injections SQL.
+    """
+    import json
+    _ALLOWED = {
+        'date_evaluation': (
+            "SELECT pv.date_evaluation, p.nom, p.prenom, po.poste_code, pv.operateur_id, po.id "
+            "FROM polyvalence pv JOIN personnel p ON p.id = pv.operateur_id "
+            "JOIN postes po ON po.id = pv.poste_id WHERE pv.id = %s",
+            "UPDATE polyvalence SET date_evaluation = %s WHERE id = %s",
+            "Date d'évaluation"
+        ),
+        'prochaine_evaluation': (
+            "SELECT pv.prochaine_evaluation, p.nom, p.prenom, po.poste_code, pv.operateur_id, po.id "
+            "FROM polyvalence pv JOIN personnel p ON p.id = pv.operateur_id "
+            "JOIN postes po ON po.id = pv.poste_id WHERE pv.id = %s",
+            "UPDATE polyvalence SET prochaine_evaluation = %s WHERE id = %s",
+            "Prochaine évaluation"
+        ),
+    }
+    if field not in _ALLOWED:
+        raise ValueError(f"Champ non autorisé: {field}")
+
+    query_select, query_update, field_display = _ALLOWED[field]
+
+    try:
+        result = QueryExecutor.fetch_one(query_select, (poly_id,))
+        old_date = result[0] if result else None
+        nom = result[1] if result else None
+        prenom = result[2] if result else None
+        poste_code = result[3] if result else None
+        operateur_id = result[4] if result else None
+        poste_id = result[5] if result else None
+
+        QueryExecutor.execute_write(query_update, (new_date, poly_id))
+
+        from core.services.logger import log_hist
+        log_hist(
+            action="UPDATE",
+            table_name="polyvalence",
+            record_id=poly_id,
+            operateur_id=operateur_id,
+            poste_id=poste_id,
+            description=json.dumps({
+                "operateur": f"{prenom} {nom}",
+                "poste": poste_code,
+                "field": field_display,
+                "old_value": str(old_date) if old_date else "Non défini",
+                "new_value": str(new_date),
+                "type": "modification_date_evaluation"
+            }, ensure_ascii=False),
+            source="service/evaluation_service"
+        )
+        return True
+
+    except Exception as e:
+        logger.exception(f"Erreur update champ {field} polyvalence {poly_id}: {e}")
+        return False

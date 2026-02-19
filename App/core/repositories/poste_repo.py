@@ -252,6 +252,36 @@ class PosteRepository(BaseRepository[Poste]):
             return False, "Le besoin ne peut pas être négatif"
         return cls.update(id, {"besoins_postes": besoin})
 
+    @classmethod
+    def get_all_codes(cls) -> List[str]:
+        """Retourne tous les codes de postes (y compris invisibles) triés."""
+        from core.db.query_executor import QueryExecutor
+        rows = QueryExecutor.fetch_all(
+            "SELECT poste_code FROM postes ORDER BY poste_code ASC",
+            dictionary=True,
+        )
+        return [r["poste_code"] for r in rows]
+
+    @classmethod
+    def delete_by_code(cls, poste_code: str) -> Tuple[bool, str]:
+        """Supprime un poste par son code."""
+        from core.db.query_executor import QueryExecutor
+        from core.services.logger import log_hist
+        import json
+        try:
+            QueryExecutor.execute_write(
+                "DELETE FROM postes WHERE poste_code = %s",
+                (poste_code,),
+            )
+            log_hist(
+                "DELETE", "postes", None,
+                json.dumps({"poste_code": poste_code, "type": "suppression_poste"}, ensure_ascii=False),
+            )
+            return True, f"Poste '{poste_code}' supprimé"
+        except Exception as e:
+            logger.error(f"Erreur suppression poste {poste_code}: {e}")
+            return False, f"Erreur: {str(e)}"
+
 
 class AtelierRepository(BaseRepository[Atelier]):
     """Repository pour les opérations sur la table atelier."""

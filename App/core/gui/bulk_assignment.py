@@ -19,7 +19,9 @@ from PyQt5.QtGui import QColor, QFont
 
 from core.gui.db_worker import DbWorker, DbThreadPool
 from core.gui.loading_components import LoadingPlaceholder, ProgressWidget
-from core.db.query_executor import QueryExecutor
+from core.repositories.personnel_repo import PersonnelRepository
+from core.services.absence_service_crud import AbsenceServiceCRUD
+from core.services.formation_service_crud import FormationServiceCRUD
 from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -242,14 +244,7 @@ class PersonnelSelectionWidget(QWidget):
     def _load_personnel(self):
         """Charge la liste du personnel depuis la base de données."""
         try:
-            self._personnel_data = QueryExecutor.fetch_all(
-                """
-                SELECT id, nom, prenom, matricule, statut
-                FROM personnel
-                ORDER BY nom, prenom
-                """,
-                dictionary=True
-            )
+            self._personnel_data = PersonnelRepository.get_all_as_dicts()
             self._populate_table()
         except Exception as e:
             logger.error(f"Erreur chargement personnel: {e}")
@@ -866,15 +861,7 @@ class AbsenceBulkTab(QWidget):
     def _load_types_absence(self):
         """Charge les types d'absence depuis la base de données."""
         def fetch(progress_callback=None):
-            return QueryExecutor.fetch_all(
-                """
-                SELECT id, code, libelle
-                FROM type_absence
-                WHERE actif = TRUE
-                ORDER BY code
-                """,
-                dictionary=True
-            )
+            return AbsenceServiceCRUD.get_types_absence()
 
         def on_result(data):
             self._types_absence = data
@@ -1374,15 +1361,7 @@ class CompetenceBulkTab(QWidget):
     def _load_catalogue(self):
         """Charge le catalogue des compétences."""
         def fetch(progress_callback=None):
-            return QueryExecutor.fetch_all(
-                """
-                SELECT id, code, libelle, categorie, duree_validite_mois
-                FROM competences_catalogue
-                WHERE actif = 1
-                ORDER BY categorie, libelle
-                """,
-                dictionary=True
-            )
+            return FormationServiceCRUD.get_catalogue_competences()
 
         def on_result(data):
             self._catalogue = data
@@ -1667,16 +1646,7 @@ class BulkOperationResultsDialog(QDialog):
         personnel_ids = [d['personnel_id'] for d in self.details]
 
         if personnel_ids:
-            placeholders = ','.join(['%s'] * len(personnel_ids))
-            rows = QueryExecutor.fetch_all(
-                f"""
-                SELECT id, nom, prenom
-                FROM personnel
-                WHERE id IN ({placeholders})
-                """,
-                tuple(personnel_ids),
-                dictionary=True
-            )
+            rows = PersonnelRepository.get_by_ids(personnel_ids)
             for row in rows:
                 personnel_names[row['id']] = (row['nom'], row['prenom'])
 

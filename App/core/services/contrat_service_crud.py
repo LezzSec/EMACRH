@@ -82,6 +82,56 @@ class ContratServiceCRUD(CRUDService):
         return cls.get_all(conditions=conditions, order_by=order_by)
 
     @classmethod
+    def get_expiring_soon(
+        cls,
+        jours: int = 30,
+        type_contrat: str = None,
+        limit: int = 10,
+    ) -> List[Dict]:
+        """
+        Retourne les contrats actifs expirant dans les N prochains jours.
+
+        Utilisé par le tableau de bord pour les alertes RH.
+
+        Args:
+            jours: Horizon en jours (défaut 30)
+            type_contrat: Filtre optionnel sur le type
+            limit: Nombre max de résultats
+
+        Returns:
+            Liste de dicts avec id, type_contrat, date_fin, nom, prenom
+        """
+        from core.db.query_executor import QueryExecutor
+        if type_contrat:
+            sql = """
+                SELECT c.id, c.type_contrat, c.date_fin, p.nom, p.prenom
+                FROM contrat c
+                INNER JOIN personnel p ON p.id = c.operateur_id
+                WHERE c.actif = 1
+                  AND c.date_fin IS NOT NULL
+                  AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+                  AND p.statut = 'ACTIF'
+                  AND c.type_contrat = %s
+                ORDER BY c.date_fin ASC
+                LIMIT %s
+            """
+            params = (jours, type_contrat, limit)
+        else:
+            sql = """
+                SELECT c.id, c.type_contrat, c.date_fin, p.nom, p.prenom
+                FROM contrat c
+                INNER JOIN personnel p ON p.id = c.operateur_id
+                WHERE c.actif = 1
+                  AND c.date_fin IS NOT NULL
+                  AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+                  AND p.statut = 'ACTIF'
+                ORDER BY c.date_fin ASC
+                LIMIT %s
+            """
+            params = (jours, limit)
+        return QueryExecutor.fetch_all(sql, params, dictionary=True)
+
+    @classmethod
     def get_actifs(cls, order_by: str = 'date_debut DESC') -> List[Dict]:
         """
         Récupère tous les contrats actifs.

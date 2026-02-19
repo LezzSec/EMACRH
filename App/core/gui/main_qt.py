@@ -657,12 +657,8 @@ class MainWindow(QMainWindow):
         DbThreadPool.start(w)
 
     def _fetch_one_actif_personnel_id(self, progress_callback=None):
-        from core.db.query_executor import QueryExecutor
-
-        result = QueryExecutor.fetch_scalar(
-            "SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1"
-        )
-        return result
+        from core.repositories.personnel_repo import PersonnelRepository
+        return PersonnelRepository.get_first_actif_id()
 
     def _open_regularisation(self, personnel_id):
         if not personnel_id:
@@ -674,14 +670,8 @@ class MainWindow(QMainWindow):
         dialog.exec_()
 
     def show_contract_management(self):
-        # Forcer le rechargement du module pour voir les modifications
-        import sys
-        import importlib
-        if 'core.gui.contract_management' in sys.modules:
-            importlib.reload(sys.modules['core.gui.contract_management'])
-
-        from core.gui.contract_management import ContractManagementDialog
-        dialog = ContractManagementDialog(self)
+        from core.gui.gestion_rh import GestionRHDialog
+        dialog = GestionRHDialog(self)
         dialog.data_changed.connect(self.load_evaluations_async)
         dialog.data_changed.connect(self.load_alertes_rh_async)
         dialog.exec_()
@@ -721,11 +711,11 @@ class MainWindow(QMainWindow):
             if (time.time() - self._postes_cache_time) < 300:
                 return self._postes_cache
 
-        from core.db.query_executor import QueryExecutor
+        from core.repositories.poste_repo import PosteRepository
 
-        postes = QueryExecutor.fetch_all(
-            "SELECT DISTINCT poste_code FROM postes WHERE visible = 1 ORDER BY poste_code"
-        )
+        codes = PosteRepository.get_codes_list()
+        # Garder le format tuple pour la compatibilité avec _apply_postes_to_filters
+        postes = [(code,) for code in codes]
         self._postes_cache = postes
         self._postes_cache_time = time.time()
         return postes
@@ -750,43 +740,14 @@ class MainWindow(QMainWindow):
         DbThreadPool.start(w)
 
     def _fetch_evaluations(self, poste_retard, poste_next, progress_callback=None):
-        from core.db.query_executor import QueryExecutor
-
+        from core.repositories.polyvalence_repo import PolyvalenceRepository
         try:
-            # Évaluations en retard
-            query_retard = """
-                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
-                FROM polyvalence poly
-                INNER JOIN personnel p ON p.id = poly.operateur_id
-                LEFT JOIN postes pos ON pos.id = poly.poste_id
-                WHERE poly.prochaine_evaluation < CURDATE()
-                  AND p.statut = 'ACTIF'
-                  {retard_filter}
-                ORDER BY poly.prochaine_evaluation ASC
-                LIMIT 10
-            """
-            retard_filter = "AND pos.poste_code = %s" if poste_retard else ""
-            query_retard = query_retard.format(retard_filter=retard_filter)
-            params_retard = (poste_retard,) if poste_retard else ()
-            retard = QueryExecutor.fetch_all(query_retard, params_retard, dictionary=True)
-
-            # Prochaines évaluations (30 jours)
-            query_next = """
-                SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
-                FROM polyvalence poly
-                INNER JOIN personnel p ON p.id = poly.operateur_id
-                LEFT JOIN postes pos ON pos.id = poly.poste_id
-                WHERE poly.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                  AND p.statut = 'ACTIF'
-                  {next_filter}
-                ORDER BY poly.prochaine_evaluation ASC
-                LIMIT 10
-            """
-            next_filter = "AND pos.poste_code = %s" if poste_next else ""
-            query_next = query_next.format(next_filter=next_filter)
-            params_next = (poste_next,) if poste_next else ()
-            prochaines = QueryExecutor.fetch_all(query_next, params_next, dictionary=True)
-
+            retard = PolyvalenceRepository.get_en_retard_filtre(
+                poste_code=poste_retard or None, limit=10
+            )
+            prochaines = PolyvalenceRepository.get_a_venir_filtre(
+                jours=30, poste_code=poste_next or None, limit=10
+            )
             return {"retard": retard, "prochaines": prochaines}
         except Exception as e:
             logger.error(f"Erreur dans _fetch_evaluations: {e}", exc_info=True)
@@ -830,49 +791,13 @@ class MainWindow(QMainWindow):
         DbThreadPool.start(w)
 
     def _fetch_alertes_rh(self, type_contrat_filter, progress_callback=None):
-        from core.db.query_executor import QueryExecutor
-
+        from core.services.contrat_service_crud import ContratServiceCRUD
         try:
-            # Construire la requête conditionnellement (sans .format() pour éviter injection)
-            if type_contrat_filter:
-                query = """
-                    SELECT
-                        c.id,
-                        c.type_contrat,
-                        c.date_fin,
-                        p.nom,
-                        p.prenom
-                    FROM contrat c
-                    INNER JOIN personnel p ON p.id = c.operateur_id
-                    WHERE c.actif = 1
-                      AND c.date_fin IS NOT NULL
-                      AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                      AND p.statut = 'ACTIF'
-                      AND c.type_contrat = %s
-                    ORDER BY c.date_fin ASC
-                    LIMIT 10
-                """
-                params = (type_contrat_filter,)
-            else:
-                query = """
-                    SELECT
-                        c.id,
-                        c.type_contrat,
-                        c.date_fin,
-                        p.nom,
-                        p.prenom
-                    FROM contrat c
-                    INNER JOIN personnel p ON p.id = c.operateur_id
-                    WHERE c.actif = 1
-                      AND c.date_fin IS NOT NULL
-                      AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                      AND p.statut = 'ACTIF'
-                    ORDER BY c.date_fin ASC
-                    LIMIT 10
-                """
-                params = ()
-            contrats = QueryExecutor.fetch_all(query, params, dictionary=True)
-
+            contrats = ContratServiceCRUD.get_expiring_soon(
+                jours=30,
+                type_contrat=type_contrat_filter or None,
+                limit=10,
+            )
             return {"contrats": contrats}
         except Exception as e:
             logger.error(f"Erreur dans _fetch_alertes_rh: {e}", exc_info=True)

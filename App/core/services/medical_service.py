@@ -26,6 +26,33 @@ logger = get_logger(__name__)
 
 
 # ============================================================
+# 0. VALIDITÉS (accès rapide depuis la fiche personnel)
+# ============================================================
+
+def get_validites_operateur(operateur_id: int) -> List[Dict[str, Any]]:
+    """
+    Retourne toutes les validités d'un opérateur (table validite).
+
+    Args:
+        operateur_id: ID de l'opérateur
+
+    Returns:
+        Liste de dicts avec type_validite, date_debut, date_fin,
+        periodicite, taux_incapacite
+    """
+    return QueryExecutor.fetch_all(
+        """
+        SELECT type_validite, date_debut, date_fin, periodicite, taux_incapacite
+        FROM validite
+        WHERE operateur_id = %s
+        ORDER BY date_debut DESC
+        """,
+        (operateur_id,),
+        dictionary=True,
+    )
+
+
+# ============================================================
 # 1. DONNÉES MÉDICALES PRINCIPALES
 # ============================================================
 

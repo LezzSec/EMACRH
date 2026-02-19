@@ -15,9 +15,8 @@ from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 from datetime import datetime, date
 
-from core.services import absence_service
-from core.db.configbd import get_connection, DatabaseConnection
-from core.db.query_executor import QueryExecutor
+from core.services.absence_service_crud import AbsenceServiceCRUD, calculer_jours_ouvres
+from core.repositories.personnel_repo import PersonnelRepository
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.gui.db_worker import DbWorker, DbThreadPool
 from core.utils.logging_config import get_logger
@@ -416,7 +415,7 @@ class GestionAbsencesDialog(QDialog):
 
     def load_types_absence(self):
         """Charge les types d'absence"""
-        types = absence_service.get_types_absence()
+        types = AbsenceServiceCRUD.get_types_absence()
         self.type_combo.clear()
         for t in types:
             self.type_combo.addItem(f"{t['libelle']} ({t['code']})", t['code'])
@@ -429,7 +428,7 @@ class GestionAbsencesDialog(QDialog):
         annee = self.annee_filter.currentData()
         statut = self.statut_filter.currentData()
 
-        demandes = absence_service.get_demandes_personnel(self.personnel_id, annee, statut)
+        demandes = AbsenceServiceCRUD.get_demandes_personnel_details(self.personnel_id, annee, statut)
 
         self.table_demandes.setRowCount(len(demandes))
 
@@ -459,24 +458,19 @@ class GestionAbsencesDialog(QDialog):
             return
 
         annee = self.solde_annee_combo.currentData()
-        solde = absence_service.get_solde_conges(self.personnel_id, annee)
+        # Calcul des soldes à partir des absences validées
+        absences = AbsenceServiceCRUD.get_demandes_personnel_details(self.personnel_id, annee, 'VALIDEE')
+        cp_pris = sum(a['nb_jours'] for a in absences if 'CP' in (a.get('type_libelle') or ''))
+        rtt_pris = sum(a['nb_jours'] for a in absences if 'RTT' in (a.get('type_libelle') or ''))
 
-        # Mettre à jour les cards
-        self.cp_value_label.setText(str(solde['cp_restant']))
-        self.rtt_value_label.setText(str(solde['rtt_restant']))
+        self.cp_value_label.setText(str(round(cp_pris, 1)))
+        self.rtt_value_label.setText(str(round(rtt_pris, 1)))
 
-        # Détails
         details = f"""
         <b>Congés Payés:</b><br>
-        - Acquis: {solde['cp_acquis']} jours<br>
-        - Reportés N-1: {solde['cp_n_1']} jours<br>
-        - Pris: {solde['cp_pris']} jours<br>
-        - <b>Restant: {solde['cp_restant']} jours</b><br><br>
-
+        - Pris sur l'année: {round(cp_pris, 1)} jours<br><br>
         <b>RTT:</b><br>
-        - Acquis: {solde['rtt_acquis']} jours<br>
-        - Pris: {solde['rtt_pris']} jours<br>
-        - <b>Restant: {solde['rtt_restant']} jours</b>
+        - Pris sur l'année: {round(rtt_pris, 1)} jours
         """
         self.solde_details_label.setText(details)
 
@@ -486,25 +480,7 @@ class GestionAbsencesDialog(QDialog):
 
         def fetch_demandes(progress_callback=None):
             """Fonction exécutée en background"""
-            return QueryExecutor.fetch_all(
-                """
-                SELECT
-                    da.id,
-                    CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                    ta.libelle as type_libelle,
-                    da.date_debut,
-                    da.date_fin,
-                    da.nb_jours,
-                    da.motif
-                FROM demande_absence da
-                JOIN personnel p ON da.personnel_id = p.id
-                JOIN type_absence ta ON da.type_absence_id = ta.id
-                WHERE da.statut = 'EN_ATTENTE'
-                AND p.statut = 'ACTIF'
-                ORDER BY da.date_creation ASC
-                """,
-                dictionary=True
-            )
+            return AbsenceServiceCRUD.get_en_attente_with_details()
 
         def on_success(demandes):
             """Callback UI avec les résultats"""
@@ -540,7 +516,7 @@ class GestionAbsencesDialog(QDialog):
         demi_debut = self.get_demi_journee(self.demi_debut_group)
         demi_fin = self.get_demi_journee(self.demi_fin_group)
 
-        nb_jours = absence_service.calculer_jours_ouvres(
+        nb_jours = calculer_jours_ouvres(
             date_debut, date_fin, demi_debut, demi_fin
         )
 
@@ -570,10 +546,20 @@ class GestionAbsencesDialog(QDialog):
         motif = self.motif_text.toPlainText()
 
         try:
-            demande_id = absence_service.creer_demande_absence(
-                self.personnel_id, type_code, date_debut, date_fin,
-                demi_debut, demi_fin, motif
+            nb_jours = calculer_jours_ouvres(date_debut, date_fin, demi_debut, demi_fin)
+            success, msg, demande_id = AbsenceServiceCRUD.create(
+                personnel_id=self.personnel_id,
+                type_absence_code=type_code,
+                date_debut=date_debut,
+                date_fin=date_fin,
+                demi_debut=demi_debut,
+                demi_fin=demi_fin,
+                nb_jours=nb_jours,
+                motif=motif,
+                statut='EN_ATTENTE'
             )
+            if not success:
+                raise Exception(msg)
 
             QMessageBox.information(
                 self,
@@ -616,10 +602,7 @@ class GestionAbsencesDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             try:
-                QueryExecutor.execute_write(
-                    "UPDATE demande_absence SET statut = 'ANNULEE' WHERE id = %s",
-                    (demande_id,)
-                )
+                AbsenceServiceCRUD.annuler(demande_id)
 
                 QMessageBox.information(self, "Succès", "Demande annulée")
                 self.load_mes_demandes()
@@ -651,7 +634,10 @@ class GestionAbsencesDialog(QDialog):
                 # TODO: Récupérer l'ID du validateur (personnel connecté)
                 validateur_id = 1  # À remplacer par l'ID réel
 
-                absence_service.valider_demande(demande_id, validateur_id, valide)
+                if valide:
+                    AbsenceServiceCRUD.valider(demande_id, valideur_id=validateur_id)
+                else:
+                    AbsenceServiceCRUD.refuser(demande_id, valideur_id=validateur_id)
 
                 msg = "validée" if valide else "refusée"
                 QMessageBox.information(self, "Succès", f"Demande {msg}")
@@ -676,9 +662,7 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
 
     # Test avec le premier personnel actif
-    personnel_id = QueryExecutor.fetch_scalar(
-        "SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1"
-    )
+    personnel_id = PersonnelRepository.get_first_actif_id()
 
     dialog = GestionAbsencesDialog(personnel_id=personnel_id)
     dialog.show()

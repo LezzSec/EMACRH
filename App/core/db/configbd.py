@@ -46,18 +46,19 @@ def _load_env_once() -> None:
         if appdata:
             appdata_dir = Path(appdata) / "EMAC"
 
-    # Candidats: .env.encrypted (priorité) puis .env
+    # Candidats: .env en clair (priorité dev) puis .env.encrypted (production)
+    # Le .env local prend toujours le dessus sur le .env.encrypted
     candidates = [
-        # Mode production: fichier chiffré inclus dans l'exe
-        (internal_dir / ".env.encrypted", True),
-        (base_dir / ".env.encrypted", True),
-        (base_dir / "config" / ".env.encrypted", True),
-        ((appdata_dir / ".env.encrypted") if appdata_dir else None, True),
-        # Mode dev: fichier .env en clair
+        # Mode dev: fichier .env en clair (prioritaire)
         (internal_dir / ".env", False),
         (base_dir / ".env", False),
         (base_dir / "config" / ".env", False),
         ((appdata_dir / ".env") if appdata_dir else None, False),
+        # Mode production: fichier chiffré (fallback si pas de .env)
+        (internal_dir / ".env.encrypted", True),
+        (base_dir / ".env.encrypted", True),
+        (base_dir / "config" / ".env.encrypted", True),
+        ((appdata_dir / ".env.encrypted") if appdata_dir else None, True),
     ]
 
     for p, is_encrypted in candidates:

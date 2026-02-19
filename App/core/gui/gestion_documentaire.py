@@ -19,8 +19,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate, pyqtSignal, QUrl
 from PyQt5.QtGui import QFont, QColor, QIcon, QDesktopServices
 
-from core.db.query_executor import QueryExecutor
 from core.services.document_service import DocumentService
+from core.repositories.personnel_repo import PersonnelRepository
 from core.services.logger import log_hist
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.utils.logging_config import get_logger
@@ -409,37 +409,19 @@ class GestionDocumentaireDialog(QDialog):
 
     def check_tables_exist(self):
         """Vérifie que les tables nécessaires existent"""
-        try:
-            # Vérifier la table categories_documents
-            cat_exists = QueryExecutor.fetch_one("SHOW TABLES LIKE 'categories_documents'")
-
-            # Vérifier la table documents
-            doc_exists = QueryExecutor.fetch_one("SHOW TABLES LIKE 'documents'")
-
-            return cat_exists and doc_exists
-        except Exception as e:
-            logger.error(f"Erreur lors de la vérification des tables: {e}")
-            return False
+        return self.doc_service.check_module_installed()
 
     def load_operateurs(self):
         """Charge la liste des opérateurs"""
         try:
-            operateurs = QueryExecutor.fetch_all(
-                """
-                SELECT id, nom, prenom, statut
-                FROM personnel
-                WHERE statut = 'ACTIF'
-                ORDER BY nom, prenom
-                """,
-                dictionary=True
-            )
+            operateurs = PersonnelRepository.get_all_actifs()
 
             self.operateur_combo.clear()
             self.operateur_combo.addItem("Tous les employés", None)
 
             for op in operateurs:
-                display_name = f"{op['nom']} {op['prenom']}"
-                self.operateur_combo.addItem(display_name, op['id'])
+                display_name = f"{op.nom} {op.prenom}"
+                self.operateur_combo.addItem(display_name, op.id)
 
             # Sélectionner l'opérateur si fourni
             if self.operateur_id:
@@ -486,21 +468,7 @@ class GestionDocumentaireDialog(QDialog):
 
     def get_all_documents(self):
         """Récupère tous les documents de tous les opérateurs (sauf contrats)"""
-        try:
-            # Exclure les documents de catégorie "Contrats de travail"
-            return QueryExecutor.fetch_all(
-                """
-                SELECT * FROM v_documents_complet
-                WHERE categorie_nom != 'Contrats de travail'
-                ORDER BY date_upload DESC
-                """,
-                dictionary=True
-            )
-
-        except Exception as e:
-            logger.exception(f"Erreur chargement documents: {e}")
-            show_error_message(self, "Erreur", "Impossible de charger les documents", e)
-            return []
+        return self.doc_service.get_all_non_contrats()
 
     def display_documents(self, documents):
         """Affiche les documents dans le tableau"""

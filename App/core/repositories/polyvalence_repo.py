@@ -397,6 +397,117 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             return False, f"Erreur: {str(e)}"
 
     @classmethod
+    def get_by_operateur_dict(cls, operateur_id: int) -> List[Dict]:
+        """
+        Retourne les polyvalences d'un opérateur sous forme de dicts.
+
+        Inclut poste_code, niveau, date_evaluation, prochaine_evaluation.
+        Utilisé par les vues qui ont besoin d'accès par clé de chaîne.
+        """
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_all(
+            """
+            SELECT ps.poste_code, p.niveau, p.date_evaluation, p.prochaine_evaluation
+            FROM polyvalence p
+            JOIN postes ps ON p.poste_id = ps.id
+            WHERE p.operateur_id = %s
+            ORDER BY ps.poste_code
+            """,
+            (operateur_id,),
+            dictionary=True,
+        )
+
+    @classmethod
+    def upsert_prochaine_evaluation(
+        cls,
+        operateur_id: int,
+        poste_id: int,
+        niveau: int,
+        prochaine_evaluation,
+    ) -> Tuple[bool, str]:
+        """
+        Insère ou met à jour la prochaine évaluation (UPSERT).
+
+        Utilisé lors de la création d'un opérateur pour initialiser
+        sa polyvalence sans lever d'erreur si elle existe déjà.
+        """
+        from core.db.query_executor import QueryExecutor
+        existing = QueryExecutor.fetch_one(
+            "SELECT id FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
+            (operateur_id, poste_id),
+        )
+        if existing:
+            poly_id = existing[0]
+            QueryExecutor.execute_write(
+                "UPDATE polyvalence SET prochaine_evaluation = %s, niveau = %s WHERE id = %s",
+                (prochaine_evaluation, niveau, poly_id),
+            )
+            return True, "Polyvalence mise à jour"
+        else:
+            QueryExecutor.execute_write(
+                "INSERT INTO polyvalence (operateur_id, poste_id, niveau, prochaine_evaluation) "
+                "VALUES (%s, %s, %s, %s)",
+                (operateur_id, poste_id, niveau, prochaine_evaluation),
+            )
+            return True, "Polyvalence créée"
+
+    @classmethod
+    def get_en_retard_filtre(cls, poste_code: str = None, limit: int = 10) -> List[Dict]:
+        """
+        Retourne les évaluations en retard pour le tableau de bord.
+
+        Args:
+            poste_code: Filtre optionnel sur le code poste
+            limit: Nombre max de résultats
+        """
+        from core.db.query_executor import QueryExecutor
+        query = """
+            SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
+            FROM polyvalence poly
+            INNER JOIN personnel p ON p.id = poly.operateur_id
+            LEFT JOIN postes pos ON pos.id = poly.poste_id
+            WHERE poly.prochaine_evaluation < CURDATE()
+              AND p.statut = 'ACTIF'
+        """
+        params: List[Any] = []
+        if poste_code:
+            query += " AND pos.poste_code = %s"
+            params.append(poste_code)
+        query += " ORDER BY poly.prochaine_evaluation ASC LIMIT %s"
+        params.append(limit)
+        return QueryExecutor.fetch_all(query, tuple(params), dictionary=True)
+
+    @classmethod
+    def get_a_venir_filtre(
+        cls, jours: int = 30, poste_code: str = None, limit: int = 10
+    ) -> List[Dict]:
+        """
+        Retourne les évaluations à venir pour le tableau de bord.
+
+        Args:
+            jours: Horizon en jours (défaut 30)
+            poste_code: Filtre optionnel sur le code poste
+            limit: Nombre max de résultats
+        """
+        from core.db.query_executor import QueryExecutor
+        query = """
+            SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
+            FROM polyvalence poly
+            INNER JOIN personnel p ON p.id = poly.operateur_id
+            LEFT JOIN postes pos ON pos.id = poly.poste_id
+            WHERE poly.prochaine_evaluation BETWEEN CURDATE()
+              AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+              AND p.statut = 'ACTIF'
+        """
+        params: List[Any] = [jours]
+        if poste_code:
+            query += " AND pos.poste_code = %s"
+            params.append(poste_code)
+        query += " ORDER BY poly.prochaine_evaluation ASC LIMIT %s"
+        params.append(limit)
+        return QueryExecutor.fetch_all(query, tuple(params), dictionary=True)
+
+    @classmethod
     def delete_competence(cls, operateur_id: int, poste_id: int) -> Tuple[bool, str]:
         """Supprime une compétence."""
         query = "DELETE FROM polyvalence WHERE operateur_id = %s AND poste_id = %s"
@@ -418,3 +529,44 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         except Exception as e:
             logger.error(f"Erreur suppression polyvalence: {e}")
             return False, f"Erreur: {str(e)}"
+
+    @classmethod
+    def get_actuelles_with_type(cls, operateur_id: int) -> List[Dict]:
+        """
+        Retourne les polyvalences actuelles avec les champs type/id/commentaire
+        pour la vue historique personnel (HistoriquePersonnelTab).
+        """
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_all(
+            """
+            SELECT 'ACTUELLE' AS type, p.id, ps.poste_code, p.niveau,
+                   p.date_evaluation, p.prochaine_evaluation, NULL AS commentaire
+            FROM polyvalence p
+            JOIN postes ps ON p.poste_id = ps.id
+            WHERE p.operateur_id = %s
+            ORDER BY ps.poste_code
+            """,
+            (operateur_id,),
+            dictionary=True,
+        )
+
+    @classmethod
+    def get_anciennes_historique(cls, operateur_id: int) -> List[Dict]:
+        """
+        Retourne les anciennes polyvalences (IMPORT_MANUEL) depuis
+        historique_polyvalence pour la vue historique personnel.
+        """
+        from core.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_all(
+            """
+            SELECT 'ANCIENNE' AS type, hp.id, p.poste_code, hp.nouveau_niveau AS niveau,
+                   hp.nouvelle_date_evaluation AS date_evaluation,
+                   NULL AS prochaine_evaluation, hp.commentaire
+            FROM historique_polyvalence hp
+            LEFT JOIN postes p ON hp.poste_id = p.id
+            WHERE hp.operateur_id = %s AND hp.action_type = 'IMPORT_MANUEL'
+            ORDER BY p.poste_code, hp.date_action DESC
+            """,
+            (operateur_id,),
+            dictionary=True,
+        )

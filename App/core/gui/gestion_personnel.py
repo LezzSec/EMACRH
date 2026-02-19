@@ -13,7 +13,11 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
-from core.db.query_executor import QueryExecutor
+from core.repositories.personnel_repo import PersonnelRepository
+from core.repositories.polyvalence_repo import PolyvalenceRepository
+from core.services.contrat_service_crud import ContratServiceCRUD
+from core.services.formation_service_crud import FormationServiceCRUD
+from core.services import medical_service
 from core.gui.db_worker import DbWorker, DbThreadPool
 from core.services.logger import log_hist
 from core.gui.historique_personnel import HistoriquePersonnelTab
@@ -269,7 +273,8 @@ class DetailOperateurDialog(QDialog):
             self._infos_data = []
 
             # -------- Carte Informations personnelles --------
-            row_data = QueryExecutor.fetch_all("SELECT * FROM personnel_infos WHERE personnel_id = %s", (self.operateur_id,), dictionary=True)
+            _pi = PersonnelRepository.get_personnel_infos(self.operateur_id)
+            row_data = [_pi] if _pi else []
 
             personal_items = []
             if row_data:
@@ -299,12 +304,7 @@ class DetailOperateurDialog(QDialog):
             )
 
             # -------- Carte Contrat actuel --------
-            contr = QueryExecutor.fetch_all("""
-                SELECT type_contrat, date_debut, date_fin, etp, categorie
-                FROM contrat
-                WHERE operateur_id = %s AND actif = 1
-                ORDER BY date_debut DESC LIMIT 1
-            """, (self.operateur_id,), dictionary=True)
+            contr = ContratServiceCRUD.get_by_operateur(self.operateur_id, actif_only=True)[:1]
 
             contract_items = []
             if contr:
@@ -334,12 +334,7 @@ class DetailOperateurDialog(QDialog):
             )
 
             # -------- Carte Formations --------
-            formations = QueryExecutor.fetch_all("""
-                SELECT intitule, organisme, date_debut, date_fin, statut, certificat_obtenu
-                FROM formation
-                WHERE operateur_id = %s
-                ORDER BY date_debut DESC LIMIT 5
-            """, (self.operateur_id,), dictionary=True)
+            formations = FormationServiceCRUD.get_by_operateur(self.operateur_id)[:5]
 
             formation_items = []
             if formations:
@@ -361,12 +356,7 @@ class DetailOperateurDialog(QDialog):
             )
 
             # -------- Carte Validités --------
-            validites = QueryExecutor.fetch_all("""
-                SELECT type_validite, date_debut, date_fin, periodicite, taux_incapacite
-                FROM validite
-                WHERE operateur_id = %s
-                ORDER BY date_debut DESC
-            """, (self.operateur_id,), dictionary=True)
+            validites = medical_service.get_validites_operateur(self.operateur_id)
 
             validite_items = []
             if validites:
@@ -510,7 +500,7 @@ class DetailOperateurDialog(QDialog):
     def _open_contract_management(self):
         """Ouvre la Gestion RH directement sur l'onglet Contrat pour cet opérateur."""
         from core.gui.gestion_rh import GestionRHDialog
-        from core.services.rh_service import DomaineRH
+        from core.services.rh_service_refactored import DomaineRH
         dialog = GestionRHDialog(self)
         dialog._selectionner_operateur_par_id(self.operateur_id)
         dialog._on_domaine_change(DomaineRH.CONTRAT.value)
@@ -521,7 +511,7 @@ class DetailOperateurDialog(QDialog):
     def _open_formation_rh(self):
         """Ouvre la Gestion RH directement sur l'onglet Formation pour cet opérateur."""
         from core.gui.gestion_rh import GestionRHDialog
-        from core.services.rh_service import DomaineRH
+        from core.services.rh_service_refactored import DomaineRH
         dialog = GestionRHDialog(self)
         dialog._selectionner_operateur_par_id(self.operateur_id)
         dialog._on_domaine_change(DomaineRH.FORMATION.value)
@@ -558,17 +548,7 @@ class DetailOperateurDialog(QDialog):
     def load_polyvalences(self):
         """Charge les polyvalences."""
         try:
-            rows = QueryExecutor.fetch_all("""
-                SELECT
-                    ps.poste_code,
-                    p.niveau,
-                    p.date_evaluation,
-                    p.prochaine_evaluation
-                FROM polyvalence p
-                JOIN postes ps ON p.poste_id = ps.id
-                WHERE p.operateur_id = %s
-                ORDER BY ps.poste_code
-            """, (self.operateur_id,), dictionary=True)
+            rows = PolyvalenceRepository.get_by_operateur_dict(self.operateur_id)
             
             self.poly_table.setRowCount(0)
             
@@ -676,16 +656,16 @@ class DetailOperateurDialog(QDialog):
         
         try:
             # Récupérer nom/prénom pour le log
-            pers = QueryExecutor.fetch_one("SELECT nom, prenom FROM personnel WHERE id = %s", (self.operateur_id,))
+            pers_info = PersonnelRepository.get_info_basique(self.operateur_id)
 
             # Mettre à jour le statut
-            QueryExecutor.execute_write(
-                "UPDATE personnel SET statut = %s WHERE id = %s",
-                (new_statut, self.operateur_id)
-            )
+            if new_statut == "INACTIF":
+                PersonnelRepository.desactiver(self.operateur_id)
+            else:
+                PersonnelRepository.reactiver(self.operateur_id)
 
             # Logger le changement de statut
-            if pers:
+            if pers_info:
                 import json
                 log_hist(
                     action="UPDATE",
@@ -693,7 +673,7 @@ class DetailOperateurDialog(QDialog):
                     record_id=self.operateur_id,
                     operateur_id=self.operateur_id,
                     description=json.dumps({
-                        "operateur": f"{pers[1]} {pers[0]}",
+                        "operateur": f"{pers_info['prenom']} {pers_info['nom']}",
                         "old_statut": self.current_statut,
                         "new_statut": new_statut,
                         "type": "changement_statut"
@@ -809,15 +789,12 @@ class DetailOperateurDialog(QDialog):
             # ---------- Données opérateur ----------
             nom = prenom = matricule = statut = "-"
             try:
-                row = QueryExecutor.fetch_one("""
-                    SELECT nom, prenom, COALESCE(matricule,'-'), UPPER(statut)
-                    FROM personnel WHERE id=%s
-                """, (self.operateur_id,))
+                row = PersonnelRepository.get_info_basique(self.operateur_id)
                 if row:
-                    nom, prenom, matricule, statut = row
+                    nom, prenom, matricule, statut = row['nom'], row['prenom'], row['matricule'], row['statut']
             except Exception:
                 pass
-    
+
             # ---------- Fichier ----------
             default_name = f"profil_{(matricule or 'operateur')}_{_dt.date.today():%Y%m%d}.pdf"
             file_path, _ = QFileDialog.getSaveFileName(self, "Exporter en PDF", default_name, "PDF (*.pdf)")
@@ -1091,9 +1068,9 @@ class DetailOperateurDialog(QDialog):
             # ----- En-tête opérateur -----
             nom = prenom = matricule = statut = "-"
             try:
-                row = QueryExecutor.fetch_one("SELECT nom, prenom, COALESCE(matricule,'-'), UPPER(statut) FROM personnel WHERE id=%s", (self.operateur_id,))
+                row = PersonnelRepository.get_info_basique(self.operateur_id)
                 if row:
-                    nom, prenom, matricule, statut = row
+                    nom, prenom, matricule, statut = row['nom'], row['prenom'], row['matricule'], row['statut']
             except Exception:
                 pass
     
@@ -1233,15 +1210,7 @@ class DetailOperateurDialog(QDialog):
     def _load_date_entree(self):
         """Charge la date d'entrée de l'opérateur depuis personnel_infos."""
         try:
-            row = QueryExecutor.fetch_one(
-                "SELECT date_entree FROM personnel_infos WHERE personnel_id = %s",
-                (self.operateur_id,),
-                dictionary=True
-            )
-
-            if row and row.get('date_entree'):
-                return row['date_entree']
-            return None
+            return PersonnelRepository.get_date_entree(self.operateur_id)
         except Exception:
             return None
 
@@ -1438,26 +1407,7 @@ class GestionPersonnelDialog(QDialog):
 
         def fetch_data(progress_callback=None):
             """Fonction exécutée en background"""
-            return QueryExecutor.fetch_all("""
-                SELECT
-                o.id,
-                o.nom,
-                o.prenom,
-                o.matricule,
-                o.numposte,
-                UPPER(o.statut) AS statut,
-                ct.type_contrat,
-                COUNT(p.id) AS nb_postes,
-                SUM(CASE WHEN p.niveau = 1 THEN 1 ELSE 0 END) AS n1,
-                SUM(CASE WHEN p.niveau = 2 THEN 1 ELSE 0 END) AS n2,
-                SUM(CASE WHEN p.niveau = 3 THEN 1 ELSE 0 END) AS n3,
-                SUM(CASE WHEN p.niveau = 4 THEN 1 ELSE 0 END) AS n4
-            FROM personnel o
-            LEFT JOIN polyvalence p ON o.id = p.operateur_id
-            LEFT JOIN contrat ct ON ct.operateur_id = o.id AND ct.actif = 1
-            GROUP BY o.id, o.nom, o.prenom, o.matricule, o.numposte, o.statut, ct.type_contrat
-            ORDER BY o.nom, o.prenom;
-            """, dictionary=True)
+            return PersonnelRepository.get_personnel_avec_stats()
 
         def on_success(data):
             """Callback UI avec les résultats"""
@@ -1841,19 +1791,7 @@ class AffecterDatesEntreeDialog(QDialog):
     def load_personnel_sans_date(self):
         """Charge les employés sans date d'entrée"""
         try:
-            personnel = QueryExecutor.fetch_all("""
-                SELECT
-                    p.id,
-                    p.nom,
-                    p.prenom,
-                    p.matricule,
-                    p.statut,
-                    pi.date_entree
-                FROM personnel p
-                LEFT JOIN personnel_infos pi ON p.id = pi.personnel_id
-                WHERE pi.date_entree IS NULL OR pi.personnel_id IS NULL
-                ORDER BY p.nom, p.prenom
-            """, dictionary=True)
+            personnel = PersonnelRepository.get_personnel_sans_date_entree()
 
             # Mettre à jour les stats
             self.stats_label.setText(
@@ -1959,19 +1897,7 @@ class AffecterDatesEntreeDialog(QDialog):
 
             # Enregistrer dans la base
             try:
-                # Vérifier si l'enregistrement existe
-                exists = QueryExecutor.exists('personnel_infos', {'personnel_id': operateur_id})
-
-                if exists:
-                    QueryExecutor.execute_write(
-                        "UPDATE personnel_infos SET date_entree = %s WHERE personnel_id = %s",
-                        (date_entree, operateur_id)
-                    )
-                else:
-                    QueryExecutor.execute_write(
-                        "INSERT INTO personnel_infos (personnel_id, date_entree) VALUES (%s, %s)",
-                        (operateur_id, date_entree)
-                    )
+                PersonnelRepository.save_date_entree(operateur_id, date_entree)
 
                 # Logger
                 log_hist(

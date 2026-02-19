@@ -17,9 +17,11 @@ from PyQt5.QtGui import QFont, QColor
 from datetime import datetime, date
 
 from core.services import formation_service
+from core.services.document_service import DocumentService as _DocumentService
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.utils.logging_config import get_logger
-from core.db.query_executor import QueryExecutor
+
+_doc_service = _DocumentService()
 
 logger = get_logger(__name__)
 
@@ -887,23 +889,17 @@ class AddEditFormationDialog(QDialog):
             import sys
             import subprocess
 
-            result = QueryExecutor.fetch_one(
-                "SELECT chemin_fichier FROM documents WHERE id = %s",
-                (self.document_id,),
-                dictionary=True
-            )
+            file_path = _doc_service.get_document_path(self.document_id)
 
-            if result and result['chemin_fichier']:
-                file_path = result['chemin_fichier']
-                if os.path.exists(file_path):
-                    if sys.platform == 'win32':
-                        os.startfile(file_path)
-                    elif sys.platform == 'darwin':
-                        subprocess.run(['open', file_path])
-                    else:
-                        subprocess.run(['xdg-open', file_path])
+            if file_path and file_path.exists():
+                if sys.platform == 'win32':
+                    os.startfile(str(file_path))
+                elif sys.platform == 'darwin':
+                    subprocess.run(['open', str(file_path)])
                 else:
-                    QMessageBox.warning(self, "Erreur", "Fichier introuvable.")
+                    subprocess.run(['xdg-open', str(file_path)])
+            else:
+                QMessageBox.warning(self, "Erreur", "Fichier introuvable.")
         except Exception as e:
             logger.exception(f"Erreur voir attestation: {e}")
             show_error_message(self, "Erreur", "Impossible d'ouvrir l'attestation", e)
@@ -927,14 +923,10 @@ class AddEditFormationDialog(QDialog):
         """Met à jour l'affichage de l'attestation"""
         if self.document_id:
             try:
-                result = QueryExecutor.fetch_one(
-                    "SELECT nom_fichier FROM documents WHERE id = %s",
-                    (self.document_id,),
-                    dictionary=True
-                )
+                nom_fichier = _doc_service.get_document_nom(self.document_id)
 
-                if result:
-                    self.attestation_label.setText(f"📄 {result['nom_fichier']}")
+                if nom_fichier:
+                    self.attestation_label.setText(f"📄 {nom_fichier}")
                     self.attestation_label.setStyleSheet("color: #10b981; font-weight: bold;")
                     self.btn_voir.setEnabled(True)
                     self.btn_supprimer_doc.setEnabled(True)

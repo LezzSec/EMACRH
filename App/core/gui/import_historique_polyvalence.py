@@ -17,7 +17,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor
 
-from core.db.query_executor import QueryExecutor
+from core.repositories.personnel_repo import PersonnelRepository
+from core.repositories.poste_repo import PosteRepository
 from core.services.polyvalence_logger import log_polyvalence_action
 from core.gui.emac_ui_kit import show_error_message
 from core.utils.logging_config import get_logger
@@ -272,22 +273,15 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
     def _load_operateurs(self):
         """Charge la liste des opérateurs."""
         try:
-            operateurs = QueryExecutor.fetch_all(
-                """
-                SELECT id, nom, prenom, matricule
-                FROM personnel
-                ORDER BY nom, prenom
-                """,
-                dictionary=True
-            )
+            operateurs = PersonnelRepository.get_all()
 
             self.operateurs_map = {}
             for op in operateurs:
-                display = f"{op['nom']} {op['prenom']}"
-                if op.get('matricule'):
-                    display += f" ({op['matricule']})"
-                self.operateur_combo.addItem(display, op['id'])
-                self.operateurs_map[op['id']] = display
+                display = f"{op.nom} {op.prenom}"
+                if op.matricule:
+                    display += f" ({op.matricule})"
+                self.operateur_combo.addItem(display, op.id)
+                self.operateurs_map[op.id] = display
 
         except Exception as e:
             logger.exception(f"Erreur chargement operateurs: {e}")
@@ -296,20 +290,12 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
     def _load_postes(self):
         """Charge la liste des postes."""
         try:
-            postes = QueryExecutor.fetch_all(
-                """
-                SELECT id, poste_code
-                FROM postes
-                WHERE visible = 1
-                ORDER BY poste_code
-                """,
-                dictionary=True
-            )
+            postes = PosteRepository.get_all_visibles()
 
             self.postes_map = {}
             for poste in postes:
-                self.poste_combo.addItem(poste['poste_code'], poste['id'])
-                self.postes_map[poste['id']] = poste['poste_code']
+                self.poste_combo.addItem(poste.poste_code, poste.id)
+                self.postes_map[poste.id] = poste.poste_code
 
         except Exception as e:
             logger.exception(f"Erreur chargement postes: {e}")

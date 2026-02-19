@@ -10,8 +10,12 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QTextCharFormat
 from datetime import date, datetime, timedelta
-from core.db.query_executor import QueryExecutor
-from core.services.logger import log_hist
+from core.services.planning_service import (
+    get_absents_du_jour, get_personnel_actif_liste, creer_declaration,
+    get_absences_du_mois, get_absences_du_jour, get_postes_avec_polyvalences,
+    get_evaluations_dates_du_mois, get_evaluations_du_jour,
+    get_historique_declarations, supprimer_declaration,
+)
 from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -181,21 +185,7 @@ class RegularisationDialog(QDialog):
         try:
             today = date.today()
 
-            rows = QueryExecutor.fetch_all("""
-                SELECT
-                    d.id,
-                    d.operateur_id,
-                    p.nom,
-                    p.prenom,
-                    d.type_declaration,
-                    d.date_debut,
-                    d.date_fin,
-                    d.motif
-                FROM declaration d
-                LEFT JOIN personnel p ON p.id = d.operateur_id
-                WHERE %s BETWEEN d.date_debut AND d.date_fin
-                ORDER BY p.nom, p.prenom
-            """, (today,), dictionary=True)
+            rows = get_absents_du_jour(today)
 
             self.absents_table.setRowCount(0)
 
@@ -339,12 +329,7 @@ class RegularisationDialog(QDialog):
     def load_personnel_combo(self):
         """Charge la liste du personnel dans le combo."""
         try:
-            rows = QueryExecutor.fetch_all("""
-                SELECT id, nom, prenom, matricule
-                FROM personnel
-                WHERE statut = 'ACTIF'
-                ORDER BY nom, prenom
-            """, dictionary=True)
+            rows = get_personnel_actif_liste()
 
             self.personnel_combo.clear()
 
@@ -377,21 +362,9 @@ class RegularisationDialog(QDialog):
             return
 
         try:
-            new_id = QueryExecutor.execute_write("""
-                INSERT INTO declaration (operateur_id, type_declaration, date_debut, date_fin, motif)
-                VALUES (%s, %s, %s, %s, %s)
-            """, (operateur_id, type_decl, date_debut, date_fin, motif), return_lastrowid=True)
-
-            # Logger l'action
-            try:
-                log_hist(
-                    "INSERT",
-                    f"Déclaration d'absence : {type_decl}",
-                    operateur_id,
-                    None
-                )
-            except Exception:
-                pass
+            new_id = creer_declaration(operateur_id, type_decl, date_debut, date_fin, motif)
+            if new_id is None:
+                raise RuntimeError("Échec de l'enregistrement")
 
             QMessageBox.information(
                 self, "Succès",
@@ -466,13 +439,7 @@ class RegularisationDialog(QDialog):
             else:
                 last_day = date(current_date.year, current_date.month + 1, 1) - timedelta(days=1)
 
-            rows = QueryExecutor.fetch_all("""
-                SELECT DISTINCT date_debut, date_fin
-                FROM declaration
-                WHERE (date_debut BETWEEN %s AND %s)
-                   OR (date_fin BETWEEN %s AND %s)
-                   OR (date_debut <= %s AND date_fin >= %s)
-            """, (first_day, last_day, first_day, last_day, first_day, last_day), dictionary=True)
+            rows = get_absences_du_mois(first_day, last_day)
 
             # Réinitialiser le format
             default_format = QTextCharFormat()
@@ -509,17 +476,7 @@ class RegularisationDialog(QDialog):
         self.selected_date_label.setText(f"📅 Absences du {selected.strftime('%d/%m/%Y')}")
 
         try:
-            rows = QueryExecutor.fetch_all("""
-                SELECT
-                    p.nom,
-                    p.prenom,
-                    d.type_declaration,
-                    d.motif
-                FROM declaration d
-                LEFT JOIN personnel p ON p.id = d.operateur_id
-                WHERE %s BETWEEN d.date_debut AND d.date_fin
-                ORDER BY p.nom, p.prenom
-            """, (selected,), dictionary=True)
+            rows = get_absences_du_jour(selected)
 
             self.calendar_absents_list.clear()
 
@@ -621,13 +578,7 @@ class RegularisationDialog(QDialog):
     def load_eval_postes_filter(self):
         """Charge la liste des postes pour le filtre d'évaluations."""
         try:
-            rows = QueryExecutor.fetch_all("""
-                SELECT DISTINCT p.id, p.poste_code
-                FROM postes p
-                INNER JOIN polyvalence poly ON poly.poste_id = p.id
-                WHERE p.visible = 1
-                ORDER BY p.poste_code
-            """, dictionary=True)
+            rows = get_postes_avec_polyvalences()
 
             self.eval_poste_filter.clear()
             self.eval_poste_filter.addItem("(Tous)", None)
@@ -652,15 +603,7 @@ class RegularisationDialog(QDialog):
             else:
                 last_day = date(year, month + 1, 1) - timedelta(days=1)
 
-            rows = QueryExecutor.fetch_all("""
-                SELECT DISTINCT DATE(poly.prochaine_evaluation) as eval_date
-                FROM polyvalence poly
-                JOIN personnel pers ON poly.operateur_id = pers.id
-                JOIN postes p ON poly.poste_id = p.id
-                WHERE poly.prochaine_evaluation BETWEEN %s AND %s
-                  AND pers.statut = 'ACTIF'
-                  AND p.visible = 1
-            """, (first_day, last_day), dictionary=True)
+            rows = get_evaluations_dates_du_mois(first_day, last_day)
 
             self.eval_dates_cache = set()
             for r in rows:
@@ -726,34 +669,10 @@ class RegularisationDialog(QDialog):
         self.eval_selected_date_label.setText(f"📆 Évaluations du {selected.strftime('%d/%m/%Y')}")
 
         try:
-            # Récupérer les filtres
             search_text = self.eval_search.text().lower()
             poste_id = self.eval_poste_filter.currentData()
 
-            # Construire la requête
-            query = """
-                SELECT
-                    pers.nom,
-                    pers.prenom,
-                    p.poste_code,
-                    poly.niveau,
-                    poly.prochaine_evaluation
-                FROM polyvalence poly
-                JOIN personnel pers ON poly.operateur_id = pers.id
-                JOIN postes p ON poly.poste_id = p.id
-                WHERE DATE(poly.prochaine_evaluation) = %s
-                  AND pers.statut = 'ACTIF'
-                  AND p.visible = 1
-            """
-            params = [selected]
-
-            if poste_id is not None:
-                query += " AND p.id = %s"
-                params.append(poste_id)
-
-            query += " ORDER BY pers.nom, pers.prenom, p.poste_code"
-
-            rows = QueryExecutor.fetch_all(query, params, dictionary=True)
+            rows = get_evaluations_du_jour(selected, poste_id=poste_id)
 
             self.eval_calendar_list.clear()
 
@@ -885,49 +804,10 @@ class RegularisationDialog(QDialog):
         """Charge l'historique des déclarations."""
         try:
             # Construire la requête selon les filtres
-            query = """
-                SELECT
-                    d.id,
-                    p.nom,
-                    p.prenom,
-                    d.type_declaration,
-                    d.date_debut,
-                    d.date_fin,
-                    d.motif
-                FROM declaration d
-                LEFT JOIN personnel p ON p.id = d.operateur_id
-                WHERE 1=1
-            """
-            params = []
-
-            # Filtre par type
             type_filter = self.history_type_combo.currentText()
-            if type_filter != "Tous":
-                query += " AND d.type_declaration = %s"
-                params.append(type_filter)
-
-            # Filtre par période
             period = self.period_combo.currentText()
-            if period == "30 derniers jours":
-                start_date = date.today() - timedelta(days=30)
-                query += " AND d.date_debut >= %s"
-                params.append(start_date)
-            elif period == "3 derniers mois":
-                start_date = date.today() - timedelta(days=90)
-                query += " AND d.date_debut >= %s"
-                params.append(start_date)
-            elif period == "6 derniers mois":
-                start_date = date.today() - timedelta(days=180)
-                query += " AND d.date_debut >= %s"
-                params.append(start_date)
-            elif period == "Cette année":
-                start_date = date(date.today().year, 1, 1)
-                query += " AND d.date_debut >= %s"
-                params.append(start_date)
 
-            query += " ORDER BY d.date_debut DESC, p.nom, p.prenom"
-
-            rows = QueryExecutor.fetch_all(query, params, dictionary=True)
+            rows = get_historique_declarations(type_filter=type_filter, period=period)
 
             self.history_table.setRowCount(0)
 
@@ -995,7 +875,8 @@ class RegularisationDialog(QDialog):
             return
 
         try:
-            QueryExecutor.execute_write("DELETE FROM declaration WHERE id = %s", (decl_id,))
+            if not supprimer_declaration(decl_id):
+                raise RuntimeError("Échec de la suppression")
 
             QMessageBox.information(self, "Succès", "✅ Déclaration supprimée avec succès.")
 
