@@ -189,8 +189,13 @@ def evaluate_condition(condition: Optional[Dict], event_data: Dict) -> bool:
                 # Pas de poste dans l'événement, condition non applicable
                 continue
 
-            # Convertir en string pour comparaison
-            code_poste = str(code_poste)
+            # Normaliser: supprimer les zéros initiaux pour comparaison
+            # (postes table: "0506", templates: "506" → les deux → "506")
+            def _normalize_code(c):
+                s = str(c).lstrip('0')
+                return s if s else str(c)
+
+            code_poste_norm = _normalize_code(code_poste)
 
             # expected peut être une string JSON ou une liste
             if isinstance(expected, str):
@@ -200,8 +205,9 @@ def evaluate_condition(condition: Optional[Dict], event_data: Dict) -> bool:
                     expected = [expected]
 
             if isinstance(expected, list):
-                if code_poste not in expected:
-                    logger.debug(f"Condition postes non satisfaite: {code_poste} not in {expected}")
+                expected_norm = [_normalize_code(e) for e in expected]
+                if code_poste_norm not in expected_norm:
+                    logger.debug(f"Condition postes non satisfaite: {code_poste_norm} not in {expected_norm}")
                     return False
             continue
 

@@ -396,6 +396,7 @@ def get_polyvalences_actuelles_operateur(operateur_id: int) -> List[Dict]:
     """Polyvalences actuelles (dernière par poste) pour un opérateur."""
     return QueryExecutor.fetch_all("""
         SELECT poly.id,
+               poly.poste_id,
                ps.poste_code,
                poly.niveau,
                poly.date_evaluation,

@@ -122,6 +122,20 @@ class DocumentTriggerService:
 
         logger.debug(f"DocumentTrigger: traitement de '{event.name}'")
 
+        # Quand le niveau baisse, supprimer les docs en attente des niveaux devenus invalides
+        # (traité avant la récupération des templates car niveau_changed n'a pas de règles)
+        if event.name == 'polyvalence.niveau_changed':
+            op_id = event.data.get('operateur_id')
+            new_niv = event.data.get('new_niveau')
+            old_niv = event.data.get('old_niveau')
+            if op_id and new_niv is not None and old_niv is not None and new_niv < old_niv:
+                for n in range(new_niv + 1, 5):
+                    self._remove_pending_by_event(op_id, f'polyvalence.niveau_{n}_reached')
+                logger.info(
+                    f"Niveau abaissé ({old_niv}→{new_niv}) pour op {op_id}: "
+                    f"docs niveaux {new_niv+1}-4 supprimés de la queue"
+                )
+
         # Récupérer les templates correspondants (avec évaluation des conditions)
         templates = get_matching_templates(event.name, event.data)
 
@@ -135,6 +149,17 @@ class DocumentTriggerService:
         operateur_id = event.data.get('operateur_id')
         operateur_nom = event.data.get('nom', '')
         operateur_prenom = event.data.get('prenom', '')
+
+        # Quand un niveau supérieur est atteint, supprimer les docs des niveaux inférieurs.
+        # Ex : 1→3 direct : niveau_1_reached doit être retiré quand niveau_3_reached arrive.
+        import re as _re
+        _m = _re.match(r'polyvalence\.niveau_(\d)_reached', event.name)
+        if _m:
+            new_niv = int(_m.group(1))
+            op_id = event.data.get('operateur_id')
+            if op_id and new_niv > 1:
+                for n in range(1, new_niv):
+                    self._remove_pending_by_event(op_id, f'polyvalence.niveau_{n}_reached')
 
         # Traiter chaque template selon son mode
         for tpl in templates:
@@ -235,6 +260,25 @@ class DocumentTriggerService:
             if not exists:
                 self._pending_documents.append(pending)
                 logger.debug(f"Document en attente ajouté: {template['template_nom']}")
+
+    def _remove_pending_by_event(self, operateur_id: int, event_name: str):
+        """
+        Retire tous les documents en attente d'un opérateur liés à un événement donné.
+
+        Utilisé pour les règles de priorité (ex: niveau 3 annule les docs niveau 2).
+        """
+        with self._pending_lock:
+            before = len(self._pending_documents)
+            self._pending_documents = [
+                p for p in self._pending_documents
+                if not (p.operateur_id == operateur_id and p.event_name == event_name)
+            ]
+            removed = before - len(self._pending_documents)
+            if removed:
+                logger.debug(
+                    f"Priorité niveau 3 : {removed} doc(s) '{event_name}' "
+                    f"supprimé(s) pour opérateur {operateur_id}"
+                )
 
     def _log_silent(self, template: Dict, op_id: int, event_name: str):
         """
@@ -378,6 +422,172 @@ class DocumentTriggerService:
         except Exception as e:
             logger.error(f"Erreur génération pending: {e}", exc_info=True)
             return False, str(e), None
+
+    @classmethod
+    def compute_documents_for_polyvalences(
+        cls,
+        operateur_id: int,
+        nom: str,
+        prenom: str,
+        polyvalences: list
+    ) -> List['PendingDocument']:
+        """
+        Calcule les documents disponibles pour les polyvalences d'un opérateur
+        **sans modifier la file d'attente** (lecture seule).
+
+        Utilisé pour afficher les documents potentiels avant que l'utilisateur
+        confirme la génération.
+
+        Args:
+            operateur_id: ID de l'opérateur
+            nom: Nom de l'opérateur
+            prenom: Prénom de l'opérateur
+            polyvalences: Liste de dicts avec clés: id, poste_id, poste_code, niveau
+
+        Returns:
+            Liste de PendingDocument (non ajoutés à la queue)
+        """
+        from core.services.event_rule_service import get_matching_templates
+
+        result = []
+        seen: set = set()
+
+        for poly in polyvalences:
+            niveau = poly.get('niveau')
+            poste_id = poly.get('poste_id')
+            code_poste = poly.get('poste_code') or str(poste_id)
+
+            event_data = {
+                'operateur_id': operateur_id,
+                'nom': nom,
+                'prenom': prenom,
+                'polyvalence_id': poly.get('id'),
+                'poste_id': poste_id,
+                'code_poste': code_poste,
+                'niveau': niveau,
+                'new_niveau': niveau,
+            }
+
+            for event_name in (f'polyvalence.niveau_{niveau}_reached', 'evaluation.completed'):
+                for tpl in get_matching_templates(event_name, event_data):
+                    key = (tpl['template_id'], operateur_id)
+                    if key not in seen:
+                        seen.add(key)
+                        result.append(PendingDocument(
+                            template_id=tpl['template_id'],
+                            template_nom=tpl['template_nom'],
+                            execution_mode=tpl['execution_mode'],
+                            operateur_id=operateur_id,
+                            operateur_nom=nom,
+                            operateur_prenom=prenom,
+                            event_name=event_name,
+                            rule_id=tpl.get('rule_id', 0)
+                        ))
+
+        return result
+
+    @classmethod
+    def generate_on_demand(
+        cls,
+        pending: 'PendingDocument'
+    ) -> Tuple[bool, str, Optional[str]]:
+        """
+        Génère un document à la demande (hors file d'attente).
+
+        Contrairement à `generate_pending`, ne retire rien de la queue
+        et logue l'action comme DOCUMENT_ON_DEMAND_GENERATED.
+
+        Args:
+            pending: Document à générer
+
+        Returns:
+            Tuple (success, message, file_path)
+        """
+        try:
+            success, msg, path = generate_filled_template(
+                template_id=pending.template_id,
+                operateur_nom=pending.operateur_nom,
+                operateur_prenom=pending.operateur_prenom,
+            )
+
+            if success:
+                log_hist(
+                    "DOCUMENT_ON_DEMAND_GENERATED",
+                    "documents_templates",
+                    pending.template_id,
+                    f"Document '{pending.template_nom}' généré à la demande pour "
+                    f"{pending.operateur_prenom} {pending.operateur_nom}",
+                    operateur_id=pending.operateur_id
+                )
+                logger.info(f"Document on-demand généré: {pending.template_nom} → {path}")
+
+            return success, msg, path
+
+        except Exception as e:
+            logger.error(f"Erreur génération on-demand '{pending.template_nom}': {e}", exc_info=True)
+            return False, str(e), None
+
+    @classmethod
+    def propose_for_polyvalences(
+        cls,
+        operateur_id: int,
+        nom: str,
+        prenom: str,
+        polyvalences: list
+    ) -> int:
+        """
+        Propose documents à la demande selon les polyvalences actuelles d'un opérateur.
+
+        Pour chaque polyvalence, vérifie les règles configurées pour l'événement
+        `polyvalence.niveau_X_reached` et `evaluation.completed` afin de proposer
+        les documents correspondants au niveau et au poste.
+
+        Args:
+            operateur_id: ID de l'opérateur
+            nom: Nom de l'opérateur
+            prenom: Prénom de l'opérateur
+            polyvalences: Liste de dicts avec clés: id, poste_id, poste_code, niveau
+
+        Returns:
+            Nombre de documents ajoutés à la file d'attente
+        """
+        from core.services.event_rule_service import get_matching_templates
+
+        instance = cls()
+        added = 0
+
+        for poly in polyvalences:
+            niveau = poly.get('niveau')
+            poste_id = poly.get('poste_id')
+            code_poste = poly.get('poste_code') or str(poste_id)
+
+            event_data = {
+                'operateur_id': operateur_id,
+                'nom': nom,
+                'prenom': prenom,
+                'polyvalence_id': poly.get('id'),
+                'poste_id': poste_id,
+                'code_poste': code_poste,
+                'niveau': niveau,
+                'new_niveau': niveau,
+            }
+
+            events_to_check = [
+                f'polyvalence.niveau_{niveau}_reached',
+                'evaluation.completed',
+            ]
+
+            for event_name in events_to_check:
+                templates = get_matching_templates(event_name, event_data)
+                for tpl in templates:
+                    instance._add_pending(tpl, operateur_id, nom, prenom, event_name)
+                    added += 1
+
+        logger.info(
+            f"propose_for_polyvalences: {added} document(s) ajoutés pour "
+            f"{prenom} {nom} ({len(polyvalences)} polyvalence(s))"
+        )
+        return added
 
     @classmethod
     def set_enabled(cls, enabled: bool):

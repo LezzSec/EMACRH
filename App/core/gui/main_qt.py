@@ -389,6 +389,14 @@ class MainWindow(QMainWindow):
             # Initialiser le service (singleton)
             self._doc_trigger = DocumentTriggerService()
 
+            # Timer debounce : évite d'afficher plusieurs dialogs quand plusieurs
+            # événements sont émis en rafale pour le même opérateur (ex : niveau_changed
+            # + niveau_1_reached émis consécutivement lors d'un changement de niveau).
+            self._pending_doc_timer = QTimer(self)
+            self._pending_doc_timer.setSingleShot(True)
+            self._pending_doc_timer.timeout.connect(self._check_pending_documents)
+            self._pending_doc_operateur: dict = {}
+
             # Connecter le signal Qt pour afficher les dialogs de proposition
             EventBus.get_qt_signals().event_emitted.connect(self._on_event_for_documents)
 
@@ -405,18 +413,28 @@ class MainWindow(QMainWindow):
         if not event_name.startswith(('personnel.', 'contrat.', 'polyvalence.')):
             return
 
-        # Vérifier s'il y a des documents en attente après un court délai
-        # (pour laisser le temps au DocumentTriggerService de traiter l'événement)
         operateur_id = event_data.get('operateur_id')
-        if operateur_id:
-            QTimer.singleShot(200, lambda: self._check_pending_documents(
-                operateur_id,
-                event_data.get('nom', ''),
-                event_data.get('prenom', '')
-            ))
+        if not operateur_id:
+            return
 
-    def _check_pending_documents(self, operateur_id: int, nom: str, prenom: str):
+        # Mémoriser le dernier opérateur concerné et relancer le timer debounce.
+        # Si plusieurs événements arrivent en rafale pour le même opérateur,
+        # le timer est réinitialisé à chaque fois → un seul dialog au final.
+        self._pending_doc_operateur = {
+            'id': operateur_id,
+            'nom': event_data.get('nom', ''),
+            'prenom': event_data.get('prenom', ''),
+        }
+        self._pending_doc_timer.start(300)
+
+    def _check_pending_documents(self):
         """Affiche le dialog de proposition si des documents sont en attente."""
+        info = getattr(self, '_pending_doc_operateur', {})
+        operateur_id = info.get('id')
+        nom = info.get('nom', '')
+        prenom = info.get('prenom', '')
+        if not operateur_id:
+            return
         try:
             from core.services.document_trigger_service import DocumentTriggerService
 
@@ -913,9 +931,9 @@ class MainWindow(QMainWindow):
     def logout(self):
         reply = QMessageBox.question(
             self, "Déconnexion", "Voulez-vous vraiment vous déconnecter?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+            QMessageBox.Oui | QMessageBox.Non, QMessageBox.Non
         )
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.Oui:
             # Arrêter le timeout manager
             if self._timeout_manager:
                 self._timeout_manager.stop()

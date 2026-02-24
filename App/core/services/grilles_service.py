@@ -197,6 +197,14 @@ class GrillesService:
                     VALUES (%s, %s, %s, CURDATE(), %s)
                 """, (operateur_id, poste_id, new_niveau_int, prochaine_eval))
                 action = 'INSERT'
+                GrillesService._emit_polyvalence_events(
+                    action='INSERT',
+                    operateur_id=operateur_id,
+                    poste_id=poste_id,
+                    poste_code=poste_code,
+                    old_niveau=None,
+                    new_niveau=new_niveau_int,
+                )
             else:
                 QueryExecutor.execute_write("""
                     UPDATE polyvalence
@@ -204,6 +212,14 @@ class GrillesService:
                     WHERE operateur_id = %s AND poste_id = %s
                 """, (new_niveau_int, prochaine_eval, operateur_id, poste_id))
                 action = 'UPDATE'
+                GrillesService._emit_polyvalence_events(
+                    action='UPDATE',
+                    operateur_id=operateur_id,
+                    poste_id=poste_id,
+                    poste_code=poste_code,
+                    old_niveau=old_niveau,
+                    new_niveau=new_niveau_int,
+                )
 
         # 3. Logging dans l'historique
         GrillesService._log_modification(
@@ -216,6 +232,65 @@ class GrillesService:
         )
 
         return action, old_niveau, new_niveau_int
+
+    @staticmethod
+    def _emit_polyvalence_events(
+        action: str,
+        operateur_id: int,
+        poste_id: int,
+        poste_code: str,
+        old_niveau: Optional[int],
+        new_niveau: int,
+    ):
+        """
+        Émet les événements EventBus après modification de polyvalence.
+
+        - INSERT → polyvalence.created (pour déclencher le document du poste)
+        - UPDATE avec nouveau niveau → polyvalence.niveau_changed
+          + polyvalence.niveau_1_reached si passage à 1
+          + polyvalence.niveau_2_reached si passage à 2
+          + polyvalence.niveau_3_reached si passage à 3
+        """
+        try:
+            from core.services.event_bus import EventBus
+            from core.repositories.personnel_repo import PersonnelRepository
+
+            personnel = PersonnelRepository.get_by_id(operateur_id)
+            if not personnel:
+                return
+
+            base_data = {
+                'operateur_id': operateur_id,
+                'nom': personnel.nom,
+                'prenom': personnel.prenom,
+                'poste_id': poste_id,
+                'code_poste': poste_code,
+                'niveau': new_niveau,
+            }
+
+            if action == 'INSERT':
+                EventBus.emit('polyvalence.created', base_data,
+                              source='GrillesService.update_polyvalence_from_grille')
+
+            elif action == 'UPDATE' and old_niveau != new_niveau:
+                event_data = {**base_data, 'old_niveau': old_niveau, 'new_niveau': new_niveau}
+                EventBus.emit('polyvalence.niveau_changed', event_data,
+                              source='GrillesService.update_polyvalence_from_grille')
+
+                if new_niveau == 1:
+                    EventBus.emit('polyvalence.niveau_1_reached', {**event_data, 'niveau': 1},
+                                  source='GrillesService.update_polyvalence_from_grille')
+
+                if new_niveau == 2 and (old_niveau is None or old_niveau < 2):
+                    EventBus.emit('polyvalence.niveau_2_reached', {**event_data, 'niveau': 2},
+                                  source='GrillesService.update_polyvalence_from_grille')
+
+                if new_niveau == 3 and (old_niveau is None or old_niveau < 3):
+                    EventBus.emit('polyvalence.niveau_3_reached', {**event_data, 'niveau': 3},
+                                  source='GrillesService.update_polyvalence_from_grille')
+
+        except Exception as e:
+            logger.warning(f"Erreur émission événement polyvalence: {e}")
 
     @staticmethod
     def _log_modification(

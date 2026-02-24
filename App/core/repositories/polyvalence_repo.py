@@ -383,6 +383,13 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                         EventBus.emit('polyvalence.niveau_changed', event_data,
                                      source='PolyvalenceRepository.update_niveau')
 
+                        # Événement spécial pour le passage au niveau 2
+                        if nouveau_niveau == 2 and old_niveau < 2:
+                            EventBus.emit('polyvalence.niveau_2_reached', {
+                                **event_data,
+                                'niveau': 2
+                            }, source='PolyvalenceRepository.update_niveau')
+
                         # Événement spécial pour le passage au niveau 3
                         if nouveau_niveau == 3 and old_niveau < 3:
                             EventBus.emit('polyvalence.niveau_3_reached', {
@@ -449,6 +456,26 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 "VALUES (%s, %s, %s, %s)",
                 (operateur_id, poste_id, niveau, prochaine_evaluation),
             )
+
+            # Émettre l'événement pour déclencher la proposition du document du poste
+            try:
+                from core.services.event_bus import EventBus
+                from core.repositories.personnel_repo import PersonnelRepository
+                from core.repositories.poste_repo import PosteRepository
+                personnel = PersonnelRepository.get_by_id(operateur_id)
+                poste = PosteRepository.get_by_id(poste_id)
+                if personnel and poste:
+                    EventBus.emit('polyvalence.created', {
+                        'operateur_id': operateur_id,
+                        'nom': personnel.nom,
+                        'prenom': personnel.prenom,
+                        'poste_id': poste_id,
+                        'code_poste': poste.poste_code if hasattr(poste, 'poste_code') else str(poste_id),
+                        'niveau': niveau,
+                    }, source='PolyvalenceRepository.upsert_prochaine_evaluation')
+            except Exception as _e:
+                logger.warning(f"Erreur émission polyvalence.created (upsert): {_e}")
+
             return True, "Polyvalence créée"
 
     @classmethod

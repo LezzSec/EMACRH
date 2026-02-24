@@ -251,6 +251,8 @@ class DocumentProposalDialog(QDialog):
             'contrat.expiring_soon': 'Contrat expirant',
             'polyvalence.created': 'Affectation poste',
             'polyvalence.niveau_changed': 'Changement de niveau',
+            'polyvalence.niveau_1_reached': 'Passage niveau 1',
+            'polyvalence.niveau_2_reached': 'Passage niveau 2',
             'polyvalence.niveau_3_reached': 'Passage niveau 3',
             'evaluation.completed': 'Évaluation terminée',
             'evaluation.overdue': 'Évaluation en retard',

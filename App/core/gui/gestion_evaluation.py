@@ -566,6 +566,18 @@ class DetailOperateurDialog(QDialog):
                         EventBus.emit('polyvalence.niveau_changed', event_data,
                                      source='GestionEvaluationDialog.on_cell_changed')
 
+                        if new_niveau == 1:
+                            EventBus.emit('polyvalence.niveau_1_reached', {
+                                **event_data,
+                                'niveau': 1
+                            }, source='GestionEvaluationDialog.on_cell_changed')
+
+                        if new_niveau == 2 and (ancien_niveau is None or ancien_niveau < 2):
+                            EventBus.emit('polyvalence.niveau_2_reached', {
+                                **event_data,
+                                'niveau': 2
+                            }, source='GestionEvaluationDialog.on_cell_changed')
+
                         if new_niveau == 3 and (ancien_niveau is None or ancien_niveau < 3):
                             EventBus.emit('polyvalence.niveau_3_reached', {
                                 **event_data,
@@ -624,6 +636,23 @@ class DetailOperateurDialog(QDialog):
                         self._load_data()
                         QMessageBox.information(self, "Succès",
                             f"Date d'évaluation mise à jour.\nProchaine évaluation automatiquement recalculée : {prochaine_eval.strftime('%d/%m/%Y')}")
+
+                        # Émettre l'événement evaluation.completed
+                        try:
+                            from core.services.event_bus import EventBus
+                            poly_info = get_polyvalence_par_id(poly_id)
+                            EventBus.emit('evaluation.completed', {
+                                'polyvalence_id': poly_id,
+                                'operateur_id': self.operateur_id,
+                                'nom': self.operateur_nom,
+                                'prenom': self.operateur_prenom,
+                                'poste_id': poly_info['poste_id'] if poly_info else None,
+                                'niveau': niveau,
+                                'date_evaluation': new_date.isoformat(),
+                            }, source='DetailOperateurDialog.on_cell_changed')
+                        except Exception as evt_err:
+                            logger.warning(f"Erreur émission evaluation.completed: {evt_err}")
+
                         return
 
                     except Exception as e:
@@ -708,6 +737,7 @@ class GestionEvaluationDialog(QDialog):
 
         # Données
         self.all_evaluations = []
+        self._filtered_evaluations = []
 
         # Layout principal avec marges nulles
         main_layout = QVBoxLayout(self)
@@ -914,6 +944,11 @@ class GestionEvaluationDialog(QDialog):
             self.export_btn.clicked.connect(self.export_to_pdf)
             btn_layout.addWidget(self.export_btn)
 
+            self.print_btn = EmacButton("🖨️ Imprimer les documents", variant='ghost')
+            self.print_btn.setToolTip("Ouvrir la fenêtre de sélection des documents à imprimer")
+            self.print_btn.clicked.connect(self._imprimer_documents_operateur)
+            btn_layout.addWidget(self.print_btn)
+
             btn_layout.addStretch()
 
             self.close_btn = EmacButton("Fermer", variant='ghost')
@@ -951,6 +986,27 @@ class GestionEvaluationDialog(QDialog):
             """)
             self.export_btn.clicked.connect(self.export_to_pdf)
             btn_layout.addWidget(self.export_btn)
+
+            self.print_btn = QPushButton("🖨️ Imprimer les documents")
+            self.print_btn.setToolTip("Ouvrir la fenêtre de sélection des documents à imprimer")
+            self.print_btn.setStyleSheet("""
+                QPushButton {
+                    background: #7c3aed;
+                    color: white;
+                    padding: 8px 16px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background: #6d28d9;
+                }
+                QPushButton:disabled {
+                    background: #d1d5db;
+                    color: #9ca3af;
+                }
+            """)
+            self.print_btn.clicked.connect(self._imprimer_documents_operateur)
+            btn_layout.addWidget(self.print_btn)
 
             btn_layout.addStretch()
 
@@ -1077,6 +1133,9 @@ class GestionEvaluationDialog(QDialog):
 
             filtered.append(oper_data)
 
+        # Mémoriser pour le bouton impression
+        self._filtered_evaluations = filtered
+
         # Afficher dans le tableau
         self.display_operateurs(filtered)
 
@@ -1151,6 +1210,36 @@ class GestionEvaluationDialog(QDialog):
         self.retard_label.setText(f"En retard : {en_retard}")
         self.a_planifier_label.setText(f"À planifier : {a_planifier}")
         self.a_jour_label.setText(f"À jour : {a_jour}")
+
+    def _imprimer_documents_operateur(self):
+        """
+        Ouvre la fenêtre de sélection multi-opérateurs pour l'impression
+        des documents d'évaluation à la demande.
+
+        Passe la liste des opérateurs actuellement filtrés dans le tableau.
+        """
+        operateurs = self._filtered_evaluations or self.all_evaluations
+
+        if not operateurs:
+            QMessageBox.information(
+                self,
+                "Liste vide",
+                "Aucun opérateur dans la liste courante.\n"
+                "Actualisez ou modifiez les filtres."
+            )
+            return
+
+        try:
+            from core.gui.imprimer_documents_dialog import ImprimerDocumentsDialog
+            dialog = ImprimerDocumentsDialog(operateurs=operateurs, parent=self)
+            dialog.exec_()
+        except Exception as e:
+            logger.exception(f"Erreur ouverture dialog impression: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible d'ouvrir la fenêtre d'impression", e)
+            else:
+                QMessageBox.critical(self, "Erreur",
+                                     "Impossible d'ouvrir la fenêtre d'impression. Contactez l'administrateur.")
 
     def update_date_in_db(self, row, col, qdate):
         """Met à jour une date dans la base de données."""
@@ -1267,6 +1356,11 @@ class GestionEvaluationDialog(QDialog):
         # Ouvrir le dialogue détaillé avec 2 onglets
         dialog = DetailOperateurDialog(operateur_id, nom, prenom, self)
         dialog.exec_()
+
+        # Les documents en attente sont gérés par le mécanisme debounce
+        # de MainWindow (_on_event_for_documents) via l'EventBus.
+        # Ne pas appeler show_pending_documents_if_any ici pour éviter
+        # une double apparition du dialog.
 
         # Recharger les données après fermeture du dialogue
         self.load_data()

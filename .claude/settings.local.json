@@ -74,7 +74,9 @@
       "Bash(git restore:*)",
       "Bash(powershell -Command \"Get-ChildItem -Path . -Filter ''tmpclaude-*'' -Directory | Remove-Item -Recurse -Force\")",
       "Bash(powershell -Command:*)",
-      "Bash(powershell -ExecutionPolicy Bypass -File cleanup_temp.ps1)"
+      "Bash(powershell -ExecutionPolicy Bypass -File cleanup_temp.ps1)",
+      "Bash(python3:*)",
+      "Bash(sc query:*)"
     ],
     "deny": [],
     "ask": []

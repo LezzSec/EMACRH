@@ -186,7 +186,7 @@ class PerformanceMonitor:
         # Fichier log
         if PerformanceConfig.FILE_LOGS:
             try:
-                from core.utils.optimized_logger import get_logger
+                from core.utils.logging_config import get_logger
                 logger = get_logger('performance')
                 logger.warning(message)
             except Exception:
