@@ -931,9 +931,9 @@ class MainWindow(QMainWindow):
     def logout(self):
         reply = QMessageBox.question(
             self, "Déconnexion", "Voulez-vous vraiment vous déconnecter?",
-            QMessageBox.Oui | QMessageBox.Non, QMessageBox.Non
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
-        if reply == QMessageBox.Oui:
+        if reply == QMessageBox.Yes:
             # Arrêter le timeout manager
             if self._timeout_manager:
                 self._timeout_manager.stop()

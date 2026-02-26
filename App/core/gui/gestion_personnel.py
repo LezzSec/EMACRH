@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QButtonGroup, QRadioButton, QDateEdit, QScrollArea, QFrame, QGridLayout,
     QSizePolicy
 )
-from PyQt5.QtCore import Qt, QDate, pyqtSignal
+from PyQt5.QtCore import Qt, QDate, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
 from core.repositories.personnel_repo import PersonnelRepository
@@ -1254,6 +1254,17 @@ class GestionPersonnelDialog(QDialog):
         self.setWindowTitle("Gestion du Personnel")
         self.setGeometry(100, 100, 1000, 600)
 
+        # --- État pagination ---
+        self._page_offset = 0
+        self._page_size = 50
+        self._total_count = 0
+
+        # Debounce recherche : attend 350 ms après la dernière frappe avant de requêter
+        self._search_timer = QTimer()
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(350)
+        self._search_timer.timeout.connect(self._reload_page)
+
         # Layout principal avec marges nulles
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -1289,7 +1300,7 @@ class GestionPersonnelDialog(QDialog):
         search_layout.addWidget(QLabel("Recherche :"))
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Nom ou prénom...")
-        self.search_input.textChanged.connect(self.filter_table)
+        self.search_input.textChanged.connect(self._search_timer.start)
         search_layout.addWidget(self.search_input, 1)
         filters_layout.addLayout(search_layout)
         
@@ -1303,9 +1314,9 @@ class GestionPersonnelDialog(QDialog):
 
         self.radio_tous.setChecked(True)
 
-        self.radio_tous.toggled.connect(self.filter_table)
-        self.radio_actifs.toggled.connect(self.filter_table)
-        self.radio_inactifs.toggled.connect(self.filter_table)
+        self.radio_tous.toggled.connect(self._reload_page)
+        self.radio_actifs.toggled.connect(self._reload_page)
+        self.radio_inactifs.toggled.connect(self._reload_page)
 
         statut_layout.addWidget(self.radio_tous)
         statut_layout.addWidget(self.radio_actifs)
@@ -1359,7 +1370,24 @@ class GestionPersonnelDialog(QDialog):
         self.total_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
         self.total_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.total_label)
-        
+
+        # === Navigation de pagination ===
+        pagination_bar = QHBoxLayout()
+        self.prev_btn = QPushButton("◀ Précédent")
+        self.prev_btn.setEnabled(False)
+        self.prev_btn.clicked.connect(self._prev_page)
+        self.pagination_label = QLabel("Page 1/1")
+        self.pagination_label.setAlignment(Qt.AlignCenter)
+        self.next_btn = QPushButton("Suivant ▶")
+        self.next_btn.setEnabled(False)
+        self.next_btn.clicked.connect(self._next_page)
+        pagination_bar.addWidget(self.prev_btn)
+        pagination_bar.addStretch()
+        pagination_bar.addWidget(self.pagination_label)
+        pagination_bar.addStretch()
+        pagination_bar.addWidget(self.next_btn)
+        layout.addLayout(pagination_bar)
+
         # === Actions ===
         actions = QHBoxLayout()
         actions.addStretch()
@@ -1402,67 +1430,77 @@ class GestionPersonnelDialog(QDialog):
         self.all_data = []
         self.load_data()
     
+    def _get_current_filters(self) -> dict:
+        """Retourne les filtres actifs sous forme de dict pour get_paginated()."""
+        filters = {}
+        if self.radio_actifs.isChecked():
+            filters['statut'] = 'ACTIF'
+        elif self.radio_inactifs.isChecked():
+            filters['statut'] = 'INACTIF'
+        search = self.search_input.text().strip()
+        if search:
+            filters['search'] = search
+        if self.production_only_check.isChecked():
+            filters['production_only'] = True
+        return filters
+
+    def _reload_page(self):
+        """Remet l'offset à 0 et recharge (après changement de filtre)."""
+        self._page_offset = 0
+        self.load_data()
+
+    def _prev_page(self):
+        """Passe à la page précédente."""
+        if self._page_offset >= self._page_size:
+            self._page_offset -= self._page_size
+            self.load_data()
+
+    def _next_page(self):
+        """Passe à la page suivante."""
+        if self._page_offset + self._page_size < self._total_count:
+            self._page_offset += self._page_size
+            self.load_data()
+
+    def _update_pagination_controls(self):
+        """Met à jour les boutons et le label de pagination."""
+        current_page = self._page_offset // self._page_size + 1
+        total_pages = max(1, (self._total_count + self._page_size - 1) // self._page_size)
+        self.pagination_label.setText(f"Page {current_page}/{total_pages}")
+        self.total_label.setText(f"Total : {self._total_count} personne(s)")
+        self.prev_btn.setEnabled(self._page_offset > 0)
+        self.next_btn.setEnabled(self._page_offset + self._page_size < self._total_count)
+
     def load_data(self):
-        """Charge tous les opérateurs avec leurs stats (async)."""
+        """Charge la page courante de personnels avec filtres (async, côté serveur)."""
+        offset = self._page_offset
+        limit = self._page_size
+        filters = self._get_current_filters()
 
         def fetch_data(progress_callback=None):
-            """Fonction exécutée en background"""
-            return PersonnelRepository.get_personnel_avec_stats()
+            return PersonnelRepository.get_paginated(offset=offset, limit=limit, filters=filters)
 
-        def on_success(data):
-            """Callback UI avec les résultats"""
-            self.all_data = data
-            self.filter_table()
+        def on_success(result):
+            rows, total = result
+            self.all_data = rows
+            self._total_count = total
+            self._render_table()
+            self._update_pagination_controls()
 
         def on_error(error_msg):
-            """Callback en cas d'erreur"""
             logger.error(f"Erreur chargement donnees: {error_msg}")
             show_error_message(self, "Erreur", "Impossible de charger les données", Exception(error_msg))
 
-        # Lancer en background
         worker = DbWorker(fetch_data)
         worker.signals.result.connect(on_success)
         worker.signals.error.connect(on_error)
         DbThreadPool.start(worker)
 
-    def filter_table(self):
-        """Filtre et affiche les données dans la table."""
-        search_text = self.search_input.text().lower()
-
-        # Déterminer le filtre de statut
-        statut_filter = None
-        if self.radio_actifs.isChecked():
-            statut_filter = "ACTIF"
-        elif self.radio_inactifs.isChecked():
-            statut_filter = "INACTIF"
-
-        # Filtre production uniquement (personnel avec matricule)
-        production_only = self.production_only_check.isChecked()
-
+    def _render_table(self):
+        """Affiche self.all_data (déjà filtrée côté serveur) dans la table."""
         self.table.setRowCount(0)
 
-        count = 0
-        count_actifs = 0
-        count_inactifs = 0
-
         for data in self.all_data:
-            nom = data.get("nom", "").lower()
-            prenom = data.get("prenom", "").lower()
             statut = data.get("statut", "").upper()
-            numposte = data.get("numposte") or ""
-
-            # Filtre production uniquement
-            if production_only and numposte != "Production":
-                continue
-
-            # Filtre de recherche
-            if search_text and search_text not in nom and search_text not in prenom:
-                continue
-
-            # Filtre de statut
-            if statut_filter and statut != statut_filter:
-                continue
-
             row = self.table.rowCount()
             self.table.insertRow(row)
 
@@ -1487,11 +1525,9 @@ class GestionPersonnelDialog(QDialog):
             if statut == "ACTIF":
                 statut_item.setBackground(QColor("#d1fae5"))
                 statut_item.setForeground(QColor("#065f46"))
-                count_actifs += 1
             else:
                 statut_item.setBackground(QColor("#fee2e2"))
                 statut_item.setForeground(QColor("#991b1b"))
-                count_inactifs += 1
             self.table.setItem(row, 4, statut_item)
 
             # Col 5 : Nb Postes
@@ -1522,19 +1558,11 @@ class GestionPersonnelDialog(QDialog):
             n4_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 9, n4_item)
 
-            count += 1
-        
-        # Mise à jour du label total
-        total_text = f"Total : {count} personne(s)"
-        if self.radio_tous.isChecked():
-            total_text += f" ({count_actifs} actifs, {count_inactifs} inactifs)"
-        self.total_label.setText(total_text)
-
     def _on_production_toggled(self, checked):
-        """Bascule les colonnes polyvalence et re-filtre quand la checkbox Production change."""
+        """Bascule les colonnes polyvalence et recharge quand la checkbox Production change."""
         for col in range(5, 10):
             self.table.setColumnHidden(col, not checked)
-        self.filter_table()
+        self._reload_page()
     
     def open_detail_dialog(self):
         """Ouvre la fenêtre de détails pour l'opérateur sélectionné."""
@@ -1619,28 +1647,13 @@ class GestionPersonnelDialog(QDialog):
                 cell.font = header_font
                 cell.alignment = Alignment(horizontal="center")
 
-            # Données (filtrées selon la vue actuelle)
-            search_text = self.search_input.text().lower()
-            statut_filter = None
-            if self.radio_actifs.isChecked():
-                statut_filter = "ACTIF"
-            elif self.radio_inactifs.isChecked():
-                statut_filter = "INACTIF"
+            # Données : récupérer TOUS les résultats filtrés (pas seulement la page courante)
+            all_matching, _ = PersonnelRepository.get_paginated(
+                offset=0, limit=10_000, filters=self._get_current_filters()
+            )
 
-            for data in self.all_data:
-                nom = data.get("nom", "").lower()
-                prenom = data.get("prenom", "").lower()
+            for data in all_matching:
                 statut = data.get("statut", "").upper()
-                numposte = data.get("numposte") or ""
-
-                # Appliquer les mêmes filtres que la table
-                if production_only and numposte != "Production":
-                    continue
-                if search_text and search_text not in nom and search_text not in prenom:
-                    continue
-                if statut_filter and statut != statut_filter:
-                    continue
-
                 row_data = [
                     data.get("nom", ""),
                     data.get("prenom", ""),

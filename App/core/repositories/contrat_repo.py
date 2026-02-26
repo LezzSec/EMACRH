@@ -35,7 +35,7 @@ class ContratRepository(BaseRepository[Contrat]):
     TABLE = "contrat"
     MODEL = Contrat
     COLUMNS = [
-        "id", "operateur_id", "type_contrat", "date_debut", "date_fin",
+        "id", "personnel_id", "type_contrat", "date_debut", "date_fin",
         "etp", "categorie", "coefficient", "actif", "motif",
         "date_sortie", "motif_sortie"
     ]
@@ -51,7 +51,7 @@ class ContratRepository(BaseRepository[Contrat]):
         query = """
             SELECT c.*, p.nom as personnel_nom, p.prenom as personnel_prenom
             FROM contrat c
-            JOIN personnel p ON c.operateur_id = p.id
+            JOIN personnel p ON c.personnel_id = p.id
             WHERE c.actif = 1
             ORDER BY c.date_fin ASC
             LIMIT %s
@@ -66,7 +66,7 @@ class ContratRepository(BaseRepository[Contrat]):
         columns = ", ".join(cls.COLUMNS)
         query = f"""
             SELECT {columns} FROM contrat
-            WHERE operateur_id = %s
+            WHERE personnel_id = %s
         """
         params = [operateur_id]
 
@@ -85,7 +85,7 @@ class ContratRepository(BaseRepository[Contrat]):
         columns = ", ".join(cls.COLUMNS)
         query = f"""
             SELECT {columns} FROM contrat
-            WHERE operateur_id = %s AND actif = 1
+            WHERE personnel_id = %s AND actif = 1
             ORDER BY date_debut DESC
             LIMIT 1
         """
@@ -112,7 +112,7 @@ class ContratRepository(BaseRepository[Contrat]):
             SELECT c.*, p.nom as personnel_nom, p.prenom as personnel_prenom,
                    DATEDIFF(c.date_fin, CURDATE()) as jours_restants
             FROM contrat c
-            JOIN personnel p ON c.operateur_id = p.id
+            JOIN personnel p ON c.personnel_id = p.id
             WHERE c.actif = 1
               AND c.date_fin IS NOT NULL
               AND c.date_fin BETWEEN CURDATE() AND %s
@@ -129,7 +129,7 @@ class ContratRepository(BaseRepository[Contrat]):
         query = """
             SELECT c.*, p.nom as personnel_nom, p.prenom as personnel_prenom
             FROM contrat c
-            JOIN personnel p ON c.operateur_id = p.id
+            JOIN personnel p ON c.personnel_id = p.id
             WHERE c.actif = 1
               AND c.date_fin IS NOT NULL
               AND c.date_fin < CURDATE()
@@ -145,7 +145,7 @@ class ContratRepository(BaseRepository[Contrat]):
         query = """
             SELECT c.*, p.nom as personnel_nom, p.prenom as personnel_prenom
             FROM contrat c
-            JOIN personnel p ON c.operateur_id = p.id
+            JOIN personnel p ON c.personnel_id = p.id
             WHERE c.actif = 1 AND c.type_contrat = 'CDI'
             ORDER BY p.nom
         """
@@ -207,12 +207,12 @@ class ContratRepository(BaseRepository[Contrat]):
     @classmethod
     def create(cls, data: Dict[str, Any]) -> Tuple[bool, str, Optional[int]]:
         """Crée un nouveau contrat."""
-        required = ["operateur_id", "type_contrat", "date_debut"]
+        required = ["personnel_id", "type_contrat", "date_debut"]
         for field in required:
             if not data.get(field):
                 return False, f"Le champ '{field}' est obligatoire", None
 
-        allowed = ["operateur_id", "type_contrat", "date_debut", "date_fin",
+        allowed = ["personnel_id", "type_contrat", "date_debut", "date_fin",
                    "etp", "categorie", "coefficient", "actif", "motif",
                    "date_sortie", "motif_sortie"]
 
@@ -234,17 +234,17 @@ class ContratRepository(BaseRepository[Contrat]):
 
                 from core.services.logger import log_hist
                 log_hist("CREATE", "contrat", new_id,
-                        f"Contrat {data.get('type_contrat')} créé pour operateur {data.get('operateur_id')}")
+                        f"Contrat {data.get('type_contrat')} créé pour personnel {data.get('personnel_id')}")
 
                 # Émettre l'événement pour déclencher les documents
                 from core.services.event_bus import EventBus
-                # Récupérer les infos de l'opérateur pour l'événement
+                # Récupérer les infos du personnel pour l'événement
                 from core.repositories.personnel_repo import PersonnelRepository
-                personnel = PersonnelRepository.get_by_id(data.get('operateur_id'))
+                personnel = PersonnelRepository.get_by_id(data.get('personnel_id'))
                 if personnel:
                     EventBus.emit('contrat.created', {
                         'contrat_id': new_id,
-                        'operateur_id': data.get('operateur_id'),
+                        'personnel_id': data.get('personnel_id'),
                         'nom': personnel.nom,
                         'prenom': personnel.prenom,
                         'type_contrat': data.get('type_contrat'),
@@ -309,11 +309,11 @@ class ContratRepository(BaseRepository[Contrat]):
         if success and old_contrat:
             from core.services.event_bus import EventBus
             from core.repositories.personnel_repo import PersonnelRepository
-            personnel = PersonnelRepository.get_by_id(old_contrat.operateur_id)
+            personnel = PersonnelRepository.get_by_id(old_contrat.personnel_id)
             if personnel:
                 EventBus.emit('contrat.renewed', {
                     'contrat_id': id,
-                    'operateur_id': old_contrat.operateur_id,
+                    'personnel_id': old_contrat.personnel_id,
                     'nom': personnel.nom,
                     'prenom': personnel.prenom,
                     'type_contrat': old_contrat.type_contrat,

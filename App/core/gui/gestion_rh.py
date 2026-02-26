@@ -23,6 +23,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QDate
 from PyQt5.QtGui import QFont, QColor
 
+from core.gui.db_worker import DbWorker, DbThreadPool
+from core.gui.loading_components import LoadingLabel
 from core.gui.ui_theme import EmacTheme, EmacCard, EmacButton
 from core.gui.emac_ui_kit import EmacBadge, EmacAlert, EmacChip, add_custom_title_bar, show_error_message
 from core.gui.emac_dialog import EmacFormDialog
@@ -53,7 +55,7 @@ from core.services.vie_salarie_service import (
     get_tests_salivaires, delete_test_salivaire,
     get_entretiens, delete_entretien,
 )
-from core.services.permission_manager import can
+from core.services.permission_manager import can, require
 from core.gui.gestion_rh_dialogs import (
     EditInfosGeneralesDialog, EditContratDialog, EditDeclarationDialog,
     EditCompetenceDialog, EditFormationDialog, EditVisiteDialog,
@@ -82,6 +84,7 @@ class GestionRHDialog(QDialog):
         self._search_timer = QTimer()
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._executer_recherche)
+        self._loading_worker = None  # Worker en cours pour le chargement de domaine
 
         self._setup_ui()
 
@@ -222,26 +225,38 @@ class GestionRHDialog(QDialog):
         self._search_timer.start(300)  # 300ms de délai
 
     def _executer_recherche(self):
-        """Exécute la recherche d'opérateurs."""
+        """Exécute la recherche d'opérateurs (async)."""
         recherche = self.search_input.text().strip()
-        resultats = rechercher_operateurs(recherche=recherche if recherche else None)
 
         self.liste_operateurs.clear()
-        for op in resultats:
-            item = QListWidgetItem()
-            item.setData(Qt.UserRole, op['id'])
+        self.liste_operateurs.addItem("⏳ Recherche en cours…")
+        self.compteur_resultats.setText("…")
 
-            # Texte formaté
-            nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
-            matricule = op.get('matricule', '-')
-            statut = op.get('statut', 'ACTIF')
+        def fetch(progress_callback=None):
+            return rechercher_operateurs(recherche=recherche if recherche else None)
 
-            item.setText(f"{nom_complet}\n{matricule}")
-            item.setToolTip(f"ID: {op['id']} | Statut: {statut}")
+        def on_result(resultats):
+            self.liste_operateurs.clear()
+            for op in resultats:
+                item = QListWidgetItem()
+                item.setData(Qt.UserRole, op['id'])
+                nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
+                matricule = op.get('matricule', '-')
+                statut = op.get('statut', 'ACTIF')
+                item.setText(f"{nom_complet}\n{matricule}")
+                item.setToolTip(f"ID: {op['id']} | Statut: {statut}")
+                self.liste_operateurs.addItem(item)
+            self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
 
-            self.liste_operateurs.addItem(item)
+        def on_error(err):
+            self.liste_operateurs.clear()
+            self.compteur_resultats.setText("Erreur")
+            logger.error(f"Erreur recherche opérateurs: {err}")
 
-        self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
+        worker = DbWorker(fetch)
+        worker.signals.result.connect(on_result)
+        worker.signals.error.connect(on_error)
+        DbThreadPool.start(worker)
 
     def _on_operateur_selectionne(self, item: QListWidgetItem):
         """Appelé quand un opérateur est sélectionné dans la liste."""
@@ -570,31 +585,51 @@ class GestionRHDialog(QDialog):
         self.stack_details.setCurrentIndex(1)
 
     def _charger_contenu_domaine(self):
-        """Charge le contenu du domaine RH actif."""
+        """Charge le contenu du domaine RH actif (async)."""
         if not self.operateur_selectionne:
             return
 
-        operateur_id = self.operateur_selectionne['id']
+        # Annuler le chargement précédent s'il est encore en cours
+        if self._loading_worker:
+            self._loading_worker.cancel()
+            self._loading_worker = None
 
-        # Vider les zones
+        operateur_id = self.operateur_selectionne['id']
+        domaine = self.domaine_actif  # Capturer pour éviter la race condition
+
+        # Vider les zones et afficher un indicateur de chargement
         self._vider_layout(self.layout_resume)
         self._vider_layout(self.layout_documents)
+        loading = LoadingLabel("Chargement")
+        self.layout_resume.addWidget(loading)
 
-        # Charger les données du domaine
-        donnees = get_donnees_domaine(operateur_id, self.domaine_actif)
+        def fetch(progress_callback=None):
+            donnees   = get_donnees_domaine(operateur_id, domaine)
+            documents = get_documents_domaine(operateur_id, domaine, include_archives=True)
+            return donnees, documents, domaine
 
-        # Créer la zone de résumé selon le domaine
-        widget_resume = self._creer_widget_resume(donnees)
-        if widget_resume:
-            self.layout_resume.addWidget(widget_resume)
+        def on_result(result):
+            donnees, documents, fetched_domaine = result
+            # Ignorer si le domaine actif a changé pendant le chargement
+            if self.domaine_actif != fetched_domaine:
+                return
+            self._vider_layout(self.layout_resume)
+            self._vider_layout(self.layout_documents)
+            widget_resume = self._creer_widget_resume(donnees)
+            if widget_resume:
+                self.layout_resume.addWidget(widget_resume)
+            widget_documents = self._creer_widget_documents(documents)
+            self.layout_documents.addWidget(widget_documents)
+            self.data_changed.emit()
 
-        # Charger les documents du domaine (inclut les archives pour pouvoir les afficher si demandé)
-        documents = get_documents_domaine(operateur_id, self.domaine_actif, include_archives=True)
-        widget_documents = self._creer_widget_documents(documents)
-        self.layout_documents.addWidget(widget_documents)
+        def on_error(err):
+            self._vider_layout(self.layout_resume)
+            logger.error(f"Erreur chargement domaine RH: {err}")
 
-        # Émettre le signal de changement de données
-        self.data_changed.emit()
+        self._loading_worker = DbWorker(fetch)
+        self._loading_worker.signals.result.connect(on_result)
+        self._loading_worker.signals.error.connect(on_error)
+        DbThreadPool.start(self._loading_worker)
 
     def _creer_widget_resume(self, donnees: dict) -> QWidget:
         """Crée le widget de résumé selon le domaine actif."""
@@ -828,6 +863,11 @@ class GestionRHDialog(QDialog):
 
     def _delete_declaration(self, declaration: dict):
         """Supprime une déclaration après confirmation."""
+        try:
+            require('rh.declarations.edit')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmation",
             f"Voulez-vous vraiment supprimer cette déclaration ?\n{declaration.get('type_declaration')} du {self._format_date(declaration.get('date_debut'))}",
@@ -842,6 +882,11 @@ class GestionRHDialog(QDialog):
 
     def _delete_formation(self, formation: dict):
         """Supprime une formation après confirmation."""
+        try:
+            require('rh.formations.delete')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmation",
             f"Voulez-vous vraiment supprimer cette formation ?\n{formation.get('intitule', 'N/A')}",
@@ -1058,20 +1103,25 @@ class GestionRHDialog(QDialog):
 
     def _add_competence(self):
         """Ouvre le formulaire d'ajout de compétence."""
-        if not self.operateur_id:
+        if not self.operateur_selectionne:
             return
-        dialog = EditCompetenceDialog(self.operateur_id, parent=self)
+        dialog = EditCompetenceDialog(self.operateur_selectionne['id'], parent=self)
         if dialog.exec_() == QDialog.Accepted:
             self._charger_contenu_domaine()
 
     def _edit_competence(self, competence: dict):
         """Ouvre le formulaire de modification de compétence."""
-        dialog = EditCompetenceDialog(self.operateur_id, competence, parent=self)
+        dialog = EditCompetenceDialog(self.operateur_selectionne['id'], competence, parent=self)
         if dialog.exec_() == QDialog.Accepted:
             self._charger_contenu_domaine()
 
     def _delete_competence(self, competence: dict):
         """Retire une compétence après confirmation."""
+        try:
+            require('rh.competences.delete')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         libelle = competence.get('libelle', 'cette compétence')
         reply = QMessageBox.question(
             self,
@@ -1657,6 +1707,11 @@ class GestionRHDialog(QDialog):
 
     def _delete_visite(self, visite: dict):
         """Supprime une visite médicale."""
+        try:
+            require('rh.medical.delete')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer la visite du {self._format_date(visite.get('date_visite'))} ?",
@@ -1687,6 +1742,11 @@ class GestionRHDialog(QDialog):
 
     def _delete_accident(self, accident: dict):
         """Supprime un accident du travail."""
+        try:
+            require('rh.medical.delete')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer l'accident du {self._format_date(accident.get('date_accident'))} ?",
@@ -1718,6 +1778,11 @@ class GestionRHDialog(QDialog):
 
     def _delete_sanction(self, sanction: dict):
         """Supprime une sanction."""
+        try:
+            require('rh.vie_salarie.edit')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer la sanction du {self._format_date(sanction.get('date_sanction'))} ?",
@@ -1764,6 +1829,11 @@ class GestionRHDialog(QDialog):
 
     def _delete_entretien(self, entretien: dict):
         """Supprime un entretien professionnel."""
+        try:
+            require('rh.vie_salarie.edit')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer l'entretien du {self._format_date(entretien.get('date_entretien'))} ?",
@@ -2198,6 +2268,7 @@ class GestionRHWidget(QWidget):
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._executer_recherche)
         self._initial_operateur_id = operateur_id
+        self._loading_worker = None  # Worker en cours pour le chargement de domaine
 
         self._setup_ui()
 
@@ -2352,26 +2423,38 @@ class GestionRHWidget(QWidget):
         self._search_timer.start(300)  # 300ms de délai
 
     def _executer_recherche(self):
-        """Exécute la recherche d'opérateurs."""
+        """Exécute la recherche d'opérateurs (async)."""
         recherche = self.search_input.text().strip()
-        resultats = rechercher_operateurs(recherche=recherche if recherche else None)
 
         self.liste_operateurs.clear()
-        for op in resultats:
-            item = QListWidgetItem()
-            item.setData(Qt.UserRole, op['id'])
+        self.liste_operateurs.addItem("⏳ Recherche en cours…")
+        self.compteur_resultats.setText("…")
 
-            # Texte formaté
-            nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
-            matricule = op.get('matricule', '-')
-            statut = op.get('statut', 'ACTIF')
+        def fetch(progress_callback=None):
+            return rechercher_operateurs(recherche=recherche if recherche else None)
 
-            item.setText(f"{nom_complet}\n{matricule}")
-            item.setToolTip(f"ID: {op['id']} | Statut: {statut}")
+        def on_result(resultats):
+            self.liste_operateurs.clear()
+            for op in resultats:
+                item = QListWidgetItem()
+                item.setData(Qt.UserRole, op['id'])
+                nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
+                matricule = op.get('matricule', '-')
+                statut = op.get('statut', 'ACTIF')
+                item.setText(f"{nom_complet}\n{matricule}")
+                item.setToolTip(f"ID: {op['id']} | Statut: {statut}")
+                self.liste_operateurs.addItem(item)
+            self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
 
-            self.liste_operateurs.addItem(item)
+        def on_error(err):
+            self.liste_operateurs.clear()
+            self.compteur_resultats.setText("Erreur")
+            logger.error(f"Erreur recherche opérateurs: {err}")
 
-        self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
+        worker = DbWorker(fetch)
+        worker.signals.result.connect(on_result)
+        worker.signals.error.connect(on_error)
+        DbThreadPool.start(worker)
 
     def _on_operateur_selectionne(self, item: QListWidgetItem):
         """Appelé quand un opérateur est sélectionné dans la liste."""
@@ -2700,31 +2783,51 @@ class GestionRHWidget(QWidget):
         self.stack_details.setCurrentIndex(1)
 
     def _charger_contenu_domaine(self):
-        """Charge le contenu du domaine RH actif."""
+        """Charge le contenu du domaine RH actif (async)."""
         if not self.operateur_selectionne:
             return
 
-        operateur_id = self.operateur_selectionne['id']
+        # Annuler le chargement précédent s'il est encore en cours
+        if self._loading_worker:
+            self._loading_worker.cancel()
+            self._loading_worker = None
 
-        # Vider les zones
+        operateur_id = self.operateur_selectionne['id']
+        domaine = self.domaine_actif  # Capturer pour éviter la race condition
+
+        # Vider les zones et afficher un indicateur de chargement
         self._vider_layout(self.layout_resume)
         self._vider_layout(self.layout_documents)
+        loading = LoadingLabel("Chargement")
+        self.layout_resume.addWidget(loading)
 
-        # Charger les données du domaine
-        donnees = get_donnees_domaine(operateur_id, self.domaine_actif)
+        def fetch(progress_callback=None):
+            donnees   = get_donnees_domaine(operateur_id, domaine)
+            documents = get_documents_domaine(operateur_id, domaine, include_archives=True)
+            return donnees, documents, domaine
 
-        # Créer la zone de résumé selon le domaine
-        widget_resume = self._creer_widget_resume(donnees)
-        if widget_resume:
-            self.layout_resume.addWidget(widget_resume)
+        def on_result(result):
+            donnees, documents, fetched_domaine = result
+            # Ignorer si le domaine actif a changé pendant le chargement
+            if self.domaine_actif != fetched_domaine:
+                return
+            self._vider_layout(self.layout_resume)
+            self._vider_layout(self.layout_documents)
+            widget_resume = self._creer_widget_resume(donnees)
+            if widget_resume:
+                self.layout_resume.addWidget(widget_resume)
+            widget_documents = self._creer_widget_documents(documents)
+            self.layout_documents.addWidget(widget_documents)
+            self.data_changed.emit()
 
-        # Charger les documents du domaine (inclut les archives pour pouvoir les afficher si demandé)
-        documents = get_documents_domaine(operateur_id, self.domaine_actif, include_archives=True)
-        widget_documents = self._creer_widget_documents(documents)
-        self.layout_documents.addWidget(widget_documents)
+        def on_error(err):
+            self._vider_layout(self.layout_resume)
+            logger.error(f"Erreur chargement domaine RH: {err}")
 
-        # Émettre le signal de changement de données
-        self.data_changed.emit()
+        self._loading_worker = DbWorker(fetch)
+        self._loading_worker.signals.result.connect(on_result)
+        self._loading_worker.signals.error.connect(on_error)
+        DbThreadPool.start(self._loading_worker)
 
     def _creer_widget_resume(self, donnees: dict) -> QWidget:
         """Crée le widget de résumé selon le domaine actif."""
@@ -2958,6 +3061,11 @@ class GestionRHWidget(QWidget):
 
     def _delete_declaration(self, declaration: dict):
         """Supprime une déclaration après confirmation."""
+        try:
+            require('rh.declarations.edit')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmation",
             f"Voulez-vous vraiment supprimer cette déclaration ?\n{declaration.get('type_declaration')} du {self._format_date(declaration.get('date_debut'))}",
@@ -2972,6 +3080,11 @@ class GestionRHWidget(QWidget):
 
     def _delete_formation(self, formation: dict):
         """Supprime une formation après confirmation."""
+        try:
+            require('rh.formations.delete')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmation",
             f"Voulez-vous vraiment supprimer cette formation ?\n{formation.get('intitule', 'N/A')}",
@@ -3188,20 +3301,25 @@ class GestionRHWidget(QWidget):
 
     def _add_competence(self):
         """Ouvre le formulaire d'ajout de compétence."""
-        if not self.operateur_id:
+        if not self.operateur_selectionne:
             return
-        dialog = EditCompetenceDialog(self.operateur_id, parent=self)
+        dialog = EditCompetenceDialog(self.operateur_selectionne['id'], parent=self)
         if dialog.exec_() == QDialog.Accepted:
             self._charger_contenu_domaine()
 
     def _edit_competence(self, competence: dict):
         """Ouvre le formulaire de modification de compétence."""
-        dialog = EditCompetenceDialog(self.operateur_id, competence, parent=self)
+        dialog = EditCompetenceDialog(self.operateur_selectionne['id'], competence, parent=self)
         if dialog.exec_() == QDialog.Accepted:
             self._charger_contenu_domaine()
 
     def _delete_competence(self, competence: dict):
         """Retire une compétence après confirmation."""
+        try:
+            require('rh.competences.delete')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         libelle = competence.get('libelle', 'cette compétence')
         reply = QMessageBox.question(
             self,
@@ -3787,6 +3905,11 @@ class GestionRHWidget(QWidget):
 
     def _delete_visite(self, visite: dict):
         """Supprime une visite médicale."""
+        try:
+            require('rh.medical.delete')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer la visite du {self._format_date(visite.get('date_visite'))} ?",
@@ -3817,6 +3940,11 @@ class GestionRHWidget(QWidget):
 
     def _delete_accident(self, accident: dict):
         """Supprime un accident du travail."""
+        try:
+            require('rh.medical.delete')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer l'accident du {self._format_date(accident.get('date_accident'))} ?",
@@ -3848,6 +3976,11 @@ class GestionRHWidget(QWidget):
 
     def _delete_sanction(self, sanction: dict):
         """Supprime une sanction."""
+        try:
+            require('rh.vie_salarie.edit')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer la sanction du {self._format_date(sanction.get('date_sanction'))} ?",
@@ -3894,6 +4027,11 @@ class GestionRHWidget(QWidget):
 
     def _delete_entretien(self, entretien: dict):
         """Supprime un entretien professionnel."""
+        try:
+            require('rh.vie_salarie.edit')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer l'entretien du {self._format_date(entretien.get('date_entretien'))} ?",

@@ -6,16 +6,21 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QPalette, QCursor
 
-from core.services.historique_service import get_entity_name, fetch_historique, delete_historique_range
+from core.services.historique_service import fetch_historique_paginated, delete_historique_range
 from core.services.log_exporter import export_day
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
+from core.gui.db_worker import DbWorker, DbThreadPool
+from core.gui.loading_components import LoadingLabel
 from core.utils.logging_config import get_logger
 
 import json
 import datetime as dt
 import os
+from itertools import groupby
 
 logger = get_logger(__name__)
+
+_PAGE_SIZE = 100  # Nombre de cards chargées par page
 
 # --- Fonctions utilitaires (garder vos fonctions existantes) ---
 ACTION_LABEL = {
@@ -24,6 +29,22 @@ ACTION_LABEL = {
     "DELETE": "Suppression",
     "ERROR":  "Erreur",
 }
+
+# Mapping action → (icône, libellé, couleur texte, couleur fond clair)
+ACTION_CONFIG = {
+    "INSERT":         ("✚",  "Ajout de compétence",     "#4caf50", "#e8f5e9"),
+    "UPDATE":         ("✏️", "Modification de compétence","#f57f17", "#fff8e1"),
+    "DELETE":         ("✕",  "Suppression de compétence","#f44336", "#ffebee"),
+    "ERROR":          ("⚠",  "Erreur",                  "#d32f2f", "#ffebee"),
+    "CONNEXION":      ("🔐", "Connexion utilisateur",    "#1976d2", "#e3f2fd"),
+    "DECONNEXION":    ("🚪", "Déconnexion utilisateur",  "#455a64", "#eceff1"),
+    "LOGOUT_TIMEOUT": ("⏱",  "Déconnexion automatique", "#7b1fa2", "#f3e5f5"),
+}
+_ACTION_CONFIG_DEFAULT = ("ℹ️", "Action",              "#616161", "#f5f5f5")
+
+def get_action_config(action: str) -> tuple:
+    """Retourne (icône, libellé, couleur, couleur_fond) pour un type d'action."""
+    return ACTION_CONFIG.get((action or "").upper(), _ACTION_CONFIG_DEFAULT)
 
 def fr_action(a: str) -> str:
     return ACTION_LABEL.get((a or "").upper(), a or "")
@@ -65,8 +86,9 @@ def make_resume(row: dict) -> str:
     po_id = row.get("poste_id")
     desc = row.get("description") or ""
 
-    op_name = get_entity_name("operateur", op_id) if op_id else None
-    po_name = get_entity_name("poste", po_id) if po_id else None
+    # Noms déjà résolus par le JOIN dans fetch_historique_paginated — pas de requête N+1
+    op_name = row.get('op_name') or (f"#{op_id}" if op_id else None)
+    po_name = row.get('po_name') or (f"Poste #{po_id}" if po_id else None)
 
     try:
         data = json.loads(desc)
@@ -134,27 +156,14 @@ class DetailDialog(QDialog):
         
         # En-tête avec type d'action
         action = row.get("action", "").upper()
-        if action == "INSERT":
-            icon = "✚"
-            action_text = "Ajout de compétence"
-            color = "#4caf50"
-        elif action == "UPDATE":
-            icon = "✏️"
-            action_text = "Modification de compétence"
-            color = "#ffc107"
-        elif action == "DELETE":
-            icon = "✕"
-            action_text = "Suppression de compétence"
-            color = "#f44336"
-        else:
-            icon = "⚠"
-            action_text = "Action"
-            color = "#9e9e9e"
-        
-        header = QLabel(f"{icon} {action_text}")
+        icon, action_text, color, bg_color = get_action_config(action)
+
+        header = QLabel(f"{icon}  {action_text}")
         header_font = QFont("Segoe UI", 16, QFont.Bold)
         header.setFont(header_font)
-        header.setStyleSheet(f"color: {color}; padding: 12px; background-color: {color}22; border-radius: 6px;")
+        header.setStyleSheet(
+            f"color: {color}; padding: 12px; background-color: {bg_color}; border-radius: 6px;"
+        )
         layout.addWidget(header)
         
         # Date et heure
@@ -188,7 +197,8 @@ class DetailDialog(QDialog):
         
         # Opérateur (n'afficher que s'il y en a un)
         op_id = row.get("operateur_id")
-        op_name = get_entity_name("operateur", op_id) if op_id else ""
+        # Nom résolu par le JOIN — pas de requête N+1
+        op_name = row.get('op_name') or ""
         if not op_name and op_id:
             try:
                 data = json.loads(row.get("description", "{}"))
@@ -203,7 +213,7 @@ class DetailDialog(QDialog):
 
         # Poste (n'afficher que s'il y en a un)
         po_id = row.get("poste_id")
-        po_name = get_entity_name("poste", po_id) if po_id else ""
+        po_name = row.get('po_name') or ""
         if not po_name and po_id:
             try:
                 data = json.loads(row.get("description", "{}"))
@@ -221,6 +231,15 @@ class DetailDialog(QDialog):
         if utilisateur:
             user_label = self._create_info_row("👨‍💼 Effectué par :", utilisateur)
             info_layout.addWidget(user_label)
+
+        # Table et record modifiés
+        table_name = row.get("table_name")
+        if table_name:
+            info_layout.addWidget(self._create_info_row("🗃 Table :", table_name))
+
+        record_id = row.get("record_id")
+        if record_id is not None:
+            info_layout.addWidget(self._create_info_row("🔑 ID enregistrement :", str(record_id)))
 
         # Détails selon le type d'action
         try:
@@ -252,8 +271,35 @@ class DetailDialog(QDialog):
                 if source:
                     info_layout.addWidget(self._create_info_row("📍 Source :", source))
 
+            # === Détails spécifiques : sessions (CONNEXION / DECONNEXION / LOGOUT_TIMEOUT) ===
+            if action in ("CONNEXION", "DECONNEXION", "LOGOUT_TIMEOUT"):
+                import re
+                # La description est du texte libre, ex:
+                # "Connexion de l'utilisateur admin (rôle: admin)"
+                # Extraire rôle si présent
+                role_match = re.search(r'r[oô]le\s*:\s*([^\)]+)', desc_str, re.IGNORECASE)
+                if role_match:
+                    role_val = role_match.group(1).strip()
+                    info_layout.addWidget(self._create_info_row("🎭 Rôle :", role_val))
+
+                # Badge visuel selon le type de session
+                if action == "CONNEXION":
+                    badge_text = "Session ouverte avec succès"
+                    badge_style = "color: #1565c0; background-color: #e3f2fd; padding: 8px; border-radius: 4px; font-style: italic;"
+                elif action == "DECONNEXION":
+                    badge_text = "Session fermée normalement"
+                    badge_style = "color: #37474f; background-color: #eceff1; padding: 8px; border-radius: 4px; font-style: italic;"
+                else:  # LOGOUT_TIMEOUT
+                    badge_text = "Session expirée après inactivité"
+                    badge_style = "color: #6a1b9a; background-color: #f3e5f5; padding: 8px; border-radius: 4px; font-style: italic;"
+
+                badge = QLabel(badge_text)
+                badge.setWordWrap(True)
+                badge.setStyleSheet(badge_style)
+                info_layout.addWidget(badge)
+
             # === Détails spécifiques selon le type d'action ===
-            if action == "INSERT" and data:
+            elif action == "INSERT" and data:
                 niveau = data.get("niveau", "?")
                 niveau_label = self._create_info_row("⭐ Niveau attribué :", f"Niveau {niveau}")
                 info_layout.addWidget(niveau_label)
@@ -296,7 +342,10 @@ class DetailDialog(QDialog):
                     change_layout.addStretch()
                     info_layout.addWidget(change_widget)
 
-                    direction = "augmenté" if new > old else "diminué"
+                    try:
+                        direction = "augmenté" if int(new) > int(old) else "diminué"
+                    except (ValueError, TypeError):
+                        direction = "modifié"
                     info_text = QLabel(f"Le niveau de compétence a été {direction}.")
                     info_text.setWordWrap(True)
                     info_text.setStyleSheet("color: #757575; font-style: italic; padding: 8px; background-color: #f5f5f5; border-radius: 4px;")
@@ -393,26 +442,8 @@ class ActionCard(QFrame):
         
         # Styles selon le type d'action
         action = row.get("action", "").upper()
-        if action == "INSERT":
-            bg_color = "#e8f5e9"  # Vert très clair
-            border_color = "#4caf50"  # Vert
-            icon = "✚"
-            icon_color = "#2e7d32"
-        elif action == "UPDATE":
-            bg_color = "#fff8e1"  # Jaune très clair
-            border_color = "#ffc107"  # Jaune/orange
-            icon = "✏️"
-            icon_color = "#f57f17"
-        elif action == "DELETE":
-            bg_color = "#ffebee"  # Rouge très clair
-            border_color = "#f44336"  # Rouge
-            icon = "✕"
-            icon_color = "#c62828"
-        else:
-            bg_color = "#f5f5f5"
-            border_color = "#9e9e9e"
-            icon = "⚠"
-            icon_color = "#424242"
+        icon, _, icon_color, bg_color = get_action_config(action)
+        border_color = icon_color
         
         self.setStyleSheet(f"""
             ActionCard {{
@@ -496,9 +527,44 @@ class ActionCard(QFrame):
 
         details_layout.addStretch()
         content_layout.addLayout(details_layout)
-        
+
+        # --- Ligne secondaire : table, record_id, extrait description ---
+        extra_parts = []
+
+        table_name = row.get("table_name")
+        if table_name:
+            extra_parts.append(f"🗃 {table_name}")
+
+        record_id = row.get("record_id")
+        if record_id is not None:
+            extra_parts.append(f"#ID {record_id}")
+
+        # Extrait de description pour les entrées sans opérateur/poste (ex: CONNEXION, admin)
+        if not row.get("operateur_id") and not row.get("poste_id"):
+            raw_desc = row.get("description") or ""
+            # Tenter de lire le champ "details" dans le JSON, sinon tronquer le texte brut
+            try:
+                data = json.loads(raw_desc)
+                excerpt = data.get("details") or data.get("description") or ""
+            except (json.JSONDecodeError, ValueError):
+                excerpt = raw_desc
+            if excerpt and len(excerpt) > 2:
+                max_len = 80
+                excerpt_str = excerpt[:max_len] + ("…" if len(excerpt) > max_len else "")
+                extra_parts.append(f"📝 {excerpt_str}")
+
+        if extra_parts:
+            extra_layout = QHBoxLayout()
+            extra_layout.setSpacing(12)
+            extra_label = QLabel("  ".join(extra_parts))
+            extra_label.setStyleSheet("color: #9e9e9e; font-size: 9px; background: transparent;")
+            extra_label.setWordWrap(True)
+            extra_layout.addWidget(extra_label)
+            extra_layout.addStretch()
+            content_layout.addLayout(extra_layout)
+
         layout.addLayout(content_layout, stretch=1)
-        
+
         # Ajuster la hauteur
         self.setMinimumHeight(80)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -515,6 +581,73 @@ class ActionCard(QFrame):
         color = QColor(hex_color)
         h, s, l, a = color.getHsl()
         return QColor.fromHsl(h, max(0, s - 10), min(255, l + 10), a).name()
+
+
+class DateSeparator(QWidget):
+    """
+    En-tête de date pour la timeline de l'historique.
+    Affiche le jour en français avec un marqueur ◆ et une ligne horizontale.
+    """
+    _MONTHS_FR = [
+        "", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin",
+        "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre",
+    ]
+    _DAYS_FR = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"]
+
+    def __init__(self, date_val, count: int = 0, parent=None):
+        super().__init__(parent)
+
+        # Formater la date en français
+        if hasattr(date_val, 'weekday'):
+            today     = dt.date.today()
+            yesterday = today - dt.timedelta(days=1)
+            day_name  = self._DAYS_FR[date_val.weekday()]
+            month     = self._MONTHS_FR[date_val.month]
+            base_str  = f"{day_name} {date_val.day} {month} {date_val.year}"
+            if date_val == today:
+                date_str = f"Aujourd'hui  —  {base_str}"
+            elif date_val == yesterday:
+                date_str = f"Hier  —  {base_str}"
+            else:
+                date_str = base_str
+        else:
+            date_str = str(date_val)
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(4, 18, 4, 6)
+        layout.setSpacing(10)
+
+        # Marqueur ◆
+        dot = QLabel("◆")
+        dot.setFont(QFont("Segoe UI", 9))
+        dot.setStyleSheet("color: #1976d2; background: transparent;")
+        dot.setFixedWidth(14)
+        layout.addWidget(dot)
+
+        # Label date
+        lbl = QLabel(date_str)
+        lbl.setFont(QFont("Segoe UI", 11, QFont.Bold))
+        lbl.setStyleSheet("color: #1565c0; background: transparent;")
+        layout.addWidget(lbl)
+
+        # Ligne extensible
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFixedHeight(1)
+        line.setStyleSheet("QFrame { background-color: #bbdefb; border: none; }")
+        layout.addWidget(line, stretch=1)
+
+        # Badge nombre d'actions
+        if count > 0:
+            badge = QLabel(f"  {count} action{'s' if count > 1 else ''}  ")
+            badge.setStyleSheet(
+                "background-color: #e3f2fd; color: #1565c0;"
+                "border: 1px solid #90caf9; border-radius: 10px;"
+                "font-size: 10px; padding: 2px 8px;"
+            )
+            layout.addWidget(badge)
+
+        self.setStyleSheet("background: transparent;")
 
 
 class HistoriqueDialog(QDialog):
@@ -662,6 +795,23 @@ class HistoriqueDialog(QDialog):
         scroll.setWidget(self.cards_container)
         root.addWidget(scroll, stretch=1)
 
+        # --- Bouton "Charger plus" (pagination) ---
+        self._btn_load_more = QPushButton("⬇ Charger plus…")
+        self._btn_load_more.clicked.connect(self._load_more)
+        self._btn_load_more.setVisible(False)
+        self._btn_load_more.setStyleSheet("""
+            QPushButton {
+                background-color: #f5f5f5;
+                color: #616161;
+                border: 1px solid #e0e0e0;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-size: 11px;
+            }
+            QPushButton:hover { background-color: #eeeeee; }
+        """)
+        root.addWidget(self._btn_load_more)
+
         # --- Compteur ---
         self.count_label = QLabel()
         self.count_label.setStyleSheet("""
@@ -678,51 +828,157 @@ class HistoriqueDialog(QDialog):
         # Ajouter le widget de contenu au layout principal
         main_layout.addWidget(content_widget)
 
+        # État de pagination + timeline
+        self._page_offset = 0
+        self._current_worker = None
+        self._loading_label = None
+        self._last_shown_date = None  # Dernier jour affiché (évite les doublons de séparateur)
+
         self.reload()
 
-    # ---------- Fetch ----------
-    def _fetch_logs(self, d_from: QDate, d_to: QDate, search_text: str, action_filter: str):
-        return fetch_historique(
-            date_from=dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
-            date_to=dt.datetime(d_to.year(), d_to.month(), d_to.day(), 23, 59, 59),
-            search_text=search_text,
-            action_filter=action_filter,
-        )
+    # ---------- Gestion du worker courant ----------
 
-    # ---------- UI Reload ----------
+    def _cancel_current_worker(self):
+        """Déconnecte les signaux et annule le worker en cours.
+
+        Déconnecter avant cancel() est essentiel : cela libère immédiatement
+        les closures (qui capturent self) et évite qu'un worker terminé
+        après cancel() rappelle nos callbacks ou retarde le GC du dialog.
+        """
+        if self._current_worker is None:
+            return
+        try:
+            self._current_worker.signals.result.disconnect()
+        except TypeError:
+            pass  # Déjà déconnecté
+        try:
+            self._current_worker.signals.error.disconnect()
+        except TypeError:
+            pass
+        self._current_worker.cancel()
+        self._current_worker = None
+
+    # ---------- Reload (déclenché par changements de filtres) ----------
+
     def reload(self):
-        # Supprimer toutes les cards existantes
-        while self.cards_layout.count() > 1:  # Garder le stretch
+        """Recharge depuis le début — appelé quand les filtres changent."""
+        self._page_offset = 0
+        self._last_shown_date = None  # Réinitialiser la timeline
+
+        self._cancel_current_worker()
+
+        # Vider toutes les cards existantes
+        while self.cards_layout.count() > 1:
             item = self.cards_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        
-        try:
-            rows = self._fetch_logs(
-                self.from_date.date(),
-                self.to_date.date(),
-                self.search.text(),
-                self.action_filter.currentText(),
-            )
-        except Exception as e:
-            code = getattr(e, "errno", None) or (e.args[0] if getattr(e, "args", None) else "")
-            msg  = getattr(e, "msg", None) or (e.args[1] if getattr(e, "args", None) and len(e.args) > 1 else str(e))
-            QMessageBox.critical(self, "Erreur", f"Impossible de charger l'historique :\n{msg or code}")
-            return
 
-        # Créer une card pour chaque action
-        for row in rows:
-            card = ActionCard(row)
-            self.cards_layout.insertWidget(self.cards_layout.count() - 1, card)
-        
-        # Message si aucun résultat
-        if len(rows) == 0:
+        # Afficher le label de chargement
+        self._loading_label = LoadingLabel("Chargement de l'historique")
+        self._loading_label.setAlignment(Qt.AlignCenter)
+        self.cards_layout.insertWidget(0, self._loading_label)
+
+        self.count_label.setText("⏳ Chargement…")
+        self._btn_load_more.setVisible(False)
+
+        self._launch_fetch()
+
+    def _launch_fetch(self):
+        """Lance la récupération asynchrone d'une page via DbWorker."""
+        d_from = self.from_date.date()
+        d_to   = self.to_date.date()
+        search_text   = self.search.text()
+        action_filter = self.action_filter.currentText()
+        offset        = self._page_offset
+
+        def fetch(progress_callback=None):
+            return fetch_historique_paginated(
+                date_from=dt.datetime(d_from.year(), d_from.month(), d_from.day(), 0, 0, 0),
+                date_to=dt.datetime(d_to.year(), d_to.month(), d_to.day(), 23, 59, 59),
+                search_text=search_text,
+                action_filter=action_filter,
+                offset=offset,
+                limit=_PAGE_SIZE + 1,  # +1 pour détecter s'il y a une suite
+            )
+
+        def on_result(rows):
+            self._on_data_fetched(rows, offset)
+
+        def on_error(err):
+            if self._loading_label:
+                self._loading_label.stop()
+                self._loading_label.setText("❌ Erreur de chargement")
+                self._loading_label = None
+            self.count_label.setText("❌ Erreur")
+            logger.error(f"Erreur fetch historique: {err}")
+            QMessageBox.critical(self, "Erreur", "Impossible de charger l'historique.")
+
+        self._current_worker = DbWorker(fetch)
+        self._current_worker.signals.result.connect(on_result)
+        self._current_worker.signals.error.connect(on_error)
+        DbThreadPool.start(self._current_worker)
+
+    def _on_data_fetched(self, rows, offset):
+        """Appelé dans le thread UI après chargement d'une page."""
+        has_more = len(rows) > _PAGE_SIZE
+        if has_more:
+            rows = rows[:_PAGE_SIZE]
+
+        # Retirer le label de chargement
+        if self._loading_label:
+            self._loading_label.stop()
+            self._loading_label.deleteLater()
+            self._loading_label = None
+
+        # Grouper les lignes par jour et insérer les séparateurs de date (timeline)
+        insert_pos = self.cards_layout.count() - 1
+        for row_date, group in groupby(rows, key=self._row_date):
+            group_rows = list(group)
+            # Séparateur de date uniquement si le jour change
+            if row_date is not None and row_date != self._last_shown_date:
+                sep = DateSeparator(row_date, count=len(group_rows))
+                self.cards_layout.insertWidget(insert_pos, sep)
+                insert_pos += 1
+                self._last_shown_date = row_date
+            for row in group_rows:
+                card = ActionCard(row)
+                self.cards_layout.insertWidget(insert_pos, card)
+                insert_pos += 1
+
+        # Message "aucun résultat" sur la première page vide
+        if offset == 0 and len(rows) == 0:
             no_result = QLabel("Aucune action trouvée pour cette période")
             no_result.setAlignment(Qt.AlignCenter)
             no_result.setStyleSheet("color: #9e9e9e; font-size: 12px; padding: 40px;")
             self.cards_layout.insertWidget(0, no_result)
-        
-        self.count_label.setText(f"📊 {len(rows)} action(s) trouvée(s)")
+
+        total = offset + len(rows)
+        self._page_offset = total
+        suffix = " — ⬇ suite disponible" if has_more else ""
+        self.count_label.setText(f"📊 {total} action(s) affichée(s){suffix}")
+        self._btn_load_more.setVisible(has_more)
+
+    @staticmethod
+    def _row_date(row: dict):
+        """Extrait la date (sans heure) d'une ligne — clé de groupement pour la timeline."""
+        dt_val = row.get('date_time')
+        if dt_val is None:
+            return None
+        if hasattr(dt_val, 'date'):
+            return dt_val.date()
+        if isinstance(dt_val, str):
+            try:
+                return dt.datetime.fromisoformat(dt_val).date()
+            except Exception:
+                return None
+        return None
+
+    def _load_more(self):
+        """Charge la page suivante sans effacer les cards existantes."""
+        self._cancel_current_worker()
+        self._btn_load_more.setVisible(False)
+        self.count_label.setText("⏳ Chargement de la suite…")
+        self._launch_fetch()
 
     # ---------- Clear + export ----------
     def _export_range(self, d_from: QDate, d_to: QDate):

@@ -41,7 +41,7 @@ class ContratServiceCRUD(CRUDService):
 
     # Champs autorisés pour les mises à jour (sécurité)
     ALLOWED_FIELDS = [
-        'operateur_id',
+        'personnel_id',
         'type_contrat',
         'date_debut',
         'date_fin',
@@ -75,7 +75,7 @@ class ContratServiceCRUD(CRUDService):
             >>> contrats = ContratServiceCRUD.get_by_operateur(1)
             >>> contrats_actifs = ContratServiceCRUD.get_by_operateur(1, actif_only=True)
         """
-        conditions = {'operateur_id': operateur_id}
+        conditions = {'personnel_id': operateur_id}
         if actif_only:
             conditions['actif'] = 1
 
@@ -106,7 +106,7 @@ class ContratServiceCRUD(CRUDService):
             sql = """
                 SELECT c.id, c.type_contrat, c.date_fin, p.nom, p.prenom
                 FROM contrat c
-                INNER JOIN personnel p ON p.id = c.operateur_id
+                INNER JOIN personnel p ON p.id = c.personnel_id
                 WHERE c.actif = 1
                   AND c.date_fin IS NOT NULL
                   AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
@@ -120,7 +120,7 @@ class ContratServiceCRUD(CRUDService):
             sql = """
                 SELECT c.id, c.type_contrat, c.date_fin, p.nom, p.prenom
                 FROM contrat c
-                INNER JOIN personnel p ON p.id = c.operateur_id
+                INNER JOIN personnel p ON p.id = c.personnel_id
                 WHERE c.actif = 1
                   AND c.date_fin IS NOT NULL
                   AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
@@ -246,7 +246,7 @@ class ContratServiceCRUD(CRUDService):
         Example:
             >>> total = ContratServiceCRUD.count_by_operateur(1, actif_only=True)
         """
-        conditions = {'operateur_id': operateur_id}
+        conditions = {'personnel_id': operateur_id}
         if actif_only:
             conditions['actif'] = 1
 

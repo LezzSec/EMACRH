@@ -69,11 +69,11 @@ class AlertService:
             Liste d'alertes de type CONTRAT_EXPIRE (urgence CRITIQUE)
         """
         query = """
-            SELECT c.id, c.operateur_id, c.type_contrat, c.date_debut, c.date_fin,
+            SELECT c.id, c.personnel_id, c.type_contrat, c.date_debut, c.date_fin,
                    p.nom, p.prenom, p.matricule,
                    DATEDIFF(CURDATE(), c.date_fin) as jours_expires
             FROM contrat c
-            JOIN personnel p ON c.operateur_id = p.id
+            JOIN personnel p ON c.personnel_id = p.id
             WHERE c.actif = 1
               AND c.date_fin IS NOT NULL
               AND c.date_fin < CURDATE()
@@ -92,7 +92,7 @@ class AlertService:
                 urgence="CRITIQUE",
                 titre=f"Contrat expiré ({row['type_contrat']})",
                 description=f"Contrat expiré depuis {row['jours_expires']} jour(s)",
-                personnel_id=row['operateur_id'],
+                personnel_id=row['personnel_id'],
                 personnel_nom=row['nom'],
                 personnel_prenom=row['prenom'],
                 date_alerte=date.today(),
@@ -122,11 +122,11 @@ class AlertService:
         date_limite = date.today() + timedelta(days=jours)
 
         query = """
-            SELECT c.id, c.operateur_id, c.type_contrat, c.date_debut, c.date_fin,
+            SELECT c.id, c.personnel_id, c.type_contrat, c.date_debut, c.date_fin,
                    p.nom, p.prenom, p.matricule,
                    DATEDIFF(c.date_fin, CURDATE()) as jours_restants
             FROM contrat c
-            JOIN personnel p ON c.operateur_id = p.id
+            JOIN personnel p ON c.personnel_id = p.id
             WHERE c.actif = 1
               AND c.date_fin IS NOT NULL
               AND c.date_fin BETWEEN CURDATE() AND %s
@@ -155,7 +155,7 @@ class AlertService:
                 urgence=urgence,
                 titre=f"Contrat {row['type_contrat']} expire bientôt",
                 description=f"Expire dans {jours_restants} jour(s)",
-                personnel_id=row['operateur_id'],
+                personnel_id=row['personnel_id'],
                 personnel_nom=row['nom'],
                 personnel_prenom=row['prenom'],
                 date_alerte=date.today(),
@@ -188,7 +188,7 @@ class AlertService:
                 pi.date_entree
             FROM personnel p
             LEFT JOIN contrat c
-                   ON c.operateur_id = p.id
+                   ON c.personnel_id = p.id
                   AND c.actif = 1
             LEFT JOIN personnel_infos pi
                    ON pi.personnel_id = p.id
@@ -447,14 +447,14 @@ class AlertService:
         # Contrats expirés (CRITIQUE)
         counts['critiques'] += QueryExecutor.fetch_scalar("""
             SELECT COUNT(*) FROM contrat c
-            JOIN personnel p ON c.operateur_id = p.id
+            JOIN personnel p ON c.personnel_id = p.id
             WHERE c.actif = 1 AND c.date_fin < CURDATE() AND p.statut = 'ACTIF'
         """, default=0)
 
         # Contrats expirant < 7j (CRITIQUE)
         counts['critiques'] += QueryExecutor.fetch_scalar("""
             SELECT COUNT(*) FROM contrat c
-            JOIN personnel p ON c.operateur_id = p.id
+            JOIN personnel p ON c.personnel_id = p.id
             WHERE c.actif = 1
               AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
               AND p.statut = 'ACTIF'
@@ -463,7 +463,7 @@ class AlertService:
         # Contrats expirant 8-30j (AVERTISSEMENT)
         counts['avertissements'] += QueryExecutor.fetch_scalar("""
             SELECT COUNT(*) FROM contrat c
-            JOIN personnel p ON c.operateur_id = p.id
+            JOIN personnel p ON c.personnel_id = p.id
             WHERE c.actif = 1
               AND c.date_fin BETWEEN DATE_ADD(CURDATE(), INTERVAL 8 DAY) AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
               AND p.statut = 'ACTIF'
@@ -472,7 +472,7 @@ class AlertService:
         # Personnel sans contrat (AVERTISSEMENT)
         counts['avertissements'] += QueryExecutor.fetch_scalar("""
             SELECT COUNT(*) FROM personnel p
-            LEFT JOIN contrat c ON c.operateur_id = p.id AND c.actif = 1
+            LEFT JOIN contrat c ON c.personnel_id = p.id AND c.actif = 1
             WHERE p.statut = 'ACTIF' AND c.id IS NULL
         """, default=0)
 

@@ -76,7 +76,8 @@
       "Bash(powershell -Command:*)",
       "Bash(powershell -ExecutionPolicy Bypass -File cleanup_temp.ps1)",
       "Bash(python3:*)",
-      "Bash(sc query:*)"
+      "Bash(sc query:*)",
+      "Bash(git checkout c3a33d4 -- App/core/gui/historique.py)"
     ],
     "deny": [],
     "ask": []

@@ -216,9 +216,8 @@ def get_donnees_domaine(
 def _get_donnees_general(operateur_id: int) -> Dict:
     """
     ✅ REFACTORISÉ: Utilise QueryExecutor.
-
-    AVANT: 50 lignes
-    APRÈS: 30 lignes
+    Retourne un dict plat fusionnant personnel + personnel_infos,
+    avec age et anciennete calculés.
     """
     try:
         # ✅ Récupérer infos personnel
@@ -228,15 +227,51 @@ def _get_donnees_general(operateur_id: int) -> Dict:
 
         # ✅ Récupérer infos détaillées avec QueryExecutor
         infos = QueryExecutor.fetch_one(
-            "SELECT * FROM personnel_infos WHERE personnel_id = %s",  # ✅ Corrigé
+            "SELECT * FROM personnel_infos WHERE personnel_id = %s",
             (operateur_id,),
             dictionary=True
         ) or {}
 
-        return {
-            'personnel': personnel,
-            'infos': infos
-        }
+        # Aplatir les deux dicts (personnel en priorité sur infos)
+        donnees = {**infos, **personnel}
+
+        # Calculer l'âge à partir de date_naissance
+        date_naissance = infos.get('date_naissance')
+        if date_naissance:
+            today = date.today()
+            if isinstance(date_naissance, str):
+                try:
+                    date_naissance = datetime.strptime(date_naissance, '%Y-%m-%d').date()
+                except ValueError:
+                    date_naissance = None
+            if date_naissance:
+                age = today.year - date_naissance.year - (
+                    (today.month, today.day) < (date_naissance.month, date_naissance.day)
+                )
+                donnees['age'] = age
+
+        # Calculer l'ancienneté à partir de date_entree
+        date_entree = infos.get('date_entree')
+        if date_entree:
+            today = date.today()
+            if isinstance(date_entree, str):
+                try:
+                    date_entree = datetime.strptime(date_entree, '%Y-%m-%d').date()
+                except ValueError:
+                    date_entree = None
+            if date_entree:
+                annees = today.year - date_entree.year - (
+                    (today.month, today.day) < (date_entree.month, date_entree.day)
+                )
+                mois = (today.year - date_entree.year) * 12 + today.month - date_entree.month
+                if today.day < date_entree.day:
+                    mois -= 1
+                if annees > 0:
+                    donnees['anciennete'] = f"{annees} an{'s' if annees > 1 else ''}"
+                else:
+                    donnees['anciennete'] = f"{max(mois, 0)} mois"
+
+        return donnees
 
     except Exception as e:
         logger.exception(f"Erreur _get_donnees_general: {e}")
@@ -407,6 +442,7 @@ def create_contrat(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[i
     AVANT: 35 lignes (validation + INSERT + log_hist + gestion erreurs)
     APRÈS: 10 lignes (-71%)
     """
+    require('rh.contrats.edit')
     try:
         # ✅ Validation métier (si nécessaire)
         if data.get('date_fin') and data['date_fin'] < data.get('date_debut'):
@@ -431,6 +467,7 @@ def update_contrat(contrat_id: int, data: Dict) -> Tuple[bool, str]:
     AVANT: 30 lignes
     APRÈS: 8 lignes (-73%)
     """
+    require('rh.contrats.edit')
     try:
         # ✅ Validation métier (si nécessaire)
         if data.get('date_fin') and data.get('date_debut'):
@@ -455,6 +492,7 @@ def delete_contrat(contrat_id: int) -> Tuple[bool, str]:
     AVANT: 20 lignes
     APRÈS: 8 lignes (-60%)
     """
+    require('rh.contrats.delete')
     try:
         # ✅ Soft delete (marquer comme inactif)
         return ContratServiceCRUD.delete(
@@ -479,6 +517,7 @@ def create_formation(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional
     AVANT: 35 lignes
     APRÈS: 8 lignes (-77%)
     """
+    require('rh.formations.edit')
     try:
         # ✅ Utiliser FormationServiceCRUD.create()
         return FormationServiceCRUD.create(
@@ -498,6 +537,7 @@ def update_formation(formation_id: int, data: Dict) -> Tuple[bool, str]:
     AVANT: 30 lignes
     APRÈS: 8 lignes (-73%)
     """
+    require('rh.formations.edit')
     try:
         # ✅ Utiliser FormationServiceCRUD.update()
         return FormationServiceCRUD.update(
@@ -517,6 +557,7 @@ def delete_formation(formation_id: int) -> Tuple[bool, str]:
     AVANT: 20 lignes
     APRÈS: 8 lignes (-60%)
     """
+    require('rh.formations.delete')
     try:
         # ✅ Hard delete
         return FormationServiceCRUD.delete(record_id=formation_id)
@@ -539,7 +580,32 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
     AVANT: 120 lignes (construction dynamique UPDATE + log_hist)
     APRÈS: 60 lignes (-50%)
     """
+    require('rh.personnel.edit')
     try:
+        # Validation des dates
+        dn = data.get('date_naissance')
+        de = data.get('date_entree')
+        today = date.today()
+
+        if dn and isinstance(dn, str):
+            try:
+                dn = datetime.strptime(dn, '%Y-%m-%d').date()
+            except ValueError:
+                dn = None
+
+        if de and isinstance(de, str):
+            try:
+                de = datetime.strptime(de, '%Y-%m-%d').date()
+            except ValueError:
+                de = None
+
+        if dn and dn > today:
+            return False, "La date de naissance ne peut pas être dans le futur."
+        if de and de > today:
+            return False, "La date d'entrée ne peut pas être dans le futur."
+        if dn and de and de < dn:
+            return False, "La date d'entrée ne peut pas être antérieure à la date de naissance."
+
         # Séparer les données personnel vs personnel_infos
         personnel_fields = ['nom', 'prenom', 'matricule', 'statut', 'numposte']
         personnel_data = {k: v for k, v in data.items() if k in personnel_fields}
@@ -611,6 +677,7 @@ def create_declaration(operateur_id: int, data: Dict) -> Tuple[bool, str, Option
     AVANT: 25 lignes avec DatabaseConnection + require
     APRÈS: 8 lignes avec DeclarationServiceCRUD
     """
+    require('rh.declarations.edit')
     from core.services.declaration_service_crud import DeclarationServiceCRUD
     try:
         return DeclarationServiceCRUD.create(
@@ -629,6 +696,7 @@ def update_declaration(declaration_id: int, data: Dict) -> Tuple[bool, str]:
     AVANT: 25 lignes avec DatabaseConnection
     APRÈS: 8 lignes avec DeclarationServiceCRUD
     """
+    require('rh.declarations.edit')
     from core.services.declaration_service_crud import DeclarationServiceCRUD
     try:
         return DeclarationServiceCRUD.update(
@@ -647,6 +715,7 @@ def delete_declaration(declaration_id: int) -> Tuple[bool, str]:
     AVANT: 10 lignes avec DatabaseConnection
     APRÈS: 5 lignes avec DeclarationServiceCRUD
     """
+    require('rh.declarations.edit')
     from core.services.declaration_service_crud import DeclarationServiceCRUD
     try:
         return DeclarationServiceCRUD.delete(record_id=declaration_id)
@@ -1028,11 +1097,11 @@ def get_alertes_rh_dashboard(jours: int = 30) -> Dict:
         alertes["contrats"] = QueryExecutor.fetch_all(
             """
             SELECT
-                c.id, c.operateur_id, c.type_contrat, c.date_fin,
+                c.id, c.personnel_id, c.type_contrat, c.date_fin,
                 p.nom, p.prenom, p.matricule,
                 DATEDIFF(c.date_fin, CURDATE()) as jours_restants
             FROM contrat c
-            INNER JOIN personnel p ON p.id = c.operateur_id
+            INNER JOIN personnel p ON p.id = c.personnel_id
             WHERE c.actif = 1
               AND c.date_fin IS NOT NULL
               AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
@@ -1080,7 +1149,7 @@ def get_alertes_rh_count(jours: int = 30) -> Dict:
         counts["contrats_count"] = QueryExecutor.fetch_scalar(
             """
             SELECT COUNT(*) FROM contrat c
-            INNER JOIN personnel p ON p.id = c.operateur_id
+            INNER JOIN personnel p ON p.id = c.personnel_id
             WHERE c.actif = 1 AND c.date_fin IS NOT NULL
               AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
               AND p.statut = 'ACTIF'

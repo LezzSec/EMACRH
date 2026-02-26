@@ -155,6 +155,22 @@ class EditInfosGeneralesDialog(EmacFormDialog):
             if not is_matricule_disponible(nouveau_matricule, self.operateur_id):
                 return False, f"Le matricule '{nouveau_matricule}' est déjà utilisé par un autre opérateur."
 
+        # Récupérer les dates saisies (None si non renseignées)
+        dn = self.date_naissance.date().toPyDate() if self.date_naissance.date().year() > 1900 else None
+        de = self.date_entree.date().toPyDate() if self.date_entree.date().year() > 1900 else None
+
+        from datetime import date as _date
+        if dn and de:
+            # La date d'entrée ne peut pas être antérieure à la naissance
+            if de < dn:
+                return False, "La date d'entrée dans l'entreprise ne peut pas être antérieure à la date de naissance."
+
+        if dn and dn > _date.today():
+            return False, "La date de naissance ne peut pas être dans le futur."
+
+        if de and de > _date.today():
+            return False, "La date d'entrée ne peut pas être dans le futur."
+
         return True, ""
 
     def save_to_db(self):

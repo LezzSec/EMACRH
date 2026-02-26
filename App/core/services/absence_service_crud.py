@@ -28,18 +28,43 @@ Usage:
     absences = AbsenceServiceCRUD.get_by_personnel(personnel_id=1)
 """
 
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 from datetime import date, timedelta
+from functools import lru_cache
 from core.services.crud_service import CRUDService
+from core.services.permission_manager import require
 
 
 # =============================================================================
 # UTILITAIRES : CALCUL DES JOURS OUVRÉS
 # =============================================================================
 
+@lru_cache(maxsize=16)
+def _get_jours_feries_cached(annee_debut: int, annee_fin: int) -> FrozenSet[date]:
+    """
+    Requête DB mise en cache : retourne les jours fériés sous forme de frozenset.
+    Le cache est conservé pendant toute la durée de la session (les jours fériés
+    ne changent pas au cours d'une session utilisateur).
+    """
+    from core.db.query_executor import QueryExecutor
+    try:
+        rows = QueryExecutor.fetch_all(
+            "SELECT date_ferie FROM jours_feries WHERE YEAR(date_ferie) BETWEEN %s AND %s",
+            (annee_debut, annee_fin),
+        )
+        return frozenset(
+            row[0] if isinstance(row, (tuple, list)) else row.get('date_ferie')
+            for row in rows
+        )
+    except Exception:
+        return frozenset()
+
+
 def get_jours_feries(annee_debut: int, annee_fin: int) -> Set[date]:
     """
     Retourne l'ensemble des jours fériés entre deux années (incluses).
+    Utilise un cache en mémoire — la DB n'est interrogée qu'une seule fois
+    par paire (annee_debut, annee_fin) pendant la session.
 
     Args:
         annee_debut: Année de début
@@ -48,15 +73,7 @@ def get_jours_feries(annee_debut: int, annee_fin: int) -> Set[date]:
     Returns:
         Ensemble de dates correspondant aux jours fériés
     """
-    from core.db.query_executor import QueryExecutor
-    try:
-        rows = QueryExecutor.fetch_all(
-            "SELECT date_ferie FROM jours_feries WHERE YEAR(date_ferie) BETWEEN %s AND %s",
-            (annee_debut, annee_fin),
-        )
-        return {row[0] if isinstance(row, (tuple, list)) else row.get('date_ferie') for row in rows}
-    except Exception:
-        return set()
+    return set(_get_jours_feries_cached(annee_debut, annee_fin))
 
 
 def calculer_jours_ouvres(
@@ -129,6 +146,12 @@ class AbsenceServiceCRUD(CRUDService):
         'valideur_id',
         'date_validation'
     ]
+
+    @classmethod
+    def create(cls, **kwargs) -> Tuple[bool, str, Optional[int]]:
+        """Crée une absence (vérifie la permission planning.absences.edit)."""
+        require('planning.absences.edit')
+        return super().create(**kwargs)
 
     @classmethod
     def get_by_personnel(
@@ -212,6 +235,7 @@ class AbsenceServiceCRUD(CRUDService):
         Example:
             >>> AbsenceServiceCRUD.valider(10, valideur_id=5)
         """
+        require('planning.absences.edit')
         from datetime import datetime
 
         update_data = {
@@ -245,6 +269,7 @@ class AbsenceServiceCRUD(CRUDService):
         Example:
             >>> AbsenceServiceCRUD.refuser(10, commentaire="Période déjà occupée")
         """
+        require('planning.absences.edit')
         from datetime import datetime
 
         update_data = {
@@ -272,6 +297,7 @@ class AbsenceServiceCRUD(CRUDService):
         Returns:
             (success: bool, message: str)
         """
+        require('planning.absences.edit')
         update_data = {'statut': 'ANNULEE'}
 
         if commentaire:

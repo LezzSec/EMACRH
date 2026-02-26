@@ -451,6 +451,24 @@ def _fill_excel_template(
         if cell_date and date_str:
             ws[cell_date] = date_str
 
+        # Auto-ajustement des colonnes dont le libellé serait tronqué.
+        # On élargit uniquement les colonnes trop étroites pour leur contenu texte
+        # (libellés courts ≤ 30 car.), sans jamais rétrécir les autres.
+        from openpyxl.utils import get_column_letter
+        DEFAULT_COL_WIDTH = 8.43  # largeur Excel par défaut
+        for row in ws.iter_rows():
+            for cell in row:
+                if not cell.value or not isinstance(cell.value, str):
+                    continue
+                text = str(cell.value)
+                if len(text) > 30:
+                    continue  # probablement du contenu, pas un libellé
+                col_letter = get_column_letter(cell.column)
+                needed = len(text) + 2
+                current = ws.column_dimensions[col_letter].width or DEFAULT_COL_WIDTH
+                if current < needed:
+                    ws.column_dimensions[col_letter].width = needed
+
         wb.save(file_path)
         wb.close()
 

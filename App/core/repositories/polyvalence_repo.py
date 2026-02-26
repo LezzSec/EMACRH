@@ -216,43 +216,31 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
     @classmethod
     @monitor_query('PolyvalenceRepo.get_statistiques')
     def get_statistiques(cls) -> StatistiquesEvaluations:
-        """Calcule les statistiques des évaluations."""
+        """Calcule les statistiques des évaluations (1 seule requête agrégée)."""
         stats = StatistiquesEvaluations()
 
         with DatabaseCursor(dictionary=True) as cur:
-            # Total
             cur.execute("""
-                SELECT COUNT(*) as total FROM polyvalence p
+                SELECT
+                    COUNT(*) AS total,
+                    SUM(CASE WHEN p.prochaine_evaluation < CURDATE()
+                        THEN 1 ELSE 0 END) AS en_retard,
+                    SUM(CASE WHEN p.prochaine_evaluation
+                        BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+                        THEN 1 ELSE 0 END) AS a_venir_7j,
+                    SUM(CASE WHEN p.prochaine_evaluation
+                        BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                        THEN 1 ELSE 0 END) AS a_venir_30j
+                FROM polyvalence p
                 JOIN personnel pers ON p.operateur_id = pers.id
                 WHERE pers.statut = 'ACTIF'
             """)
-            stats.total = cur.fetchone()['total']
-
-            # En retard
-            cur.execute("""
-                SELECT COUNT(*) as total FROM polyvalence p
-                JOIN personnel pers ON p.operateur_id = pers.id
-                WHERE pers.statut = 'ACTIF' AND p.prochaine_evaluation < CURDATE()
-            """)
-            stats.en_retard = cur.fetchone()['total']
-
-            # À venir 7j
-            cur.execute("""
-                SELECT COUNT(*) as total FROM polyvalence p
-                JOIN personnel pers ON p.operateur_id = pers.id
-                WHERE pers.statut = 'ACTIF'
-                AND p.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
-            """)
-            stats.a_venir_7j = cur.fetchone()['total']
-
-            # À venir 30j
-            cur.execute("""
-                SELECT COUNT(*) as total FROM polyvalence p
-                JOIN personnel pers ON p.operateur_id = pers.id
-                WHERE pers.statut = 'ACTIF'
-                AND p.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-            """)
-            stats.a_venir_30j = cur.fetchone()['total']
+            row = cur.fetchone()
+            if row:
+                stats.total       = row['total']       or 0
+                stats.en_retard   = row['en_retard']   or 0
+                stats.a_venir_7j  = row['a_venir_7j']  or 0
+                stats.a_venir_30j = row['a_venir_30j'] or 0
 
         return stats
 

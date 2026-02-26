@@ -479,7 +479,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
                 SUM(CASE WHEN p.niveau = 4 THEN 1 ELSE 0 END) AS n4
             FROM personnel o
             LEFT JOIN polyvalence p ON o.id = p.operateur_id
-            LEFT JOIN contrat ct ON ct.operateur_id = o.id AND ct.actif = 1
+            LEFT JOIN contrat ct ON ct.personnel_id = o.id AND ct.actif = 1
             GROUP BY o.id, o.nom, o.prenom, o.matricule, o.numposte, o.statut, ct.type_contrat
             ORDER BY o.nom, o.prenom
             """,
@@ -591,14 +591,16 @@ class PersonnelRepository(BaseRepository[Personnel]):
 
         where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
 
-        # Requête principale avec stats polyvalence
+        # Requête principale avec stats polyvalence + contrat actif
         query = f"""
             SELECT
                 p.id,
                 p.nom,
                 p.prenom,
                 p.matricule,
+                p.numposte,
                 UPPER(p.statut) AS statut,
+                ct.type_contrat,
                 COUNT(poly.id) AS nb_postes,
                 SUM(CASE WHEN poly.niveau = 1 THEN 1 ELSE 0 END) AS n1,
                 SUM(CASE WHEN poly.niveau = 2 THEN 1 ELSE 0 END) AS n2,
@@ -606,8 +608,9 @@ class PersonnelRepository(BaseRepository[Personnel]):
                 SUM(CASE WHEN poly.niveau = 4 THEN 1 ELSE 0 END) AS n4
             FROM personnel p
             LEFT JOIN polyvalence poly ON p.id = poly.operateur_id
+            LEFT JOIN contrat ct ON ct.personnel_id = p.id AND ct.actif = 1
             WHERE {where_sql}
-            GROUP BY p.id, p.nom, p.prenom, p.matricule, p.statut
+            GROUP BY p.id, p.nom, p.prenom, p.matricule, p.numposte, p.statut, ct.type_contrat
             ORDER BY p.nom, p.prenom
             LIMIT %s OFFSET %s
         """

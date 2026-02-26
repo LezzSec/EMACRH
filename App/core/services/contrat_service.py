@@ -72,8 +72,8 @@ def validate_contract_data(data: dict) -> Tuple[bool, str]:
         return False, "Le type de contrat est obligatoire"
 
     # Validation de l'opérateur
-    if not data.get('operateur_id'):
-        return False, "L'identifiant de l'opérateur est obligatoire"
+    if not data.get('personnel_id'):
+        return False, "L'identifiant du personnel est obligatoire"
 
     return True, ""
 
@@ -103,14 +103,14 @@ def create_contract(data: dict) -> Tuple[bool, str, Optional[int]]:
     try:
         # Désactiver les anciens contrats de cet opérateur
         QueryExecutor.execute_write(
-            "UPDATE contrat SET actif = 0 WHERE operateur_id = %s AND actif = 1",
-            (data['operateur_id'],)
+            "UPDATE contrat SET actif = 0 WHERE personnel_id = %s AND actif = 1",
+            (data['personnel_id'],)
         )
 
         # Insérer le nouveau contrat
         query = """
             INSERT INTO contrat (
-                operateur_id, type_contrat, date_debut, date_fin, etp,
+                personnel_id, type_contrat, date_debut, date_fin, etp,
                 categorie, echelon, emploi, salaire, actif,
                 nom_tuteur, prenom_tuteur, ecole, nom_ett, adresse_ett,
                 nom_ge, adresse_ge, date_autorisation_travail,
@@ -123,7 +123,7 @@ def create_contract(data: dict) -> Tuple[bool, str, Optional[int]]:
         """
 
         values = (
-            data['operateur_id'],
+            data['personnel_id'],
             data['type_contrat'],
             data['date_debut'],
             data.get('date_fin'),
@@ -273,8 +273,8 @@ def get_active_contract(operateur_id: int) -> Optional[dict]:
         return QueryExecutor.fetch_one("""
             SELECT c.*, p.nom, p.prenom
             FROM contrat c
-            LEFT JOIN personnel p ON p.id = c.operateur_id
-            WHERE c.operateur_id = %s AND c.actif = 1
+            LEFT JOIN personnel p ON p.id = c.personnel_id
+            WHERE c.personnel_id = %s AND c.actif = 1
             ORDER BY c.date_debut DESC
             LIMIT 1
         """, (operateur_id,), dictionary=True)
@@ -290,8 +290,8 @@ def get_all_contracts(operateur_id: int, include_inactive: bool = False) -> List
         query = """
             SELECT c.*, p.nom, p.prenom
             FROM contrat c
-            LEFT JOIN personnel p ON p.id = c.operateur_id
-            WHERE c.operateur_id = %s
+            LEFT JOIN personnel p ON p.id = c.personnel_id
+            WHERE c.personnel_id = %s
         """
 
         if not include_inactive:
@@ -312,7 +312,7 @@ def get_contract_by_id(contract_id: int) -> Optional[dict]:
         return QueryExecutor.fetch_one("""
             SELECT c.*, p.nom, p.prenom
             FROM contrat c
-            LEFT JOIN personnel p ON p.id = c.operateur_id
+            LEFT JOIN personnel p ON p.id = c.personnel_id
             WHERE c.id = %s
         """, (contract_id,), dictionary=True)
 
@@ -342,7 +342,7 @@ def get_expiring_contracts(days: int = 30) -> List[dict]:
                 p.prenom,
                 DATEDIFF(c.date_fin, CURDATE()) as jours_restants
             FROM contrat c
-            LEFT JOIN personnel p ON p.id = c.operateur_id
+            LEFT JOIN personnel p ON p.id = c.personnel_id
             WHERE c.actif = 1
               AND c.date_fin IS NOT NULL
               AND c.date_fin BETWEEN CURDATE() AND %s
@@ -367,7 +367,7 @@ def get_all_active_contracts() -> List[dict]:
                 p.matricule,
                 p.statut
             FROM contrat c
-            LEFT JOIN personnel p ON p.id = c.operateur_id
+            LEFT JOIN personnel p ON p.id = c.personnel_id
             WHERE c.actif = 1
             ORDER BY p.nom, p.prenom, c.date_debut DESC
         """, dictionary=True)

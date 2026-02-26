@@ -254,7 +254,7 @@ class Contrat(ModelMixin):
     Correspond à la table 'contrat'.
     """
     id: int
-    operateur_id: int
+    personnel_id: int
     type_contrat: str  # CDI, CDD, Interimaire, etc.
     date_debut: date
     date_fin: Optional[date] = None
