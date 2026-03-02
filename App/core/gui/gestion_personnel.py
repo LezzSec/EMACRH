@@ -36,6 +36,8 @@ class DetailOperateurDialog(QDialog):
     def __init__(self, operateur_id, nom, prenom, statut, parent=None, is_production=True):
         super().__init__(parent)
         self.operateur_id = operateur_id
+        self.operateur_nom = nom
+        self.operateur_prenom = prenom
         self.is_production = is_production
         self.current_statut = statut.upper()
         self.date_entree = self._load_date_entree()  # Charger la date d'entrée
@@ -109,6 +111,7 @@ class DetailOperateurDialog(QDialog):
         stats_box.addWidget(self.stat_total)
         poly_layout.addLayout(stats_box)
         
+        self._poly_tab_ref = poly_tab  # Empêche le GC de détruire poly_table quand is_production=False
         if self.is_production:
             tabs.addTab(poly_tab, "Polyvalences")
 
@@ -887,90 +890,120 @@ class DetailOperateurDialog(QDialog):
             flow = []
             
             # Titre principal
-            flow.append(Paragraph(f"Profil Opérateur", title_style))
-            flow.append(Spacer(1, 0.3*cm))
-    
-            # Note: L'onglet résumé a été supprimé, donc on n'affiche plus le résumé textuel
-            # On affiche directement les informations principales
-            flow.append(Paragraph(f"<b>Nom :</b> {self.operateur_nom}", body_style))
-            flow.append(Paragraph(f"<b>Prénom :</b> {self.operateur_prenom}", body_style))
-            flow.append(Spacer(1, 0.3*cm))
-    
-            # ---------- Informations complémentaires ----------
-            flow.append(Paragraph("Informations Complémentaires", section_style))
+            flow.append(Paragraph("Fiche Personnel", title_style))
+            flow.append(Spacer(1, 0.4*cm))
 
-            infos_data = []
-            if hasattr(self, "_infos_data") and self._infos_data:
-                for section_title, items in self._infos_data:
-                    # Ajouter le titre de section
-                    infos_data.append([section_title.upper(), ""])
-                    for label, value in items:
-                        if "Aucune" not in label:
-                            infos_data.append([f"  {label}", str(value)])
+            # ---------- Table unifiée : identité + contrat + formations + validités ----------
+            _sections = {t: items for t, items in (self._infos_data if hasattr(self, "_infos_data") and self._infos_data else [])}
 
-            if infos_data:
-                t_infos = Table(infos_data, colWidths=[6*cm, 11*cm])
-                t_infos.setStyle(TableStyle([
-                    ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
-                    ("FONTSIZE", (0,0), (-1,-1), 9),
-                    ("TEXTCOLOR", (0,0), (0,-1), colors.HexColor("#475569")),
-                    ("TEXTCOLOR", (1,0), (1,-1), colors.HexColor("#1f2937")),
-                    ("VALIGN", (0,0), (-1,-1), "TOP"),
-                    ("ROWBACKGROUNDS", (0,0), (-1,-1), 
-                     [colors.white, colors.HexColor("#f8fafc")]),
-                    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
-                    ("LEFTPADDING", (0,0), (-1,-1), 8),
-                    ("RIGHTPADDING", (0,0), (-1,-1), 8),
-                    ("TOPPADDING", (0,0), (-1,-1), 6),
-                    ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-                ]))
-                flow.append(t_infos)
+            unified_rows = []
+            header_style_idx = []  # indices des lignes d'en-tête de section
+
+            def _add_section_header(label):
+                header_style_idx.append(len(unified_rows))
+                unified_rows.append([label.upper(), ""])
+
+            # Identité
+            _add_section_header("Identité")
+            unified_rows.append(["Nom", self.operateur_nom])
+            unified_rows.append(["Prénom", self.operateur_prenom])
+            unified_rows.append(["Matricule", matricule or "—"])
+            unified_rows.append(["Statut", statut])
+            for label, value in _sections.get("Informations Personnelles", []):
+                if value and "Aucune" not in str(value):
+                    unified_rows.append([label, str(value)])
+
+            # Contrat
+            _add_section_header("Contrat actuel")
+            contrat_items = [(l, v) for l, v in _sections.get("Contrat Actuel", []) if v and "Aucun" not in str(v)]
+            if contrat_items:
+                for l, v in contrat_items:
+                    unified_rows.append([l, str(v)])
             else:
-                flow.append(Paragraph("<i>Aucune information complémentaire disponible</i>", body_style))
-            
+                unified_rows.append(["Statut", "Aucun contrat actif"])
+
+            # Formations
+            _add_section_header("Formations")
+            formation_items = [(l, v) for l, v in _sections.get("Formations", []) if "Aucune" not in l]
+            if formation_items:
+                for l, v in formation_items:
+                    unified_rows.append([l, str(v)])
+            else:
+                unified_rows.append(["", "Aucune formation renseignée"])
+
+            # Validités
+            _add_section_header("Validités médicales")
+            validite_items = [(l, v) for l, v in _sections.get("Validités", []) if "Aucune" not in l]
+            if validite_items:
+                for l, v in validite_items:
+                    unified_rows.append([l, str(v)])
+            else:
+                unified_rows.append(["", "Aucune validité enregistrée"])
+
+            t_unified = Table(unified_rows, colWidths=[5*cm, 12*cm])
+            base_style = [
+                ("FONTSIZE", (0,0), (-1,-1), 9),
+                ("VALIGN", (0,0), (-1,-1), "TOP"),
+                ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#e2e8f0")),
+                ("LEFTPADDING", (0,0), (-1,-1), 8),
+                ("RIGHTPADDING", (0,0), (-1,-1), 8),
+                ("TOPPADDING", (0,0), (-1,-1), 5),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+                ("FONTNAME", (0,0), (0,-1), "Helvetica-Bold"),
+                ("TEXTCOLOR", (0,0), (0,-1), colors.HexColor("#475569")),
+                ("TEXTCOLOR", (1,0), (1,-1), colors.HexColor("#1f2937")),
+                ("ROWBACKGROUNDS", (0,0), (-1,-1), [colors.white, colors.HexColor("#f8fafc")]),
+            ]
+            for idx in header_style_idx:
+                base_style += [
+                    ("BACKGROUND", (0, idx), (-1, idx), colors.HexColor("#e2e8f0")),
+                    ("TEXTCOLOR", (0, idx), (-1, idx), colors.HexColor("#334155")),
+                    ("FONTNAME", (0, idx), (-1, idx), "Helvetica-Bold"),
+                    ("SPAN", (0, idx), (-1, idx)),
+                ]
+            t_unified.setStyle(TableStyle(base_style))
+            flow.append(t_unified)
             flow.append(Spacer(1, 0.5*cm))
-    
-            # ---------- Polyvalences ----------
-            flow.append(Paragraph("Polyvalences et Évaluations", section_style))
-            
-            poly_data = [["Poste", "Niveau", "Dernière\néval.", "Prochaine\néval.", "Ancienneté", "Statut"]]
-            
-            if hasattr(self, "poly_table") and self.poly_table.rowCount() > 0:
+
+            # ---------- Polyvalences (production uniquement, si données) ----------
+            has_poly = (
+                self.is_production
+                and hasattr(self, "poly_table")
+                and self.poly_table.rowCount() > 0
+            )
+            if has_poly:
+                flow.append(Spacer(1, 0.5*cm))
+                flow.append(Paragraph("Polyvalences et Évaluations", section_style))
+
+                poly_data = [["Poste", "Niveau", "Dernière\néval.", "Prochaine\néval.", "Ancienneté", "Statut"]]
                 for r in range(self.poly_table.rowCount()):
                     row_data = []
                     for c in range(6):
                         item = self.poly_table.item(r, c)
                         row_data.append(item.text() if item else "")
                     poly_data.append(row_data)
-            else:
-                poly_data.append(["Aucune polyvalence enregistrée", "", "", "", "", ""])
-            
-            col_widths = [4*cm, 2*cm, 2.5*cm, 2.5*cm, 2.5*cm, 2*cm]
-            t_poly = Table(poly_data, colWidths=col_widths, repeatRows=1)
-            
-            t_poly.setStyle(TableStyle([
-                # En-tête
-                ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1e40af")),
-                ("TEXTCOLOR", (0,0), (-1,0), colors.white),
-                ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
-                ("FONTSIZE", (0,0), (-1,0), 9),
-                ("ALIGN", (0,0), (-1,0), "CENTER"),
-                ("VALIGN", (0,0), (-1,0), "MIDDLE"),
-                # Corps
-                ("FONTSIZE", (0,1), (-1,-1), 9),
-                ("ALIGN", (1,1), (-1,-1), "CENTER"),
-                ("ALIGN", (0,1), (0,-1), "LEFT"),
-                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
-                ("ROWBACKGROUNDS", (0,1), (-1,-1), 
-                 [colors.white, colors.HexColor("#f8fafc")]),
-                ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#cbd5e1")),
-                ("LEFTPADDING", (0,0), (-1,-1), 6),
-                ("RIGHTPADDING", (0,0), (-1,-1), 6),
-                ("TOPPADDING", (0,0), (-1,-1), 6),
-                ("BOTTOMPADDING", (0,0), (-1,-1), 6),
-            ]))
-            
-            flow.append(t_poly)
+
+                col_widths = [4*cm, 2*cm, 2.5*cm, 2.5*cm, 2.5*cm, 2*cm]
+                t_poly = Table(poly_data, colWidths=col_widths, repeatRows=1)
+                t_poly.setStyle(TableStyle([
+                    ("BACKGROUND", (0,0), (-1,0), colors.HexColor("#1e40af")),
+                    ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+                    ("FONTNAME", (0,0), (-1,0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0,0), (-1,0), 9),
+                    ("ALIGN", (0,0), (-1,0), "CENTER"),
+                    ("VALIGN", (0,0), (-1,0), "MIDDLE"),
+                    ("FONTSIZE", (0,1), (-1,-1), 9),
+                    ("ALIGN", (1,1), (-1,-1), "CENTER"),
+                    ("ALIGN", (0,1), (0,-1), "LEFT"),
+                    ("VALIGN", (0,1), (-1,-1), "MIDDLE"),
+                    ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#f8fafc")]),
+                    ("GRID", (0,0), (-1,-1), 0.5, colors.HexColor("#cbd5e1")),
+                    ("LEFTPADDING", (0,0), (-1,-1), 6),
+                    ("RIGHTPADDING", (0,0), (-1,-1), 6),
+                    ("TOPPADDING", (0,0), (-1,-1), 6),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+                ]))
+                flow.append(t_poly)
     
             # ---------- Build ----------
             doc.build(flow, onFirstPage=_header_footer, onLaterPages=_header_footer)

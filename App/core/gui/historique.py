@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QScrollArea, QWidget, QFrame, QDateEdit, QMessageBox, QComboBox, QSizePolicy,
-    QTextEdit
+    QTextEdit, QGraphicsDropShadowEffect
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QPalette, QCursor
@@ -150,7 +150,13 @@ class DetailDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Détails de l'action")
         self.resize(600, 500)
-        
+
+        palette = self.palette()
+        palette.setColor(QPalette.Window, QColor("#ffffff"))
+        palette.setColor(QPalette.WindowText, QColor("#212121"))
+        self.setPalette(palette)
+        self.setAutoFillBackground(True)
+
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
         
@@ -192,6 +198,7 @@ class DetailDialog(QDialog):
         
         # Informations détaillées
         info_widget = QWidget()
+        info_widget.setAutoFillBackground(True)
         info_layout = QVBoxLayout(info_widget)
         info_layout.setSpacing(12)
         
@@ -670,133 +677,203 @@ class HistoriqueDialog(QDialog):
 
         # Widget de contenu
         content_widget = QWidget()
+        content_widget.setStyleSheet("background: #eef1f5;")
         root = QVBoxLayout(content_widget)
-        root.setContentsMargins(12, 12, 12, 12)
-        root.setSpacing(12)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        # --- En-tête simplifié ---
-        header_layout = QHBoxLayout()
-        header_layout.setContentsMargins(0, 0, 0, 0)
+        # --- Zone header avec fond gris clair ---
+        header_bg = QWidget()
+        header_bg.setStyleSheet("background: #eef1f5;")
+        header_bg_layout = QVBoxLayout(header_bg)
+        header_bg_layout.setContentsMargins(18, 16, 18, 14)
+        header_bg_layout.setSpacing(0)
 
-        title = QLabel("Historique des modifications")
-        title_font = QFont("Segoe UI", 13, QFont.Bold)
-        title.setFont(title_font)
-        title.setStyleSheet("color: #212121; padding: 4px;")
-        header_layout.addWidget(title)
-
-        subtitle = QLabel("• Chronologie complète des actions")
-        subtitle.setStyleSheet("color: #757575; font-size: 10px; padding: 4px;")
-        header_layout.addWidget(subtitle)
-
-        header_layout.addStretch()
-
-        root.addLayout(header_layout)
-
-        # --- Barre de filtres ---
-        filters_frame = QFrame()
-        filters_frame.setStyleSheet("""
+        # Card blanche élevée
+        card = QFrame()
+        card.setStyleSheet("""
             QFrame {
-                background-color: #fafafa;
-                border: 1px solid #e0e0e0;
-                border-radius: 6px;
-                padding: 12px;
+                background-color: white;
+                border-radius: 10px;
+                border: none;
             }
         """)
-        filters = QHBoxLayout(filters_frame)
-        filters.setSpacing(8)
-        
-        filters.addWidget(QLabel("Du"))
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(18)
+        shadow.setOffset(0, 3)
+        shadow.setColor(QColor(0, 0, 0, 40))
+        card.setGraphicsEffect(shadow)
+
+        card_layout = QVBoxLayout(card)
+        card_layout.setContentsMargins(18, 14, 18, 14)
+        card_layout.setSpacing(12)
+
+        # --- Ligne 1 : Titre ---
+        title_row = QHBoxLayout()
+        title_row.setSpacing(10)
+
+        icon_badge = QLabel("🕐")
+        icon_badge.setFont(QFont("Segoe UI", 16))
+        icon_badge.setStyleSheet("""
+            background-color: #e3f2fd;
+            border-radius: 8px;
+            padding: 4px 8px;
+        """)
+        title_row.addWidget(icon_badge)
+
+        title_col = QVBoxLayout()
+        title_col.setSpacing(1)
+        title = QLabel("Historique des modifications")
+        title.setFont(QFont("Segoe UI", 13, QFont.Bold))
+        title.setStyleSheet("color: #1a237e; background: transparent;")
+        title_col.addWidget(title)
+        sub = QLabel("Chronologie complète des actions enregistrées")
+        sub.setStyleSheet("color: #90a4ae; font-size: 10px; background: transparent;")
+        title_col.addWidget(sub)
+        title_row.addLayout(title_col, stretch=1)
+
+        card_layout.addLayout(title_row)
+
+        # Séparateur interne
+        inner_sep = QFrame()
+        inner_sep.setFrameShape(QFrame.HLine)
+        inner_sep.setFixedHeight(1)
+        inner_sep.setStyleSheet("QFrame { background-color: #f0f4f8; border: none; }")
+        card_layout.addWidget(inner_sep)
+
+        # --- Ligne 2 : Filtres ---
+        filters_row = QHBoxLayout()
+        filters_row.setSpacing(8)
+
+        field_style = """
+            QDateEdit, QComboBox, QLineEdit {
+                padding: 5px 10px;
+                border: 1px solid #e0e0e0;
+                border-radius: 6px;
+                background: #f8fafc;
+                font-size: 11px;
+                color: #37474f;
+            }
+            QDateEdit:focus, QComboBox:focus, QLineEdit:focus {
+                border: 1.5px solid #1976d2;
+                background: white;
+            }
+        """
+
         self.from_date = QDateEdit(calendarPopup=True)
         self.from_date.setDate(QDate.currentDate().addDays(-30))
         self.from_date.setDisplayFormat("dd/MM/yyyy")
-        filters.addWidget(self.from_date)
+        self.from_date.setFixedHeight(32)
+        self.from_date.setStyleSheet(field_style)
+        filters_row.addWidget(self.from_date)
 
-        filters.addWidget(QLabel("au"))
+        arr = QLabel("→")
+        arr.setStyleSheet("color: #b0bec5; font-size: 13px; background: transparent;")
+        filters_row.addWidget(arr)
+
         self.to_date = QDateEdit(calendarPopup=True)
         self.to_date.setDate(QDate.currentDate())
         self.to_date.setDisplayFormat("dd/MM/yyyy")
-        filters.addWidget(self.to_date)
+        self.to_date.setFixedHeight(32)
+        self.to_date.setStyleSheet(field_style)
+        filters_row.addWidget(self.to_date)
 
-        filters.addWidget(QLabel("Type"))
+        vsep1 = QFrame()
+        vsep1.setFrameShape(QFrame.VLine)
+        vsep1.setFixedHeight(22)
+        vsep1.setStyleSheet("QFrame { color: #e0e0e0; }")
+        filters_row.addWidget(vsep1, alignment=Qt.AlignVCenter)
+
         self.action_filter = QComboBox()
         self.action_filter.addItems([
-            "(Toutes les actions)",
-            "Ajout",
-            "Modification", 
-            "Suppression",
-            "Erreur"
+            "(Toutes les actions)", "Ajout", "Modification", "Suppression", "Erreur"
         ])
+        self.action_filter.setFixedHeight(32)
+        self.action_filter.setStyleSheet(field_style)
         self.action_filter.currentIndexChanged.connect(self.reload)
-        filters.addWidget(self.action_filter)
+        filters_row.addWidget(self.action_filter)
 
-        self.search = QLineEdit(placeholderText="🔍 Rechercher...")
+        vsep2 = QFrame()
+        vsep2.setFrameShape(QFrame.VLine)
+        vsep2.setFixedHeight(22)
+        vsep2.setStyleSheet("QFrame { color: #e0e0e0; }")
+        filters_row.addWidget(vsep2, alignment=Qt.AlignVCenter)
+
+        self.search = QLineEdit(placeholderText="🔍  Rechercher...")
+        self.search.setFixedHeight(32)
         self.search.returnPressed.connect(self.reload)
-        self.search.setStyleSheet("""
-            QLineEdit {
-                padding: 6px 12px;
-                border: 1px solid #bdbdbd;
-                border-radius: 4px;
-                background: white;
-            }
-            QLineEdit:focus {
-                border: 2px solid #1976d2;
-            }
-        """)
-        filters.addWidget(self.search, stretch=1)
+        self.search.setStyleSheet(field_style)
+        filters_row.addWidget(self.search, stretch=1)
 
-        self.btn_refresh = QPushButton("🔄 Actualiser")
+        filters_row.addSpacing(4)
+
+        self.btn_refresh = QPushButton("Actualiser")
+        self.btn_refresh.setFixedHeight(32)
+        self.btn_refresh.setCursor(QCursor(Qt.PointingHandCursor))
         self.btn_refresh.clicked.connect(self.reload)
         self.btn_refresh.setStyleSheet("""
             QPushButton {
                 background-color: #1976d2;
                 color: white;
                 border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
+                padding: 0px 18px;
+                border-radius: 6px;
                 font-weight: bold;
+                font-size: 11px;
             }
-            QPushButton:hover {
-                background-color: #1565c0;
-            }
+            QPushButton:hover { background-color: #1565c0; }
+            QPushButton:pressed { background-color: #0d47a1; }
         """)
-        filters.addWidget(self.btn_refresh)
+        filters_row.addWidget(self.btn_refresh)
 
-        self.btn_clear = QPushButton("📦 Archiver...")
+        self.btn_clear = QPushButton("Archiver...")
+        self.btn_clear.setFixedHeight(32)
+        self.btn_clear.setCursor(QCursor(Qt.PointingHandCursor))
         self.btn_clear.clicked.connect(self._clear_range_with_optional_export)
         self.btn_clear.setStyleSheet("""
             QPushButton {
-                background-color: #ff9800;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
+                background-color: #fff3e0;
+                color: #e65100;
+                border: 1px solid #ffcc80;
+                padding: 0px 18px;
+                border-radius: 6px;
                 font-weight: bold;
+                font-size: 11px;
             }
-            QPushButton:hover {
-                background-color: #f57c00;
-            }
+            QPushButton:hover { background-color: #ffe0b2; border-color: #ffa726; }
+            QPushButton:pressed { background-color: #ffcc80; }
         """)
-        filters.addWidget(self.btn_clear)
+        filters_row.addWidget(self.btn_clear)
 
-        root.addWidget(filters_frame)
+        card_layout.addLayout(filters_row)
+        header_bg_layout.addWidget(card)
+        root.addWidget(header_bg)
+
+        # Contenu scrollable
+        content_inner = QWidget()
+        content_inner.setStyleSheet("background: #eef1f5;")
+        inner_layout = QVBoxLayout(content_inner)
+        inner_layout.setContentsMargins(18, 0, 18, 14)
+        inner_layout.setSpacing(0)
 
         # --- Zone de scroll pour les cards ---
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
-        scroll.setStyleSheet("QScrollArea { background-color: #ffffff; border: none; }")
-        
+        scroll.setStyleSheet("QScrollArea { background-color: #eef1f5; border: none; }")
+
         self.cards_container = QWidget()
+        self.cards_container.setStyleSheet("background: transparent;")
         self.cards_layout = QVBoxLayout(self.cards_container)
         self.cards_layout.setSpacing(8)
-        self.cards_layout.setContentsMargins(4, 4, 4, 4)
+        self.cards_layout.setContentsMargins(0, 8, 0, 4)
         self.cards_layout.addStretch()
-        
+
         scroll.setWidget(self.cards_container)
-        root.addWidget(scroll, stretch=1)
+        inner_layout.addWidget(scroll, stretch=1)
 
         # --- Bouton "Charger plus" (pagination) ---
-        self._btn_load_more = QPushButton("⬇ Charger plus…")
+        self._btn_load_more = QPushButton("Charger plus…")
         self._btn_load_more.clicked.connect(self._load_more)
         self._btn_load_more.setVisible(False)
         self._btn_load_more.setStyleSheet("""
@@ -805,25 +882,26 @@ class HistoriqueDialog(QDialog):
                 color: #616161;
                 border: 1px solid #e0e0e0;
                 padding: 8px 16px;
-                border-radius: 4px;
+                border-radius: 5px;
                 font-size: 11px;
             }
             QPushButton:hover { background-color: #eeeeee; }
         """)
-        root.addWidget(self._btn_load_more)
+        inner_layout.addWidget(self._btn_load_more)
 
         # --- Compteur ---
         self.count_label = QLabel()
         self.count_label.setStyleSheet("""
             QLabel {
-                padding: 8px;
-                color: #616161;
-                font-size: 11px;
-                background-color: #fafafa;
-                border-radius: 4px;
+                padding: 6px 10px;
+                color: #78909c;
+                font-size: 10px;
+                background-color: transparent;
             }
         """)
-        root.addWidget(self.count_label)
+        inner_layout.addWidget(self.count_label)
+
+        root.addWidget(content_inner, stretch=1)
 
         # Ajouter le widget de contenu au layout principal
         main_layout.addWidget(content_widget)

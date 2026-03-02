@@ -293,6 +293,16 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 log_hist("CREATE", "polyvalence", new_id,
                         f"Compétence N{niveau} créée", operateur_id=operateur_id, poste_id=poste_id)
 
+                from core.services.evaluation_service import log_historique_polyvalence
+                log_historique_polyvalence(
+                    operateur_id=operateur_id, poste_id=poste_id,
+                    polyvalence_id=new_id,
+                    action_type='AJOUT',
+                    nouveau_niveau=niveau,
+                    nouvelle_date_evaluation=date_evaluation,
+                    source='GUI',
+                )
+
                 # Émettre l'événement pour déclencher les documents
                 from core.services.event_bus import EventBus
                 from core.repositories.personnel_repo import PersonnelRepository
@@ -346,6 +356,18 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 log_hist("UPDATE", "polyvalence", id,
                         f"Évaluation: N{old[2]}→N{nouveau_niveau}",
                         operateur_id=old[0], poste_id=old[1])
+
+                if old[2] != nouveau_niveau:
+                    from core.services.evaluation_service import log_historique_polyvalence
+                    log_historique_polyvalence(
+                        operateur_id=old[0], poste_id=old[1],
+                        polyvalence_id=id,
+                        action_type='MODIFICATION',
+                        ancien_niveau=old[2],
+                        nouveau_niveau=nouveau_niveau,
+                        nouvelle_date_evaluation=date_evaluation,
+                        source='GUI',
+                    )
 
                 # Émettre les événements si le niveau a changé
                 old_niveau = old[2]
@@ -525,6 +547,13 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
     @classmethod
     def delete_competence(cls, operateur_id: int, poste_id: int) -> Tuple[bool, str]:
         """Supprime une compétence."""
+        # Lire l'état avant suppression pour l'historique
+        from core.db.query_executor import QueryExecutor as QE
+        old = QE.fetch_one(
+            "SELECT id, niveau, date_evaluation FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
+            (operateur_id, poste_id), dictionary=True
+        )
+
         query = "DELETE FROM polyvalence WHERE operateur_id = %s AND poste_id = %s"
 
         try:
@@ -538,6 +567,15 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                     from core.services.logger import log_hist
                     log_hist("DELETE", "polyvalence", None,
                             f"Compétence supprimée", operateur_id=operateur_id, poste_id=poste_id)
+
+                    from core.services.evaluation_service import log_historique_polyvalence
+                    log_historique_polyvalence(
+                        operateur_id=operateur_id, poste_id=poste_id,
+                        action_type='SUPPRESSION',
+                        ancien_niveau=old['niveau'] if old else None,
+                        ancienne_date_evaluation=old['date_evaluation'] if old else None,
+                        source='GUI',
+                    )
 
                 return deleted, "Compétence supprimée" if deleted else "Compétence non trouvée"
 
@@ -568,19 +606,32 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
     @classmethod
     def get_anciennes_historique(cls, operateur_id: int) -> List[Dict]:
         """
-        Retourne les anciennes polyvalences (IMPORT_MANUEL) depuis
-        historique_polyvalence pour la vue historique personnel.
+        Retourne l'historique des polyvalences depuis historique_polyvalence
+        (IMPORT_MANUEL + MODIFICATION + AJOUT + SUPPRESSION).
         """
         from core.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
-            SELECT 'ANCIENNE' AS type, hp.id, p.poste_code, hp.nouveau_niveau AS niveau,
-                   hp.nouvelle_date_evaluation AS date_evaluation,
-                   NULL AS prochaine_evaluation, hp.commentaire
+            SELECT 'ANCIENNE' AS type, hp.id, p.poste_code,
+                   CASE
+                       WHEN hp.action_type = 'MODIFICATION' THEN hp.ancien_niveau
+                       ELSE hp.nouveau_niveau
+                   END AS niveau,
+                   CASE
+                       WHEN hp.action_type = 'MODIFICATION' THEN hp.ancienne_date_evaluation
+                       ELSE hp.nouvelle_date_evaluation
+                   END AS date_evaluation,
+                   NULL AS prochaine_evaluation,
+                   CASE
+                       WHEN hp.action_type = 'MODIFICATION' THEN
+                           CONCAT('Modifié le ', DATE_FORMAT(hp.date_action, '%d/%m/%Y'),
+                                  ' → N', hp.nouveau_niveau)
+                       ELSE hp.commentaire
+                   END AS commentaire
             FROM historique_polyvalence hp
             LEFT JOIN postes p ON hp.poste_id = p.id
-            WHERE hp.operateur_id = %s AND hp.action_type = 'IMPORT_MANUEL'
-            ORDER BY p.poste_code, hp.date_action DESC
+            WHERE hp.operateur_id = %s
+            ORDER BY hp.date_action DESC
             """,
             (operateur_id,),
             dictionary=True,

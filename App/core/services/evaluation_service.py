@@ -172,15 +172,16 @@ def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
             WHERE id = %s
         """, (nouveau_niveau, date_evaluation, prochaine_evaluation, polyvalence_id))
 
-        # Logger la modification
-        from core.services.logger import log_hist
-        log_hist(
-            action="UPDATE",
-            table_name="polyvalence",
-            record_id=polyvalence_id,
-            description=f"Évaluation mise à jour: N{ancien_niveau}→N{nouveau_niveau}, date: {ancienne_date}→{date_evaluation}, prochaine: {prochaine_evaluation}",
+        # Archiver dans historique_polyvalence
+        log_historique_polyvalence(
             operateur_id=operateur_id,
-            poste_id=poste_id
+            poste_id=poste_id,
+            polyvalence_id=polyvalence_id,
+            action_type='MODIFICATION',
+            ancien_niveau=ancien_niveau,
+            nouveau_niveau=nouveau_niveau,
+            ancienne_date_evaluation=ancienne_date,
+            nouvelle_date_evaluation=date_evaluation,
         )
 
         return True
@@ -392,6 +393,65 @@ def get_stats_polyvalence_operateur(operateur_id: int) -> Optional[Dict]:
     """, (operateur_id,), dictionary=True)
 
 
+def has_operateur_deja_eu_niveau_1(
+    operateur_id: int,
+    old_niveau: int = None,
+    exclude_polyvalence_id: int = None,
+    exclude_poste_id: int = None,
+) -> bool:
+    """
+    Vérifie si l'opérateur a déjà eu une expérience niveau 1 par le passé.
+
+    Retourne True si ce n'est PAS la première fois que cet opérateur passe au
+    niveau 1, ce qui signifie que les documents NOUVEL_OPERATEUR (consignes
+    générales, formation initiale) n'ont pas besoin d'être réimprimés.
+
+    Logique :
+    1. Si ``old_niveau`` est fourni et non None → l'opérateur avait déjà un
+       niveau sur ce poste → documents déjà reçus.
+    2. Sinon, cherche d'autres polyvalences actives (autres postes).
+    3. Enfin, consulte historique_polyvalence pour tout antécédent.
+
+    Args:
+        operateur_id: ID de l'opérateur.
+        old_niveau: Niveau AVANT la modification en cours (None = nouvel enregistrement).
+        exclude_polyvalence_id: ID de la polyvalence venant d'être mise à jour (à exclure).
+        exclude_poste_id: ID du poste venant d'être inséré (à exclure, pour INSERT).
+
+    Returns:
+        True si l'opérateur a déjà été niveau 1 ailleurs / auparavant.
+    """
+    # 1. Le poste avait déjà un niveau enregistré → formation déjà effectuée
+    if old_niveau is not None:
+        return True
+
+    # 2. Autres polyvalences actives (hors enregistrement courant)
+    params: list = [operateur_id]
+    exclude_clause = ""
+    if exclude_polyvalence_id is not None:
+        exclude_clause = " AND id != %s"
+        params.append(exclude_polyvalence_id)
+    elif exclude_poste_id is not None:
+        exclude_clause = " AND poste_id != %s"
+        params.append(exclude_poste_id)
+
+    count_other = QueryExecutor.fetch_scalar(
+        f"SELECT COUNT(*) FROM polyvalence WHERE operateur_id = %s{exclude_clause}",
+        tuple(params),
+        default=0,
+    )
+    if count_other > 0:
+        return True
+
+    # 3. Antécédents dans historique_polyvalence (modifications passées)
+    count_hist = QueryExecutor.fetch_scalar(
+        "SELECT COUNT(*) FROM historique_polyvalence WHERE operateur_id = %s",
+        (operateur_id,),
+        default=0,
+    )
+    return count_hist > 0
+
+
 def get_polyvalences_actuelles_operateur(operateur_id: int) -> List[Dict]:
     """Polyvalences actuelles (dernière par poste) pour un opérateur."""
     return QueryExecutor.fetch_all("""
@@ -414,19 +474,60 @@ def get_polyvalences_actuelles_operateur(operateur_id: int) -> List[Dict]:
     """, (operateur_id,), dictionary=True)
 
 
+def log_historique_polyvalence(
+    operateur_id: int,
+    poste_id: int,
+    action_type: str,
+    ancien_niveau: int = None,
+    nouveau_niveau: int = None,
+    ancienne_date_evaluation=None,
+    nouvelle_date_evaluation=None,
+    polyvalence_id: int = None,
+    commentaire: str = None,
+    source: str = 'GUI',
+) -> None:
+    """
+    Centralise l'écriture dans historique_polyvalence.
+
+    À appeler depuis tout endroit qui modifie la table polyvalence.
+    Ne lève pas d'exception : les erreurs sont loguées en warning.
+
+    Args:
+        action_type: 'AJOUT', 'MODIFICATION', 'SUPPRESSION' ou 'IMPORT_MANUEL'
+        ancien_niveau: niveau avant modification (MODIFICATION, SUPPRESSION)
+        nouveau_niveau: niveau après modification (AJOUT, MODIFICATION)
+    """
+    try:
+        QueryExecutor.execute_write("""
+            INSERT INTO historique_polyvalence
+            (operateur_id, poste_id, polyvalence_id, action_type,
+             ancien_niveau, nouveau_niveau,
+             ancienne_date_evaluation, nouvelle_date_evaluation,
+             commentaire, source, date_action)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+        """, (operateur_id, poste_id, polyvalence_id, action_type,
+              ancien_niveau, nouveau_niveau,
+              ancienne_date_evaluation, nouvelle_date_evaluation,
+              commentaire, source))
+    except Exception as e:
+        logger.warning(f"Erreur archivage historique_polyvalence op={operateur_id} poste={poste_id}: {e}")
+
+
 def get_historique_polyvalence_operateur(operateur_id: int) -> List[Dict]:
-    """Historique des imports manuels de polyvalence pour un opérateur."""
+    """Historique complet des modifications de polyvalence pour un opérateur."""
     return QueryExecutor.fetch_all("""
         SELECT
             hp.id,
+            hp.date_action,
+            hp.action_type,
             p.poste_code,
-            hp.ancien_niveau AS niveau_affiche,
-            hp.ancienne_date_evaluation AS date_eval_affiche,
+            hp.ancien_niveau,
+            hp.nouveau_niveau,
+            hp.nouvelle_date_evaluation AS date_eval_affiche,
             hp.commentaire
         FROM historique_polyvalence hp
         LEFT JOIN postes p ON hp.poste_id = p.id
         WHERE hp.operateur_id = %s
-          AND hp.action_type = 'IMPORT_MANUEL'
         ORDER BY hp.date_action DESC
     """, (operateur_id,), dictionary=True)
 

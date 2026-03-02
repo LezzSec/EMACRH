@@ -152,6 +152,9 @@ class DocumentTriggerService:
 
         # Quand un niveau supérieur est atteint, supprimer les docs des niveaux inférieurs.
         # Ex : 1→3 direct : niveau_1_reached doit être retiré quand niveau_3_reached arrive.
+        # Quand niveau_1_reached est émis pour un nouveau poste, purger les anciens docs
+        # niveau_1_reached d'autres postes déjà en file d'attente pour cet opérateur afin
+        # de ne proposer que le document du poste actuellement traité.
         import re as _re
         _m = _re.match(r'polyvalence\.niveau_(\d)_reached', event.name)
         if _m:
@@ -160,6 +163,14 @@ class DocumentTriggerService:
             if op_id and new_niv > 1:
                 for n in range(1, new_niv):
                     self._remove_pending_by_event(op_id, f'polyvalence.niveau_{n}_reached')
+            elif op_id and new_niv == 1:
+                # Purger les anciens docs niveau_1 (autres postes) pour ne montrer
+                # que les documents du poste en cours d'affectation.
+                self._remove_pending_by_event(op_id, 'polyvalence.niveau_1_reached')
+                logger.debug(
+                    f"niveau_1_reached sur nouveau poste pour op {op_id}: "
+                    f"anciens docs niveau_1 supprimés de la queue"
+                )
 
         # Traiter chaque template selon son mode
         for tpl in templates:

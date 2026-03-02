@@ -14,9 +14,9 @@ from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from core.services.evaluation_service import (
-    get_postes_liste, get_stats_polyvalence_operateur,
+    get_stats_polyvalence_operateur,
     get_polyvalences_actuelles_operateur, get_polyvalence_par_id,
-    get_historique_polyvalence_operateur, importer_ancienne_polyvalence,
+    get_historique_polyvalence_operateur,
     mettre_a_jour_evaluation, update_date_evaluation_polyvalence,
     update_date_champ_polyvalence, get_operateurs_avec_stats_polyvalences,
 )
@@ -102,10 +102,10 @@ class DetailOperateurDialog(QDialog):
         self._init_tab_resume()
         self.tabs.addTab(self.tab_resume, "📊 Résumé")
 
-        # Onglet 2 : Ajouter anciennes polyvalences
+        # Onglet 2 : Historique
         self.tab_anciennes = QWidget()
         self._init_tab_anciennes()
-        self.tabs.addTab(self.tab_anciennes, "➕ Ajouter anciennes polyvalences")
+        self.tabs.addTab(self.tab_anciennes, "📜 Historique")
 
         layout.addWidget(self.tabs, 1)
 
@@ -182,98 +182,20 @@ class DetailOperateurDialog(QDialog):
         layout.addWidget(poly_group, 1)
 
     def _init_tab_anciennes(self):
-        """Initialise l'onglet Ajouter anciennes polyvalences."""
+        """Initialise l'onglet Historique des polyvalences."""
         layout = QVBoxLayout(self.tab_anciennes)
         layout.setSpacing(15)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        # Formulaire
-        form_group = QGroupBox("Nouvelle ancienne polyvalence")
-        form_layout = QVBoxLayout(form_group)
-        form_layout.setSpacing(10)
-
-        # Ligne 1 : Poste + Niveau
-        row1 = QHBoxLayout()
-        row1.addWidget(QLabel("Poste :"))
-        self.poste_combo = QComboBox()
-        self.poste_combo.setMinimumWidth(150)
-        row1.addWidget(self.poste_combo, 1)
-
-        row1.addWidget(QLabel("Niveau :"))
-        self.niveau_combo = QComboBox()
-        self.niveau_combo.addItem("Niveau 1 - Débutant (réévaluation dans 1 mois)", 1)
-        self.niveau_combo.addItem("Niveau 2 - Intermédiaire (réévaluation dans 1 mois)", 2)
-        self.niveau_combo.addItem("Niveau 3 - Confirmé (réévaluation dans 10 ans)", 3)
-        self.niveau_combo.addItem("Niveau 4 - Expert/Formateur (réévaluation dans 10 ans)", 4)
-        self.niveau_combo.setCurrentIndex(0)  # Par défaut : niveau 1
-        self.niveau_combo.setMinimumWidth(200)
-        self.niveau_combo.currentIndexChanged.connect(self._calculer_prochaine_eval_ancienne)
-        row1.addWidget(self.niveau_combo)
-
-        form_layout.addLayout(row1)
-
-        # Ligne 2 : Date évaluation
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Date d'évaluation :"))
-        self.date_eval = QDateEdit()
-        self.date_eval.setCalendarPopup(True)
-        self.date_eval.setDisplayFormat("dd/MM/yyyy")
-        self.date_eval.setDate(QDate.currentDate().addYears(-1))
-        self.date_eval.dateChanged.connect(self._calculer_prochaine_eval_ancienne)
-        row2.addWidget(self.date_eval, 1)
-        form_layout.addLayout(row2)
-
-        # Ligne 2b : Prochaine évaluation (calculée automatiquement)
-        row2b = QHBoxLayout()
-        row2b.addWidget(QLabel("Prochaine évaluation :"))
-        self.date_prochaine_eval = QDateEdit()
-        self.date_prochaine_eval.setCalendarPopup(True)
-        self.date_prochaine_eval.setDisplayFormat("dd/MM/yyyy")
-        self.date_prochaine_eval.setDate(QDate.currentDate())
-        row2b.addWidget(self.date_prochaine_eval, 1)
-        form_layout.addLayout(row2b)
-
-        # Calcul initial de la prochaine évaluation
-        self._calculer_prochaine_eval_ancienne()
-
-        # Ligne 3 : Commentaire
-        row3 = QVBoxLayout()
-        row3.addWidget(QLabel("Commentaire (optionnel) :"))
-        self.commentaire = QLineEdit()
-        self.commentaire.setPlaceholderText("Ex: Ancienne certification, formation passée...")
-        row3.addWidget(self.commentaire)
-        form_layout.addLayout(row3)
-
-        # Bouton Ajouter
-        add_btn = QPushButton("✓ Ajouter cette polyvalence")
-        add_btn.clicked.connect(self._add_ancienne_poly)
-        add_btn.setStyleSheet("""
-            QPushButton {
-                background: #8b5cf6;
-                color: white;
-                border: none;
-                padding: 10px 20px;
-                border-radius: 6px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background: #7c3aed;
-            }
-        """)
-        form_layout.addWidget(add_btn)
-
-        layout.addWidget(form_group)
-
-        # Tableau des anciennes polyvalences déjà ajoutées
-        anciennes_group = QGroupBox("📜 Anciennes polyvalences déjà enregistrées")
+        anciennes_group = QGroupBox("📜 Historique des polyvalences")
         anciennes_layout = QVBoxLayout(anciennes_group)
 
         self.anciennes_table = QTableWidget()
-        self.anciennes_table.setColumnCount(5)
+        self.anciennes_table.setColumnCount(6)
         self.anciennes_table.setHorizontalHeaderLabels([
-            "Poste", "Niveau", "Date Éval.", "Commentaire", "_id"
+            "Date", "Poste", "Changement", "Nouveau niveau", "Commentaire", "_id"
         ])
-        self.anciennes_table.setColumnHidden(4, True)
+        self.anciennes_table.setColumnHidden(5, True)
         self.anciennes_table.horizontalHeader().setStretchLastSection(True)
         self.anciennes_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.anciennes_table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -297,11 +219,6 @@ class DetailOperateurDialog(QDialog):
     def _load_data(self):
         """Charge toutes les données de l'opérateur."""
         try:
-            # Charger tous les postes pour le combo
-            postes = get_postes_liste()
-            for poste in postes:
-                self.poste_combo.addItem(poste['poste_code'], poste['id'])
-
             # Charger les statistiques
             stats = get_stats_polyvalence_operateur(self.operateur_id)
 
@@ -384,91 +301,60 @@ class DetailOperateurDialog(QDialog):
             else:
                 QMessageBox.critical(self, "Erreur", "Impossible de charger les donnees. Contactez l'administrateur.")
 
-    def _calculer_prochaine_eval_ancienne(self):
-        """Calcule automatiquement la date de prochaine évaluation selon le niveau et la date d'évaluation."""
-        niveau = self.niveau_combo.currentData()
-        if niveau is None:
-            return
-
-        # Récupérer la date d'évaluation
-        date_eval = self.date_eval.date()
-
-        # Calcul selon le niveau
-        if niveau == 1:
-            jours = 30  # 1 mois
-        elif niveau == 2:
-            jours = 30  # 1 mois
-        elif niveau in [3, 4]:
-            jours = 3650  # 10 ans
-        else:
-            jours = 30  # Par défaut 1 mois
-
-        date_future = date_eval.addDays(jours)
-        self.date_prochaine_eval.setDate(date_future)
-
     def _load_anciennes_polyvalences(self):
-        """Charge les anciennes polyvalences dans le tableau."""
+        """Charge l'historique des polyvalences dans le tableau."""
         anciennes = get_historique_polyvalence_operateur(self.operateur_id)
         self.anciennes_table.setRowCount(len(anciennes))
 
-        for row_idx, anc in enumerate(anciennes):
-            self.anciennes_table.setItem(row_idx, 0, QTableWidgetItem(anc['poste_code'] or "N/A"))
+        action_labels = {
+            'MODIFICATION': 'Modification',
+            'AJOUT': 'Ajout',
+            'SUPPRESSION': 'Suppression',
+            'IMPORT_MANUEL': 'Import manuel',
+        }
 
-            niveau_txt = (
-                f"N{anc['niveau_affiche']}"
-                if anc['niveau_affiche'] is not None else "N/A"
-            )
+        for row_idx, anc in enumerate(anciennes):
+            # Col 0 : Date de l'action
+            date_action = anc['date_action']
+            if date_action:
+                date_str = date_action.strftime('%d/%m/%Y %H:%M') if hasattr(date_action, 'strftime') else str(date_action)
+            else:
+                date_str = "N/A"
+            date_item = QTableWidgetItem(date_str)
+            date_item.setTextAlignment(Qt.AlignCenter)
+            self.anciennes_table.setItem(row_idx, 0, date_item)
+
+            # Col 1 : Poste
+            self.anciennes_table.setItem(row_idx, 1, QTableWidgetItem(anc['poste_code'] or "N/A"))
+
+            # Col 2 : Changement (ex: "Modification", "N2 → N3")
+            action_type = anc.get('action_type', '')
+            label = action_labels.get(action_type, action_type)
+            ancien = anc.get('ancien_niveau')
+            nouveau = anc.get('nouveau_niveau')
+            if ancien is not None and nouveau is not None and ancien != nouveau:
+                label = f"N{ancien} → N{nouveau}"
+            changement_item = QTableWidgetItem(label)
+            changement_item.setTextAlignment(Qt.AlignCenter)
+            self.anciennes_table.setItem(row_idx, 2, changement_item)
+
+            # Col 3 : Nouveau niveau
+            niveau_txt = f"N{nouveau}" if nouveau is not None else "N/A"
             niveau_item = QTableWidgetItem(niveau_txt)
             niveau_item.setTextAlignment(Qt.AlignCenter)
-            self.anciennes_table.setItem(row_idx, 1, niveau_item)
+            self.anciennes_table.setItem(row_idx, 3, niveau_item)
 
-            if anc['date_eval_affiche']:
-                date_eval = anc['date_eval_affiche'].strftime('%d/%m/%Y')
-            else:
-                date_eval = "N/A"
-            self.anciennes_table.setItem(row_idx, 2, QTableWidgetItem(date_eval))
-
-            self.anciennes_table.setItem(
-                row_idx, 3,
-                QTableWidgetItem(anc['commentaire'] or "—")
-            )
+            # Col 4 : Commentaire
             self.anciennes_table.setItem(
                 row_idx, 4,
-                QTableWidgetItem(str(anc['id']))
+                QTableWidgetItem(anc['commentaire'] or "—")
             )
 
-    def _add_ancienne_poly(self):
-        """Ajoute une ancienne polyvalence."""
-        poste_id = self.poste_combo.currentData()
-        if not poste_id:
-            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un poste.")
-            return
-
-        niveau = self.niveau_combo.currentData()  # Utiliser currentData() au lieu de currentText()
-        date_eval = self.date_eval.date().toPyDate()
-        date_prochaine = self.date_prochaine_eval.date().toPyDate()  # Récupérer la prochaine évaluation calculée
-        commentaire = self.commentaire.text().strip()
-
-        try:
-            if not importer_ancienne_polyvalence(
-                self.operateur_id, poste_id, niveau, date_eval, date_prochaine, commentaire or None
-            ):
-                raise RuntimeError("Échec de l'import")
-
-            QMessageBox.information(self, "Succès", "Ancienne polyvalence ajoutée avec succès.")
-
-            # Recharger les données
-            self._load_data()
-
-            # Réinitialiser le formulaire
-            self.commentaire.clear()
-
-        except Exception as e:
-            logger.exception(f"Erreur ajout polyvalence: {e}")
-            if show_error_message:
-                show_error_message(self, "Erreur", "Impossible d'ajouter la polyvalence", e)
-            else:
-                QMessageBox.critical(self, "Erreur", "Impossible d'ajouter la polyvalence. Contactez l'administrateur.")
+            # Col 5 : ID (caché)
+            self.anciennes_table.setItem(
+                row_idx, 5,
+                QTableWidgetItem(str(anc['id']))
+            )
 
     def _on_poly_cell_changed(self, item):
         """Gère les modifications de cellules dans le tableau des polyvalences."""
@@ -567,9 +453,16 @@ class DetailOperateurDialog(QDialog):
                                      source='GestionEvaluationDialog.on_cell_changed')
 
                         if new_niveau == 1:
+                            from core.services.evaluation_service import has_operateur_deja_eu_niveau_1
+                            is_premier = not has_operateur_deja_eu_niveau_1(
+                                operateur_id,
+                                old_niveau=ancien_niveau,
+                                exclude_polyvalence_id=poly_id,
+                            )
                             EventBus.emit('polyvalence.niveau_1_reached', {
                                 **event_data,
-                                'niveau': 1
+                                'niveau': 1,
+                                'is_premier_niveau_1': is_premier,
                             }, source='GestionEvaluationDialog.on_cell_changed')
 
                         if new_niveau == 2 and (ancien_niveau is None or ancien_niveau < 2):

@@ -158,44 +158,43 @@ class GrillesService:
         action = None
         new_niveau_int = None
 
+        from core.services.evaluation_service import log_historique_polyvalence
+
         if new_niveau_str == "":
             # Suppression
             QueryExecutor.execute_write(
                 "DELETE FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
                 (operateur_id, poste_id)
             )
+            log_historique_polyvalence(
+                operateur_id=operateur_id, poste_id=poste_id,
+                action_type='SUPPRESSION',
+                ancien_niveau=old_niveau,
+                ancienne_date_evaluation=old_date_eval,
+                source='GRILLE',
+            )
             action = 'DELETE'
 
         else:
             new_niveau_int = int(new_niveau_str)
-
-            # Archiver si modification de niveau
-            if old_niveau is not None and old_niveau != new_niveau_int:
-                try:
-                    QueryExecutor.execute_write("""
-                        INSERT INTO historique_polyvalence
-                        (operateur_id, poste_id, action_type,
-                         ancien_niveau, nouveau_niveau,
-                         ancienne_date_evaluation, nouvelle_date_evaluation,
-                         commentaire, date_action)
-                        VALUES (%s, %s, 'IMPORT_MANUEL',
-                                %s, %s,
-                                %s, NULL,
-                                'Ancienne polyvalence archivée lors de modification depuis la grille',
-                                NOW())
-                    """, (operateur_id, poste_id, old_niveau, new_niveau_int, old_date_eval))
-                except Exception as arch_err:
-                    logger.warning(f"Erreur archivage historique_polyvalence: {arch_err}")
 
             # Calculer la prochaine évaluation
             jours = 30 if new_niveau_int in [1, 2] else 3650
             prochaine_eval = date.today() + timedelta(days=jours)
 
             if old_niveau is None:
-                QueryExecutor.execute_write("""
+                new_poly_id = QueryExecutor.execute_write("""
                     INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
                     VALUES (%s, %s, %s, CURDATE(), %s)
                 """, (operateur_id, poste_id, new_niveau_int, prochaine_eval))
+                log_historique_polyvalence(
+                    operateur_id=operateur_id, poste_id=poste_id,
+                    polyvalence_id=new_poly_id,
+                    action_type='AJOUT',
+                    nouveau_niveau=new_niveau_int,
+                    nouvelle_date_evaluation=date.today(),
+                    source='GRILLE',
+                )
                 action = 'INSERT'
                 GrillesService._emit_polyvalence_events(
                     action='INSERT',
@@ -211,6 +210,16 @@ class GrillesService:
                     SET niveau = %s, date_evaluation = CURDATE(), prochaine_evaluation = %s
                     WHERE operateur_id = %s AND poste_id = %s
                 """, (new_niveau_int, prochaine_eval, operateur_id, poste_id))
+                if old_niveau != new_niveau_int:
+                    log_historique_polyvalence(
+                        operateur_id=operateur_id, poste_id=poste_id,
+                        action_type='MODIFICATION',
+                        ancien_niveau=old_niveau,
+                        nouveau_niveau=new_niveau_int,
+                        ancienne_date_evaluation=old_date_eval,
+                        nouvelle_date_evaluation=date.today(),
+                        source='GRILLE',
+                    )
                 action = 'UPDATE'
                 GrillesService._emit_polyvalence_events(
                     action='UPDATE',
@@ -278,8 +287,16 @@ class GrillesService:
                               source='GrillesService.update_polyvalence_from_grille')
 
                 if new_niveau == 1:
-                    EventBus.emit('polyvalence.niveau_1_reached', {**event_data, 'niveau': 1},
-                                  source='GrillesService.update_polyvalence_from_grille')
+                    from core.services.evaluation_service import has_operateur_deja_eu_niveau_1
+                    is_premier = not has_operateur_deja_eu_niveau_1(
+                        operateur_id,
+                        old_niveau=old_niveau,
+                        exclude_poste_id=poste_id if action == 'INSERT' else None,
+                    )
+                    EventBus.emit('polyvalence.niveau_1_reached', {
+                        **event_data, 'niveau': 1,
+                        'is_premier_niveau_1': is_premier,
+                    }, source='GrillesService.update_polyvalence_from_grille')
 
                 if new_niveau == 2 and (old_niveau is None or old_niveau < 2):
                     EventBus.emit('polyvalence.niveau_2_reached', {**event_data, 'niveau': 2},

@@ -451,24 +451,6 @@ def _fill_excel_template(
         if cell_date and date_str:
             ws[cell_date] = date_str
 
-        # Auto-ajustement des colonnes dont le libellé serait tronqué.
-        # On élargit uniquement les colonnes trop étroites pour leur contenu texte
-        # (libellés courts ≤ 30 car.), sans jamais rétrécir les autres.
-        from openpyxl.utils import get_column_letter
-        DEFAULT_COL_WIDTH = 8.43  # largeur Excel par défaut
-        for row in ws.iter_rows():
-            for cell in row:
-                if not cell.value or not isinstance(cell.value, str):
-                    continue
-                text = str(cell.value)
-                if len(text) > 30:
-                    continue  # probablement du contenu, pas un libellé
-                col_letter = get_column_letter(cell.column)
-                needed = len(text) + 2
-                current = ws.column_dimensions[col_letter].width or DEFAULT_COL_WIDTH
-                if current < needed:
-                    ws.column_dimensions[col_letter].width = needed
-
         wb.save(file_path)
         wb.close()
 
@@ -531,6 +513,93 @@ def open_template_file(file_path: str) -> Tuple[bool, str]:
     except Exception as e:
         logger.error(f"Erreur ouverture fichier: {e}")
         return False, "Impossible d'ouvrir le fichier"
+
+
+def print_template_file(file_path: str, printer_name: str) -> Tuple[bool, str]:
+    """
+    Imprime un fichier vers une imprimante specifique.
+
+    Pour les fichiers Excel (.xlsx / .xlsm), tous les onglets sont imprimes
+    via l'automatisation COM d'Excel (PowerShell).
+    Pour les autres formats, ShellExecute 'printto' est utilise.
+
+    SECURITE: Valide le chemin avant impression (meme regles que open_template_file).
+
+    Args:
+        file_path: Chemin absolu du fichier a imprimer
+        printer_name: Nom de l'imprimante Windows cible
+
+    Returns:
+        Tuple (succes, message)
+    """
+    import subprocess
+
+    try:
+        path = Path(file_path).resolve()
+
+        if not path.exists() or not path.is_file():
+            return False, "Fichier non trouve"
+
+        # SECURITE: chemin dans zone autorisee uniquement
+        temp_dir = get_temp_dir().resolve()
+        templates_dir = get_templates_dir().resolve()
+        in_allowed = False
+        for allowed in (temp_dir, templates_dir):
+            try:
+                path.relative_to(allowed)
+                in_allowed = True
+                break
+            except ValueError:
+                pass
+        if not in_allowed:
+            logger.warning(f"Impression refusee hors zone autorisee: {path}")
+            return False, "Acces au fichier refuse"
+
+        ext = path.suffix.lower()
+
+        if ext in ('.xlsx', '.xlsm') and sys.platform == 'win32':
+            # Excel: COM via PowerShell → imprime TOUS les onglets du classeur
+            path_esc = str(path).replace("'", "''")
+            printer_esc = printer_name.replace("'", "''")
+
+            ps_cmd = (
+                f"$ErrorActionPreference = 'Stop'; "
+                f"$xl = New-Object -ComObject Excel.Application; "
+                f"$xl.Visible = $false; $xl.DisplayAlerts = $false; "
+                f"try {{ "
+                f"  $wb = $xl.Workbooks.Open('{path_esc}'); "
+                f"  $wb.PrintOut([Type]::Missing, [Type]::Missing, 1, $false, '{printer_esc}'); "
+                f"  $wb.Close($false) "
+                f"}} finally {{ "
+                f"  $xl.Quit(); "
+                f"  [System.Runtime.Interopservices.Marshal]::ReleaseComObject($xl) | Out-Null; "
+                f"  [System.GC]::Collect() "
+                f"}}"
+            )
+            result = subprocess.run(
+                ['powershell', '-NoProfile', '-NonInteractive', '-Command', ps_cmd],
+                capture_output=True, text=True, timeout=120
+            )
+            if result.returncode != 0:
+                err = (result.stderr or result.stdout or "").strip()
+                logger.warning(f"Impression Excel echouee (PowerShell): {err}")
+                return False, f"Impression echouee: {err}"
+            return True, "Impression lancee (tous les onglets)"
+
+        else:
+            # Autres formats (PDF, Word, .xls…): ShellExecute printto
+            import ctypes
+            ret = ctypes.windll.shell32.ShellExecuteW(
+                None, 'printto', str(path), f'"{printer_name}"', None, 0
+            )
+            if ret <= 32:
+                logger.warning(f"ShellExecute printto echoue (code {ret}) pour {path}")
+                return False, f"Impression echouee (code {ret})"
+            return True, "Impression lancee"
+
+    except Exception as e:
+        logger.exception(f"Erreur impression fichier: {e}")
+        return False, "Impossible de lancer l'impression"
 
 
 def check_templates_table_exists() -> bool:
