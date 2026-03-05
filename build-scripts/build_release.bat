@@ -1,144 +1,158 @@
 @echo off
 REM ============================================================================
-REM build_release.bat - Compilation EMAC version finale
+REM build_release.bat - Compilation EMAC version release
 REM ============================================================================
-REM Ce script compile l'application en mode release (sans console)
-REM A N'UTILISER QUE si la version debug fonctionne correctement
-REM
-REM Usage:
-REM   build_release.bat
-REM
-REM Output:
-REM   dist/EMAC/EMAC.exe (version finale optimisée)
+REM Usage: double-clic ou lancer depuis build-scripts\
+REM Output: dist\EMAC\EMAC.exe (sans console)
 REM ============================================================================
+
+setlocal enabledelayedexpansion
 
 echo.
 echo ================================================================================
-echo EMAC - Build Release (version finale)
+echo  EMAC - Build Release
 echo ================================================================================
 echo.
 
-REM Vérifier qu'on est dans le bon dossier
-if not exist "EMAC.spec" (
-    echo [ERREUR] Fichier EMAC.spec introuvable.
-    echo Vous devez executer ce script depuis le dossier racine du projet.
+REM Se positionner a la racine du projet (dossier parent de build-scripts\)
+cd /d "%~dp0"
+cd ..
+set "ROOT=%CD%"
+set "SPEC_FILE=build-scripts\specs\EMAC_base.spec"
+
+echo Racine projet : %ROOT%
+echo Spec          : %SPEC_FILE%
+echo.
+
+REM -----------------------------------------------------------------------
+REM [1/6] Verifications prealables
+REM -----------------------------------------------------------------------
+echo [1/6] Verifications...
+
+if not exist "%SPEC_FILE%" (
+    echo [ERREUR] Fichier spec introuvable : %SPEC_FILE%
     pause
     exit /b 1
 )
+echo       OK - Spec trouve
 
-echo [AVERTISSEMENT] Cette compilation va creer une version SANS console.
-echo                 Si l'application crash, vous ne verrez pas les erreurs.
-echo.
-echo                 Utilisez build_debug.bat pour le debug.
-echo.
-set /p "confirm=Continuer la compilation en mode release ? (O/N): "
-if /i not "%confirm%"=="O" (
-    echo Compilation annulee.
-    pause
-    exit /b 0
-)
-echo.
-
-echo [INFO] Verification du fichier EMAC.spec...
-findstr /C:"console=True" EMAC.spec >nul
-if not errorlevel 1 (
-    echo.
-    echo [ERREUR] Le fichier EMAC.spec est encore en mode debug ^(console=True^).
-    echo.
-    echo Vous devez modifier EMAC.spec:
-    echo   - Ligne ~254: console=True  -^> console=False
-    echo   - Ligne ~252: strip=False   -^> strip=True
-    echo.
-    echo Puis relancer ce script.
+py --version >nul 2>&1
+if errorlevel 1 (
+    echo [ERREUR] Python introuvable. Verifiez votre installation.
     pause
     exit /b 1
 )
-echo       OK - Mode release detecte
+for /f "tokens=*" %%i in ('py --version 2^>^&1') do echo       OK - %%i
+
+py -m PyInstaller --version >nul 2>&1
+if errorlevel 1 (
+    echo       PyInstaller absent - Installation en cours...
+    py -m pip install pyinstaller
+    if errorlevel 1 (
+        echo [ERREUR] Impossible d'installer PyInstaller.
+        pause
+        exit /b 1
+    )
+)
+for /f "tokens=*" %%i in ('py -m PyInstaller --version 2^>^&1') do echo       OK - PyInstaller %%i
+
+echo       OK - Verifications terminees
 echo.
 
-echo [1/5] Nettoyage des anciens builds...
-if exist "build" rmdir /S /Q "build"
-if exist "dist" rmdir /S /Q "dist"
-echo       OK - Dossiers build et dist supprimes
+REM -----------------------------------------------------------------------
+REM [2/6] Nettoyage
+REM -----------------------------------------------------------------------
+echo [2/6] Nettoyage des anciens builds...
+if exist "build"  rmdir /S /Q "build"
+if exist "dist"   rmdir /S /Q "dist"
+echo       OK
 echo.
 
-echo [2/5] Compilation avec PyInstaller (mode release)...
-echo       Fichier: EMAC.spec
-echo       Mode: one-folder, console=False, strip=True
-echo       Duree estimee: 2-3 minutes
+REM -----------------------------------------------------------------------
+REM [3/6] Compilation PyInstaller
+REM -----------------------------------------------------------------------
+echo [3/6] Compilation PyInstaller (mode release, sans console)...
+echo       Duree estimee : 3-5 minutes
 echo.
-pyinstaller EMAC.spec
+
+py -m PyInstaller --noconfirm "%SPEC_FILE%"
+
 if errorlevel 1 (
     echo.
     echo [ERREUR] La compilation a echoue.
-    echo Verifiez les erreurs ci-dessus.
+    if exist "build\EMAC\warn-EMAC.txt" (
+        echo Consultez build\EMAC\warn-EMAC.txt pour les details.
+    )
     pause
     exit /b 1
 )
+echo.
 echo       OK - Compilation terminee
 echo.
 
-echo [3/5] Verification de l'executable...
+REM -----------------------------------------------------------------------
+REM [4/6] Verification de l'executable
+REM -----------------------------------------------------------------------
+echo [4/6] Verification de l'executable...
 if not exist "dist\EMAC\EMAC.exe" (
-    echo [ERREUR] L'executable n'a pas ete cree.
-    echo Verifiez les erreurs de compilation.
+    echo [ERREUR] dist\EMAC\EMAC.exe introuvable apres compilation.
     pause
     exit /b 1
 )
-echo       OK - EMAC.exe trouve
+for %%A in ("dist\EMAC\EMAC.exe") do (
+    set /a EXE_MB=%%~zA / 1048576
+    echo       OK - EMAC.exe trouve ^(!EXE_MB! MB^)
+)
 echo.
 
-echo [4/5] Copie du fichier .env (configuration DB)...
-if exist "App\.env" (
-    copy /Y "App\.env" "dist\EMAC\.env" >nul
-    echo       OK - .env copie
+REM -----------------------------------------------------------------------
+REM [5/6] Copie des fichiers de configuration
+REM -----------------------------------------------------------------------
+echo [5/6] Copie des fichiers de configuration...
+
+REM Le .env.encrypted est inclus automatiquement par le spec PyInstaller.
+REM Le .env en clair n'est JAMAIS copie dans le build (securite).
+REM Sur chaque machine cible, les credentials DB doivent etre configures via :
+REM   - Variables d'environnement Windows (EMAC_DB_PASSWORD, etc.)
+REM   - OU fichier .env place dans %%APPDATA%%\EMAC\  (invisible dans dist\)
+if exist "App\.env.encrypted" (
+    echo       OK - .env.encrypted present ^(inclus via le spec^)
 ) else (
-    echo [ERREUR] Fichier App\.env introuvable.
-    echo          L'application ne pourra pas se connecter a la base de donnees.
-    echo          Creez App\.env avec vos parametres de connexion DB.
-    pause
-    exit /b 1
+    echo [INFO] Pas de .env.encrypted - les credentials DB devront etre
+    echo        configures via variables d'environnement ou %%APPDATA%%\EMAC\.env
 )
+
+if not exist "dist\EMAC\logs" mkdir "dist\EMAC\logs"
+echo       OK - Dossier logs\ cree
 echo.
 
-echo [5/5] Calcul de la taille du build...
-for /f "tokens=3" %%a in ('dir /s "dist\EMAC" ^| findstr "octets"') do set size=%%a
-echo       Taille totale: %size% octets
+REM -----------------------------------------------------------------------
+REM [6/6] Resume final
+REM -----------------------------------------------------------------------
+echo [6/6] Calcul de la taille totale...
+set TOTAL_SIZE=0
+for /r "dist\EMAC" %%F in (*) do set /a TOTAL_SIZE+=%%~zF
+set /a SIZE_MB=%TOTAL_SIZE% / 1048576
+for /f %%A in ('dir /s /b "dist\EMAC\*.*" 2^>nul ^| find /c /v ""') do set FILE_COUNT=%%A
+echo       Taille : %SIZE_MB% MB  (%FILE_COUNT% fichiers)
 echo.
 
 echo ================================================================================
-echo BUILD RELEASE TERMINE AVEC SUCCES
+echo  BUILD RELEASE TERMINE AVEC SUCCES
 echo ================================================================================
 echo.
-echo Fichiers generes:
-echo   - dist\EMAC\EMAC.exe           (executable optimise, sans console)
-echo   - dist\EMAC\.env               (configuration DB)
-echo   - dist\EMAC\*.dll              (dependances)
+echo  Executable   : dist\EMAC\EMAC.exe
+echo  Configuration: dist\EMAC\.env
+echo  Logs         : dist\EMAC\logs\
+echo  Exports      : dist\EMAC\exports\
 echo.
-echo Caracteristiques:
-echo   - Mode GUI pur (pas de console)
-echo   - Bytecode Python optimise (optimize=2)
-echo   - Symboles de debug supprimes (strip=True)
-echo   - Pret pour la distribution
-echo.
-echo ================================================================================
-echo DISTRIBUTION
-echo ================================================================================
-echo.
-echo Pour distribuer l'application:
-echo.
-echo 1. Copiez tout le dossier dist\EMAC\ (pas juste l'exe)
-echo 2. Assurez-vous que .env est present avec les bons parametres DB
-echo 3. L'utilisateur peut lancer EMAC.exe directement
-echo.
-echo NOTE: Tous les fichiers dans dist\EMAC\ sont requis.
-echo       Ne distribuez pas uniquement EMAC.exe.
+echo  Pour distribuer : copiez tout le dossier dist\EMAC\
+echo                    (ne pas distribuer uniquement EMAC.exe)
 echo.
 echo ================================================================================
 echo.
 
-echo Lancer l'application maintenant ? (O/N)
-set /p "launch=Choix: "
+set /p "launch=Lancer l'application maintenant ? (O/N) : "
 if /i "%launch%"=="O" (
     echo Lancement de EMAC...
     start "" "dist\EMAC\EMAC.exe"

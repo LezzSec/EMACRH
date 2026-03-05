@@ -135,6 +135,7 @@ class MainWindow(QMainWindow):
         self.drawer = None
         self.is_drawer_open = False
         self.installEventFilter(self)
+        self._last_notification_summary = None  # Cache pour le badge drawer
 
         # Cache postes
         self._postes_cache = None
@@ -246,10 +247,38 @@ class MainWindow(QMainWindow):
 
         header_layout.addLayout(title_layout, 1)
 
-        self.menu_btn = HamburgerButton(self, variant="default")
+        # Conteneur pour le bouton hamburger + badge iOS superposé
+        # QWidget simple = pas de clipping sur ses enfants
+        _notif_container = QWidget()
+        _notif_container.setFixedSize(52, 44)
+
+        self.menu_btn = HamburgerButton(_notif_container, variant="default")
+        self.menu_btn.setGeometry(0, 4, 40, 40)   # décalé vers le bas de 4px pour laisser la place au badge
         self.menu_btn.setToolTip("Menu")
         self.menu_btn.clicked.connect(self.toggle_drawer)
-        header_layout.addWidget(self.menu_btn, 0, Qt.AlignRight | Qt.AlignVCenter)
+
+        # Badge iOS : positionné sur le coin supérieur droit du bouton
+        self._notif_badge = QLabel("", _notif_container)
+        self._notif_badge.setAlignment(Qt.AlignCenter)
+        self._notif_badge.setAttribute(Qt.WA_StyledBackground, True)
+        self._notif_badge.setStyleSheet("""
+            background-color: #ef4444;
+            color: white;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+            padding: 1px 5px;
+            min-width: 20px;
+            min-height: 20px;
+        """)
+        self._notif_badge.setGeometry(26, 0, 26, 20)   # centré sur le coin haut-droit du bouton
+        self._notif_badge.setToolTip("Alertes en attente")
+        self._notif_badge.hide()
+        self._notif_badge.raise_()
+
+        header_layout.addWidget(_notif_container, 0, Qt.AlignRight | Qt.AlignVCenter)
+
+        self._startup_alert_shown = False
 
         right.addWidget(header_widget)
 
@@ -375,6 +404,11 @@ class MainWindow(QMainWindow):
         if self.drawer is not None:
             self.drawer.deleteLater()
             self.drawer = None
+
+        # Charger les compteurs d'alertes pour le badge + popup démarrage
+        # (uniquement pour les utilisateurs RH, 1.5s de délai)
+        if has_rh_access:
+            QTimer.singleShot(1500, self._load_notification_counts)
 
     # ---------------------------
     # Document Trigger Service
@@ -530,13 +564,52 @@ class MainWindow(QMainWindow):
         if perms.get("contrats_ecriture") or perms.get("contrats_lecture") or perms.get("documentsrh_lecture"):
             add_btn("Gestion RH", self.show_contract_management)
         if perms.get("contrats_ecriture") or perms.get("documentsrh_ecriture"):
-            add_btn("Alertes RH", self.show_alertes_rh)
+            # Bouton "Alertes RH" avec badge de notification
+            row_alertes = QWidget()
+            row_alertes_layout = QHBoxLayout(row_alertes)
+            row_alertes_layout.setContentsMargins(0, 0, 0, 0)
+            row_alertes_layout.setSpacing(6)
+
+            btn_alertes = EmacButton("Alertes RH", 'ghost')
+            btn_alertes.setFixedHeight(44)
+            btn_alertes.clicked.connect(self.show_alertes_rh)
+            btn_alertes.clicked.connect(self.toggle_drawer)
+            row_alertes_layout.addWidget(btn_alertes, 1)
+
+            self._drawer_notif_badge = QLabel("")
+            self._drawer_notif_badge.setAlignment(Qt.AlignCenter)
+            self._drawer_notif_badge.setAttribute(Qt.WA_StyledBackground, True)
+            self._drawer_notif_badge.setStyleSheet("""
+                background-color: #ef4444;
+                color: white;
+                border-radius: 10px;
+                font-size: 10px;
+                font-weight: bold;
+                padding: 1px 6px;
+                min-width: 20px;
+                min-height: 20px;
+            """)
+            self._drawer_notif_badge.setFixedHeight(20)
+            self._drawer_notif_badge.hide()
+            row_alertes_layout.addWidget(self._drawer_notif_badge, 0, Qt.AlignVCenter | Qt.AlignRight)
+
+            # Appliquer le compte déjà chargé si disponible
+            if self._last_notification_summary:
+                total = (self._last_notification_summary.get('total_critique', 0) +
+                         self._last_notification_summary.get('total_avertissement', 0))
+                if total > 0:
+                    display = str(total) if total < 100 else "99+"
+                    self._drawer_notif_badge.setText(display)
+                    self._drawer_notif_badge.show()
+
+            drawer_layout.addWidget(row_alertes)
         if perms.get("planning_lecture"):
             add_btn("Planning", self.show_regularisation)
         if perms.get("documentsrh_lecture"):
             add_btn("Documents", self.show_gestion_templates)
-        if perms.get("is_admin"):
+        if perms.get("historique_lecture") or perms.get("is_admin"):
             add_btn("Historique", self.show_historique)
+        if perms.get("is_admin"):
             drawer_layout.addSpacing(10)
             sep = QFrame()
             sep.setFrameShape(QFrame.HLine)
@@ -857,6 +930,113 @@ class MainWindow(QMainWindow):
             )
         except Exception:
             pass  # Si on ne peut même pas afficher le message, tant pis
+
+    # ---------------------------
+    # Notification Badge & Popup démarrage
+    # ---------------------------
+
+    def _load_notification_counts(self):
+        """Charge les compteurs d'alertes pour le badge et le popup de démarrage."""
+        from core.services.alert_service import AlertService
+        def _fetch(progress_callback=None):
+            return AlertService.get_startup_summary()
+        w = DbWorker(_fetch)
+        w.signals.result.connect(self._apply_notification_counts)
+        w.signals.error.connect(lambda tb: logger.warning(f"Erreur compteurs alertes: {tb}"))
+        DbThreadPool.start(w)
+
+    def _apply_notification_counts(self, summary):
+        """Met à jour le badge hamburger et affiche le popup si nécessaire."""
+        logger.debug(f"Compteurs alertes: {summary}")
+        self._last_notification_summary = summary
+        total = summary.get('total_critique', 0) + summary.get('total_avertissement', 0)
+        display = str(total) if total < 100 else "99+"
+
+        # Badge dans le header
+        if total > 0:
+            self._notif_badge.setText(display)
+            self._notif_badge.show()
+        else:
+            self._notif_badge.hide()
+
+        # Badge dans le drawer (s'il est déjà créé)
+        if self.drawer is not None and hasattr(self, '_drawer_notif_badge'):
+            if total > 0:
+                self._drawer_notif_badge.setText(display)
+                self._drawer_notif_badge.show()
+            else:
+                self._drawer_notif_badge.hide()
+
+        # Popup de démarrage (une seule fois par session, uniquement si critiques)
+        if not self._startup_alert_shown and summary.get('total_critique', 0) > 0:
+            self._startup_alert_shown = True
+            QTimer.singleShot(300, lambda: self._show_startup_alert_popup(summary))
+
+    def _show_startup_alert_popup(self, summary):
+        """Affiche un popup récapitulatif des alertes critiques au démarrage."""
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Alertes en attente")
+        dlg.setFixedWidth(420)
+        dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
+
+        layout = QVBoxLayout(dlg)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(12)
+
+        # En-tête
+        header = QLabel("⚠️  Des alertes nécessitent votre attention")
+        header.setStyleSheet("font-size: 14px; font-weight: bold; color: #dc2626;")
+        header.setWordWrap(True)
+        layout.addWidget(header)
+
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)
+        sep.setStyleSheet("color: #e5e7eb;")
+        layout.addWidget(sep)
+
+        # Lignes de résumé
+        def add_row(icon, label, count, color):
+            if count <= 0:
+                return
+            row = QHBoxLayout()
+            ico = QLabel(icon)
+            ico.setFixedWidth(22)
+            txt = QLabel(label)
+            txt.setStyleSheet(f"color: {color}; font-size: 13px;")
+            cnt = QLabel(f"<b>{count}</b>")
+            cnt.setStyleSheet(f"color: {color}; font-size: 13px; font-weight: bold;")
+            cnt.setAlignment(Qt.AlignRight)
+            row.addWidget(ico)
+            row.addWidget(txt, 1)
+            row.addWidget(cnt)
+            layout.addLayout(row)
+
+        add_row("🔴", "Évaluations en retard", summary.get('evaluations_retard', 0), "#dc2626")
+        add_row("🔴", "Contrats expirés", summary.get('contrats_expires', 0), "#dc2626")
+        add_row("🟡", "Contrats expirant (30j)", summary.get('contrats_expirant', 0), "#d97706")
+        add_row("🟡", "Personnel sans contrat", summary.get('personnel_sans_contrat', 0), "#d97706")
+
+        layout.addSpacing(8)
+
+        # Boutons
+        btn_layout = QHBoxLayout()
+        btn_layout.setSpacing(10)
+
+        theme = get_theme_components()
+        EmacButton = theme['EmacButton']
+
+        btn_fermer = EmacButton("Fermer", variant='ghost')
+        btn_fermer.clicked.connect(dlg.accept)
+
+        btn_voir = EmacButton("Voir les alertes RH", variant='primary')
+        btn_voir.clicked.connect(dlg.accept)
+        btn_voir.clicked.connect(self.show_alertes_rh)
+
+        btn_layout.addWidget(btn_fermer)
+        btn_layout.addWidget(btn_voir)
+        layout.addLayout(btn_layout)
+
+        dlg.exec_()
 
     # ---------------------------
     # Export

@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QPalette, QCursor
 
-from core.services.historique_service import fetch_historique_paginated, delete_historique_range
+from core.services.historique_service import fetch_historique_paginated, delete_historique_range, MODULE_TABLES
 from core.services.log_exporter import export_day
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.gui.db_worker import DbWorker, DbThreadPool
@@ -151,11 +151,7 @@ class DetailDialog(QDialog):
         self.setWindowTitle("Détails de l'action")
         self.resize(600, 500)
 
-        palette = self.palette()
-        palette.setColor(QPalette.Window, QColor("#ffffff"))
-        palette.setColor(QPalette.WindowText, QColor("#212121"))
-        self.setPalette(palette)
-        self.setAutoFillBackground(True)
+        self.setStyleSheet("QDialog { background-color: #ffffff; color: #212121; }")
 
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
@@ -198,7 +194,7 @@ class DetailDialog(QDialog):
         
         # Informations détaillées
         info_widget = QWidget()
-        info_widget.setAutoFillBackground(True)
+        info_widget.setStyleSheet("background-color: #ffffff;")
         info_layout = QVBoxLayout(info_widget)
         info_layout.setSpacing(12)
         
@@ -912,7 +908,39 @@ class HistoriqueDialog(QDialog):
         self._loading_label = None
         self._last_shown_date = None  # Dernier jour affiché (évite les doublons de séparateur)
 
+        # Filtrage par rôle : chaque utilisateur ne voit que son périmètre métier
+        self._allowed_tables = self._resolve_allowed_tables()
+        if self._allowed_tables is not None:
+            modules = ', '.join(sorted(
+                m for m, tables in MODULE_TABLES.items()
+                if any(t in self._allowed_tables for t in tables)
+            ))
+            sub.setText(f"Actions liées à votre périmètre ({modules})")
+            self.btn_clear.setVisible(False)  # Archivage réservé à l'admin
+
         self.reload()
+
+    # ---------- Filtrage par rôle ----------
+
+    def _resolve_allowed_tables(self):
+        """
+        Retourne la liste de tables autorisées selon le rôle de l'utilisateur.
+        None = admin → toutes les tables.
+        """
+        try:
+            from core.services.auth_service import get_current_user
+            user = get_current_user()
+            if not user:
+                return None
+            role = user.get('role_nom', '')
+            if role == 'gestion_production':
+                return MODULE_TABLES["Production"] + MODULE_TABLES["Planning"] + ["personnel", "personnel_infos"]
+            elif role == 'gestion_rh':
+                return MODULE_TABLES["RH"] + MODULE_TABLES["Planning"]
+            # admin et autres rôles : pas de restriction
+            return None
+        except Exception:
+            return None
 
     # ---------- Gestion du worker courant ----------
 
@@ -975,6 +1003,7 @@ class HistoriqueDialog(QDialog):
                 date_to=dt.datetime(d_to.year(), d_to.month(), d_to.day(), 23, 59, 59),
                 search_text=search_text,
                 action_filter=action_filter,
+                table_names=self._allowed_tables,
                 offset=offset,
                 limit=_PAGE_SIZE + 1,  # +1 pour détecter s'il y a une suite
             )

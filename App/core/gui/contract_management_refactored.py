@@ -31,8 +31,9 @@ from core.gui.emac_dialog import EmacFormDialog
 from core.repositories.personnel_repo import PersonnelRepository
 from core.services.contrat_service_crud import ContratServiceCRUD
 
-# Services existants (pour compatibilité)
-from core.services.contrat_service import get_contract_types, get_categories
+from core.services.contrat_service_crud import ContratServiceCRUD as _ContratServiceCRUD
+get_contract_types = _ContratServiceCRUD.get_contract_types
+get_categories = _ContratServiceCRUD.get_categories
 
 # UI
 try:

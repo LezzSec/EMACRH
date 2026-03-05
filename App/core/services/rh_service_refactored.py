@@ -279,46 +279,11 @@ def _get_donnees_general(operateur_id: int) -> Dict:
 
 
 def _get_donnees_contrat(operateur_id: int) -> Dict:
-    """
-    ✅ REFACTORISÉ: Utilise ContratServiceCRUD.
-
-    AVANT: 30 lignes avec with DatabaseCursor
-    APRÈS: 10 lignes
-    """
-    try:
-        # ✅ Utiliser le service CRUD
-        contrats = ContratServiceCRUD.get_by_operateur(
-            operateur_id=operateur_id,
-            actif_only=False,  # Tous les contrats
-            order_by='date_debut DESC'
-        )
-
-        return {'contrats': contrats}
-
-    except Exception as e:
-        logger.exception(f"Erreur _get_donnees_contrat: {e}")
-        return {}
+    return {'contrats': ContratServiceCRUD.get_by_operateur(operateur_id, actif_only=False)}
 
 
 def _get_donnees_formation(operateur_id: int) -> Dict:
-    """
-    ✅ REFACTORISÉ: Utilise FormationServiceCRUD.
-
-    AVANT: 30 lignes
-    APRÈS: 10 lignes (-67%)
-    """
-    try:
-        # ✅ Utiliser le service CRUD
-        formations = FormationServiceCRUD.get_by_operateur(
-            operateur_id=operateur_id,
-            order_by='date_debut DESC'
-        )
-
-        return {'formations': formations}
-
-    except Exception as e:
-        logger.exception(f"Erreur _get_donnees_formation: {e}")
-        return {}
+    return {'formations': FormationServiceCRUD.get_by_operateur(operateur_id)}
 
 
 def _get_donnees_declaration(operateur_id: int) -> Dict:
@@ -374,8 +339,8 @@ def _get_donnees_medical(operateur_id: int) -> Dict:
         visites = QueryExecutor.fetch_all(
             """
             SELECT *
-            FROM visite_medicale
-            WHERE personnel_id = %s
+            FROM medical_visite
+            WHERE operateur_id = %s
             ORDER BY date_visite DESC
             """,
             (operateur_id,),
@@ -401,8 +366,8 @@ def _get_donnees_vie_salarie(operateur_id: int) -> Dict:
         entretiens = QueryExecutor.fetch_all(
             """
             SELECT *
-            FROM entretien_professionnel
-            WHERE personnel_id = %s
+            FROM vie_salarie_entretien
+            WHERE operateur_id = %s
             ORDER BY date_entretien DESC
             """,
             (operateur_id,),
@@ -413,8 +378,8 @@ def _get_donnees_vie_salarie(operateur_id: int) -> Dict:
         sanctions = QueryExecutor.fetch_all(
             """
             SELECT *
-            FROM sanction_disciplinaire
-            WHERE personnel_id = %s
+            FROM vie_salarie_sanction
+            WHERE operateur_id = %s
             ORDER BY date_sanction DESC
             """,
             (operateur_id,),
@@ -724,19 +689,9 @@ def delete_declaration(declaration_id: int) -> Tuple[bool, str]:
         return False, f"Erreur: {str(e)}"
 
 
-def get_types_declaration() -> List[str]:
-    """Retourne la liste des types de déclaration disponibles."""
-    from core.services.declaration_service_crud import DeclarationServiceCRUD
-    return DeclarationServiceCRUD.get_types_declaration()
-
-
 # ============================================================
 # 7. GESTION DES COMPÉTENCES
 # ============================================================
-
-def get_catalogue_competences(actif_only: bool = True) -> List[Dict]:
-    """Récupère le catalogue des compétences disponibles."""
-    return competences_service.get_all_competences(actif_only)
 
 
 def create_competence_personnel(
@@ -776,29 +731,6 @@ def create_competence_personnel(
         return False, "Erreur lors de l'assignation", None
 
 
-def update_competence_personnel(
-    assignment_id: int,
-    data: Dict
-) -> Tuple[bool, str]:
-    """Met à jour une assignation de compétence."""
-    try:
-        return competences_service.update_assignment(assignment_id, **data)
-    except PermissionError as e:
-        return False, str(e)
-    except Exception as e:
-        logger.exception(f"Erreur update_competence_personnel: {e}")
-        return False, "Erreur lors de la mise à jour"
-
-
-def delete_competence_personnel(assignment_id: int) -> Tuple[bool, str]:
-    """Retire une compétence d'un opérateur."""
-    try:
-        return competences_service.remove_assignment(assignment_id)
-    except PermissionError as e:
-        return False, str(e)
-    except Exception as e:
-        logger.exception(f"Erreur delete_competence_personnel: {e}")
-        return False, "Erreur lors du retrait"
 
 
 # ============================================================

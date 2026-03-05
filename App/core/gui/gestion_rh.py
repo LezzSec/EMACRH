@@ -37,12 +37,13 @@ from core.services.rh_service_refactored import (
     delete_contrat,
     delete_formation,
     delete_declaration,
-    delete_competence_personnel,
     get_documents_domaine,
     get_documents_archives_operateur,
     get_resume_operateur,
     get_domaines_rh,
 )
+from core.services import competences_service as _competences_service
+delete_competence_personnel = _competences_service.remove_assignment
 from core.services.medical_service import (
     get_visites, delete_visite,
     get_accidents, delete_accident,
@@ -615,11 +616,12 @@ class GestionRHDialog(QDialog):
                 return
             self._vider_layout(self.layout_resume)
             self._vider_layout(self.layout_documents)
-            widget_resume = self._creer_widget_resume(donnees)
+            widget_resume = self._creer_widget_resume(donnees, documents)
             if widget_resume:
                 self.layout_resume.addWidget(widget_resume)
-            widget_documents = self._creer_widget_documents(documents)
-            self.layout_documents.addWidget(widget_documents)
+            if fetched_domaine != DomaineRH.CONTRAT and self._domaine_a_contenu(donnees, fetched_domaine):
+                widget_documents = self._creer_widget_documents(documents)
+                self.layout_resume.addWidget(widget_documents)
             self.data_changed.emit()
 
         def on_error(err):
@@ -631,12 +633,12 @@ class GestionRHDialog(QDialog):
         self._loading_worker.signals.error.connect(on_error)
         DbThreadPool.start(self._loading_worker)
 
-    def _creer_widget_resume(self, donnees: dict) -> QWidget:
+    def _creer_widget_resume(self, donnees: dict, documents: list = None) -> QWidget:
         """Crée le widget de résumé selon le domaine actif."""
         if self.domaine_actif == DomaineRH.GENERAL:
             return self._creer_resume_general(donnees)
         elif self.domaine_actif == DomaineRH.CONTRAT:
-            return self._creer_resume_contrat(donnees)
+            return self._creer_resume_contrat(donnees, documents or [])
         elif self.domaine_actif == DomaineRH.DECLARATION:
             return self._creer_resume_declaration(donnees)
         elif self.domaine_actif == DomaineRH.COMPETENCES:
@@ -742,7 +744,7 @@ class GestionRHDialog(QDialog):
         if dialog.exec_() == QDialog.Accepted:
             self._charger_contenu_domaine()
 
-    def _creer_resume_contrat(self, donnees: dict) -> QWidget:
+    def _creer_resume_contrat(self, donnees: dict, documents: list = None) -> QWidget:
         """Crée le résumé du contrat."""
         self._donnees_contrat = donnees  # Stocker pour édition
 
@@ -806,6 +808,40 @@ class GestionRHDialog(QDialog):
                 grid.addWidget(lbl, row, col)
 
             card.body.addLayout(grid)
+
+            # Section documents intégrée dans la carte contrat
+            sep = QFrame()
+            sep.setFrameShape(QFrame.HLine)
+            sep.setStyleSheet("background: #e5e7eb; margin: 8px 0;")
+            card.body.addWidget(sep)
+
+            docs_actifs = [d for d in (documents or []) if d.get('statut') != 'archive']
+            doc_header_layout = QHBoxLayout()
+            doc_title_lbl = QLabel(f"Documents ({len(docs_actifs)})")
+            doc_title_lbl.setFont(QFont("Segoe UI", 10, QFont.Bold))
+            doc_title_lbl.setStyleSheet("color: #374151; background: transparent;")
+            doc_header_layout.addWidget(doc_title_lbl)
+            doc_header_layout.addStretch()
+            btn_ajouter_doc = EmacButton("+ Ajouter un document", variant="secondary")
+            btn_ajouter_doc.setVisible(can("rh.documents.edit"))
+            btn_ajouter_doc.clicked.connect(self._ajouter_document)
+            doc_header_layout.addWidget(btn_ajouter_doc)
+            card.body.addLayout(doc_header_layout)
+
+            if not docs_actifs:
+                no_doc_lbl = QLabel("Aucun document joint")
+                no_doc_lbl.setStyleSheet("color: #9ca3af; padding: 4px 0; background: transparent;")
+                card.body.addWidget(no_doc_lbl)
+            else:
+                for doc in docs_actifs:
+                    doc_lbl = QLabel(
+                        f"📎 <b>{doc.get('nom_affichage', '-')}</b>"
+                        f"<span style='color:#6b7280; font-size:11px;'>"
+                        f"  •  Ajouté le {self._format_date(doc.get('date_upload'))}</span>"
+                    )
+                    doc_lbl.setStyleSheet("padding: 3px 0; background: transparent;")
+                    card.body.addWidget(doc_lbl)
+
             layout.addWidget(card)
         else:
             alert = EmacAlert("Aucun contrat actif", variant="info")
@@ -2232,6 +2268,20 @@ class GestionRHDialog(QDialog):
     # UTILITAIRES
     # =========================================================================
 
+    def _domaine_a_contenu(self, donnees: dict, domaine) -> bool:
+        """Retourne True si le domaine a au moins un enregistrement."""
+        if domaine == DomaineRH.DECLARATION:
+            return bool(donnees.get('declarations'))
+        if domaine == DomaineRH.COMPETENCES:
+            return bool(donnees.get('competences'))
+        if domaine == DomaineRH.FORMATION:
+            return bool(donnees.get('formations'))
+        if domaine == DomaineRH.MEDICAL:
+            return bool(donnees.get('visites_medicales'))
+        if domaine == DomaineRH.VIE_SALARIE:
+            return bool(donnees.get('entretiens') or donnees.get('sanctions'))
+        return True  # GENERAL : toujours afficher
+
     def _vider_layout(self, layout):
         """Supprime tous les widgets d'un layout."""
         while layout.count():
@@ -2813,11 +2863,12 @@ class GestionRHWidget(QWidget):
                 return
             self._vider_layout(self.layout_resume)
             self._vider_layout(self.layout_documents)
-            widget_resume = self._creer_widget_resume(donnees)
+            widget_resume = self._creer_widget_resume(donnees, documents)
             if widget_resume:
                 self.layout_resume.addWidget(widget_resume)
-            widget_documents = self._creer_widget_documents(documents)
-            self.layout_documents.addWidget(widget_documents)
+            if fetched_domaine != DomaineRH.CONTRAT and self._domaine_a_contenu(donnees, fetched_domaine):
+                widget_documents = self._creer_widget_documents(documents)
+                self.layout_resume.addWidget(widget_documents)
             self.data_changed.emit()
 
         def on_error(err):
@@ -2829,12 +2880,12 @@ class GestionRHWidget(QWidget):
         self._loading_worker.signals.error.connect(on_error)
         DbThreadPool.start(self._loading_worker)
 
-    def _creer_widget_resume(self, donnees: dict) -> QWidget:
+    def _creer_widget_resume(self, donnees: dict, documents: list = None) -> QWidget:
         """Crée le widget de résumé selon le domaine actif."""
         if self.domaine_actif == DomaineRH.GENERAL:
             return self._creer_resume_general(donnees)
         elif self.domaine_actif == DomaineRH.CONTRAT:
-            return self._creer_resume_contrat(donnees)
+            return self._creer_resume_contrat(donnees, documents or [])
         elif self.domaine_actif == DomaineRH.DECLARATION:
             return self._creer_resume_declaration(donnees)
         elif self.domaine_actif == DomaineRH.COMPETENCES:
@@ -2940,7 +2991,7 @@ class GestionRHWidget(QWidget):
         if dialog.exec_() == QDialog.Accepted:
             self._charger_contenu_domaine()
 
-    def _creer_resume_contrat(self, donnees: dict) -> QWidget:
+    def _creer_resume_contrat(self, donnees: dict, documents: list = None) -> QWidget:
         """Crée le résumé du contrat."""
         self._donnees_contrat = donnees  # Stocker pour édition
 
@@ -3004,6 +3055,40 @@ class GestionRHWidget(QWidget):
                 grid.addWidget(lbl, row, col)
 
             card.body.addLayout(grid)
+
+            # Section documents intégrée dans la carte contrat
+            sep = QFrame()
+            sep.setFrameShape(QFrame.HLine)
+            sep.setStyleSheet("background: #e5e7eb; margin: 8px 0;")
+            card.body.addWidget(sep)
+
+            docs_actifs = [d for d in (documents or []) if d.get('statut') != 'archive']
+            doc_header_layout = QHBoxLayout()
+            doc_title_lbl = QLabel(f"Documents ({len(docs_actifs)})")
+            doc_title_lbl.setFont(QFont("Segoe UI", 10, QFont.Bold))
+            doc_title_lbl.setStyleSheet("color: #374151; background: transparent;")
+            doc_header_layout.addWidget(doc_title_lbl)
+            doc_header_layout.addStretch()
+            btn_ajouter_doc = EmacButton("+ Ajouter un document", variant="secondary")
+            btn_ajouter_doc.setVisible(can("rh.documents.edit"))
+            btn_ajouter_doc.clicked.connect(self._ajouter_document)
+            doc_header_layout.addWidget(btn_ajouter_doc)
+            card.body.addLayout(doc_header_layout)
+
+            if not docs_actifs:
+                no_doc_lbl = QLabel("Aucun document joint")
+                no_doc_lbl.setStyleSheet("color: #9ca3af; padding: 4px 0; background: transparent;")
+                card.body.addWidget(no_doc_lbl)
+            else:
+                for doc in docs_actifs:
+                    doc_lbl = QLabel(
+                        f"📎 <b>{doc.get('nom_affichage', '-')}</b>"
+                        f"<span style='color:#6b7280; font-size:11px;'>"
+                        f"  •  Ajouté le {self._format_date(doc.get('date_upload'))}</span>"
+                    )
+                    doc_lbl.setStyleSheet("padding: 3px 0; background: transparent;")
+                    card.body.addWidget(doc_lbl)
+
             layout.addWidget(card)
         else:
             alert = EmacAlert("Aucun contrat actif", variant="info")
@@ -4386,6 +4471,20 @@ class GestionRHWidget(QWidget):
     # =========================================================================
     # UTILITAIRES
     # =========================================================================
+
+    def _domaine_a_contenu(self, donnees: dict, domaine) -> bool:
+        """Retourne True si le domaine a au moins un enregistrement."""
+        if domaine == DomaineRH.DECLARATION:
+            return bool(donnees.get('declarations'))
+        if domaine == DomaineRH.COMPETENCES:
+            return bool(donnees.get('competences'))
+        if domaine == DomaineRH.FORMATION:
+            return bool(donnees.get('formations'))
+        if domaine == DomaineRH.MEDICAL:
+            return bool(donnees.get('visites_medicales'))
+        if domaine == DomaineRH.VIE_SALARIE:
+            return bool(donnees.get('entretiens') or donnees.get('sanctions'))
+        return True  # GENERAL : toujours afficher
 
     def _vider_layout(self, layout):
         """Supprime tous les widgets d'un layout."""

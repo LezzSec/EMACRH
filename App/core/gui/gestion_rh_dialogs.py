@@ -19,12 +19,15 @@ from core.services.rh_service_refactored import (
     create_contrat, update_contrat,
     create_formation, update_formation,
     create_declaration, update_declaration,
-    get_types_declaration,
-    get_catalogue_competences,
-    create_competence_personnel, update_competence_personnel,
+    create_competence_personnel,
     get_categories_documents, CATEGORIE_TO_DOMAINE, DomaineRH,
     is_matricule_disponible,
 )
+from core.services.declaration_service_crud import DeclarationServiceCRUD as _DeclSvc
+from core.services import competences_service as _competences_service
+get_types_declaration = _DeclSvc.get_types_declaration
+get_catalogue_competences = _competences_service.get_all_competences
+update_competence_personnel = _competences_service.update_assignment
 from core.services.medical_service import (
     create_visite, update_visite,
     create_accident, update_accident,
@@ -1091,7 +1094,8 @@ class AjouterDocumentDialog(EmacFormDialog):
 
     def _charger_categories(self):
         """Charge les catégories de documents."""
-        from core.services.contrat_service import get_contract_types
+        from core.services.contrat_service_crud import ContratServiceCRUD
+        get_contract_types = ContratServiceCRUD.get_contract_types
 
         self.categorie_combo.clear()
 

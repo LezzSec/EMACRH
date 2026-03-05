@@ -68,6 +68,7 @@ class AlertService:
         Returns:
             Liste d'alertes de type CONTRAT_EXPIRE (urgence CRITIQUE)
         """
+        logger.debug("get_contrats_expires: début de la requête")
         query = """
             SELECT c.id, c.personnel_id, c.type_contrat, c.date_debut, c.date_fin,
                    p.nom, p.prenom, p.matricule,
@@ -81,10 +82,19 @@ class AlertService:
             ORDER BY c.date_fin ASC
         """
 
-        rows = QueryExecutor.fetch_all(query, dictionary=True)
+        try:
+            rows = QueryExecutor.fetch_all(query, dictionary=True)
+        except Exception as e:
+            logger.exception(f"get_contrats_expires: erreur DB — {e}")
+            return []
 
         alerts = []
         for row in rows:
+            logger.debug(
+                f"  contrat expiré: {row['prenom']} {row['nom']} (matricule={row['matricule']}, "
+                f"type={row['type_contrat']}, date_fin={row['date_fin']}, "
+                f"jours_expires={row['jours_expires']})"
+            )
             alerts.append(Alert(
                 id=row['id'],
                 categorie="CONTRAT",
@@ -105,6 +115,11 @@ class AlertService:
                 }
             ))
 
+        if alerts:
+            logger.warning(f"get_contrats_expires: {len(alerts)} contrat(s) expiré(s) détecté(s)")
+        else:
+            logger.debug("get_contrats_expires: aucun contrat expiré")
+
         return alerts
 
     @staticmethod
@@ -120,6 +135,7 @@ class AlertService:
             Liste d'alertes CRITIQUE (<= 7j) ou AVERTISSEMENT (8-30j)
         """
         date_limite = date.today() + timedelta(days=jours)
+        logger.debug(f"get_contrats_expirant: horizon={jours}j, date_limite={date_limite}")
 
         query = """
             SELECT c.id, c.personnel_id, c.type_contrat, c.date_debut, c.date_fin,
@@ -134,9 +150,15 @@ class AlertService:
             ORDER BY c.date_fin ASC
         """
 
-        rows = QueryExecutor.fetch_all(query, (date_limite,), dictionary=True)
+        try:
+            rows = QueryExecutor.fetch_all(query, (date_limite,), dictionary=True)
+        except Exception as e:
+            logger.exception(f"get_contrats_expirant: erreur DB (jours={jours}) — {e}")
+            return []
 
         alerts = []
+        nb_critiques = 0
+        nb_avertissements = 0
         for row in rows:
             jours_restants = row['jours_restants']
 
@@ -144,10 +166,17 @@ class AlertService:
             if jours_restants <= 7:
                 urgence = "CRITIQUE"
                 type_alerte = TypeAlerte.CONTRAT_EXPIRE_7J
+                nb_critiques += 1
             else:
                 urgence = "AVERTISSEMENT"
                 type_alerte = TypeAlerte.CONTRAT_EXPIRE_30J
+                nb_avertissements += 1
 
+            logger.debug(
+                f"  contrat expirant: {row['prenom']} {row['nom']} (matricule={row['matricule']}, "
+                f"type={row['type_contrat']}, date_fin={row['date_fin']}, "
+                f"jours_restants={jours_restants}, urgence={urgence})"
+            )
             alerts.append(Alert(
                 id=row['id'],
                 categorie="CONTRAT",
@@ -168,6 +197,14 @@ class AlertService:
                 }
             ))
 
+        if alerts:
+            logger.info(
+                f"get_contrats_expirant({jours}j): {len(alerts)} alerte(s) — "
+                f"{nb_critiques} critique(s), {nb_avertissements} avertissement(s)"
+            )
+        else:
+            logger.debug(f"get_contrats_expirant({jours}j): aucun contrat expirant")
+
         return alerts
 
     @staticmethod
@@ -179,6 +216,7 @@ class AlertService:
         Returns:
             Liste d'alertes de type PERSONNEL_SANS_CONTRAT (urgence AVERTISSEMENT)
         """
+        logger.debug("get_personnel_sans_contrat: début de la requête")
         query = """
             SELECT
                 p.id,
@@ -197,10 +235,18 @@ class AlertService:
             ORDER BY p.nom, p.prenom;
         """
 
-        rows = QueryExecutor.fetch_all(query, dictionary=True)
+        try:
+            rows = QueryExecutor.fetch_all(query, dictionary=True)
+        except Exception as e:
+            logger.exception(f"get_personnel_sans_contrat: erreur DB — {e}")
+            return []
 
         alerts = []
         for row in rows:
+            logger.debug(
+                f"  sans contrat: {row['prenom']} {row['nom']} "
+                f"(matricule={row['matricule']}, date_entree={row['date_entree']})"
+            )
             alerts.append(Alert(
                 id=row['id'],
                 categorie="PERSONNEL",
@@ -220,6 +266,11 @@ class AlertService:
                 }
             ))
 
+        if alerts:
+            logger.info(f"get_personnel_sans_contrat: {len(alerts)} personnel(s) sans contrat actif")
+        else:
+            logger.debug("get_personnel_sans_contrat: tout le personnel actif a un contrat")
+
         return alerts
 
     # ===========================
@@ -235,6 +286,7 @@ class AlertService:
         Returns:
             Liste d'alertes de type PERSONNEL_SANS_COMPETENCES (urgence INFO)
         """
+        logger.debug("get_personnel_sans_competences: début de la requête")
         query = """
             SELECT p.id, p.nom, p.prenom, p.matricule, pi.date_entree
             FROM personnel p
@@ -245,10 +297,18 @@ class AlertService:
             ORDER BY pi.date_entree DESC, p.nom
         """
 
-        rows = QueryExecutor.fetch_all(query, dictionary=True)
+        try:
+            rows = QueryExecutor.fetch_all(query, dictionary=True)
+        except Exception as e:
+            logger.exception(f"get_personnel_sans_competences: erreur DB — {e}")
+            return []
 
         alerts = []
         for row in rows:
+            logger.debug(
+                f"  sans compétences: {row['prenom']} {row['nom']} "
+                f"(matricule={row['matricule']}, date_entree={row['date_entree']})"
+            )
             alerts.append(Alert(
                 id=row['id'],
                 categorie="PERSONNEL",
@@ -268,6 +328,11 @@ class AlertService:
                 }
             ))
 
+        if alerts:
+            logger.info(f"get_personnel_sans_competences: {len(alerts)} personnel(s) sans polyvalence")
+        else:
+            logger.debug("get_personnel_sans_competences: tout le personnel actif a des compétences")
+
         return alerts
 
     @staticmethod
@@ -283,6 +348,7 @@ class AlertService:
             Liste d'alertes de type PERSONNEL_NOUVEAU_SANS_AFFECTATION (urgence INFO)
         """
         date_limite = date.today() - timedelta(days=jours)
+        logger.debug(f"get_nouveaux_sans_affectation: fenêtre={jours}j, depuis={date_limite}")
 
         query = """
             SELECT p.id, p.nom, p.prenom, p.matricule, pi.date_entree,
@@ -297,10 +363,19 @@ class AlertService:
             ORDER BY pi.date_entree DESC
         """
 
-        rows = QueryExecutor.fetch_all(query, (date_limite,), dictionary=True)
+        try:
+            rows = QueryExecutor.fetch_all(query, (date_limite,), dictionary=True)
+        except Exception as e:
+            logger.exception(f"get_nouveaux_sans_affectation: erreur DB (jours={jours}) — {e}")
+            return []
 
         alerts = []
         for row in rows:
+            logger.debug(
+                f"  nouveau sans affectation: {row['prenom']} {row['nom']} "
+                f"(matricule={row['matricule']}, date_entree={row['date_entree']}, "
+                f"jours_depuis_entree={row['jours_depuis_entree']})"
+            )
             alerts.append(Alert(
                 id=row['id'],
                 categorie="PERSONNEL",
@@ -321,6 +396,13 @@ class AlertService:
                 }
             ))
 
+        if alerts:
+            logger.info(
+                f"get_nouveaux_sans_affectation({jours}j): {len(alerts)} nouveau(x) sans compétences"
+            )
+        else:
+            logger.debug(f"get_nouveaux_sans_affectation({jours}j): aucun nouveau sans affectation")
+
         return alerts
 
     # ===========================
@@ -338,20 +420,31 @@ class AlertService:
         Returns:
             Liste combinée d'alertes triées par urgence puis par jours restants
         """
+        logger.debug(f"get_all_contract_alerts: agrégation (filtre type_contrat={type_contrat!r})")
         alerts = []
 
         # Contrats expirés
-        alerts.extend(AlertService.get_contrats_expires())
+        expires = AlertService.get_contrats_expires()
+        alerts.extend(expires)
 
         # Contrats expirant dans 30 jours
-        alerts.extend(AlertService.get_contrats_expirant(30))
+        expirant = AlertService.get_contrats_expirant(30)
+        alerts.extend(expirant)
 
         # Personnel sans contrat (catégorisé ici car lié aux contrats)
-        alerts.extend(AlertService.get_personnel_sans_contrat())
+        sans_contrat = AlertService.get_personnel_sans_contrat()
+        alerts.extend(sans_contrat)
+
+        logger.debug(
+            f"get_all_contract_alerts: brut — {len(expires)} expirés, "
+            f"{len(expirant)} expirant, {len(sans_contrat)} sans contrat"
+        )
 
         # Filtrer par type si demandé
         if type_contrat:
+            avant = len(alerts)
             alerts = [a for a in alerts if a.data.get('type_contrat') == type_contrat or a.type_alerte == TypeAlerte.PERSONNEL_SANS_CONTRAT]
+            logger.debug(f"get_all_contract_alerts: filtre '{type_contrat}' — {avant} → {len(alerts)} alertes")
 
         # Trier par urgence puis par jours restants
         def sort_key(alert):
@@ -359,7 +452,9 @@ class AlertService:
             jours = alert.jours_restants if alert.jours_restants is not None else 9999
             return (urgence_order, jours)
 
-        return sorted(alerts, key=sort_key)
+        result = sorted(alerts, key=sort_key)
+        logger.info(f"get_all_contract_alerts: {len(result)} alerte(s) contrat au total")
+        return result
 
     @staticmethod
     def get_all_personnel_alerts() -> List[Alert]:
@@ -369,28 +464,40 @@ class AlertService:
         Returns:
             Liste combinée d'alertes triées par urgence
         """
+        logger.debug("get_all_personnel_alerts: agrégation")
         alerts = []
 
         # Personnel sans contrat
-        alerts.extend(AlertService.get_personnel_sans_contrat())
-
-        # Personnel sans compétences
-        alerts.extend(AlertService.get_personnel_sans_competences())
+        sans_contrat = AlertService.get_personnel_sans_contrat()
+        alerts.extend(sans_contrat)
 
         # Nouveaux sans affectation (30 jours)
-        alerts.extend(AlertService.get_nouveaux_sans_affectation(30))
+        nouveaux = AlertService.get_nouveaux_sans_affectation(30)
+        alerts.extend(nouveaux)
+
+        logger.debug(
+            f"get_all_personnel_alerts: brut — {len(sans_contrat)} sans contrat, "
+            f"{len(nouveaux)} nouveaux sans affectation"
+        )
 
         # Dédupliquer (un personnel peut être dans plusieurs listes)
         seen_ids = {}
         unique_alerts = []
+        doublons = 0
         for alert in alerts:
             key = (alert.personnel_id, alert.type_alerte)
             if key not in seen_ids:
                 seen_ids[key] = True
                 unique_alerts.append(alert)
+            else:
+                doublons += 1
 
-        # Trier par urgence
-        return sorted(unique_alerts, key=lambda a: a.urgence_ordre)
+        if doublons:
+            logger.debug(f"get_all_personnel_alerts: {doublons} doublon(s) supprimé(s)")
+
+        result = sorted(unique_alerts, key=lambda a: a.urgence_ordre)
+        logger.info(f"get_all_personnel_alerts: {len(result)} alerte(s) personnel au total")
+        return result
 
     # ===========================
     # Statistiques
@@ -405,6 +512,7 @@ class AlertService:
         Returns:
             Dict avec clés 'contrats', 'personnel', 'total'
         """
+        logger.debug("get_statistics: calcul des statistiques d'alertes")
         stats = {
             'contrats': StatistiquesAlertes(),
             'personnel': StatistiquesAlertes(),
@@ -432,6 +540,13 @@ class AlertService:
         stats['total'].avertissements = stats['contrats'].avertissements + stats['personnel'].avertissements
         stats['total'].infos = stats['contrats'].infos + stats['personnel'].infos
 
+        logger.info(
+            f"get_statistics: total={stats['total'].total} — "
+            f"critiques={stats['total'].critiques}, "
+            f"avertissements={stats['total'].avertissements}, "
+            f"infos={stats['total'].infos} | "
+            f"contrats={stats['contrats'].total}, personnel={stats['personnel'].total}"
+        )
         return stats
 
     @staticmethod
@@ -442,45 +557,118 @@ class AlertService:
         Returns:
             Dict avec 'critiques', 'avertissements', 'infos'
         """
+        logger.debug("get_quick_counts: calcul rapide des comptages")
         counts = {'critiques': 0, 'avertissements': 0, 'infos': 0}
 
-        # Contrats expirés (CRITIQUE)
-        counts['critiques'] += QueryExecutor.fetch_scalar("""
-            SELECT COUNT(*) FROM contrat c
-            JOIN personnel p ON c.personnel_id = p.id
-            WHERE c.actif = 1 AND c.date_fin < CURDATE() AND p.statut = 'ACTIF'
-        """, default=0)
+        try:
+            # Contrats expirés (CRITIQUE)
+            n = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM contrat c
+                JOIN personnel p ON c.personnel_id = p.id
+                WHERE c.actif = 1 AND c.date_fin < CURDATE() AND p.statut = 'ACTIF'
+            """, default=0)
+            logger.debug(f"  contrats expirés (CRITIQUE): {n}")
+            counts['critiques'] += n
 
-        # Contrats expirant < 7j (CRITIQUE)
-        counts['critiques'] += QueryExecutor.fetch_scalar("""
-            SELECT COUNT(*) FROM contrat c
-            JOIN personnel p ON c.personnel_id = p.id
-            WHERE c.actif = 1
-              AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
-              AND p.statut = 'ACTIF'
-        """, default=0)
+            # Contrats expirant < 7j (CRITIQUE)
+            n = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM contrat c
+                JOIN personnel p ON c.personnel_id = p.id
+                WHERE c.actif = 1
+                  AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+                  AND p.statut = 'ACTIF'
+            """, default=0)
+            logger.debug(f"  contrats expirant ≤7j (CRITIQUE): {n}")
+            counts['critiques'] += n
 
-        # Contrats expirant 8-30j (AVERTISSEMENT)
-        counts['avertissements'] += QueryExecutor.fetch_scalar("""
-            SELECT COUNT(*) FROM contrat c
-            JOIN personnel p ON c.personnel_id = p.id
-            WHERE c.actif = 1
-              AND c.date_fin BETWEEN DATE_ADD(CURDATE(), INTERVAL 8 DAY) AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-              AND p.statut = 'ACTIF'
-        """, default=0)
+            # Contrats expirant 8-30j (AVERTISSEMENT)
+            n = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM contrat c
+                JOIN personnel p ON c.personnel_id = p.id
+                WHERE c.actif = 1
+                  AND c.date_fin BETWEEN DATE_ADD(CURDATE(), INTERVAL 8 DAY) AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                  AND p.statut = 'ACTIF'
+            """, default=0)
+            logger.debug(f"  contrats expirant 8-30j (AVERTISSEMENT): {n}")
+            counts['avertissements'] += n
 
-        # Personnel sans contrat (AVERTISSEMENT)
-        counts['avertissements'] += QueryExecutor.fetch_scalar("""
-            SELECT COUNT(*) FROM personnel p
-            LEFT JOIN contrat c ON c.personnel_id = p.id AND c.actif = 1
-            WHERE p.statut = 'ACTIF' AND c.id IS NULL
-        """, default=0)
+            # Personnel sans contrat (AVERTISSEMENT)
+            n = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM personnel p
+                LEFT JOIN contrat c ON c.personnel_id = p.id AND c.actif = 1
+                WHERE p.statut = 'ACTIF' AND c.id IS NULL
+            """, default=0)
+            logger.debug(f"  personnel sans contrat (AVERTISSEMENT): {n}")
+            counts['avertissements'] += n
 
-        # Personnel sans compétences (INFO)
-        counts['infos'] += QueryExecutor.fetch_scalar("""
-            SELECT COUNT(*) FROM personnel p
-            LEFT JOIN polyvalence poly ON poly.operateur_id = p.id
-            WHERE p.statut = 'ACTIF' AND poly.id IS NULL
-        """, default=0)
+        except Exception as e:
+            logger.exception(f"get_quick_counts: erreur DB — {e}")
 
+        logger.info(
+            f"get_quick_counts: critiques={counts['critiques']}, "
+            f"avertissements={counts['avertissements']}, infos={counts['infos']}"
+        )
         return counts
+
+    @staticmethod
+    def get_startup_summary() -> Dict[str, int]:
+        """
+        Résumé détaillé par catégorie pour le popup de démarrage.
+
+        Returns:
+            Dict avec 'evaluations_retard', 'contrats_expires', 'contrats_expirant',
+            'personnel_sans_contrat', 'total_critique', 'total_avertissement'
+        """
+        logger.debug("get_startup_summary: calcul du résumé de démarrage")
+        result = {}
+
+        try:
+            # Évaluations en retard (CRITIQUE)
+            result['evaluations_retard'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM polyvalence poly
+                JOIN personnel p ON p.id = poly.operateur_id
+                WHERE poly.prochaine_evaluation < CURDATE() AND p.statut = 'ACTIF'
+            """, default=0)
+
+            # Contrats expirés (CRITIQUE)
+            result['contrats_expires'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM contrat c
+                JOIN personnel p ON c.personnel_id = p.id
+                WHERE c.actif = 1 AND c.date_fin < CURDATE() AND p.statut = 'ACTIF'
+            """, default=0)
+
+            # Contrats expirant dans 30j (AVERTISSEMENT)
+            result['contrats_expirant'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM contrat c
+                JOIN personnel p ON c.personnel_id = p.id
+                WHERE c.actif = 1
+                  AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                  AND p.statut = 'ACTIF'
+            """, default=0)
+
+            # Personnel sans contrat actif (AVERTISSEMENT)
+            result['personnel_sans_contrat'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM personnel p
+                LEFT JOIN contrat c ON c.personnel_id = p.id AND c.actif = 1
+                WHERE p.statut = 'ACTIF' AND c.id IS NULL
+            """, default=0)
+
+        except Exception as e:
+            logger.exception(f"get_startup_summary: erreur DB — {e}")
+            result.setdefault('evaluations_retard', 0)
+            result.setdefault('contrats_expires', 0)
+            result.setdefault('contrats_expirant', 0)
+            result.setdefault('personnel_sans_contrat', 0)
+
+        result['total_critique'] = result['evaluations_retard'] + result['contrats_expires']
+        result['total_avertissement'] = result['contrats_expirant'] + result['personnel_sans_contrat']
+
+        logger.info(
+            f"get_startup_summary: éval_retard={result['evaluations_retard']}, "
+            f"contrats_expirés={result['contrats_expires']}, "
+            f"contrats_expirant={result['contrats_expirant']}, "
+            f"sans_contrat={result['personnel_sans_contrat']} | "
+            f"total_critique={result['total_critique']}, "
+            f"total_avertissement={result['total_avertissement']}"
+        )
+        return result

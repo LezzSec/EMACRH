@@ -800,7 +800,8 @@ class GestionAlertesRHDialog(QDialog):
     # ------- Actions -------
 
     def _on_view_alert(self, alert: Alert):
-        if alert.categorie == "CONTRAT":
+        # Les alertes "sans contrat" doivent ouvrir la gestion RH (contrats), pas les détails polyvalence
+        if alert.categorie == "CONTRAT" or alert.type_alerte == "PERSONNEL_SANS_CONTRAT":
             self._on_view_contract_detail(alert)
         else:
             self._on_view_personnel_detail(alert)
@@ -809,9 +810,12 @@ class GestionAlertesRHDialog(QDialog):
         pid = alert.personnel_id
         if pid:
             from core.gui.gestion_rh import GestionRHDialog
+            from core.services.rh_service_refactored import DomaineRH
             dialog = GestionRHDialog(parent=self)
             dialog.data_changed.connect(self._on_sub_dialog_changed)
             dialog._selectionner_operateur_par_id(pid)
+            # Naviguer directement vers l'onglet Contrats
+            dialog._on_domaine_change(DomaineRH.CONTRAT.value)
             dialog.exec_()
 
     def _on_view_personnel_detail(self, alert: Alert):

@@ -16,7 +16,7 @@ from PyQt5.QtGui import QFont, QColor
 
 from datetime import datetime, date
 
-from core.services import formation_service
+from core.services.formation_service_crud import FormationServiceCRUD as formation_service
 from core.services.document_service import DocumentService as _DocumentService
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.utils.logging_config import get_logger

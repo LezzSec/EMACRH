@@ -1,57 +1,217 @@
 # -*- coding: utf-8 -*-
 """
-FormationService - Service métier CRUD pour la gestion des formations.
+FormationServiceCRUD - Service métier unifié pour la gestion des formations.
 
-Ce service encapsule toutes les opérations CRUD sur la table formation
-avec logging automatique dans l'historique.
-
-Note: Ce service coexiste avec l'ancien formation_service.py.
-Pour nouveaux développements, utiliser FormationServiceCRUD.
+Fusion de formation_service.py (requêtes enrichies + stats)
+et formation_service_crud.py (CRUD générique CRUDService).
 
 Usage:
     from core.services.formation_service_crud import FormationServiceCRUD
 
-    # Créer une nouvelle formation
+    # Créer une formation
     success, msg, new_id = FormationServiceCRUD.create(
-        operateur_id=1,
-        intitule="Formation Python",
-        organisme="AFPA",
-        date_debut=date.today(),
-        date_fin=date.today() + timedelta(days=5),
-        statut='Planifiée'
+        operateur_id=1, intitule="Formation Python", organisme="AFPA",
+        date_debut=date.today(), statut='Planifiée'
     )
 
-    # Mettre à jour le statut
-    FormationServiceCRUD.update(record_id=10, statut='Terminée', certificat_obtenu=True)
-
-    # Récupérer toutes les formations d'un opérateur
-    formations = FormationServiceCRUD.get_by_operateur(operateur_id=1)
+    # Getters enrichis (JOIN personnel + documents)
+    formation = FormationServiceCRUD.get_formation_by_id(10)
+    toutes = FormationServiceCRUD.get_all_formations(statut='Planifiée')
+    stats = FormationServiceCRUD.get_formations_stats()
 """
 
-from typing import Dict, List, Optional, Tuple
-from datetime import date
+from datetime import date, datetime
+from typing import Any, Dict, List, Optional, Tuple
+
+from core.db.query_executor import QueryExecutor
 from core.services.crud_service import CRUDService
+from core.services.permission_manager import require
+from core.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class FormationServiceCRUD(CRUDService):
-    """Service métier CRUD pour la table formation."""
+    """Service métier CRUD unifié pour la table formation."""
 
     TABLE_NAME = "formation"
     ACTION_PREFIX = "FORMATION_"
 
-    # Champs autorisés pour les mises à jour (sécurité)
     ALLOWED_FIELDS = [
-        'operateur_id',
-        'intitule',
-        'organisme',
-        'date_debut',
-        'date_fin',
-        'duree_heures',
-        'statut',
-        'certificat_obtenu',
-        'cout',
-        'commentaire'
+        'operateur_id', 'intitule', 'organisme', 'date_debut', 'date_fin',
+        'duree_heures', 'statut', 'certificat_obtenu', 'cout', 'commentaire',
+        'document_id',
     ]
+
+    # ========================= QUERIES ENRICHIES (JOIN) =========================
+
+    @classmethod
+    def get_all_formations(
+        cls, statut: str = None, operateur_id: int = None
+    ) -> List[Dict]:
+        """
+        Récupère toutes les formations avec JOINs personnel + documents.
+
+        Args:
+            statut: Filtrer par statut ('Planifiée', 'En cours', 'Terminée', 'Annulée')
+            operateur_id: Filtrer par opérateur
+        """
+        try:
+            sql = """
+                SELECT
+                    f.id, f.operateur_id, f.intitule, f.organisme,
+                    f.date_debut, f.date_fin, f.duree_heures, f.statut,
+                    f.certificat_obtenu, f.cout, f.commentaire, f.document_id,
+                    f.date_creation, f.date_modification,
+                    CONCAT(p.prenom, ' ', p.nom) as nom_complet,
+                    p.matricule,
+                    d.nom_fichier as attestation_nom
+                FROM formation f
+                JOIN personnel p ON f.operateur_id = p.id
+                LEFT JOIN documents d ON f.document_id = d.id
+                WHERE 1=1
+            """
+            params = []
+            if statut:
+                sql += " AND f.statut = %s"
+                params.append(statut)
+            if operateur_id:
+                sql += " AND f.operateur_id = %s"
+                params.append(operateur_id)
+            sql += " ORDER BY f.date_debut DESC"
+
+            formations = QueryExecutor.fetch_all(sql, tuple(params), dictionary=True)
+            for f in formations:
+                if f.get('duree_heures') is not None:
+                    f['duree_heures'] = float(f['duree_heures'])
+                if f.get('cout') is not None:
+                    f['cout'] = float(f['cout'])
+            return formations
+        except Exception as e:
+            logger.error(f"Erreur get_all_formations: {e}")
+            return []
+
+    @classmethod
+    def get_formations_personnel(cls, operateur_id: int) -> List[Dict]:
+        """Alias de get_all_formations(operateur_id=...)."""
+        return cls.get_all_formations(operateur_id=operateur_id)
+
+    @classmethod
+    def get_formation_by_id(cls, formation_id: int) -> Optional[Dict]:
+        """Récupère une formation par ID avec JOINs personnel + documents."""
+        try:
+            formation = QueryExecutor.fetch_one("""
+                SELECT
+                    f.id, f.operateur_id, f.intitule, f.organisme,
+                    f.date_debut, f.date_fin, f.duree_heures, f.statut,
+                    f.certificat_obtenu, f.cout, f.commentaire, f.document_id,
+                    f.date_creation, f.date_modification,
+                    CONCAT(p.prenom, ' ', p.nom) as nom_complet,
+                    p.matricule,
+                    d.nom_fichier as attestation_nom
+                FROM formation f
+                JOIN personnel p ON f.operateur_id = p.id
+                LEFT JOIN documents d ON f.document_id = d.id
+                WHERE f.id = %s
+            """, (formation_id,), dictionary=True)
+            if formation:
+                if formation.get('duree_heures') is not None:
+                    formation['duree_heures'] = float(formation['duree_heures'])
+                if formation.get('cout') is not None:
+                    formation['cout'] = float(formation['cout'])
+            return formation
+        except Exception as e:
+            logger.error(f"Erreur get_formation_by_id {formation_id}: {e}")
+            return None
+
+    # ========================= CRUD MÉTIER =========================
+
+    @classmethod
+    def add_formation(
+        cls,
+        operateur_id: int,
+        intitule: str,
+        date_debut: date,
+        date_fin: date = None,
+        organisme: str = None,
+        duree_heures: float = None,
+        statut: str = "Planifiée",
+        certificat_obtenu: bool = False,
+        cout: float = None,
+        commentaire: str = None,
+    ) -> Tuple[bool, str, Optional[int]]:
+        """Ajoute une nouvelle formation (avec vérification permission)."""
+        require('rh.formations.edit')
+        return cls.create(
+            operateur_id=operateur_id,
+            intitule=intitule,
+            date_debut=date_debut,
+            date_fin=date_fin,
+            organisme=organisme,
+            duree_heures=duree_heures,
+            statut=statut,
+            certificat_obtenu=certificat_obtenu,
+            cout=cout,
+            commentaire=commentaire,
+        )
+
+    @classmethod
+    def update_formation(cls, formation_id: int, **kwargs) -> Tuple[bool, str]:
+        """Met à jour une formation (avec vérification permission + whitelist)."""
+        require('rh.formations.edit')
+        return cls.update(record_id=formation_id, **kwargs)
+
+    @classmethod
+    def delete_formation(cls, formation_id: int) -> Tuple[bool, str]:
+        """Supprime une formation (avec vérification permission)."""
+        require('rh.formations.delete')
+        return cls.delete(record_id=formation_id)
+
+    # ========================= STATISTIQUES =========================
+
+    @classmethod
+    def get_formations_stats(cls) -> Dict[str, Any]:
+        """Récupère les statistiques agrégées des formations."""
+        try:
+            stats = {}
+            stats['total'] = QueryExecutor.fetch_scalar(
+                "SELECT COUNT(*) FROM formation", default=0
+            )
+            rows = QueryExecutor.fetch_all("""
+                SELECT statut, COUNT(*) as count
+                FROM formation GROUP BY statut
+            """, dictionary=True)
+            stats['par_statut'] = {row['statut']: row['count'] for row in rows}
+            annee = datetime.now().year
+            stats['cette_annee'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM formation WHERE YEAR(date_debut) = %s
+            """, (annee,), default=0)
+            stats['terminees_cette_annee'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM formation
+                WHERE statut = 'Terminée' AND YEAR(date_fin) = %s
+            """, (annee,), default=0)
+            stats['en_cours'] = stats['par_statut'].get('En cours', 0)
+            stats['planifiees'] = stats['par_statut'].get('Planifiée', 0)
+            return stats
+        except Exception as e:
+            logger.error(f"Erreur get_formations_stats: {e}")
+            return {'total': 0, 'par_statut': {}, 'cette_annee': 0,
+                    'terminees_cette_annee': 0, 'en_cours': 0, 'planifiees': 0}
+
+    # ========================= HELPERS UI =========================
+
+    @classmethod
+    def get_personnel_list(cls) -> List[Dict]:
+        """Récupère la liste du personnel actif pour les combos UI."""
+        try:
+            return QueryExecutor.fetch_all("""
+                SELECT id, CONCAT(prenom, ' ', nom) as nom_complet, matricule
+                FROM personnel WHERE statut = 'ACTIF'
+                ORDER BY nom, prenom
+            """, dictionary=True)
+        except Exception as e:
+            logger.error(f"Erreur get_personnel_list: {e}")
+            return []
 
     @classmethod
     def get_by_operateur(

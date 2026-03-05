@@ -269,7 +269,7 @@ def mock_non_admin_session():
 # Liste des modules qui importent 'require' et doivent être mockés
 _MODULES_WITH_REQUIRE = [
     'core.services.permission_manager',
-    'core.services.contrat_service',
+    'core.services.contrat_service_crud',
     'core.services.absence_service',
     'core.services.evaluation_service',
     'core.services.rh_service',
