@@ -51,6 +51,7 @@ class DomaineRH(Enum):
     FORMATION = "formation"
     MEDICAL = "medical"
     VIE_SALARIE = "vie_salarie"
+    POLYVALENCE = "polyvalence"
 
 
 # Mapping catégories de documents → domaines RH
@@ -205,6 +206,8 @@ def get_donnees_domaine(
             return _get_donnees_medical(operateur_id)
         elif domaine == DomaineRH.VIE_SALARIE:
             return _get_donnees_vie_salarie(operateur_id)
+        elif domaine == DomaineRH.POLYVALENCE:
+            return _get_donnees_polyvalence(operateur_id)
         else:
             return {}
 
@@ -396,6 +399,19 @@ def _get_donnees_vie_salarie(operateur_id: int) -> Dict:
         return {}
 
 
+def _get_donnees_polyvalence(operateur_id: int) -> Dict:
+    """
+    Retourne les polyvalences d'un operateur avec les dossiers de formation associes.
+    """
+    try:
+        from core.services.polyvalence_docs_service import get_docs_pour_operateur
+        polyvalences = get_docs_pour_operateur(operateur_id)
+        return {'polyvalences': polyvalences}
+    except Exception as e:
+        logger.exception(f"Erreur _get_donnees_polyvalence: {e}")
+        return {'polyvalences': []}
+
+
 # ============================================================
 # 3. GESTION DES CONTRATS
 # ============================================================
@@ -413,12 +429,12 @@ def create_contrat(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[i
         if data.get('date_fin') and data['date_fin'] < data.get('date_debut'):
             return False, "La date de fin doit être postérieure à la date de début", None
 
-        # ✅ Utiliser ContratServiceCRUD.create()
-        # Logging automatique dans historique !
-        return ContratServiceCRUD.create(
-            operateur_id=operateur_id,
+        # ✅ Utiliser ContratServiceCRUD.create_contract()
+        # Gère la désactivation du contrat précédent + logging automatique
+        return ContratServiceCRUD.create_contract({
+            'personnel_id': operateur_id,
             **data
-        )
+        })
 
     except Exception as e:
         logger.exception(f"Erreur create_contrat: {e}")
@@ -1012,6 +1028,12 @@ def get_domaines_rh() -> List[Dict]:
             "nom": "Vie du salarié",
             "description": "Sanctions, contrôles, entretiens professionnels",
             "icone": "user-clock"
+        },
+        {
+            "code": DomaineRH.POLYVALENCE.value,
+            "nom": "Polyvalence",
+            "description": "Niveaux de polyvalence et dossiers de formation par poste",
+            "icone": "layer-group"
         },
     ]
 

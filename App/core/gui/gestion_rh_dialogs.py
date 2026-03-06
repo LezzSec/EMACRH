@@ -180,7 +180,7 @@ class EditInfosGeneralesDialog(EmacFormDialog):
         data = {
             'nom': self.nom.text().strip(),
             'prenom': self.prenom.text().strip(),
-            'matricule': self.matricule.text().strip() or None,
+            'matricule': self.matricule.text().strip() or self.donnees.get('matricule'),
             'sexe': self.sexe_combo.currentText() or None,
             'date_naissance': self.date_naissance.date().toPyDate() if self.date_naissance.date().year() > 1900 else None,
             'date_entree': self.date_entree.date().toPyDate() if self.date_entree.date().year() > 1900 else None,
@@ -1169,3 +1169,347 @@ class AjouterDocumentDialog(EmacFormDialog):
 
         if not success:
             raise Exception(message)
+
+
+# ============================================================
+# Dialog : Gestion des dossiers de formation (Polyvalence)
+# ============================================================
+
+class GestionDocsFormationDialog:
+    """
+    Dialog d'administration des dossiers de formation pour les niveaux de polyvalence.
+
+    Permet aux responsables de :
+    - Voir tous les postes et leurs documents de formation
+    - Ajouter un document (PDF, Word, etc.) pour un poste + niveau
+    - Supprimer un document
+    """
+
+    def __init__(self, parent=None):
+        from PyQt5.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSplitter,
+            QListWidget, QListWidgetItem, QTableWidget, QTableWidgetItem,
+            QHeaderView, QAbstractItemView, QWidget, QLineEdit
+        )
+        from PyQt5.QtCore import Qt
+
+        self._parent = parent
+        self._dialog = QDialog(parent)
+        self._dialog.setWindowTitle("Gestion des dossiers de formation – Polyvalence")
+        self._dialog.setMinimumSize(900, 600)
+        self._dialog.resize(1000, 650)
+
+        self._poste_selectionne = None
+
+        main_layout = QVBoxLayout(self._dialog)
+        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(16, 16, 16, 16)
+
+        titre = QLabel("Dossiers de formation de compétences – Niveaux de polyvalence")
+        titre.setStyleSheet("font-size: 16px; font-weight: bold; color: #1e293b;")
+        main_layout.addWidget(titre)
+
+        sous_titre = QLabel(
+            "Associez des documents (PDF, Word, etc.) à un poste et un niveau de polyvalence. "
+            "Ils seront lisibles par tous les utilisateurs depuis l'onglet Polyvalence."
+        )
+        sous_titre.setStyleSheet("color: #64748b; font-size: 12px;")
+        sous_titre.setWordWrap(True)
+        main_layout.addWidget(sous_titre)
+
+        splitter = QSplitter(Qt.Horizontal)
+        main_layout.addWidget(splitter, 1)
+
+        # Panneau gauche : liste des postes
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setSpacing(6)
+
+        lbl_postes = QLabel("Postes :")
+        lbl_postes.setStyleSheet("font-weight: bold;")
+        left_layout.addWidget(lbl_postes)
+
+        self._search_poste = QLineEdit()
+        self._search_poste.setPlaceholderText("Filtrer par code poste...")
+        self._search_poste.textChanged.connect(self._filtrer_postes)
+        left_layout.addWidget(self._search_poste)
+
+        self._list_postes = QListWidget()
+        self._list_postes.setMaximumWidth(220)
+        self._list_postes.currentRowChanged.connect(self._on_poste_change)
+        left_layout.addWidget(self._list_postes)
+
+        splitter.addWidget(left_panel)
+
+        # Panneau droit : tableau + ajout
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setContentsMargins(8, 0, 0, 0)
+        right_layout.setSpacing(8)
+
+        toolbar = QHBoxLayout()
+        self._lbl_poste_titre = QLabel("Sélectionnez un poste")
+        self._lbl_poste_titre.setStyleSheet("font-size: 14px; font-weight: bold;")
+        toolbar.addWidget(self._lbl_poste_titre)
+        toolbar.addStretch()
+
+        self._btn_ajouter = EmacButton("+ Ajouter un document", variant="primary")
+        self._btn_ajouter.setEnabled(False)
+        self._btn_ajouter.clicked.connect(self._ajouter_doc)
+        toolbar.addWidget(self._btn_ajouter)
+        right_layout.addLayout(toolbar)
+
+        self._table = QTableWidget()
+        self._table.setColumnCount(5)
+        self._table.setHorizontalHeaderLabels(["Nom", "Niveau", "Taille", "Ajouté par", "Actions"])
+        self._table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        for col in [1, 2, 3]:
+            self._table.horizontalHeader().setSectionResizeMode(col, QHeaderView.ResizeToContents)
+        self._table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self._table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self._table.setAlternatingRowColors(True)
+        right_layout.addWidget(self._table)
+
+        splitter.addWidget(right_panel)
+        splitter.setSizes([220, 680])
+
+        btn_fermer = EmacButton("Fermer", variant="ghost")
+        btn_fermer.clicked.connect(self._dialog.accept)
+        main_layout.addWidget(btn_fermer, alignment=Qt.AlignRight)
+
+        self._tous_postes = []
+        self._charger_postes()
+
+    def exec_(self):
+        return self._dialog.exec_()
+
+    def _charger_postes(self):
+        from core.services.polyvalence_docs_service import get_tous_les_postes_avec_docs
+        self._tous_postes = get_tous_les_postes_avec_docs()
+        self._remplir_liste_postes(self._tous_postes)
+
+    def _remplir_liste_postes(self, postes):
+        from PyQt5.QtWidgets import QListWidgetItem
+        self._list_postes.clear()
+        for p in postes:
+            nb = p.get('nb_documents', 0)
+            label = p['poste_code']
+            if p.get('atelier_nom'):
+                label = f"{p['atelier_nom']} / {label}"
+            if nb:
+                label += f"  ({nb})"
+            item = QListWidgetItem(label)
+            item.setData(32, p)  # Qt.UserRole = 32
+            self._list_postes.addItem(item)
+
+    def _filtrer_postes(self, texte):
+        texte = texte.lower()
+        filtered = [p for p in self._tous_postes if texte in p['poste_code'].lower()]
+        self._remplir_liste_postes(filtered)
+
+    def _on_poste_change(self, row):
+        if row < 0:
+            return
+        item = self._list_postes.item(row)
+        if not item:
+            return
+        self._poste_selectionne = item.data(32)
+        self._lbl_poste_titre.setText(f"Poste {self._poste_selectionne['poste_code']}")
+        self._btn_ajouter.setEnabled(True)
+        self._charger_docs_poste()
+
+    def _charger_docs_poste(self):
+        from PyQt5.QtWidgets import QTableWidgetItem, QWidget, QHBoxLayout
+        from core.services.polyvalence_docs_service import get_docs_pour_poste
+
+        if not self._poste_selectionne:
+            return
+
+        docs = get_docs_pour_poste(self._poste_selectionne['poste_id'])
+        self._table.setRowCount(len(docs))
+
+        NIVEAU_LABELS = {None: "Tous niveaux", 1: "Niv. 1", 2: "Niv. 2", 3: "Niv. 3", 4: "Niv. 4"}
+
+        for row_idx, doc in enumerate(docs):
+            nom = doc.get('nom_affichage', doc.get('nom_fichier', '?'))
+            self._table.setItem(row_idx, 0, QTableWidgetItem(nom))
+            self._table.setItem(row_idx, 1, QTableWidgetItem(
+                NIVEAU_LABELS.get(doc.get('niveau'), f"Niv. {doc['niveau']}")))
+            taille = doc.get('taille_octets')
+            self._table.setItem(row_idx, 2, QTableWidgetItem(
+                f"{taille // 1024} Ko" if taille else "-"))
+            self._table.setItem(row_idx, 3, QTableWidgetItem(doc.get('ajoute_par', '-')))
+
+            btn_widget = QWidget()
+            btn_layout = QHBoxLayout(btn_widget)
+            btn_layout.setContentsMargins(2, 2, 2, 2)
+            btn_layout.setSpacing(4)
+
+            btn_ouvrir = EmacButton("Ouvrir", variant="outline")
+            btn_ouvrir.setFixedHeight(26)
+            doc_id = doc['id']
+            btn_ouvrir.clicked.connect(lambda checked, did=doc_id: self._ouvrir_doc(did))
+            btn_layout.addWidget(btn_ouvrir)
+
+            btn_suppr = EmacButton("Suppr.", variant="ghost")
+            btn_suppr.setFixedHeight(26)
+            btn_suppr.clicked.connect(lambda checked, did=doc_id, n=nom: self._supprimer_doc(did, n))
+            btn_layout.addWidget(btn_suppr)
+
+            self._table.setCellWidget(row_idx, 4, btn_widget)
+
+    def _ajouter_doc(self):
+        if not self._poste_selectionne:
+            return
+        dialog = AjouterDocFormationDialog(self._poste_selectionne, self._dialog)
+        if dialog.exec_() == 1:
+            self._charger_docs_poste()
+            self._charger_postes()
+
+    def _ouvrir_doc(self, doc_id: int):
+        import os
+        from core.services.polyvalence_docs_service import extraire_vers_fichier_temp
+        temp_path = extraire_vers_fichier_temp(doc_id)
+        if temp_path and temp_path.exists():
+            if os.name == 'nt':
+                os.startfile(str(temp_path))
+            else:
+                import subprocess
+                subprocess.run(['xdg-open', str(temp_path)])
+        else:
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self._dialog, "Erreur", "Le fichier n'a pas pu être extrait.")
+
+    def _supprimer_doc(self, doc_id: int, nom: str):
+        from PyQt5.QtWidgets import QMessageBox
+        from core.services.polyvalence_docs_service import supprimer_document
+        reply = QMessageBox.question(
+            self._dialog,
+            "Confirmer la suppression",
+            f"Supprimer le document '{nom}' ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, message = supprimer_document(doc_id)
+            if success:
+                self._charger_docs_poste()
+                self._charger_postes()
+            else:
+                QMessageBox.critical(self._dialog, "Erreur", message)
+
+
+class AjouterDocFormationDialog:
+    """
+    Dialog pour ajouter un document de formation à un poste + niveau.
+    """
+
+    def __init__(self, poste_info: dict, parent=None):
+        from PyQt5.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+            QFormLayout, QComboBox, QTextEdit
+        )
+        from PyQt5.QtCore import Qt
+
+        self._poste_info = poste_info
+        self._fichier_path = None
+
+        self._dialog = QDialog(parent)
+        self._dialog.setWindowTitle(f"Ajouter un dossier – Poste {poste_info['poste_code']}")
+        self._dialog.setMinimumWidth(480)
+
+        layout = QVBoxLayout(self._dialog)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 16, 16, 16)
+
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        # Fichier
+        file_row = QHBoxLayout()
+        self._file_label = QLineEdit()
+        self._file_label.setReadOnly(True)
+        self._file_label.setPlaceholderText("Aucun fichier sélectionné...")
+        file_row.addWidget(self._file_label)
+        btn_parcourir = EmacButton("Parcourir...", variant="ghost")
+        btn_parcourir.clicked.connect(self._parcourir)
+        file_row.addWidget(btn_parcourir)
+        form.addRow("Fichier :", file_row)
+
+        self._nom_input = QLineEdit()
+        self._nom_input.setPlaceholderText("Titre du document (optionnel)")
+        form.addRow("Titre :", self._nom_input)
+
+        self._niveau_combo = QComboBox()
+        self._niveau_combo.addItem("Tous les niveaux", None)
+        self._niveau_combo.addItem("Niveau 1 – Apprentissage", 1)
+        self._niveau_combo.addItem("Niveau 2 – En cours", 2)
+        self._niveau_combo.addItem("Niveau 3 – Autonome", 3)
+        self._niveau_combo.addItem("Niveau 4 – Expert / Formateur", 4)
+        form.addRow("Niveau concerné :", self._niveau_combo)
+
+        self._desc_input = QTextEdit()
+        self._desc_input.setMaximumHeight(70)
+        self._desc_input.setPlaceholderText("Description ou contexte (optionnel)")
+        form.addRow("Description :", self._desc_input)
+
+        layout.addLayout(form)
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        btn_annuler = EmacButton("Annuler", variant="ghost")
+        btn_annuler.clicked.connect(self._dialog.reject)
+        btn_row.addWidget(btn_annuler)
+        btn_ok = EmacButton("Ajouter", variant="primary")
+        btn_ok.clicked.connect(self._valider)
+        btn_row.addWidget(btn_ok)
+        layout.addLayout(btn_row)
+
+    def exec_(self):
+        return self._dialog.exec_()
+
+    def _parcourir(self):
+        from PyQt5.QtWidgets import QFileDialog
+        from pathlib import Path
+        path, _ = QFileDialog.getOpenFileName(
+            self._dialog,
+            "Sélectionner un fichier",
+            "",
+            "Documents (*.pdf *.doc *.docx *.xls *.xlsx *.ppt *.pptx *.odt *.png *.jpg *.jpeg);;Tous les fichiers (*)"
+        )
+        if path:
+            self._fichier_path = path
+            self._file_label.setText(Path(path).name)
+            if not self._nom_input.text():
+                self._nom_input.setText(Path(path).stem.replace('_', ' ').replace('-', ' '))
+
+    def _valider(self):
+        from PyQt5.QtWidgets import QMessageBox
+        from core.services.polyvalence_docs_service import ajouter_document
+        from core.services.auth_service import get_current_user
+
+        if not self._fichier_path:
+            QMessageBox.warning(self._dialog, "Fichier manquant", "Veuillez sélectionner un fichier.")
+            return
+
+        nom = self._nom_input.text().strip() or None
+        niveau = self._niveau_combo.currentData()
+        description = self._desc_input.toPlainText().strip() or None
+
+        user = get_current_user()
+        ajoute_par = user.get('nom_complet', 'Utilisateur') if user else 'Utilisateur'
+
+        success, message, _ = ajouter_document(
+            poste_id=self._poste_info['poste_id'],
+            nom_affichage=nom,
+            fichier_source=self._fichier_path,
+            niveau=niveau,
+            description=description,
+            ajoute_par=ajoute_par
+        )
+
+        if success:
+            self._dialog.accept()
+        else:
+            QMessageBox.critical(self._dialog, "Erreur", message)

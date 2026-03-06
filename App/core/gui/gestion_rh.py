@@ -649,6 +649,8 @@ class GestionRHDialog(QDialog):
             return self._creer_resume_medical(donnees)
         elif self.domaine_actif == DomaineRH.VIE_SALARIE:
             return self._creer_resume_vie_salarie(donnees)
+        elif self.domaine_actif == DomaineRH.POLYVALENCE:
+            return self._creer_resume_polyvalence(donnees)
         return None
 
     def _creer_resume_general(self, donnees: dict) -> QWidget:
@@ -1713,6 +1715,149 @@ class GestionRHDialog(QDialog):
 
         return container
 
+    def _creer_resume_polyvalence(self, donnees: dict) -> QWidget:
+        """Crée la section polyvalence : niveaux par poste + dossiers de formation."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        polyvalences = donnees.get('polyvalences', [])
+
+        if not polyvalences:
+            card_empty = EmacCard("Polyvalence")
+            card_empty.body.addWidget(QLabel("Aucune polyvalence enregistrée pour cet opérateur."))
+            layout.addWidget(card_empty)
+            return container
+
+        # Bouton admin : gérer les dossiers de formation (responsables seulement)
+        if can("production.grilles.export") or can("admin.permissions"):
+            btn_admin = EmacButton("Gérer les dossiers de formation", variant="ghost")
+            btn_admin.clicked.connect(self._ouvrir_gestion_docs_formation)
+            layout.addWidget(btn_admin, alignment=Qt.AlignRight)
+
+        NIVEAU_LABELS = {
+            1: "Niv.1 - Apprentissage",
+            2: "Niv.2 - En cours",
+            3: "Niv.3 - Autonome",
+            4: "Niv.4 - Expert/Formateur",
+        }
+        NIVEAU_COLORS = {1: "#ef4444", 2: "#f97316", 3: "#3b82f6", 4: "#22c55e"}
+
+        # Grouper par atelier
+        ateliers = {}
+        for poly in polyvalences:
+            atelier = poly.get('atelier_nom') or 'Sans atelier'
+            ateliers.setdefault(atelier, []).append(poly)
+
+        for atelier_nom, postes in ateliers.items():
+            card = EmacCard(atelier_nom)
+
+            for poly in postes:
+                poste_code = poly.get('poste_code', '?')
+                niveau = poly.get('niveau')
+                docs = poly.get('documents', [])
+
+                # Ligne principale : poste + niveau + prochaine évaluation
+                poste_row = QHBoxLayout()
+                poste_row.setSpacing(8)
+
+                badge_poste = QLabel(f"<b>{poste_code}</b>")
+                badge_poste.setStyleSheet("font-size: 14px; min-width: 60px;")
+                poste_row.addWidget(badge_poste)
+
+                niveau_label = NIVEAU_LABELS.get(niveau, f"Niveau {niveau}") if niveau else "Niveau non défini"
+                color = NIVEAU_COLORS.get(niveau, "#6b7280")
+                badge_niv = QLabel(niveau_label)
+                badge_niv.setStyleSheet(
+                    f"background: {color}20; color: {color}; border: 1px solid {color}60;"
+                    " border-radius: 4px; padding: 2px 8px; font-size: 12px;"
+                )
+                poste_row.addWidget(badge_niv)
+
+                prochaine = poly.get('prochaine_evaluation')
+                if prochaine:
+                    lbl_date = QLabel(f"  Prochaine éval : {self._format_date(prochaine)}")
+                    lbl_date.setStyleSheet("color: #6b7280; font-size: 11px;")
+                    poste_row.addWidget(lbl_date)
+
+                poste_row.addStretch()
+                card.body.addLayout(poste_row)
+
+                # Dossiers de formation pour ce poste + niveau
+                if docs:
+                    docs_container = QWidget()
+                    docs_container.setStyleSheet(
+                        "background: #f8fafc; border-left: 3px solid #cbd5e1;"
+                        " border-radius: 4px; margin-left: 8px;"
+                    )
+                    docs_layout = QVBoxLayout(docs_container)
+                    docs_layout.setContentsMargins(10, 4, 8, 4)
+                    docs_layout.setSpacing(3)
+
+                    titre_docs = QLabel("Dossiers de formation :")
+                    titre_docs.setStyleSheet("color: #475569; font-size: 11px; font-style: italic;")
+                    docs_layout.addWidget(titre_docs)
+
+                    for doc in docs:
+                        doc_row = QHBoxLayout()
+                        doc_row.setSpacing(6)
+
+                        doc_nom = QLabel(f"📄 {doc.get('nom_affichage', doc.get('nom_fichier', '?'))}")
+                        doc_nom.setStyleSheet("font-size: 12px;")
+                        if doc.get('description'):
+                            doc_nom.setToolTip(doc['description'])
+                        doc_row.addWidget(doc_nom)
+                        doc_row.addStretch()
+
+                        btn_lire = EmacButton("Lire", variant="outline")
+                        btn_lire.setFixedHeight(24)
+                        btn_lire.setFixedWidth(55)
+                        doc_id = doc['id']
+                        btn_lire.clicked.connect(
+                            lambda checked, did=doc_id: self._ouvrir_doc_formation(did)
+                        )
+                        doc_row.addWidget(btn_lire)
+                        docs_layout.addLayout(doc_row)
+
+                    card.body.addWidget(docs_container)
+                else:
+                    lbl_no_doc = QLabel("     Aucun dossier de formation joint pour ce niveau")
+                    lbl_no_doc.setStyleSheet("color: #9ca3af; font-size: 11px; font-style: italic;")
+                    card.body.addWidget(lbl_no_doc)
+
+                sep = QFrame()
+                sep.setFrameShape(QFrame.HLine)
+                sep.setStyleSheet("background: #e2e8f0; margin: 4px 0;")
+                card.body.addWidget(sep)
+
+            layout.addWidget(card)
+
+        return container
+
+    def _ouvrir_doc_formation(self, doc_id: int):
+        """Ouvre un dossier de formation polyvalence."""
+        import os
+        from core.services.polyvalence_docs_service import extraire_vers_fichier_temp
+        temp_path = extraire_vers_fichier_temp(doc_id)
+        if temp_path and temp_path.exists():
+            if os.name == 'nt':
+                os.startfile(str(temp_path))
+            else:
+                import subprocess
+                subprocess.run(['xdg-open', str(temp_path)])
+        else:
+            QMessageBox.warning(self, "Fichier introuvable",
+                                "Le dossier de formation n'a pas pu être ouvert.")
+
+    def _ouvrir_gestion_docs_formation(self):
+        """Ouvre le dialog d'administration des dossiers de formation."""
+        from core.gui.gestion_rh_dialogs import GestionDocsFormationDialog
+        dialog = GestionDocsFormationDialog(self)
+        dialog.exec_()
+        if self.domaine_actif == DomaineRH.POLYVALENCE:
+            self._charger_contenu_domaine()
+
     def _format_datetime(self, dt) -> str:
         """Formate une datetime pour affichage."""
         if not dt:
@@ -2262,7 +2407,7 @@ class GestionRHDialog(QDialog):
         if dialog.exec_() == QDialog.Accepted:
             # Rafraîchir l'affichage si un opérateur est sélectionné
             if self.operateur_selectionne:
-                self._charger_domaine(self.domaine_actif)
+                self._charger_contenu_domaine()
 
     # =========================================================================
     # UTILITAIRES
@@ -2896,6 +3041,8 @@ class GestionRHWidget(QWidget):
             return self._creer_resume_medical(donnees)
         elif self.domaine_actif == DomaineRH.VIE_SALARIE:
             return self._creer_resume_vie_salarie(donnees)
+        elif self.domaine_actif == DomaineRH.POLYVALENCE:
+            return self._creer_resume_polyvalence(donnees)
         return None
 
     def _creer_resume_general(self, donnees: dict) -> QWidget:
@@ -3959,6 +4106,149 @@ class GestionRHWidget(QWidget):
         layout.addWidget(card_entretiens)
 
         return container
+
+    def _creer_resume_polyvalence(self, donnees: dict) -> QWidget:
+        """Crée la section polyvalence : niveaux par poste + dossiers de formation."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        polyvalences = donnees.get('polyvalences', [])
+
+        if not polyvalences:
+            card_empty = EmacCard("Polyvalence")
+            card_empty.body.addWidget(QLabel("Aucune polyvalence enregistrée pour cet opérateur."))
+            layout.addWidget(card_empty)
+            return container
+
+        # Bouton admin : gérer les dossiers de formation (responsables seulement)
+        if can("production.grilles.export") or can("admin.permissions"):
+            btn_admin = EmacButton("Gérer les dossiers de formation", variant="ghost")
+            btn_admin.clicked.connect(self._ouvrir_gestion_docs_formation)
+            layout.addWidget(btn_admin, alignment=Qt.AlignRight)
+
+        NIVEAU_LABELS = {
+            1: "Niv.1 - Apprentissage",
+            2: "Niv.2 - En cours",
+            3: "Niv.3 - Autonome",
+            4: "Niv.4 - Expert/Formateur",
+        }
+        NIVEAU_COLORS = {1: "#ef4444", 2: "#f97316", 3: "#3b82f6", 4: "#22c55e"}
+
+        # Grouper par atelier
+        ateliers = {}
+        for poly in polyvalences:
+            atelier = poly.get('atelier_nom') or 'Sans atelier'
+            ateliers.setdefault(atelier, []).append(poly)
+
+        for atelier_nom, postes in ateliers.items():
+            card = EmacCard(atelier_nom)
+
+            for poly in postes:
+                poste_code = poly.get('poste_code', '?')
+                niveau = poly.get('niveau')
+                docs = poly.get('documents', [])
+
+                # Ligne principale : poste + niveau + prochaine évaluation
+                poste_row = QHBoxLayout()
+                poste_row.setSpacing(8)
+
+                badge_poste = QLabel(f"<b>{poste_code}</b>")
+                badge_poste.setStyleSheet("font-size: 14px; min-width: 60px;")
+                poste_row.addWidget(badge_poste)
+
+                niveau_label = NIVEAU_LABELS.get(niveau, f"Niveau {niveau}") if niveau else "Niveau non défini"
+                color = NIVEAU_COLORS.get(niveau, "#6b7280")
+                badge_niv = QLabel(niveau_label)
+                badge_niv.setStyleSheet(
+                    f"background: {color}20; color: {color}; border: 1px solid {color}60;"
+                    " border-radius: 4px; padding: 2px 8px; font-size: 12px;"
+                )
+                poste_row.addWidget(badge_niv)
+
+                prochaine = poly.get('prochaine_evaluation')
+                if prochaine:
+                    lbl_date = QLabel(f"  Prochaine éval : {self._format_date(prochaine)}")
+                    lbl_date.setStyleSheet("color: #6b7280; font-size: 11px;")
+                    poste_row.addWidget(lbl_date)
+
+                poste_row.addStretch()
+                card.body.addLayout(poste_row)
+
+                # Dossiers de formation pour ce poste + niveau
+                if docs:
+                    docs_container = QWidget()
+                    docs_container.setStyleSheet(
+                        "background: #f8fafc; border-left: 3px solid #cbd5e1;"
+                        " border-radius: 4px; margin-left: 8px;"
+                    )
+                    docs_layout = QVBoxLayout(docs_container)
+                    docs_layout.setContentsMargins(10, 4, 8, 4)
+                    docs_layout.setSpacing(3)
+
+                    titre_docs = QLabel("Dossiers de formation :")
+                    titre_docs.setStyleSheet("color: #475569; font-size: 11px; font-style: italic;")
+                    docs_layout.addWidget(titre_docs)
+
+                    for doc in docs:
+                        doc_row = QHBoxLayout()
+                        doc_row.setSpacing(6)
+
+                        doc_nom = QLabel(f"📄 {doc.get('nom_affichage', doc.get('nom_fichier', '?'))}")
+                        doc_nom.setStyleSheet("font-size: 12px;")
+                        if doc.get('description'):
+                            doc_nom.setToolTip(doc['description'])
+                        doc_row.addWidget(doc_nom)
+                        doc_row.addStretch()
+
+                        btn_lire = EmacButton("Lire", variant="outline")
+                        btn_lire.setFixedHeight(24)
+                        btn_lire.setFixedWidth(55)
+                        doc_id = doc['id']
+                        btn_lire.clicked.connect(
+                            lambda checked, did=doc_id: self._ouvrir_doc_formation(did)
+                        )
+                        doc_row.addWidget(btn_lire)
+                        docs_layout.addLayout(doc_row)
+
+                    card.body.addWidget(docs_container)
+                else:
+                    lbl_no_doc = QLabel("     Aucun dossier de formation joint pour ce niveau")
+                    lbl_no_doc.setStyleSheet("color: #9ca3af; font-size: 11px; font-style: italic;")
+                    card.body.addWidget(lbl_no_doc)
+
+                sep = QFrame()
+                sep.setFrameShape(QFrame.HLine)
+                sep.setStyleSheet("background: #e2e8f0; margin: 4px 0;")
+                card.body.addWidget(sep)
+
+            layout.addWidget(card)
+
+        return container
+
+    def _ouvrir_doc_formation(self, doc_id: int):
+        """Ouvre un dossier de formation polyvalence."""
+        import os
+        from core.services.polyvalence_docs_service import extraire_vers_fichier_temp
+        temp_path = extraire_vers_fichier_temp(doc_id)
+        if temp_path and temp_path.exists():
+            if os.name == 'nt':
+                os.startfile(str(temp_path))
+            else:
+                import subprocess
+                subprocess.run(['xdg-open', str(temp_path)])
+        else:
+            QMessageBox.warning(self, "Fichier introuvable",
+                                "Le dossier de formation n'a pas pu être ouvert.")
+
+    def _ouvrir_gestion_docs_formation(self):
+        """Ouvre le dialog d'administration des dossiers de formation."""
+        from core.gui.gestion_rh_dialogs import GestionDocsFormationDialog
+        dialog = GestionDocsFormationDialog(self)
+        dialog.exec_()
+        if self.domaine_actif == DomaineRH.POLYVALENCE:
+            self._charger_contenu_domaine()
 
     def _format_datetime(self, dt) -> str:
         """Formate une datetime pour affichage."""

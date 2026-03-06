@@ -172,13 +172,14 @@ class CRUDService:
             # ✅ Si pas dans kwargs, essayer de le récupérer de la table
             if not operateur_id and cls.TABLE_NAME in ('contrat', 'formation', 'polyvalence'):
                 try:
+                    id_col = 'personnel_id' if cls.TABLE_NAME == 'contrat' else 'operateur_id'
                     result = QueryExecutor.fetch_one(
-                        f"SELECT operateur_id FROM {cls.TABLE_NAME} WHERE id = %s",
+                        f"SELECT {id_col} FROM {cls.TABLE_NAME} WHERE id = %s",
                         (record_id,),
                         dictionary=True
                     )
                     if result:
-                        operateur_id = result.get('operateur_id')
+                        operateur_id = result.get(id_col)
                 except:
                     pass  # Pas grave si ça échoue
 
@@ -234,13 +235,14 @@ class CRUDService:
             operateur_id = None
             if cls.TABLE_NAME in ('contrat', 'formation', 'polyvalence'):
                 try:
+                    id_col = 'personnel_id' if cls.TABLE_NAME == 'contrat' else 'operateur_id'
                     result = QueryExecutor.fetch_one(
-                        f"SELECT operateur_id FROM {cls.TABLE_NAME} WHERE id = %s",
+                        f"SELECT {id_col} FROM {cls.TABLE_NAME} WHERE id = %s",
                         (record_id,),
                         dictionary=True
                     )
                     if result:
-                        operateur_id = result.get('operateur_id')
+                        operateur_id = result.get(id_col)
                 except:
                     pass  # Pas grave si ça échoue
 

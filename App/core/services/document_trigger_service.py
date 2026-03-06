@@ -136,6 +136,11 @@ class DocumentTriggerService:
                     f"docs niveaux {new_niv+1}-4 supprimés de la queue"
                 )
 
+        # Pour les créations de personnel, ignorer si ce n'est pas de la production
+        if event.name == 'personnel.created' and not event.data.get('is_production', True):
+            logger.debug("DocumentTrigger: personnel non-production, documents ignorés")
+            return
+
         # Récupérer les templates correspondants (avec évaluation des conditions)
         templates = get_matching_templates(event.name, event.data)
 
