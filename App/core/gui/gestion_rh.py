@@ -726,7 +726,7 @@ class GestionRHDialog(QDialog):
         ]
 
         for i, (label, valeur) in enumerate(infos):
-            row, col = divmod(i, 2)
+            row, col = divmod(i, 3)
             lbl = QLabel(f"<b>{label}</b><br/>{valeur}")
             lbl.setStyleSheet("padding: 8px; background: #f9fafb; border-radius: 6px;")
             grid.addWidget(lbl, row, col)
@@ -3118,7 +3118,7 @@ class GestionRHWidget(QWidget):
         ]
 
         for i, (label, valeur) in enumerate(infos):
-            row, col = divmod(i, 2)
+            row, col = divmod(i, 3)
             lbl = QLabel(f"<b>{label}</b><br/>{valeur}")
             lbl.setStyleSheet("padding: 8px; background: #f9fafb; border-radius: 6px;")
             grid.addWidget(lbl, row, col)
