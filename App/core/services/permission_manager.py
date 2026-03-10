@@ -666,3 +666,52 @@ def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
     finally:
         cur.close()
         conn.close()
+
+
+# ===========================
+# Helpers utilitaires roles/utilisateurs
+# (migré depuis permission_service.py)
+# ===========================
+
+def get_all_roles() -> List[Dict]:
+    """Récupère tous les rôles avec leurs descriptions."""
+    try:
+        from core.db.configbd import DatabaseCursor
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute("SELECT id, nom, description FROM roles ORDER BY nom")
+            return cur.fetchall()
+    except Exception as e:
+        logger.error(f"Erreur get_all_roles: {e}")
+        return []
+
+
+def get_admin_role_id() -> Optional[int]:
+    """Retourne l'ID du rôle admin."""
+    try:
+        from core.db.configbd import DatabaseCursor
+        with DatabaseCursor() as cur:
+            cur.execute(
+                "SELECT id FROM roles WHERE LOWER(nom) IN ('admin', 'administrateur') LIMIT 1"
+            )
+            row = cur.fetchone()
+            return row[0] if row else None
+    except Exception as e:
+        logger.warning(f"Erreur get_admin_role_id: {e}")
+        return None
+
+
+def get_user_with_role(user_id: int) -> Optional[Dict]:
+    """Récupère un utilisateur avec son rôle."""
+    try:
+        from core.db.configbd import DatabaseCursor
+        with DatabaseCursor(dictionary=True) as cur:
+            cur.execute("""
+                SELECT u.id, u.username, u.nom, u.prenom, u.role_id, r.nom as role_nom
+                FROM utilisateurs u
+                JOIN roles r ON u.role_id = r.id
+                WHERE u.id = %s
+            """, (user_id,))
+            return cur.fetchone()
+    except Exception as e:
+        logger.error(f"Erreur get_user_with_role: {e}")
+        return None

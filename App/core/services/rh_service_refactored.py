@@ -282,11 +282,37 @@ def _get_donnees_general(operateur_id: int) -> Dict:
 
 
 def _get_donnees_contrat(operateur_id: int) -> Dict:
-    return {'contrats': ContratServiceCRUD.get_by_operateur(operateur_id, actif_only=False)}
+    from datetime import date as _date
+    contrats = ContratServiceCRUD.get_by_operateur(operateur_id, actif_only=False)
+
+    # La GUI attend 'contrat_actif' : le contrat actif le plus récent avec jours_restants
+    contrat_actif = None
+    for c in contrats:
+        if c.get('actif'):
+            if c.get('date_fin'):
+                delta = (c['date_fin'] - _date.today()).days
+                c['jours_restants'] = delta
+            else:
+                c['jours_restants'] = None  # CDI sans date de fin
+            contrat_actif = c
+            break  # prend le premier actif (order: date_debut DESC)
+
+    return {
+        'contrat_actif': contrat_actif,
+        'contrats': contrats,
+    }
 
 
 def _get_donnees_formation(operateur_id: int) -> Dict:
-    return {'formations': FormationServiceCRUD.get_by_operateur(operateur_id)}
+    formations = FormationServiceCRUD.get_by_operateur(operateur_id)
+    terminees = [f for f in formations if f.get('statut') == 'Terminée']
+    en_cours  = [f for f in formations if f.get('statut') not in ('Terminée', 'Annulée')]
+    statistiques = {
+        'total': len(formations),
+        'terminees': len(terminees),
+        'en_cours': len(en_cours),
+    }
+    return {'formations': formations, 'statistiques': statistiques}
 
 
 def _get_donnees_declaration(operateur_id: int) -> Dict:
@@ -309,7 +335,22 @@ def _get_donnees_declaration(operateur_id: int) -> Dict:
             dictionary=True
         )
 
-        return {'declarations': declarations}
+        from datetime import date as _date
+        today = _date.today()
+        en_cours_list = [
+            d for d in declarations
+            if d.get('date_debut') and d.get('date_fin')
+            and d['date_debut'] <= today <= d['date_fin']
+        ]
+        statistiques = {
+            'total': len(declarations),
+            'en_cours': len(en_cours_list),
+        }
+        return {
+            'declarations': declarations,
+            'en_cours': en_cours_list[0] if en_cours_list else None,
+            'statistiques': statistiques,
+        }
 
     except Exception as e:
         logger.exception(f"Erreur _get_donnees_declaration: {e}")
@@ -331,72 +372,58 @@ def _get_donnees_competences(operateur_id: int) -> Dict:
 
 
 def _get_donnees_medical(operateur_id: int) -> Dict:
-    """
-    ✅ REFACTORISÉ: Utilise QueryExecutor.
-
-    AVANT: 30 lignes
-    APRÈS: 15 lignes
-    """
+    """Retourne toutes les données médicales avec les clés attendues par la GUI."""
     try:
-        # ✅ QueryExecutor pour récupérer les visites médicales
-        visites = QueryExecutor.fetch_all(
-            """
-            SELECT *
-            FROM medical_visite
-            WHERE operateur_id = %s
-            ORDER BY date_visite DESC
-            """,
-            (operateur_id,),
-            dictionary=True
-        )
-
-        return {'visites_medicales': visites}
-
+        from core.services import medical_service
+        visites   = medical_service.get_visites(operateur_id)
+        accidents = medical_service.get_accidents(operateur_id)
+        validites = medical_service.get_validites(operateur_id)
+        alertes   = medical_service.get_alertes_medicales(operateur_id)
+        # 'medical' = données de la table medical (suivi général)
+        medical   = QueryExecutor.fetch_one(
+            "SELECT * FROM medical WHERE operateur_id = %s",
+            (operateur_id,), dictionary=True
+        ) or {}
+        return {
+            'visites':   visites,
+            'accidents': accidents,
+            'validites': validites,
+            'alertes':   alertes,
+            'medical':   medical,
+            # Compat ancienne clé
+            'visites_medicales': visites,
+        }
     except Exception as e:
         logger.exception(f"Erreur _get_donnees_medical: {e}")
-        return {}
+        return {'error': str(e), 'visites': [], 'accidents': [], 'validites': [], 'alertes': [], 'medical': {}}
 
 
 def _get_donnees_vie_salarie(operateur_id: int) -> Dict:
-    """
-    ✅ REFACTORISÉ: Utilise QueryExecutor.
-
-    AVANT: 40 lignes
-    APRÈS: 20 lignes
-    """
+    """Retourne toutes les données vie salarié avec les clés attendues par la GUI."""
     try:
-        # ✅ Entretiens professionnels
-        entretiens = QueryExecutor.fetch_all(
-            """
-            SELECT *
-            FROM vie_salarie_entretien
-            WHERE operateur_id = %s
-            ORDER BY date_entretien DESC
-            """,
-            (operateur_id,),
-            dictionary=True
-        )
-
-        # ✅ Sanctions disciplinaires
-        sanctions = QueryExecutor.fetch_all(
-            """
-            SELECT *
-            FROM vie_salarie_sanction
-            WHERE operateur_id = %s
-            ORDER BY date_sanction DESC
-            """,
-            (operateur_id,),
-            dictionary=True
-        )
-
+        from core.services import vie_salarie_service as _vs
+        sanctions   = _vs.get_sanctions(operateur_id)
+        entretiens  = _vs.get_entretiens(operateur_id)
+        alcoolemie  = _vs.get_controles_alcool(operateur_id)
+        tests_sal   = _vs.get_tests_salivaires(operateur_id)
+        alertes     = _vs.get_alertes_entretiens(operateur_id) if hasattr(_vs, 'get_alertes_entretiens') else []
         return {
-            'entretiens': entretiens,
-            'sanctions': sanctions
+            # Clés attendues par la GUI (résumés + listes détaillées)
+            'sanctions':           sanctions,
+            'sanctions_liste':     sanctions,
+            'entretiens':          entretiens,
+            'entretiens_liste':    entretiens,
+            'alcoolemie':          alcoolemie,
+            'controles_alcool_liste': alcoolemie,
+            'tests_salivaires':    tests_sal,
+            'tests_salivaires_liste': tests_sal,
+            'alertes':             alertes,
         }
-
     except Exception as e:
         logger.exception(f"Erreur _get_donnees_vie_salarie: {e}")
-        return {}
+        return {'error': str(e), 'sanctions': [], 'entretiens': [], 'alcoolemie': [],
+                'sanctions_liste': [], 'entretiens_liste': [], 'controles_alcool_liste': [],
+                'tests_salivaires': [], 'tests_salivaires_liste': [], 'alertes': []}
 
 
 def _get_donnees_polyvalence(operateur_id: int) -> Dict:

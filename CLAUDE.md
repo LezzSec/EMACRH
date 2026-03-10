@@ -594,11 +594,7 @@ EMAC/
 │   │   │   ├── creation_modification_poste.py   # Position CRUD
 │   │   │   ├── historique.py               # Audit log viewer
 │   │   │   ├── planning.py                 # Planning/schedule view
-│   │   │   └── contract_management.py      # Contract renewal interface
-│   │   ├── exporters/                      # File export layer
-│   │   │   ├── excel_export.py             # Export grids to Excel
-│   │   │   ├── pdf_export.py               # PDF generation with ReportLab
-│   │   │   └── log_export.py               # CSV export of logs
+│   │   │   └── contract_management_refactored.py  # Contract renewal interface
 │   │   └── utils/                          # Utility functions
 │   │
 │   ├── config/                    # Configuration templates

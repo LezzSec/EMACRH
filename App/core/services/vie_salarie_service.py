@@ -75,23 +75,11 @@ def get_donnees_vie_salarie(operateur_id: int) -> Dict[str, Any]:
             (operateur_id,), dictionary=True
         )
 
-        # Dernier EPP et EAP
-        entretiens_rows = QueryExecutor.fetch_all(
-            """SELECT type_entretien, MAX(date_entretien) as derniere_date
-               FROM vie_salarie_entretien
-               WHERE operateur_id = %s AND type_entretien IN ('EPP', 'EAP')
-               GROUP BY type_entretien""",
-            (operateur_id,), dictionary=True
-        )
-        entretiens = {row['type_entretien']: row['derniere_date'] for row in entretiens_rows}
-
-        # Prochain entretien prévu
-        prochain = QueryExecutor.fetch_one(
-            """SELECT prochaine_date
-               FROM vie_salarie_entretien
-               WHERE operateur_id = %s AND prochaine_date IS NOT NULL
-               ORDER BY date_entretien DESC
-               LIMIT 1""",
+        # Dernier EPP, EAP et prochain entretien (via vue v_vie_salarie_recap)
+        recap = QueryExecutor.fetch_one(
+            """SELECT dernier_epp, dernier_eap, prochain_entretien
+               FROM v_vie_salarie_recap
+               WHERE operateur_id = %s""",
             (operateur_id,), dictionary=True
         )
 
@@ -100,9 +88,9 @@ def get_donnees_vie_salarie(operateur_id: int) -> Dict[str, Any]:
             "alcoolemie": stats_alcool,
             "tests_salivaires": stats_salivaire,
             "entretiens": {
-                "dernier_epp": entretiens.get('EPP'),
-                "dernier_eap": entretiens.get('EAP'),
-                "prochain": prochain['prochaine_date'] if prochain else None
+                "dernier_epp": (recap or {}).get('dernier_epp'),
+                "dernier_eap": (recap or {}).get('dernier_eap'),
+                "prochain": (recap or {}).get('prochain_entretien')
             }
         }
 

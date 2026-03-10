@@ -827,7 +827,7 @@ def get_batch_operations_history(limit: int = 50) -> List[Dict]:
     try:
         return QueryExecutor.fetch_all("""
             SELECT *
-            FROM batch_operations
+            FROM v_batch_operations_stats
             ORDER BY created_at DESC
             LIMIT %s
         """, (limit,), dictionary=True)

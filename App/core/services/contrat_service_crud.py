@@ -258,20 +258,12 @@ class ContratServiceCRUD(CRUDService):
         Inclut jours_restants calculé, nom/prenom et filtre statut ACTIF.
         """
         try:
-            end_date = date.today() + timedelta(days=days)
             return QueryExecutor.fetch_all("""
-                SELECT
-                    c.*,
-                    p.nom, p.prenom,
-                    DATEDIFF(c.date_fin, CURDATE()) as jours_restants
-                FROM contrat c
-                LEFT JOIN personnel p ON p.id = c.personnel_id
-                WHERE c.actif = 1
-                  AND c.date_fin IS NOT NULL
-                  AND c.date_fin BETWEEN CURDATE() AND %s
-                  AND p.statut = 'ACTIF'
-                ORDER BY c.date_fin ASC
-            """, (end_date,), dictionary=True)
+                SELECT *
+                FROM v_contrats_fin_proche
+                WHERE jours_restants BETWEEN 0 AND %s
+                ORDER BY date_fin ASC
+            """, (days,), dictionary=True)
         except Exception as e:
             logger.error(f"Erreur récupération contrats expirants: {e}")
             return []
@@ -311,13 +303,12 @@ class ContratServiceCRUD(CRUDService):
                 GROUP BY type_contrat ORDER BY count DESC
             """, dictionary=True)
             stats['expiration_30j'] = QueryExecutor.fetch_scalar("""
-                SELECT COUNT(*) FROM contrat
-                WHERE actif = 1 AND date_fin IS NOT NULL
-                  AND date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                SELECT COUNT(*) FROM v_contrats_fin_proche
+                WHERE jours_restants BETWEEN 0 AND 30
             """, default=0)
             stats['expires'] = QueryExecutor.fetch_scalar("""
-                SELECT COUNT(*) FROM contrat
-                WHERE actif = 1 AND date_fin IS NOT NULL AND date_fin < CURDATE()
+                SELECT COUNT(*) FROM v_contrats_fin_proche
+                WHERE jours_restants < 0
             """, default=0)
             return stats
         except Exception as e:

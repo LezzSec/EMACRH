@@ -703,19 +703,12 @@ def get_rqth_expirant(jours_avance: int = 90) -> List[Dict]:
     """
     try:
         return QueryExecutor.fetch_all(
-            """SELECT
-                   p.id as operateur_id,
-                   p.nom, p.prenom, p.matricule,
-                   v.date_fin as date_fin_rqth,
-                   v.taux_incapacite,
-                   DATEDIFF(v.date_fin, CURDATE()) as jours_restants
-               FROM personnel p
-               JOIN validite v ON p.id = v.operateur_id
-               WHERE p.statut = 'ACTIF'
-                 AND v.type_validite = 'RQTH'
-                 AND v.date_fin IS NOT NULL
-                 AND v.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
-               ORDER BY v.date_fin""",
+            """SELECT operateur_id, nom, prenom, matricule, date_fin_rqth,
+                      DATEDIFF(date_fin_rqth, CURDATE()) AS jours_restants
+               FROM v_suivi_medical
+               WHERE date_fin_rqth IS NOT NULL
+                 AND date_fin_rqth BETWEEN CURDATE() AND CURDATE() + INTERVAL %s DAY
+               ORDER BY date_fin_rqth""",
             (jours_avance,), dictionary=True
         )
 
@@ -760,25 +753,16 @@ def get_statistiques_medicales_globales() -> Dict[str, Any]:
             default=0
         )
 
-        # RQTH actives (utilise table validite existante)
+        # RQTH actives (via vue v_suivi_medical)
         stats['rqth_actives'] = QueryExecutor.fetch_scalar(
-            """SELECT COUNT(DISTINCT p.id)
-               FROM personnel p
-               JOIN validite v ON p.id = v.operateur_id
-               WHERE p.statut = 'ACTIF'
-                 AND v.type_validite = 'RQTH'
-                 AND (v.date_fin IS NULL OR v.date_fin >= CURDATE())""",
+            "SELECT COUNT(*) FROM v_suivi_medical WHERE statut_rqth = 'Active'",
             default=0
         )
 
-        # RQTH expirant bientôt (90 jours)
+        # RQTH expirant bientôt (90 jours, via vue v_suivi_medical)
         stats['rqth_expirant'] = QueryExecutor.fetch_scalar(
-            """SELECT COUNT(DISTINCT p.id)
-               FROM personnel p
-               JOIN validite v ON p.id = v.operateur_id
-               WHERE p.statut = 'ACTIF'
-                 AND v.type_validite = 'RQTH'
-                 AND v.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY)""",
+            """SELECT COUNT(*) FROM v_suivi_medical
+               WHERE date_fin_rqth BETWEEN CURDATE() AND CURDATE() + INTERVAL 90 DAY""",
             default=0
         )
 

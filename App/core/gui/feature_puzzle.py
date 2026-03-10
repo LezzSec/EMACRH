@@ -41,7 +41,7 @@ def get_admin_role_id() -> int:
         return _admin_role_id_cache
 
     try:
-        from core.services.permission_service import get_admin_role_id as _svc_admin_id
+        from core.services.permission_manager import get_admin_role_id as _svc_admin_id
 
         role_id = _svc_admin_id()
         if role_id:
@@ -720,7 +720,7 @@ class FeatureEditorDialog(QDialog):
 
     def load_data(self):
         """Charge les données initiales"""
-        from core.services.permission_service import get_all_roles
+        from core.services.permission_manager import get_all_roles
         from core.services.auth_service import get_all_users
 
         # Charger les rôles
@@ -786,7 +786,7 @@ class FeatureEditorDialog(QDialog):
     def _load_user_features(self):
         user_data = self.user_combo.currentData()
         if user_data:
-            from core.services.permission_service import get_user_with_role
+            from core.services.permission_manager import get_user_with_role
 
             user_id = user_data['id']
             user_info = get_user_with_role(user_id)

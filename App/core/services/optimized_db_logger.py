@@ -1,22 +1,122 @@
 # -*- coding: utf-8 -*-
 """
-Logger DB optimisé pour la table historique.
-Évite les micro-lenteurs dues aux INSERT répétés.
+Logger DB pour la table historique.
+
+Expose deux APIs:
+- log_hist()       : synchrone, immédiat (compatibilité + fallback)
+- log_hist_async() : asynchrone, par batch (production - 10-50x moins de requêtes)
 
 ✅ Optimisations appliquées:
 - Buffer en mémoire (INSERT par batch)
 - Async logging (thread séparé)
 - INSERT multiple (1 requête pour N logs)
 - Flush automatique toutes les 10s
-
-Gain attendu: 10-50x moins de requêtes DB
 """
 
+import json
 import threading
 import time
 from queue import Queue, Empty
 from typing import Optional, List, Dict, Any
 from datetime import datetime
+
+
+import logging
+_logger = logging.getLogger(__name__)
+
+
+# ===========================
+# Sync logger (log_hist)
+# ===========================
+
+def _get_current_username() -> str | None:
+    """Récupère le nom d'utilisateur connecté."""
+    try:
+        from core.services.auth_service import get_current_user
+        user = get_current_user()
+        if user:
+            return user.get('username') or user.get('nom') or None
+    except Exception:
+        pass
+    return None
+
+
+def _to_json_str(details: Any) -> str | None:
+    if details is None:
+        return None
+    if isinstance(details, (bytes, bytearray)):
+        try:
+            return details.decode("utf-8", errors="ignore")
+        except Exception:
+            return str(details)
+    if isinstance(details, str):
+        return details
+    try:
+        return json.dumps(details, ensure_ascii=False)
+    except Exception:
+        return str(details)
+
+
+def log_hist(
+    action: str,
+    table_name: str | None = None,
+    record_id: Any | None = None,
+    description: str | None = None,
+    details: Any | None = None,
+    source: str | None = None,
+    utilisateur: str | None = None,
+    operateur_id: int | None = None,
+    poste_id: int | None = None,
+) -> None:
+    """Insère une ligne dans la table `historique` (synchrone, immédiat)."""
+    if utilisateur is None:
+        utilisateur = _get_current_username()
+
+    final_description = description
+    if details:
+        details_str = _to_json_str(details)
+        final_description = f"{final_description} | Details: {details_str}" if final_description else details_str
+
+    from core.db.configbd import get_connection as _get_conn
+    conn = cur = None
+    try:
+        conn = _get_conn()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO historique
+                (date_time, action, table_name, record_id, utilisateur, description, operateur_id, poste_id)
+            VALUES (NOW(), %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                action,
+                table_name,
+                str(record_id) if record_id is not None else None,
+                utilisateur,
+                final_description,
+                operateur_id,
+                poste_id,
+            ),
+        )
+        conn.commit()
+    except Exception as e:
+        _logger.warning(f"Erreur log_hist: {e}")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
 
 
 # ===========================
@@ -214,7 +314,6 @@ class OptimizedDBLogger:
     ):
         """Fallback synchrone si queue pleine"""
         try:
-            from core.services.logger import log_hist
             log_hist(
                 action=action,
                 table_name=table_name,
@@ -359,10 +458,13 @@ def auto_log_db(action: str, table_name: str, source: Optional[str] = None):
 # ===========================
 
 __all__ = [
+    'log_hist',
     'log_hist_async',
     'flush_db_logs',
     'shutdown_db_logger',
     'auto_log_db',
     'OptimizedDBLogger',
     'DBLogConfig',
+    '_to_json_str',
+    '_get_current_username',
 ]

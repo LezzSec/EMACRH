@@ -21,6 +21,7 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QCheckBox, QGroupBox, QFileDialog
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QDate
+from PyQt5.QtWidgets import QApplication as _QApp
 from PyQt5.QtGui import QFont, QColor
 
 from core.gui.db_worker import DbWorker, DbThreadPool
@@ -76,8 +77,11 @@ class GestionRHDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Gestion RH")
-        self.setMinimumSize(1200, 700)
-        self.resize(1400, 800)
+        screen = _QApp.primaryScreen().availableGeometry()
+        w = min(1400, screen.width() - 40)
+        h = min(800, screen.height() - 60)
+        self.setMinimumSize(min(1000, w), min(650, h))
+        self.resize(w, h)
 
         # État
         self.operateur_selectionne = None
@@ -968,7 +972,8 @@ class GestionRHDialog(QDialog):
             stats_layout = QHBoxLayout()
 
             for type_decl, data in stats.items():
-                chip = EmacChip(f"{type_decl}: {data.get('nombre', 0)}", variant="info")
+                count = data if isinstance(data, int) else data.get('nombre', 0)
+                chip = EmacChip(f"{type_decl}: {count}", variant="info")
                 stats_layout.addWidget(chip)
 
             stats_layout.addStretch()
@@ -980,19 +985,25 @@ class GestionRHDialog(QDialog):
         card = EmacCard(f"Déclarations ({len(declarations)})")
         if declarations:
             for decl in declarations:
-                row = QHBoxLayout()
+                frame = QFrame()
+                frame.setStyleSheet("QFrame { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }")
+                row = QHBoxLayout(frame)
+                row.setContentsMargins(12, 10, 12, 10)
+                row.setSpacing(8)
                 info_text = f"{decl.get('type_declaration', 'N/A')} - {self._format_date(decl.get('date_debut'))} au {self._format_date(decl.get('date_fin'))}"
-                row.addWidget(QLabel(info_text))
+                lbl = QLabel(info_text)
+                lbl.setStyleSheet("background: transparent;")
+                row.addWidget(lbl)
                 row.addStretch()
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.declarations.edit"))
                 btn_edit.clicked.connect(lambda checked, d=decl: self._edit_declaration(d))
                 row.addWidget(btn_edit)
-                btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete = EmacButton("Supprimer", variant="danger")
                 btn_delete.setVisible(can("rh.declarations.edit"))
                 btn_delete.clicked.connect(lambda checked, d=decl: self._delete_declaration(d))
                 row.addWidget(btn_delete)
-                card.body.addLayout(row)
+                card.body.addWidget(frame)
         else:
             card.body.addWidget(QLabel("Aucune déclaration"))
         layout.addWidget(card)
@@ -1056,7 +1067,11 @@ class GestionRHDialog(QDialog):
 
         if competences:
             for comp in competences:
-                row = QHBoxLayout()
+                frame = QFrame()
+                frame.setStyleSheet("QFrame { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }")
+                row = QHBoxLayout(frame)
+                row.setContentsMargins(12, 10, 12, 10)
+                row.setSpacing(8)
 
                 # Indicateur de statut
                 statut = comp.get('statut', 'valide')
@@ -1074,7 +1089,7 @@ class GestionRHDialog(QDialog):
                     color = "#22c55e"
 
                 status_label = QLabel(indicator)
-                status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 14px;")
+                status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 14px; background: transparent;")
                 status_label.setFixedWidth(20)
                 row.addWidget(status_label)
 
@@ -1087,7 +1102,7 @@ class GestionRHDialog(QDialog):
                 if categorie:
                     libelle = f"{libelle} [{categorie}]"
                 label_nom = QLabel(libelle)
-                label_nom.setStyleSheet("font-weight: 500;")
+                label_nom.setStyleSheet("font-weight: 500; background: transparent;")
                 info_layout.addWidget(label_nom)
 
                 # Dates
@@ -1120,18 +1135,12 @@ class GestionRHDialog(QDialog):
                 btn_edit.clicked.connect(lambda checked, c=comp: self._edit_competence(c))
                 row.addWidget(btn_edit)
 
-                btn_delete = EmacButton("Retirer", variant="ghost")
+                btn_delete = EmacButton("Retirer", variant="danger")
                 btn_delete.setVisible(can("rh.competences.delete"))
                 btn_delete.clicked.connect(lambda checked, c=comp: self._delete_competence(c))
                 row.addWidget(btn_delete)
 
-                card_list.body.addLayout(row)
-
-                # Séparateur
-                sep = QFrame()
-                sep.setFrameShape(QFrame.HLine)
-                sep.setStyleSheet("background: #e2e8f0;")
-                card_list.body.addWidget(sep)
+                card_list.body.addWidget(frame)
         else:
             card_list.body.addWidget(QLabel("Aucune compétence assignée"))
 
@@ -1223,21 +1232,27 @@ class GestionRHDialog(QDialog):
         card_list = EmacCard(f"Formations ({len(formations)})")
         if formations:
             for form in formations:
-                row = QHBoxLayout()
+                frame = QFrame()
+                frame.setStyleSheet("QFrame { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }")
+                row = QHBoxLayout(frame)
+                row.setContentsMargins(12, 10, 12, 10)
+                row.setSpacing(8)
                 info_text = f"{form.get('intitule', 'N/A')} - {form.get('statut', 'N/A')}"
                 if form.get('date_debut'):
                     info_text += f" ({self._format_date(form.get('date_debut'))})"
-                row.addWidget(QLabel(info_text))
+                lbl = QLabel(info_text)
+                lbl.setStyleSheet("background: transparent;")
+                row.addWidget(lbl)
                 row.addStretch()
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.formations.edit"))
                 btn_edit.clicked.connect(lambda checked, f=form: self._edit_formation(f))
                 row.addWidget(btn_edit)
-                btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete = EmacButton("Supprimer", variant="danger")
                 btn_delete.setVisible(can("rh.formations.delete"))
                 btn_delete.clicked.connect(lambda checked, f=form: self._delete_formation(f))
                 row.addWidget(btn_delete)
-                card_list.body.addLayout(row)
+                card_list.body.addWidget(frame)
         else:
             card_list.body.addWidget(QLabel("Aucune formation enregistrée"))
         layout.addWidget(card_list)
@@ -1308,7 +1323,8 @@ class GestionRHDialog(QDialog):
         for i, (label, valeur) in enumerate(infos):
             r, c = divmod(i, 2)
             lbl = QLabel(f"<b>{label}</b><br/>{valeur}")
-            lbl.setStyleSheet("padding: 8px; background: #f9fafb; border-radius: 6px;")
+            lbl.setStyleSheet("padding: 8px 12px; background: #f0f4f8; border: 1px solid #cbd5e1; border-radius: 6px;")
+            lbl.setWordWrap(True)
             grid.addWidget(lbl, r, c)
 
         card_medical.body.addLayout(grid)
@@ -1368,10 +1384,17 @@ class GestionRHDialog(QDialog):
             table.setColumnCount(6)
             table.setHorizontalHeaderLabels(["Date", "Type", "Résultat", "Médecin", "Prochaine", "Actions"])
             table.setRowCount(len(visites))
-            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            hh = table.horizontalHeader()
+            hh.setSectionResizeMode(0, QHeaderView.Fixed); table.setColumnWidth(0, 100)
+            hh.setSectionResizeMode(1, QHeaderView.Stretch)
+            hh.setSectionResizeMode(2, QHeaderView.Fixed); table.setColumnWidth(2, 110)
+            hh.setSectionResizeMode(3, QHeaderView.Stretch)
+            hh.setSectionResizeMode(4, QHeaderView.Fixed); table.setColumnWidth(4, 100)
+            hh.setSectionResizeMode(5, QHeaderView.Fixed); table.setColumnWidth(5, 220)
             table.setAlternatingRowColors(True)
             table.setSelectionBehavior(QAbstractItemView.SelectRows)
             table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table.verticalHeader().setDefaultSectionSize(52)
 
             for row_idx, visite in enumerate(visites):
                 table.setItem(row_idx, 0, QTableWidgetItem(self._format_date(visite.get('date_visite'))))
@@ -1382,24 +1405,23 @@ class GestionRHDialog(QDialog):
 
                 btn_widget = QWidget()
                 btn_layout_inner = QHBoxLayout(btn_widget)
-                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
-                btn_layout_inner.setSpacing(4)
+                btn_layout_inner.setContentsMargins(4, 4, 4, 4)
+                btn_layout_inner.setSpacing(6)
 
                 btn_edit = EmacButton("Modifier", variant="outline")
-                btn_edit.setFixedHeight(28)
                 btn_edit.setVisible(can("rh.medical.edit"))
                 btn_edit.clicked.connect(lambda checked, v=visite: self._edit_visite(v))
                 btn_layout_inner.addWidget(btn_edit)
 
-                btn_del = EmacButton("Suppr.", variant="ghost")
-                btn_del.setFixedHeight(28)
+                btn_del = EmacButton("Suppr.", variant="danger")
                 btn_del.setVisible(can("rh.medical.edit"))
                 btn_del.clicked.connect(lambda checked, v=visite: self._delete_visite(v))
                 btn_layout_inner.addWidget(btn_del)
 
                 table.setCellWidget(row_idx, 5, btn_widget)
 
-            table.setMaximumHeight(200)
+            _h = min(len(visites) * 52 + 32, 420)
+            table.setFixedHeight(_h)
             card_visites.body.addWidget(table)
         else:
             card_visites.body.addWidget(QLabel("Aucune visite enregistrée"))
@@ -1415,43 +1437,58 @@ class GestionRHDialog(QDialog):
         card_accidents.body.addWidget(btn_add_accident, alignment=Qt.AlignLeft)
 
         if accidents:
-            table_acc = QTableWidget()
-            table_acc.setColumnCount(6)
-            table_acc.setHorizontalHeaderLabels(["Date", "Avec arrêt", "Jours absence", "Siège lésions", "Nature", "Actions"])
-            table_acc.setRowCount(len(accidents))
-            table_acc.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            table_acc.setAlternatingRowColors(True)
-            table_acc.setSelectionBehavior(QAbstractItemView.SelectRows)
-            table_acc.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            for acc in accidents:
+                frame = QFrame()
+                frame.setStyleSheet("""
+                    QFrame {
+                        background: #f8fafc;
+                        border: 1px solid #e2e8f0;
+                        border-radius: 8px;
+                    }
+                """)
+                frame_layout = QVBoxLayout(frame)
+                frame_layout.setContentsMargins(12, 8, 12, 8)
+                frame_layout.setSpacing(4)
 
-            for row_idx, acc in enumerate(accidents):
-                table_acc.setItem(row_idx, 0, QTableWidgetItem(self._format_date(acc.get('date_accident'))))
-                table_acc.setItem(row_idx, 1, QTableWidgetItem("Oui" if acc.get('avec_arret') else "Non"))
-                table_acc.setItem(row_idx, 2, QTableWidgetItem(str(acc.get('nb_jours_absence', '-'))))
-                table_acc.setItem(row_idx, 3, QTableWidgetItem(acc.get('siege_lesions', '-')))
-                table_acc.setItem(row_idx, 4, QTableWidgetItem(acc.get('nature_lesions', '-')))
+                header_row = QHBoxLayout()
+                date_lbl = QLabel(f"<b>{self._format_date(acc.get('date_accident'))}</b>")
+                header_row.addWidget(date_lbl)
+                avec_arret = acc.get('avec_arret')
+                arret_style = "padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #fef3c7; color: #92400e;" if avec_arret else "padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #f0fdf4; color: #166534;"
+                arret_lbl = QLabel("Avec arrêt" if avec_arret else "Sans arrêt")
+                arret_lbl.setStyleSheet(arret_style)
+                header_row.addWidget(arret_lbl)
+                jours = acc.get('nb_jours_absence')
+                if jours:
+                    jours_lbl = QLabel(f"{jours} jour(s) d'absence")
+                    jours_lbl.setStyleSheet("color: #64748b; font-size: 12px;")
+                    header_row.addWidget(jours_lbl)
+                header_row.addStretch()
+                frame_layout.addLayout(header_row)
 
-                btn_widget = QWidget()
-                btn_layout_inner = QHBoxLayout(btn_widget)
-                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
-                btn_layout_inner.setSpacing(4)
+                details = []
+                if acc.get('siege_lesions'):
+                    details.append(f"Siège : {acc.get('siege_lesions')}")
+                if acc.get('nature_lesions'):
+                    details.append(f"Nature : {acc.get('nature_lesions')}")
+                if details:
+                    detail_lbl = QLabel("  ·  ".join(details))
+                    detail_lbl.setStyleSheet("color: #475569; font-size: 12px;")
+                    frame_layout.addWidget(detail_lbl)
 
+                actions_row = QHBoxLayout()
+                actions_row.addStretch()
                 btn_edit = EmacButton("Modifier", variant="outline")
-                btn_edit.setFixedHeight(28)
                 btn_edit.setVisible(can("rh.medical.edit"))
                 btn_edit.clicked.connect(lambda checked, a=acc: self._edit_accident(a))
-                btn_layout_inner.addWidget(btn_edit)
-
-                btn_del = EmacButton("Suppr.", variant="ghost")
-                btn_del.setFixedHeight(28)
+                actions_row.addWidget(btn_edit)
+                btn_del = EmacButton("Supprimer", variant="danger")
                 btn_del.setVisible(can("rh.medical.edit"))
                 btn_del.clicked.connect(lambda checked, a=acc: self._delete_accident(a))
-                btn_layout_inner.addWidget(btn_del)
+                actions_row.addWidget(btn_del)
+                frame_layout.addLayout(actions_row)
 
-                table_acc.setCellWidget(row_idx, 5, btn_widget)
-
-            table_acc.setMaximumHeight(200)
-            card_accidents.body.addWidget(table_acc)
+                card_accidents.body.addWidget(frame)
         else:
             card_accidents.body.addWidget(QLabel("Aucun accident enregistré"))
 
@@ -1561,12 +1598,18 @@ class GestionRHDialog(QDialog):
         if sanctions_list:
             table_sanctions = QTableWidget()
             table_sanctions.setColumnCount(5)
-            table_sanctions.setHorizontalHeaderLabels(["Date", "Type", "Durée (jours)", "Motif", "Actions"])
+            table_sanctions.setHorizontalHeaderLabels(["Date", "Type", "Durée", "Motif", "Actions"])
             table_sanctions.setRowCount(len(sanctions_list))
-            table_sanctions.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            hh_s = table_sanctions.horizontalHeader()
+            hh_s.setSectionResizeMode(0, QHeaderView.Fixed); table_sanctions.setColumnWidth(0, 100)
+            hh_s.setSectionResizeMode(1, QHeaderView.Fixed); table_sanctions.setColumnWidth(1, 150)
+            hh_s.setSectionResizeMode(2, QHeaderView.Fixed); table_sanctions.setColumnWidth(2, 70)
+            hh_s.setSectionResizeMode(3, QHeaderView.Stretch)
+            hh_s.setSectionResizeMode(4, QHeaderView.Fixed); table_sanctions.setColumnWidth(4, 220)
             table_sanctions.setAlternatingRowColors(True)
             table_sanctions.setSelectionBehavior(QAbstractItemView.SelectRows)
             table_sanctions.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table_sanctions.verticalHeader().setDefaultSectionSize(52)
 
             for row_idx, sanc in enumerate(sanctions_list):
                 table_sanctions.setItem(row_idx, 0, QTableWidgetItem(self._format_date(sanc.get('date_sanction'))))
@@ -1579,24 +1622,23 @@ class GestionRHDialog(QDialog):
 
                 btn_widget = QWidget()
                 btn_layout_inner = QHBoxLayout(btn_widget)
-                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
-                btn_layout_inner.setSpacing(4)
+                btn_layout_inner.setContentsMargins(4, 4, 4, 4)
+                btn_layout_inner.setSpacing(6)
 
                 btn_edit = EmacButton("Modifier", variant="outline")
-                btn_edit.setFixedHeight(28)
                 btn_edit.setVisible(can("rh.vie_salarie.edit"))
                 btn_edit.clicked.connect(lambda checked, s=sanc: self._edit_sanction(s))
                 btn_layout_inner.addWidget(btn_edit)
 
-                btn_del = EmacButton("Suppr.", variant="ghost")
-                btn_del.setFixedHeight(28)
+                btn_del = EmacButton("Suppr.", variant="danger")
                 btn_del.setVisible(can("rh.vie_salarie.edit"))
                 btn_del.clicked.connect(lambda checked, s=sanc: self._delete_sanction(s))
                 btn_layout_inner.addWidget(btn_del)
 
                 table_sanctions.setCellWidget(row_idx, 4, btn_widget)
 
-            table_sanctions.setMaximumHeight(180)
+            _h = min(len(sanctions_list) * 52 + 32, 420)
+            table_sanctions.setFixedHeight(_h)
             card_sanctions.body.addWidget(table_sanctions)
         else:
             card_sanctions.body.addWidget(QLabel("Aucune sanction enregistrée"))
@@ -1624,19 +1666,28 @@ class GestionRHDialog(QDialog):
 
         tables_layout = QHBoxLayout()
 
+        ROW_H = 30  # hauteur ligne sans boutons
+
         alcool_container = QVBoxLayout()
         alcool_container.addWidget(QLabel("<b>Alcoolémie</b>"))
         if controles_alcool:
             table_alcool = QTableWidget()
             table_alcool.setColumnCount(3)
             table_alcool.setHorizontalHeaderLabels(["Date", "Résultat", "Taux"])
-            table_alcool.setRowCount(min(5, len(controles_alcool)))
-            table_alcool.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            for row_idx, ctrl in enumerate(controles_alcool[:5]):
-                table_alcool.setItem(row_idx, 0, QTableWidgetItem(self._format_datetime(ctrl.get('date_controle'))))
+            table_alcool.setRowCount(len(controles_alcool))
+            hh_a = table_alcool.horizontalHeader()
+            hh_a.setSectionResizeMode(0, QHeaderView.Fixed); table_alcool.setColumnWidth(0, 95)
+            hh_a.setSectionResizeMode(1, QHeaderView.Stretch)
+            hh_a.setSectionResizeMode(2, QHeaderView.Fixed); table_alcool.setColumnWidth(2, 80)
+            table_alcool.setAlternatingRowColors(True)
+            table_alcool.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table_alcool.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table_alcool.verticalHeader().setDefaultSectionSize(ROW_H)
+            for row_idx, ctrl in enumerate(controles_alcool):
+                table_alcool.setItem(row_idx, 0, QTableWidgetItem(self._format_date(ctrl.get('date_controle'))))
                 table_alcool.setItem(row_idx, 1, QTableWidgetItem(ctrl.get('resultat', '-')))
-                table_alcool.setItem(row_idx, 2, QTableWidgetItem(f"{ctrl.get('taux', '-')} g/L" if ctrl.get('taux') else '-'))
-            table_alcool.setMaximumHeight(150)
+                table_alcool.setItem(row_idx, 2, QTableWidgetItem(f"{ctrl.get('taux')} g/L" if ctrl.get('taux') else '-'))
+            table_alcool.setFixedHeight(min(len(controles_alcool), 8) * ROW_H + 32)
             alcool_container.addWidget(table_alcool)
         else:
             alcool_container.addWidget(QLabel("Aucun contrôle"))
@@ -1648,12 +1699,16 @@ class GestionRHDialog(QDialog):
             table_salivaire = QTableWidget()
             table_salivaire.setColumnCount(2)
             table_salivaire.setHorizontalHeaderLabels(["Date", "Résultat"])
-            table_salivaire.setRowCount(min(5, len(controles_salivaire)))
+            table_salivaire.setRowCount(len(controles_salivaire))
             table_salivaire.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            for row_idx, test in enumerate(controles_salivaire[:5]):
-                table_salivaire.setItem(row_idx, 0, QTableWidgetItem(self._format_datetime(test.get('date_test'))))
+            table_salivaire.setAlternatingRowColors(True)
+            table_salivaire.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table_salivaire.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table_salivaire.verticalHeader().setDefaultSectionSize(ROW_H)
+            for row_idx, test in enumerate(controles_salivaire):
+                table_salivaire.setItem(row_idx, 0, QTableWidgetItem(self._format_date(test.get('date_test'))))
                 table_salivaire.setItem(row_idx, 1, QTableWidgetItem(test.get('resultat', '-')))
-            table_salivaire.setMaximumHeight(150)
+            table_salivaire.setFixedHeight(min(len(controles_salivaire), 8) * ROW_H + 32)
             salivaire_container.addWidget(table_salivaire)
         else:
             salivaire_container.addWidget(QLabel("Aucun test"))
@@ -1676,10 +1731,16 @@ class GestionRHDialog(QDialog):
             table_entretiens.setColumnCount(5)
             table_entretiens.setHorizontalHeaderLabels(["Date", "Type", "Manager", "Prochaine", "Actions"])
             table_entretiens.setRowCount(len(entretiens_liste))
-            table_entretiens.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            hh_e = table_entretiens.horizontalHeader()
+            hh_e.setSectionResizeMode(0, QHeaderView.Fixed); table_entretiens.setColumnWidth(0, 100)
+            hh_e.setSectionResizeMode(1, QHeaderView.Stretch)
+            hh_e.setSectionResizeMode(2, QHeaderView.Stretch)
+            hh_e.setSectionResizeMode(3, QHeaderView.Fixed); table_entretiens.setColumnWidth(3, 100)
+            hh_e.setSectionResizeMode(4, QHeaderView.Fixed); table_entretiens.setColumnWidth(4, 220)
             table_entretiens.setAlternatingRowColors(True)
             table_entretiens.setSelectionBehavior(QAbstractItemView.SelectRows)
             table_entretiens.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table_entretiens.verticalHeader().setDefaultSectionSize(52)
 
             for row_idx, ent in enumerate(entretiens_liste):
                 table_entretiens.setItem(row_idx, 0, QTableWidgetItem(self._format_date(ent.get('date_entretien'))))
@@ -1689,24 +1750,23 @@ class GestionRHDialog(QDialog):
 
                 btn_widget = QWidget()
                 btn_layout_inner = QHBoxLayout(btn_widget)
-                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
-                btn_layout_inner.setSpacing(4)
+                btn_layout_inner.setContentsMargins(4, 4, 4, 4)
+                btn_layout_inner.setSpacing(6)
 
                 btn_edit = EmacButton("Modifier", variant="outline")
-                btn_edit.setFixedHeight(28)
                 btn_edit.setVisible(can("rh.vie_salarie.edit"))
                 btn_edit.clicked.connect(lambda checked, e=ent: self._edit_entretien(e))
                 btn_layout_inner.addWidget(btn_edit)
 
-                btn_del = EmacButton("Suppr.", variant="ghost")
-                btn_del.setFixedHeight(28)
+                btn_del = EmacButton("Suppr.", variant="danger")
                 btn_del.setVisible(can("rh.vie_salarie.edit"))
                 btn_del.clicked.connect(lambda checked, e=ent: self._delete_entretien(e))
                 btn_layout_inner.addWidget(btn_del)
 
                 table_entretiens.setCellWidget(row_idx, 4, btn_widget)
 
-            table_entretiens.setMaximumHeight(180)
+            _h = min(len(entretiens_liste) * 52 + 32, 420)
+            table_entretiens.setFixedHeight(_h)
             card_entretiens.body.addWidget(table_entretiens)
         else:
             card_entretiens.body.addWidget(QLabel("Aucun entretien enregistré"))
@@ -3360,7 +3420,8 @@ class GestionRHWidget(QWidget):
             stats_layout = QHBoxLayout()
 
             for type_decl, data in stats.items():
-                chip = EmacChip(f"{type_decl}: {data.get('nombre', 0)}", variant="info")
+                count = data if isinstance(data, int) else data.get('nombre', 0)
+                chip = EmacChip(f"{type_decl}: {count}", variant="info")
                 stats_layout.addWidget(chip)
 
             stats_layout.addStretch()
@@ -3372,19 +3433,25 @@ class GestionRHWidget(QWidget):
         card = EmacCard(f"Déclarations ({len(declarations)})")
         if declarations:
             for decl in declarations:
-                row = QHBoxLayout()
+                frame = QFrame()
+                frame.setStyleSheet("QFrame { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }")
+                row = QHBoxLayout(frame)
+                row.setContentsMargins(12, 10, 12, 10)
+                row.setSpacing(8)
                 info_text = f"{decl.get('type_declaration', 'N/A')} - {self._format_date(decl.get('date_debut'))} au {self._format_date(decl.get('date_fin'))}"
-                row.addWidget(QLabel(info_text))
+                lbl = QLabel(info_text)
+                lbl.setStyleSheet("background: transparent;")
+                row.addWidget(lbl)
                 row.addStretch()
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.declarations.edit"))
                 btn_edit.clicked.connect(lambda checked, d=decl: self._edit_declaration(d))
                 row.addWidget(btn_edit)
-                btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete = EmacButton("Supprimer", variant="danger")
                 btn_delete.setVisible(can("rh.declarations.edit"))
                 btn_delete.clicked.connect(lambda checked, d=decl: self._delete_declaration(d))
                 row.addWidget(btn_delete)
-                card.body.addLayout(row)
+                card.body.addWidget(frame)
         else:
             card.body.addWidget(QLabel("Aucune déclaration"))
         layout.addWidget(card)
@@ -3448,7 +3515,11 @@ class GestionRHWidget(QWidget):
 
         if competences:
             for comp in competences:
-                row = QHBoxLayout()
+                frame = QFrame()
+                frame.setStyleSheet("QFrame { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }")
+                row = QHBoxLayout(frame)
+                row.setContentsMargins(12, 10, 12, 10)
+                row.setSpacing(8)
 
                 # Indicateur de statut
                 statut = comp.get('statut', 'valide')
@@ -3466,7 +3537,7 @@ class GestionRHWidget(QWidget):
                     color = "#22c55e"
 
                 status_label = QLabel(indicator)
-                status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 14px;")
+                status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 14px; background: transparent;")
                 status_label.setFixedWidth(20)
                 row.addWidget(status_label)
 
@@ -3479,7 +3550,7 @@ class GestionRHWidget(QWidget):
                 if categorie:
                     libelle = f"{libelle} [{categorie}]"
                 label_nom = QLabel(libelle)
-                label_nom.setStyleSheet("font-weight: 500;")
+                label_nom.setStyleSheet("font-weight: 500; background: transparent;")
                 info_layout.addWidget(label_nom)
 
                 # Dates
@@ -3512,18 +3583,12 @@ class GestionRHWidget(QWidget):
                 btn_edit.clicked.connect(lambda checked, c=comp: self._edit_competence(c))
                 row.addWidget(btn_edit)
 
-                btn_delete = EmacButton("Retirer", variant="ghost")
+                btn_delete = EmacButton("Retirer", variant="danger")
                 btn_delete.setVisible(can("rh.competences.delete"))
                 btn_delete.clicked.connect(lambda checked, c=comp: self._delete_competence(c))
                 row.addWidget(btn_delete)
 
-                card_list.body.addLayout(row)
-
-                # Séparateur
-                sep = QFrame()
-                sep.setFrameShape(QFrame.HLine)
-                sep.setStyleSheet("background: #e2e8f0;")
-                card_list.body.addWidget(sep)
+                card_list.body.addWidget(frame)
         else:
             card_list.body.addWidget(QLabel("Aucune compétence assignée"))
 
@@ -3615,21 +3680,27 @@ class GestionRHWidget(QWidget):
         card_list = EmacCard(f"Formations ({len(formations)})")
         if formations:
             for form in formations:
-                row = QHBoxLayout()
+                frame = QFrame()
+                frame.setStyleSheet("QFrame { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }")
+                row = QHBoxLayout(frame)
+                row.setContentsMargins(12, 10, 12, 10)
+                row.setSpacing(8)
                 info_text = f"{form.get('intitule', 'N/A')} - {form.get('statut', 'N/A')}"
                 if form.get('date_debut'):
                     info_text += f" ({self._format_date(form.get('date_debut'))})"
-                row.addWidget(QLabel(info_text))
+                lbl = QLabel(info_text)
+                lbl.setStyleSheet("background: transparent;")
+                row.addWidget(lbl)
                 row.addStretch()
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.formations.edit"))
                 btn_edit.clicked.connect(lambda checked, f=form: self._edit_formation(f))
                 row.addWidget(btn_edit)
-                btn_delete = EmacButton("Supprimer", variant="ghost")
+                btn_delete = EmacButton("Supprimer", variant="danger")
                 btn_delete.setVisible(can("rh.formations.delete"))
                 btn_delete.clicked.connect(lambda checked, f=form: self._delete_formation(f))
                 row.addWidget(btn_delete)
-                card_list.body.addLayout(row)
+                card_list.body.addWidget(frame)
         else:
             card_list.body.addWidget(QLabel("Aucune formation enregistrée"))
         layout.addWidget(card_list)
@@ -3700,7 +3771,8 @@ class GestionRHWidget(QWidget):
         for i, (label, valeur) in enumerate(infos):
             r, c = divmod(i, 2)
             lbl = QLabel(f"<b>{label}</b><br/>{valeur}")
-            lbl.setStyleSheet("padding: 8px; background: #f9fafb; border-radius: 6px;")
+            lbl.setStyleSheet("padding: 8px 12px; background: #f0f4f8; border: 1px solid #cbd5e1; border-radius: 6px;")
+            lbl.setWordWrap(True)
             grid.addWidget(lbl, r, c)
 
         card_medical.body.addLayout(grid)
@@ -3760,10 +3832,17 @@ class GestionRHWidget(QWidget):
             table.setColumnCount(6)
             table.setHorizontalHeaderLabels(["Date", "Type", "Résultat", "Médecin", "Prochaine", "Actions"])
             table.setRowCount(len(visites))
-            table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            hh = table.horizontalHeader()
+            hh.setSectionResizeMode(0, QHeaderView.Fixed); table.setColumnWidth(0, 100)
+            hh.setSectionResizeMode(1, QHeaderView.Stretch)
+            hh.setSectionResizeMode(2, QHeaderView.Fixed); table.setColumnWidth(2, 110)
+            hh.setSectionResizeMode(3, QHeaderView.Stretch)
+            hh.setSectionResizeMode(4, QHeaderView.Fixed); table.setColumnWidth(4, 100)
+            hh.setSectionResizeMode(5, QHeaderView.Fixed); table.setColumnWidth(5, 220)
             table.setAlternatingRowColors(True)
             table.setSelectionBehavior(QAbstractItemView.SelectRows)
             table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table.verticalHeader().setDefaultSectionSize(52)
 
             for row_idx, visite in enumerate(visites):
                 table.setItem(row_idx, 0, QTableWidgetItem(self._format_date(visite.get('date_visite'))))
@@ -3774,24 +3853,23 @@ class GestionRHWidget(QWidget):
 
                 btn_widget = QWidget()
                 btn_layout_inner = QHBoxLayout(btn_widget)
-                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
-                btn_layout_inner.setSpacing(4)
+                btn_layout_inner.setContentsMargins(4, 4, 4, 4)
+                btn_layout_inner.setSpacing(6)
 
                 btn_edit = EmacButton("Modifier", variant="outline")
-                btn_edit.setFixedHeight(28)
                 btn_edit.setVisible(can("rh.medical.edit"))
                 btn_edit.clicked.connect(lambda checked, v=visite: self._edit_visite(v))
                 btn_layout_inner.addWidget(btn_edit)
 
-                btn_del = EmacButton("Suppr.", variant="ghost")
-                btn_del.setFixedHeight(28)
+                btn_del = EmacButton("Suppr.", variant="danger")
                 btn_del.setVisible(can("rh.medical.edit"))
                 btn_del.clicked.connect(lambda checked, v=visite: self._delete_visite(v))
                 btn_layout_inner.addWidget(btn_del)
 
                 table.setCellWidget(row_idx, 5, btn_widget)
 
-            table.setMaximumHeight(200)
+            _h = min(len(visites) * 52 + 32, 420)
+            table.setFixedHeight(_h)
             card_visites.body.addWidget(table)
         else:
             card_visites.body.addWidget(QLabel("Aucune visite enregistrée"))
@@ -3807,43 +3885,58 @@ class GestionRHWidget(QWidget):
         card_accidents.body.addWidget(btn_add_accident, alignment=Qt.AlignLeft)
 
         if accidents:
-            table_acc = QTableWidget()
-            table_acc.setColumnCount(6)
-            table_acc.setHorizontalHeaderLabels(["Date", "Avec arrêt", "Jours absence", "Siège lésions", "Nature", "Actions"])
-            table_acc.setRowCount(len(accidents))
-            table_acc.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            table_acc.setAlternatingRowColors(True)
-            table_acc.setSelectionBehavior(QAbstractItemView.SelectRows)
-            table_acc.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            for acc in accidents:
+                frame = QFrame()
+                frame.setStyleSheet("""
+                    QFrame {
+                        background: #f8fafc;
+                        border: 1px solid #e2e8f0;
+                        border-radius: 8px;
+                    }
+                """)
+                frame_layout = QVBoxLayout(frame)
+                frame_layout.setContentsMargins(12, 8, 12, 8)
+                frame_layout.setSpacing(4)
 
-            for row_idx, acc in enumerate(accidents):
-                table_acc.setItem(row_idx, 0, QTableWidgetItem(self._format_date(acc.get('date_accident'))))
-                table_acc.setItem(row_idx, 1, QTableWidgetItem("Oui" if acc.get('avec_arret') else "Non"))
-                table_acc.setItem(row_idx, 2, QTableWidgetItem(str(acc.get('nb_jours_absence', '-'))))
-                table_acc.setItem(row_idx, 3, QTableWidgetItem(acc.get('siege_lesions', '-')))
-                table_acc.setItem(row_idx, 4, QTableWidgetItem(acc.get('nature_lesions', '-')))
+                header_row = QHBoxLayout()
+                date_lbl = QLabel(f"<b>{self._format_date(acc.get('date_accident'))}</b>")
+                header_row.addWidget(date_lbl)
+                avec_arret = acc.get('avec_arret')
+                arret_style = "padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #fef3c7; color: #92400e;" if avec_arret else "padding: 2px 8px; border-radius: 10px; font-size: 11px; background: #f0fdf4; color: #166534;"
+                arret_lbl = QLabel("Avec arrêt" if avec_arret else "Sans arrêt")
+                arret_lbl.setStyleSheet(arret_style)
+                header_row.addWidget(arret_lbl)
+                jours = acc.get('nb_jours_absence')
+                if jours:
+                    jours_lbl = QLabel(f"{jours} jour(s) d'absence")
+                    jours_lbl.setStyleSheet("color: #64748b; font-size: 12px;")
+                    header_row.addWidget(jours_lbl)
+                header_row.addStretch()
+                frame_layout.addLayout(header_row)
 
-                btn_widget = QWidget()
-                btn_layout_inner = QHBoxLayout(btn_widget)
-                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
-                btn_layout_inner.setSpacing(4)
+                details = []
+                if acc.get('siege_lesions'):
+                    details.append(f"Siège : {acc.get('siege_lesions')}")
+                if acc.get('nature_lesions'):
+                    details.append(f"Nature : {acc.get('nature_lesions')}")
+                if details:
+                    detail_lbl = QLabel("  ·  ".join(details))
+                    detail_lbl.setStyleSheet("color: #475569; font-size: 12px;")
+                    frame_layout.addWidget(detail_lbl)
 
+                actions_row = QHBoxLayout()
+                actions_row.addStretch()
                 btn_edit = EmacButton("Modifier", variant="outline")
-                btn_edit.setFixedHeight(28)
                 btn_edit.setVisible(can("rh.medical.edit"))
                 btn_edit.clicked.connect(lambda checked, a=acc: self._edit_accident(a))
-                btn_layout_inner.addWidget(btn_edit)
-
-                btn_del = EmacButton("Suppr.", variant="ghost")
-                btn_del.setFixedHeight(28)
+                actions_row.addWidget(btn_edit)
+                btn_del = EmacButton("Supprimer", variant="danger")
                 btn_del.setVisible(can("rh.medical.edit"))
                 btn_del.clicked.connect(lambda checked, a=acc: self._delete_accident(a))
-                btn_layout_inner.addWidget(btn_del)
+                actions_row.addWidget(btn_del)
+                frame_layout.addLayout(actions_row)
 
-                table_acc.setCellWidget(row_idx, 5, btn_widget)
-
-            table_acc.setMaximumHeight(200)
-            card_accidents.body.addWidget(table_acc)
+                card_accidents.body.addWidget(frame)
         else:
             card_accidents.body.addWidget(QLabel("Aucun accident enregistré"))
 
@@ -3953,12 +4046,18 @@ class GestionRHWidget(QWidget):
         if sanctions_list:
             table_sanctions = QTableWidget()
             table_sanctions.setColumnCount(5)
-            table_sanctions.setHorizontalHeaderLabels(["Date", "Type", "Durée (jours)", "Motif", "Actions"])
+            table_sanctions.setHorizontalHeaderLabels(["Date", "Type", "Durée", "Motif", "Actions"])
             table_sanctions.setRowCount(len(sanctions_list))
-            table_sanctions.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            hh_s = table_sanctions.horizontalHeader()
+            hh_s.setSectionResizeMode(0, QHeaderView.Fixed); table_sanctions.setColumnWidth(0, 100)
+            hh_s.setSectionResizeMode(1, QHeaderView.Fixed); table_sanctions.setColumnWidth(1, 150)
+            hh_s.setSectionResizeMode(2, QHeaderView.Fixed); table_sanctions.setColumnWidth(2, 70)
+            hh_s.setSectionResizeMode(3, QHeaderView.Stretch)
+            hh_s.setSectionResizeMode(4, QHeaderView.Fixed); table_sanctions.setColumnWidth(4, 220)
             table_sanctions.setAlternatingRowColors(True)
             table_sanctions.setSelectionBehavior(QAbstractItemView.SelectRows)
             table_sanctions.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table_sanctions.verticalHeader().setDefaultSectionSize(52)
 
             for row_idx, sanc in enumerate(sanctions_list):
                 table_sanctions.setItem(row_idx, 0, QTableWidgetItem(self._format_date(sanc.get('date_sanction'))))
@@ -3971,24 +4070,23 @@ class GestionRHWidget(QWidget):
 
                 btn_widget = QWidget()
                 btn_layout_inner = QHBoxLayout(btn_widget)
-                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
-                btn_layout_inner.setSpacing(4)
+                btn_layout_inner.setContentsMargins(4, 4, 4, 4)
+                btn_layout_inner.setSpacing(6)
 
                 btn_edit = EmacButton("Modifier", variant="outline")
-                btn_edit.setFixedHeight(28)
                 btn_edit.setVisible(can("rh.vie_salarie.edit"))
                 btn_edit.clicked.connect(lambda checked, s=sanc: self._edit_sanction(s))
                 btn_layout_inner.addWidget(btn_edit)
 
-                btn_del = EmacButton("Suppr.", variant="ghost")
-                btn_del.setFixedHeight(28)
+                btn_del = EmacButton("Suppr.", variant="danger")
                 btn_del.setVisible(can("rh.vie_salarie.edit"))
                 btn_del.clicked.connect(lambda checked, s=sanc: self._delete_sanction(s))
                 btn_layout_inner.addWidget(btn_del)
 
                 table_sanctions.setCellWidget(row_idx, 4, btn_widget)
 
-            table_sanctions.setMaximumHeight(180)
+            _h = min(len(sanctions_list) * 52 + 32, 420)
+            table_sanctions.setFixedHeight(_h)
             card_sanctions.body.addWidget(table_sanctions)
         else:
             card_sanctions.body.addWidget(QLabel("Aucune sanction enregistrée"))
@@ -4016,19 +4114,28 @@ class GestionRHWidget(QWidget):
 
         tables_layout = QHBoxLayout()
 
+        ROW_H = 30  # hauteur ligne sans boutons
+
         alcool_container = QVBoxLayout()
         alcool_container.addWidget(QLabel("<b>Alcoolémie</b>"))
         if controles_alcool:
             table_alcool = QTableWidget()
             table_alcool.setColumnCount(3)
             table_alcool.setHorizontalHeaderLabels(["Date", "Résultat", "Taux"])
-            table_alcool.setRowCount(min(5, len(controles_alcool)))
-            table_alcool.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            for row_idx, ctrl in enumerate(controles_alcool[:5]):
-                table_alcool.setItem(row_idx, 0, QTableWidgetItem(self._format_datetime(ctrl.get('date_controle'))))
+            table_alcool.setRowCount(len(controles_alcool))
+            hh_a = table_alcool.horizontalHeader()
+            hh_a.setSectionResizeMode(0, QHeaderView.Fixed); table_alcool.setColumnWidth(0, 95)
+            hh_a.setSectionResizeMode(1, QHeaderView.Stretch)
+            hh_a.setSectionResizeMode(2, QHeaderView.Fixed); table_alcool.setColumnWidth(2, 80)
+            table_alcool.setAlternatingRowColors(True)
+            table_alcool.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table_alcool.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table_alcool.verticalHeader().setDefaultSectionSize(ROW_H)
+            for row_idx, ctrl in enumerate(controles_alcool):
+                table_alcool.setItem(row_idx, 0, QTableWidgetItem(self._format_date(ctrl.get('date_controle'))))
                 table_alcool.setItem(row_idx, 1, QTableWidgetItem(ctrl.get('resultat', '-')))
-                table_alcool.setItem(row_idx, 2, QTableWidgetItem(f"{ctrl.get('taux', '-')} g/L" if ctrl.get('taux') else '-'))
-            table_alcool.setMaximumHeight(150)
+                table_alcool.setItem(row_idx, 2, QTableWidgetItem(f"{ctrl.get('taux')} g/L" if ctrl.get('taux') else '-'))
+            table_alcool.setFixedHeight(min(len(controles_alcool), 8) * ROW_H + 32)
             alcool_container.addWidget(table_alcool)
         else:
             alcool_container.addWidget(QLabel("Aucun contrôle"))
@@ -4040,12 +4147,16 @@ class GestionRHWidget(QWidget):
             table_salivaire = QTableWidget()
             table_salivaire.setColumnCount(2)
             table_salivaire.setHorizontalHeaderLabels(["Date", "Résultat"])
-            table_salivaire.setRowCount(min(5, len(controles_salivaire)))
+            table_salivaire.setRowCount(len(controles_salivaire))
             table_salivaire.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-            for row_idx, test in enumerate(controles_salivaire[:5]):
-                table_salivaire.setItem(row_idx, 0, QTableWidgetItem(self._format_datetime(test.get('date_test'))))
+            table_salivaire.setAlternatingRowColors(True)
+            table_salivaire.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table_salivaire.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table_salivaire.verticalHeader().setDefaultSectionSize(ROW_H)
+            for row_idx, test in enumerate(controles_salivaire):
+                table_salivaire.setItem(row_idx, 0, QTableWidgetItem(self._format_date(test.get('date_test'))))
                 table_salivaire.setItem(row_idx, 1, QTableWidgetItem(test.get('resultat', '-')))
-            table_salivaire.setMaximumHeight(150)
+            table_salivaire.setFixedHeight(min(len(controles_salivaire), 8) * ROW_H + 32)
             salivaire_container.addWidget(table_salivaire)
         else:
             salivaire_container.addWidget(QLabel("Aucun test"))
@@ -4068,10 +4179,16 @@ class GestionRHWidget(QWidget):
             table_entretiens.setColumnCount(5)
             table_entretiens.setHorizontalHeaderLabels(["Date", "Type", "Manager", "Prochaine", "Actions"])
             table_entretiens.setRowCount(len(entretiens_liste))
-            table_entretiens.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+            hh_e = table_entretiens.horizontalHeader()
+            hh_e.setSectionResizeMode(0, QHeaderView.Fixed); table_entretiens.setColumnWidth(0, 100)
+            hh_e.setSectionResizeMode(1, QHeaderView.Stretch)
+            hh_e.setSectionResizeMode(2, QHeaderView.Stretch)
+            hh_e.setSectionResizeMode(3, QHeaderView.Fixed); table_entretiens.setColumnWidth(3, 100)
+            hh_e.setSectionResizeMode(4, QHeaderView.Fixed); table_entretiens.setColumnWidth(4, 220)
             table_entretiens.setAlternatingRowColors(True)
             table_entretiens.setSelectionBehavior(QAbstractItemView.SelectRows)
             table_entretiens.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table_entretiens.verticalHeader().setDefaultSectionSize(52)
 
             for row_idx, ent in enumerate(entretiens_liste):
                 table_entretiens.setItem(row_idx, 0, QTableWidgetItem(self._format_date(ent.get('date_entretien'))))
@@ -4081,24 +4198,23 @@ class GestionRHWidget(QWidget):
 
                 btn_widget = QWidget()
                 btn_layout_inner = QHBoxLayout(btn_widget)
-                btn_layout_inner.setContentsMargins(2, 2, 2, 2)
-                btn_layout_inner.setSpacing(4)
+                btn_layout_inner.setContentsMargins(4, 4, 4, 4)
+                btn_layout_inner.setSpacing(6)
 
                 btn_edit = EmacButton("Modifier", variant="outline")
-                btn_edit.setFixedHeight(28)
                 btn_edit.setVisible(can("rh.vie_salarie.edit"))
                 btn_edit.clicked.connect(lambda checked, e=ent: self._edit_entretien(e))
                 btn_layout_inner.addWidget(btn_edit)
 
-                btn_del = EmacButton("Suppr.", variant="ghost")
-                btn_del.setFixedHeight(28)
+                btn_del = EmacButton("Suppr.", variant="danger")
                 btn_del.setVisible(can("rh.vie_salarie.edit"))
                 btn_del.clicked.connect(lambda checked, e=ent: self._delete_entretien(e))
                 btn_layout_inner.addWidget(btn_del)
 
                 table_entretiens.setCellWidget(row_idx, 4, btn_widget)
 
-            table_entretiens.setMaximumHeight(180)
+            _h = min(len(entretiens_liste) * 52 + 32, 420)
+            table_entretiens.setFixedHeight(_h)
             card_entretiens.body.addWidget(table_entretiens)
         else:
             card_entretiens.body.addWidget(QLabel("Aucun entretien enregistré"))

@@ -70,16 +70,12 @@ class AlertService:
         """
         logger.debug("get_contrats_expires: début de la requête")
         query = """
-            SELECT c.id, c.personnel_id, c.type_contrat, c.date_debut, c.date_fin,
-                   p.nom, p.prenom, p.matricule,
-                   DATEDIFF(CURDATE(), c.date_fin) as jours_expires
-            FROM contrat c
-            JOIN personnel p ON c.personnel_id = p.id
-            WHERE c.actif = 1
-              AND c.date_fin IS NOT NULL
-              AND c.date_fin < CURDATE()
-              AND p.statut = 'ACTIF'
-            ORDER BY c.date_fin ASC
+            SELECT id, personnel_id, type_contrat, date_debut, date_fin,
+                   nom, prenom, matricule,
+                   -jours_restants as jours_expires
+            FROM v_contrats_fin_proche
+            WHERE jours_restants < 0
+            ORDER BY date_fin ASC
         """
 
         try:
@@ -138,16 +134,12 @@ class AlertService:
         logger.debug(f"get_contrats_expirant: horizon={jours}j, date_limite={date_limite}")
 
         query = """
-            SELECT c.id, c.personnel_id, c.type_contrat, c.date_debut, c.date_fin,
-                   p.nom, p.prenom, p.matricule,
-                   DATEDIFF(c.date_fin, CURDATE()) as jours_restants
-            FROM contrat c
-            JOIN personnel p ON c.personnel_id = p.id
-            WHERE c.actif = 1
-              AND c.date_fin IS NOT NULL
-              AND c.date_fin BETWEEN CURDATE() AND %s
-              AND p.statut = 'ACTIF'
-            ORDER BY c.date_fin ASC
+            SELECT id, personnel_id, type_contrat, date_debut, date_fin,
+                   nom, prenom, matricule, jours_restants
+            FROM v_contrats_fin_proche
+            WHERE jours_restants >= 0
+              AND date_fin <= %s
+            ORDER BY date_fin ASC
         """
 
         try:
@@ -563,31 +555,24 @@ class AlertService:
         try:
             # Contrats expirés (CRITIQUE)
             n = QueryExecutor.fetch_scalar("""
-                SELECT COUNT(*) FROM contrat c
-                JOIN personnel p ON c.personnel_id = p.id
-                WHERE c.actif = 1 AND c.date_fin < CURDATE() AND p.statut = 'ACTIF'
+                SELECT COUNT(*) FROM v_contrats_fin_proche
+                WHERE jours_restants < 0
             """, default=0)
             logger.debug(f"  contrats expirés (CRITIQUE): {n}")
             counts['critiques'] += n
 
             # Contrats expirant < 7j (CRITIQUE)
             n = QueryExecutor.fetch_scalar("""
-                SELECT COUNT(*) FROM contrat c
-                JOIN personnel p ON c.personnel_id = p.id
-                WHERE c.actif = 1
-                  AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
-                  AND p.statut = 'ACTIF'
+                SELECT COUNT(*) FROM v_contrats_fin_proche
+                WHERE jours_restants BETWEEN 0 AND 7
             """, default=0)
             logger.debug(f"  contrats expirant ≤7j (CRITIQUE): {n}")
             counts['critiques'] += n
 
             # Contrats expirant 8-30j (AVERTISSEMENT)
             n = QueryExecutor.fetch_scalar("""
-                SELECT COUNT(*) FROM contrat c
-                JOIN personnel p ON c.personnel_id = p.id
-                WHERE c.actif = 1
-                  AND c.date_fin BETWEEN DATE_ADD(CURDATE(), INTERVAL 8 DAY) AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                  AND p.statut = 'ACTIF'
+                SELECT COUNT(*) FROM v_contrats_fin_proche
+                WHERE jours_restants BETWEEN 8 AND 30
             """, default=0)
             logger.debug(f"  contrats expirant 8-30j (AVERTISSEMENT): {n}")
             counts['avertissements'] += n
@@ -632,18 +617,14 @@ class AlertService:
 
             # Contrats expirés (CRITIQUE)
             result['contrats_expires'] = QueryExecutor.fetch_scalar("""
-                SELECT COUNT(*) FROM contrat c
-                JOIN personnel p ON c.personnel_id = p.id
-                WHERE c.actif = 1 AND c.date_fin < CURDATE() AND p.statut = 'ACTIF'
+                SELECT COUNT(*) FROM v_contrats_fin_proche
+                WHERE jours_restants < 0
             """, default=0)
 
             # Contrats expirant dans 30j (AVERTISSEMENT)
             result['contrats_expirant'] = QueryExecutor.fetch_scalar("""
-                SELECT COUNT(*) FROM contrat c
-                JOIN personnel p ON c.personnel_id = p.id
-                WHERE c.actif = 1
-                  AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                  AND p.statut = 'ACTIF'
+                SELECT COUNT(*) FROM v_contrats_fin_proche
+                WHERE jours_restants BETWEEN 0 AND 30
             """, default=0)
 
             # Personnel sans contrat actif (AVERTISSEMENT)

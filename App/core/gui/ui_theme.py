@@ -92,6 +92,37 @@ class EmacTheme:
         }}
         QPushButton[class="ghost"]:hover {{ background: #f8fafc; }}
 
+        QPushButton[class="secondary"] {{
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            color: #475569;
+            font-weight: 500;
+        }}
+        QPushButton[class="secondary"]:hover {{ background: #e2e8f0; border-color: #94a3b8; }}
+
+        QPushButton[class="outline"] {{
+            background: #ffffff;
+            border: 1.5px solid {cls.PRI};
+            color: {cls.PRI};
+            font-weight: 500;
+        }}
+        QPushButton[class="outline"]:hover {{ background: #eff6ff; border-color: {cls.PRI_H}; }}
+
+        QPushButton[class="danger"] {{
+            background: #ffffff;
+            border: 1.5px solid #ef4444;
+            color: #dc2626;
+            font-weight: 500;
+        }}
+        QPushButton[class="danger"]:hover {{ background: #fef2f2; border-color: #b91c1c; }}
+
+        QPushButton[size="sm"] {{
+            padding: 4px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+            min-width: 76px;
+        }}
+
         /* Inputs & listes */
         QComboBox, QListWidget, QLineEdit {{
             background: {cls.BG_TABLE};
@@ -237,12 +268,43 @@ class EmacDarkTheme(EmacTheme):
         QPushButton[class="primary"]:hover {{ background: {cls.PRI_H}; border-color: {cls.PRI_H}; }}
 
         QPushButton[class="ghost"] {{
-            background: {cls.BG_TABLE}; 
+            background: {cls.BG_TABLE};
             border: 1px solid {cls.BDR};
             color: {cls.TXT};
         }}
         QPushButton[class="ghost"]:hover {{ background: {cls.BG_CARD}; border-color: {cls.BDR_STRONG};}}
-        
+
+        QPushButton[class="secondary"] {{
+            background: {cls.BG_ELEV};
+            border: 1px solid {cls.BDR_STRONG};
+            color: {cls.TXT_DIM};
+            font-weight: 500;
+        }}
+        QPushButton[class="secondary"]:hover {{ background: {cls.BDR}; border-color: {cls.TXT_DIM}; }}
+
+        QPushButton[class="outline"] {{
+            background: transparent;
+            border: 1.5px solid {cls.PRI};
+            color: {cls.PRI};
+            font-weight: 500;
+        }}
+        QPushButton[class="outline"]:hover {{ background: {cls.BG_CARD}; border-color: {cls.PRI_H}; }}
+
+        QPushButton[class="danger"] {{
+            background: transparent;
+            border: 1.5px solid #ef4444;
+            color: #f87171;
+            font-weight: 500;
+        }}
+        QPushButton[class="danger"]:hover {{ background: #2d1515; border-color: #ef4444; }}
+
+        QPushButton[size="sm"] {{
+            padding: 4px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+            min-width: 76px;
+        }}
+
         /* Inputs & listes */
         QComboBox, QLineEdit {{
             background: {cls.BG_TABLE};
@@ -486,11 +548,21 @@ class EmacHeader(QWidget):
 
 
 class EmacButton(QPushButton):
-    """Bouton avec tailles uniformes et variantes (primary/ghost)."""
-    def __init__(self, text: str, variant: str = None, parent=None):
+    """Bouton avec tailles uniformes et variantes (primary/secondary/ghost/outline/danger)."""
+    VARIANTS = ('primary', 'secondary', 'ghost', 'outline', 'danger')
+
+    def __init__(self, text: str, variant: str = None, size: str = 'md', parent=None):
         super().__init__(text, parent)
-        self.setFixedHeight(44)
-        if variant in ('primary', 'ghost'):
+        if size == 'sm':
+            self.setFixedHeight(32)
+            self.setMinimumWidth(80)
+            font = self.font()
+            font.setPointSize(9)
+            self.setFont(font)
+            self.setProperty('size', 'sm')
+        else:
+            self.setFixedHeight(44)
+        if variant in self.VARIANTS:
             self.setProperty('class', variant)
 
 

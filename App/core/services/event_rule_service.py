@@ -91,19 +91,17 @@ def get_rules_for_event(event_name: str) -> List[EventRule]:
 
     query = """
         SELECT
-            r.id,
-            r.event_name,
-            r.template_id,
-            t.nom as template_nom,
-            r.execution_mode,
-            r.condition_json,
-            r.priority
-        FROM document_event_rules r
-        JOIN documents_templates t ON r.template_id = t.id
-        WHERE r.event_name = %s
-          AND r.actif = TRUE
-          AND t.actif = TRUE
-        ORDER BY r.priority ASC
+            rule_id as id,
+            event_name,
+            template_id,
+            template_nom,
+            execution_mode,
+            condition_json,
+            priority
+        FROM v_document_rules_with_templates
+        WHERE event_name = %s
+          AND rule_actif = TRUE
+        ORDER BY priority ASC
     """
 
     try:
@@ -336,17 +334,16 @@ def get_rules_summary() -> List[Dict]:
     try:
         return QueryExecutor.fetch_all("""
             SELECT
-                r.id,
-                r.event_name,
-                r.execution_mode,
-                r.priority,
-                r.actif,
-                r.description,
-                t.nom as template_nom,
-                t.contexte as template_contexte
-            FROM document_event_rules r
-            JOIN documents_templates t ON r.template_id = t.id
-            ORDER BY r.event_name, r.priority
+                rule_id as id,
+                event_name,
+                execution_mode,
+                priority,
+                rule_actif as actif,
+                NULL as description,
+                template_nom,
+                contexte as template_contexte
+            FROM v_document_rules_with_templates
+            ORDER BY event_name, priority
         """, dictionary=True)
     except Exception as e:
         logger.error(f"Erreur lecture résumé règles: {e}")

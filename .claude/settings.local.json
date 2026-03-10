@@ -77,7 +77,16 @@
       "Bash(powershell -ExecutionPolicy Bypass -File cleanup_temp.ps1)",
       "Bash(python3:*)",
       "Bash(sc query:*)",
-      "Bash(git checkout c3a33d4 -- App/core/gui/historique.py)"
+      "Bash(git checkout c3a33d4 -- App/core/gui/historique.py)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(Select-String \"passed|failed|error\")",
+      "Bash(py -c \":*)",
+      "Bash(sed \"s/.*for view //\")",
+      "Bash(sort __NEW_LINE_1440e5eab1235bde__ grep -oE \"from \\\\`[a-z_]+\\\\`|join \\\\`[a-z_]+\\\\`\" c:/Users/tlahirigoyen/Desktop/PROJET/EMAC/App/database/emac_views.sql)",
+      "Bash(tr -d '`')",
+      "Read(//c/Users/tlahirigoyen/Desktop/PROJET/EMAC/**)",
+      "Bash(cut -d'`' -f1)",
+      "Bash(git -C /c/Users/tlahirigoyen/Desktop/PROJET/EMAC diff App/core/gui/gestion_rh.py)"
     ],
     "deny": [],
     "ask": []

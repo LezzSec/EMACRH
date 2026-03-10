@@ -40,6 +40,125 @@ from core.services.vie_salarie_service import (
 )
 
 
+class JustificatifMixin:
+    """
+    Mixin qui ajoute un champ de document justificatif obligatoire (création uniquement).
+    À mélanger avec EmacFormDialog : class MonDialog(JustificatifMixin, EmacFormDialog).
+    Appeler _ajouter_section_justificatif() dans init_ui(), puis :
+      - _valider_justificatif() dans validate()
+      - _sauvegarder_justificatif(operateur_id, categorie_nom) dans save_to_db()
+    """
+
+    def _ajouter_section_justificatif(self, categorie_nom_hint: str = ""):
+        """Ajoute le groupe UI 'Document justificatif' à self.content_layout."""
+        from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout, QLineEdit, QLabel
+        self._justificatif_path = None
+        self._justificatif_categorie_nom = categorie_nom_hint
+
+        group = QGroupBox("📎 Document justificatif (obligatoire)")
+        group.setStyleSheet("""
+            QGroupBox {
+                border: 2px solid #f59e0b;
+                border-radius: 6px;
+                margin-top: 10px;
+                padding: 10px 8px 8px 8px;
+                font-weight: bold;
+                color: #92400e;
+                background: #fffbeb;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 4px;
+            }
+        """)
+        group_layout = QVBoxLayout(group)
+        group_layout.setSpacing(6)
+
+        note = QLabel("Un document justificatif (attestation, certificat, contrat signé…) "
+                      "est requis pour valider cette saisie.")
+        note.setStyleSheet("color: #78350f; font-size: 11px; font-style: italic;")
+        note.setWordWrap(True)
+        group_layout.addWidget(note)
+
+        file_row = QHBoxLayout()
+        self._justificatif_label = QLineEdit()
+        self._justificatif_label.setReadOnly(True)
+        self._justificatif_label.setPlaceholderText("Aucun fichier sélectionné…")
+        self._justificatif_label.setStyleSheet("background: white;")
+        file_row.addWidget(self._justificatif_label)
+
+        btn = EmacButton("Parcourir…", variant="ghost")
+        btn.setFixedWidth(100)
+        btn.clicked.connect(self._parcourir_justificatif)
+        file_row.addWidget(btn)
+        group_layout.addLayout(file_row)
+
+        self.content_layout.addWidget(group)
+
+    def _parcourir_justificatif(self):
+        from PyQt5.QtWidgets import QFileDialog
+        fichier, _ = QFileDialog.getOpenFileName(
+            self,
+            "Sélectionner le document justificatif",
+            "",
+            "Tous les fichiers (*);;Documents PDF (*.pdf);;Images (*.png *.jpg *.jpeg);;Documents Word (*.docx *.doc)"
+        )
+        if fichier:
+            self._justificatif_path = fichier
+            self._justificatif_label.setText(fichier)
+
+    def _valider_justificatif(self):
+        """Retourne (True, '') si un fichier est sélectionné, sinon (False, message)."""
+        if not getattr(self, '_justificatif_path', None):
+            return False, "Un document justificatif est obligatoire pour cette saisie."
+        return True, ""
+
+    def _sauvegarder_justificatif(self, operateur_id: int):
+        """
+        Upload le justificatif en document DMS après création du record.
+        Cherche la catégorie dont le nom contient self._justificatif_categorie_nom.
+        """
+        path = getattr(self, '_justificatif_path', None)
+        if not path:
+            return
+        import os
+        from core.services.document_service import DocumentService
+        from core.services.auth_service import get_current_user
+        from core.services.rh_service_refactored import get_categories_documents
+
+        categorie_nom_hint = getattr(self, '_justificatif_categorie_nom', '')
+        categories = get_categories_documents()
+
+        # Cherche la catégorie la plus proche du hint
+        categorie_id = None
+        for cat in categories:
+            if categorie_nom_hint and categorie_nom_hint.lower() in cat['nom'].lower():
+                categorie_id = cat['id']
+                break
+        if categorie_id is None and categories:
+            categorie_id = categories[0]['id']
+
+        user = get_current_user()
+        uploaded_by = user.get('nom_complet', 'Utilisateur') if user else 'Utilisateur'
+        nom_affichage = os.path.basename(path)
+
+        try:
+            doc_service = DocumentService()
+            doc_service.add_document(
+                operateur_id=operateur_id,
+                categorie_id=categorie_id,
+                fichier_source=path,
+                nom_affichage=nom_affichage,
+                uploaded_by=uploaded_by,
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(
+                f"Justificatif non sauvegardé pour operateur {operateur_id}: {e}"
+            )
+
+
 class EditInfosGeneralesDialog(EmacFormDialog):
     """Formulaire d'édition des informations générales."""
 
@@ -202,7 +321,7 @@ class EditInfosGeneralesDialog(EmacFormDialog):
             raise Exception(message)
 
 
-class EditContratDialog(EmacFormDialog):
+class EditContratDialog(JustificatifMixin, EmacFormDialog):
     """Formulaire d'édition/création de contrat."""
 
     def __init__(self, operateur_id: int, contrat: dict = None, parent=None):
@@ -210,7 +329,8 @@ class EditContratDialog(EmacFormDialog):
         self.contrat = contrat
         self.is_edit = contrat is not None
         title = "Modifier le contrat" if self.is_edit else "Nouveau contrat"
-        super().__init__(title=title, min_width=450, min_height=400, add_title_bar=False, parent=parent)
+        min_h = 400 if self.is_edit else 530
+        super().__init__(title=title, min_width=450, min_height=min_h, add_title_bar=False, parent=parent)
 
     def init_ui(self):
         form = QFormLayout()
@@ -270,6 +390,16 @@ class EditContratDialog(EmacFormDialog):
 
         self.content_layout.addLayout(form)
 
+        if not self.is_edit:
+            self._ajouter_section_justificatif("Contrats de travail")
+
+    def validate(self):
+        if not self.is_edit:
+            ok, msg = self._valider_justificatif()
+            if not ok:
+                return False, msg
+        return True, ""
+
     def save_to_db(self):
         date_fin = self.date_fin.date()
         data = {
@@ -286,12 +416,14 @@ class EditContratDialog(EmacFormDialog):
             success, message = update_contrat(self.contrat['id'], data)
         else:
             success, message, _ = create_contrat(self.operateur_id, data)
+            if success:
+                self._sauvegarder_justificatif(self.operateur_id)
 
         if not success:
             raise Exception(message)
 
 
-class EditDeclarationDialog(EmacFormDialog):
+class EditDeclarationDialog(JustificatifMixin, EmacFormDialog):
     """Formulaire d'édition/création de déclaration."""
 
     def __init__(self, operateur_id: int, declaration: dict = None, parent=None):
@@ -299,7 +431,8 @@ class EditDeclarationDialog(EmacFormDialog):
         self.declaration = declaration
         self.is_edit = declaration is not None
         title = "Modifier la déclaration" if self.is_edit else "Nouvelle déclaration"
-        super().__init__(title=title, min_width=400, min_height=350, add_title_bar=False, parent=parent)
+        min_h = 350 if self.is_edit else 490
+        super().__init__(title=title, min_width=400, min_height=min_h, add_title_bar=False, parent=parent)
 
     def init_ui(self):
         form = QFormLayout()
@@ -339,6 +472,16 @@ class EditDeclarationDialog(EmacFormDialog):
 
         self.content_layout.addLayout(form)
 
+        if not self.is_edit:
+            self._ajouter_section_justificatif("Attestations")
+
+    def validate(self):
+        if not self.is_edit:
+            ok, msg = self._valider_justificatif()
+            if not ok:
+                return False, msg
+        return True, ""
+
     def save_to_db(self):
         data = {
             'type_declaration': self.type_combo.currentText(),
@@ -351,6 +494,8 @@ class EditDeclarationDialog(EmacFormDialog):
             success, message = update_declaration(self.declaration['id'], data)
         else:
             success, message, _ = create_declaration(self.operateur_id, data)
+            if success:
+                self._sauvegarder_justificatif(self.operateur_id)
 
         if not success:
             raise Exception(message)
@@ -486,7 +631,7 @@ class EditCompetenceDialog(EmacFormDialog):
             raise Exception(message)
 
 
-class EditFormationDialog(EmacFormDialog):
+class EditFormationDialog(JustificatifMixin, EmacFormDialog):
     """Formulaire d'édition/création de formation."""
 
     def __init__(self, operateur_id: int, formation: dict = None, parent=None):
@@ -494,7 +639,8 @@ class EditFormationDialog(EmacFormDialog):
         self.formation = formation
         self.is_edit = formation is not None
         title = "Modifier la formation" if self.is_edit else "Nouvelle formation"
-        super().__init__(title=title, min_width=450, min_height=450, add_title_bar=False, parent=parent)
+        min_h = 450 if self.is_edit else 590
+        super().__init__(title=title, min_width=450, min_height=min_h, add_title_bar=False, parent=parent)
 
     def init_ui(self):
         form = QFormLayout()
@@ -555,9 +701,16 @@ class EditFormationDialog(EmacFormDialog):
 
         self.content_layout.addLayout(form)
 
+        if not self.is_edit:
+            self._ajouter_section_justificatif("Diplômes et formations")
+
     def validate(self):
         if not self.intitule.text().strip():
             return False, "L'intitulé est obligatoire"
+        if not self.is_edit:
+            ok, msg = self._valider_justificatif()
+            if not ok:
+                return False, msg
         return True, ""
 
     def save_to_db(self):
@@ -577,6 +730,8 @@ class EditFormationDialog(EmacFormDialog):
             success, message = update_formation(self.formation['id'], data)
         else:
             success, message, _ = create_formation(self.operateur_id, data)
+            if success:
+                self._sauvegarder_justificatif(self.operateur_id)
 
         if not success:
             raise Exception(message)
@@ -586,7 +741,7 @@ class EditFormationDialog(EmacFormDialog):
 # FORMULAIRES MEDICAL
 # ============================================================
 
-class EditVisiteDialog(EmacFormDialog):
+class EditVisiteDialog(JustificatifMixin, EmacFormDialog):
     """Formulaire pour ajouter/modifier une visite médicale."""
 
     def __init__(self, operateur_id: int, visite: dict = None, parent=None):
@@ -594,7 +749,8 @@ class EditVisiteDialog(EmacFormDialog):
         self.visite = visite
         self.is_edit = visite is not None
         title = "Modifier la visite" if self.is_edit else "Nouvelle visite médicale"
-        super().__init__(title=title, min_width=450, min_height=450, add_title_bar=False, parent=parent)
+        min_h = 450 if self.is_edit else 590
+        super().__init__(title=title, min_width=450, min_height=min_h, add_title_bar=False, parent=parent)
 
     def init_ui(self):
         form = QFormLayout()
@@ -656,6 +812,16 @@ class EditVisiteDialog(EmacFormDialog):
 
         self.content_layout.addLayout(form)
 
+        if not self.is_edit:
+            self._ajouter_section_justificatif("Certificats médicaux")
+
+    def validate(self):
+        if not self.is_edit:
+            ok, msg = self._valider_justificatif()
+            if not ok:
+                return False, msg
+        return True, ""
+
     def save_to_db(self):
         prochaine = self.prochaine_visite.date()
         data = {
@@ -672,12 +838,14 @@ class EditVisiteDialog(EmacFormDialog):
             success, message = update_visite(self.visite['id'], data)
         else:
             success, message, _ = create_visite(self.operateur_id, data)
+            if success:
+                self._sauvegarder_justificatif(self.operateur_id)
 
         if not success:
             raise Exception(message)
 
 
-class EditAccidentDialog(EmacFormDialog):
+class EditAccidentDialog(JustificatifMixin, EmacFormDialog):
     """Formulaire pour ajouter/modifier un accident du travail."""
 
     def __init__(self, operateur_id: int, accident: dict = None, parent=None):
@@ -685,7 +853,8 @@ class EditAccidentDialog(EmacFormDialog):
         self.accident = accident
         self.is_edit = accident is not None
         title = "Modifier l'accident" if self.is_edit else "Nouvel accident du travail"
-        super().__init__(title=title, min_width=500, min_height=500, add_title_bar=False, parent=parent)
+        min_h = 500 if self.is_edit else 640
+        super().__init__(title=title, min_width=500, min_height=min_h, add_title_bar=False, parent=parent)
 
     def init_ui(self):
         form = QFormLayout()
@@ -741,6 +910,16 @@ class EditAccidentDialog(EmacFormDialog):
 
         self.content_layout.addLayout(form)
 
+        if not self.is_edit:
+            self._ajouter_section_justificatif("Documents médicaux")
+
+    def validate(self):
+        if not self.is_edit:
+            ok, msg = self._valider_justificatif()
+            if not ok:
+                return False, msg
+        return True, ""
+
     def save_to_db(self):
         data = {
             'date_accident': self.date_accident.date().toPyDate(),
@@ -756,6 +935,8 @@ class EditAccidentDialog(EmacFormDialog):
             success, message = update_accident(self.accident['id'], data)
         else:
             success, message, _ = create_accident(self.operateur_id, data)
+            if success:
+                self._sauvegarder_justificatif(self.operateur_id)
 
         if not success:
             raise Exception(message)
@@ -765,7 +946,7 @@ class EditAccidentDialog(EmacFormDialog):
 # FORMULAIRES VIE DU SALARIE
 # ============================================================
 
-class EditSanctionDialog(EmacFormDialog):
+class EditSanctionDialog(JustificatifMixin, EmacFormDialog):
     """Formulaire pour ajouter/modifier une sanction."""
 
     def __init__(self, operateur_id: int, sanction: dict = None, parent=None):
@@ -773,7 +954,8 @@ class EditSanctionDialog(EmacFormDialog):
         self.sanction = sanction
         self.is_edit = sanction is not None
         title = "Modifier la sanction" if self.is_edit else "Nouvelle sanction"
-        super().__init__(title=title, min_width=450, min_height=400, add_title_bar=False, parent=parent)
+        min_h = 400 if self.is_edit else 540
+        super().__init__(title=title, min_width=450, min_height=min_h, add_title_bar=False, parent=parent)
 
     def init_ui(self):
         form = QFormLayout()
@@ -820,6 +1002,16 @@ class EditSanctionDialog(EmacFormDialog):
 
         self.content_layout.addLayout(form)
 
+        if not self.is_edit:
+            self._ajouter_section_justificatif("Sanctions disciplinaires")
+
+    def validate(self):
+        if not self.is_edit:
+            ok, msg = self._valider_justificatif()
+            if not ok:
+                return False, msg
+        return True, ""
+
     def save_to_db(self):
         data = {
             'date_sanction': self.date_sanction.date().toPyDate(),
@@ -833,6 +1025,8 @@ class EditSanctionDialog(EmacFormDialog):
             success, message = update_sanction(self.sanction['id'], data)
         else:
             success, message, _ = create_sanction(self.operateur_id, data)
+            if success:
+                self._sauvegarder_justificatif(self.operateur_id)
 
         if not success:
             raise Exception(message)
