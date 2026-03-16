@@ -56,17 +56,28 @@ class DomaineRH(Enum):
 
 # Mapping catégories de documents → domaines RH
 CATEGORIE_TO_DOMAINE = {
-    "Contrats de travail": DomaineRH.CONTRAT,
-    "Certificats médicaux": DomaineRH.MEDICAL,
-    "Diplômes et formations": DomaineRH.FORMATION,
-    "Autorisations de travail": DomaineRH.CONTRAT,
+    # GÉNÉRAL
     "Pièces d'identité": DomaineRH.GENERAL,
     "Attestations diverses": DomaineRH.GENERAL,
     "Documents administratifs": DomaineRH.GENERAL,
+    "Autres": DomaineRH.GENERAL,
+    # CONTRAT
+    "Contrats de travail": DomaineRH.CONTRAT,
+    "Autorisations de travail": DomaineRH.CONTRAT,
+    # ABSENCE
+    "Documents d'absence": DomaineRH.DECLARATION,
+    # COMPÉTENCES
+    "Documents de compétences": DomaineRH.COMPETENCES,
+    # FORMATION
+    "Diplômes et formations": DomaineRH.FORMATION,
+    # MÉDICAL
+    "Certificats médicaux": DomaineRH.MEDICAL,
     "Documents médicaux": DomaineRH.MEDICAL,
+    # VIE DU SALARIÉ
     "Sanctions disciplinaires": DomaineRH.VIE_SALARIE,
     "Entretiens professionnels": DomaineRH.VIE_SALARIE,
-    "Autres": DomaineRH.GENERAL,
+    # POLYVALENCE
+    "Documents de polyvalence": DomaineRH.POLYVALENCE,
 }
 
 

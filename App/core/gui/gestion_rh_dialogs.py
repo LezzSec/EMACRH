@@ -146,7 +146,7 @@ class JustificatifMixin:
         try:
             doc_service = DocumentService()
             doc_service.add_document(
-                operateur_id=operateur_id,
+                personnel_id=operateur_id,
                 categorie_id=categorie_id,
                 fichier_source=path,
                 nom_affichage=nom_affichage,
@@ -1287,30 +1287,24 @@ class AjouterDocumentDialog(EmacFormDialog):
         self.content_layout.addLayout(form)
 
     def _charger_categories(self):
-        """Charge les catégories de documents."""
-        from core.services.contrat_service_crud import ContratServiceCRUD
-        get_contract_types = ContratServiceCRUD.get_contract_types
-
+        """Charge les catégories de documents filtrées par domaine actif."""
         self.categorie_combo.clear()
-
-        if self.domaine == DomaineRH.CONTRAT:
-            types_contrat = get_contract_types()
-            for type_contrat in types_contrat:
-                self.categorie_combo.addItem(type_contrat, type_contrat)
-            return
 
         categories = get_categories_documents()
 
-        for cat in categories:
-            if self.domaine:
-                cat_domaine = CATEGORIE_TO_DOMAINE.get(cat['nom'], DomaineRH.GENERAL)
-                if cat_domaine != self.domaine:
-                    continue
+        # Filtrer uniquement les catégories du domaine actif
+        cats_domaine = [
+            cat for cat in categories
+            if CATEGORIE_TO_DOMAINE.get(cat['nom'], DomaineRH.GENERAL) == self.domaine
+        ] if self.domaine else categories
+
+        for cat in cats_domaine:
             self.categorie_combo.addItem(cat['nom'], cat['id'])
 
-        if self.categorie_combo.count() == 0:
-            for cat in categories:
-                self.categorie_combo.addItem(cat['nom'], cat['id'])
+        # Si une seule catégorie disponible : pré-sélectionner et verrouiller
+        if self.categorie_combo.count() == 1:
+            self.categorie_combo.setCurrentIndex(0)
+            self.categorie_combo.setEnabled(False)
 
     def _parcourir_fichier(self):
         """Ouvre le dialogue de sélection de fichier."""
@@ -1352,7 +1346,7 @@ class AjouterDocumentDialog(EmacFormDialog):
 
         doc_service = DocumentService()
         success, message, doc_id = doc_service.add_document(
-            operateur_id=self.operateur_id,
+            personnel_id=self.operateur_id,
             categorie_id=categorie_id,
             fichier_source=self.fichier_path,
             nom_affichage=nom,
