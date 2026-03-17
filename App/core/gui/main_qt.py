@@ -2,7 +2,7 @@ import sys, os, datetime as dt, time, traceback
 from dataclasses import dataclass
 
 # Configuration centralisée du logging (doit être en premier)
-from core.utils.logging_config import setup_logging, get_logger, set_log_context, clear_log_context
+from core.utils.logging_config import setup_logging, get_logger, set_log_context, clear_log_context, get_logs_dir
 
 # Déterminer le mode (production si variable d'environnement définie)
 _production_mode = os.getenv('EMAC_ENV', '').lower() == 'production'
@@ -617,6 +617,7 @@ class MainWindow(QMainWindow):
             drawer_layout.addWidget(sep)
             drawer_layout.addSpacing(10)
             add_btn("Gestion des Utilisateurs", self.show_user_management)
+            add_btn("Configuration BDD", self.show_admin_data_panel)
 
         drawer_layout.addStretch(1)
 
@@ -626,7 +627,7 @@ class MainWindow(QMainWindow):
         sep2.setStyleSheet("color: #ddd;")
         drawer_layout.addWidget(sep2)
         drawer_layout.addSpacing(10)
-        add_btn("🚪 Déconnexion", self.logout)
+        add_btn("Déconnexion", self.logout)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -967,8 +968,9 @@ class MainWindow(QMainWindow):
             else:
                 self._drawer_notif_badge.hide()
 
-        # Popup de démarrage (une seule fois par session, uniquement si critiques)
-        if not self._startup_alert_shown and summary.get('total_critique', 0) > 0:
+        # Popup de démarrage (une seule fois par session, si critiques OU avertissements)
+        total_all = summary.get('total_critique', 0) + summary.get('total_avertissement', 0)
+        if not self._startup_alert_shown and total_all > 0:
             self._startup_alert_shown = True
             QTimer.singleShot(300, lambda: self._show_startup_alert_popup(summary))
 
@@ -1144,6 +1146,14 @@ class MainWindow(QMainWindow):
         from core.gui.user_management import UserManagementDialog
         UserManagementDialog(self).exec_()
 
+    def show_admin_data_panel(self):
+        auth = _lazy_auth()
+        if not auth.is_admin():
+            QMessageBox.warning(self, "Accès refusé", "Seuls les administrateurs peuvent accéder à la configuration.")
+            return
+        from core.gui.admin_data_panel import AdminDataPanelDialog
+        AdminDataPanelDialog(self).exec_()
+
     def closeEvent(self, event):
         """Gère la fermeture de l'application."""
         # Arrêter le timeout manager
@@ -1157,10 +1167,10 @@ class MainWindow(QMainWindow):
 # ===========================
 
 if __name__ == "__main__":
-    # Crash handler global - ecrit dans crash.log meme si la console ferme
+    # Crash handler global - ecrit dans logs/crash.log (même dossier que emac.log)
     def _crash_handler(exc_type, exc_value, exc_tb):
         crash_msg = ''.join(traceback.format_exception(exc_type, exc_value, exc_tb))
-        crash_file = os.path.join(os.path.dirname(sys.executable) if getattr(sys, 'frozen', False) else '.', 'crash.log')
+        crash_file = get_logs_dir() / 'crash.log'
         with open(crash_file, 'a', encoding='utf-8') as f:
             f.write(f"\n{'='*60}\n{dt.datetime.now()}\n{crash_msg}\n")
         print(crash_msg, file=sys.stderr)

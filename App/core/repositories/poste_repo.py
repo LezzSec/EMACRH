@@ -151,12 +151,12 @@ class PosteRepository(BaseRepository[Poste]):
             SELECT
                 p.id, p.poste_code, p.besoins_postes,
                 a.nom as atelier_nom,
-                COUNT(DISTINCT poly.operateur_id) as nb_competents,
+                COUNT(DISTINCT poly.personnel_id) as nb_competents,
                 SUM(CASE WHEN poly.niveau >= 3 THEN 1 ELSE 0 END) as nb_confirmes
             FROM postes p
             LEFT JOIN atelier a ON p.atelier_id = a.id
             LEFT JOIN polyvalence poly ON p.id = poly.poste_id
-            LEFT JOIN personnel pers ON poly.operateur_id = pers.id AND pers.statut = 'ACTIF'
+            LEFT JOIN personnel pers ON poly.personnel_id = pers.id AND pers.statut = 'ACTIF'
             WHERE p.visible = 1
             GROUP BY p.id, p.poste_code, p.besoins_postes, a.nom
             ORDER BY a.nom, p.poste_code

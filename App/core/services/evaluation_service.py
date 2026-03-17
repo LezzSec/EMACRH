@@ -39,7 +39,7 @@ def get_evaluations_en_retard() -> List[Dict]:
     return QueryExecutor.fetch_all("""
         SELECT
             p.id as polyvalence_id,
-            p.operateur_id,
+            p.personnel_id,
             pers.nom,
             pers.prenom,
             pers.matricule,
@@ -51,7 +51,7 @@ def get_evaluations_en_retard() -> List[Dict]:
             p.prochaine_evaluation,
             DATEDIFF(CURDATE(), p.prochaine_evaluation) as jours_retard
         FROM polyvalence p
-        JOIN personnel pers ON p.operateur_id = pers.id
+        JOIN personnel pers ON p.personnel_id = pers.id
         JOIN postes pos ON p.poste_id = pos.id
         LEFT JOIN atelier a ON pos.atelier_id = a.id
         WHERE pers.statut = 'ACTIF'
@@ -76,7 +76,7 @@ def get_prochaines_evaluations(jours: int = 30) -> List[Dict]:
     return QueryExecutor.fetch_all("""
         SELECT
             p.id as polyvalence_id,
-            p.operateur_id,
+            p.personnel_id,
             pers.nom,
             pers.prenom,
             pers.matricule,
@@ -88,7 +88,7 @@ def get_prochaines_evaluations(jours: int = 30) -> List[Dict]:
             p.prochaine_evaluation,
             DATEDIFF(p.prochaine_evaluation, CURDATE()) as jours_restants
         FROM polyvalence p
-        JOIN personnel pers ON p.operateur_id = pers.id
+        JOIN personnel pers ON p.personnel_id = pers.id
         JOIN postes pos ON p.poste_id = pos.id
         LEFT JOIN atelier a ON pos.atelier_id = a.id
         WHERE pers.statut = 'ACTIF'
@@ -125,7 +125,7 @@ def get_evaluations_par_operateur(operateur_id: int) -> List[Dict]:
         FROM polyvalence p
         JOIN postes pos ON p.poste_id = pos.id
         LEFT JOIN atelier a ON pos.atelier_id = a.id
-        WHERE p.operateur_id = %s
+        WHERE p.personnel_id = %s
         ORDER BY p.prochaine_evaluation ASC
     """, (operateur_id,), dictionary=True)
 
@@ -155,11 +155,11 @@ def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
     try:
         # Récupérer les anciennes valeurs pour le log
         ancien = QueryExecutor.fetch_one(
-            "SELECT operateur_id, poste_id, niveau, date_evaluation FROM polyvalence WHERE id = %s",
+            "SELECT personnel_id, poste_id, niveau, date_evaluation FROM polyvalence WHERE id = %s",
             (polyvalence_id,),
             dictionary=True
         )
-        operateur_id = ancien['operateur_id'] if ancien else None
+        operateur_id = ancien['personnel_id'] if ancien else None
         poste_id = ancien['poste_id'] if ancien else None
         ancien_niveau = ancien['niveau'] if ancien else None
         ancienne_date = ancien['date_evaluation'] if ancien else None
@@ -204,14 +204,14 @@ def get_statistiques_evaluations() -> Dict:
     # Total d'evaluations actives
     stats['total'] = QueryExecutor.fetch_scalar("""
         SELECT COUNT(*) FROM polyvalence p
-        JOIN personnel pers ON p.operateur_id = pers.id
+        JOIN personnel pers ON p.personnel_id = pers.id
         WHERE pers.statut = 'ACTIF'
     """, default=0)
 
     # Evaluations en retard
     stats['en_retard'] = QueryExecutor.fetch_scalar("""
         SELECT COUNT(*) FROM polyvalence p
-        JOIN personnel pers ON p.operateur_id = pers.id
+        JOIN personnel pers ON p.personnel_id = pers.id
         WHERE pers.statut = 'ACTIF'
           AND p.prochaine_evaluation < CURDATE()
     """, default=0)
@@ -219,7 +219,7 @@ def get_statistiques_evaluations() -> Dict:
     # Evaluations a venir (30 jours)
     stats['a_venir_30j'] = QueryExecutor.fetch_scalar("""
         SELECT COUNT(*) FROM polyvalence p
-        JOIN personnel pers ON p.operateur_id = pers.id
+        JOIN personnel pers ON p.personnel_id = pers.id
         WHERE pers.statut = 'ACTIF'
           AND p.prochaine_evaluation BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
     """, default=0)
@@ -228,7 +228,7 @@ def get_statistiques_evaluations() -> Dict:
     stats['par_niveau'] = QueryExecutor.fetch_all("""
         SELECT niveau, COUNT(*) as count
         FROM polyvalence p
-        JOIN personnel pers ON p.operateur_id = pers.id
+        JOIN personnel pers ON p.personnel_id = pers.id
         WHERE pers.statut = 'ACTIF'
         GROUP BY niveau
         ORDER BY niveau
@@ -263,7 +263,7 @@ def get_evaluations_en_retard_typed() -> List[EvaluationResume]:
     return [
         EvaluationResume(
             polyvalence_id=row['polyvalence_id'],
-            operateur_id=row['operateur_id'],
+            operateur_id=row['personnel_id'],
             operateur_nom=row['nom'],
             operateur_prenom=row['prenom'],
             poste_code=row['poste_code'],
@@ -291,7 +291,7 @@ def get_prochaines_evaluations_typed(jours: int = 30) -> List[EvaluationResume]:
     return [
         EvaluationResume(
             polyvalence_id=row['polyvalence_id'],
-            operateur_id=row['operateur_id'],
+            operateur_id=row['personnel_id'],
             operateur_nom=row['nom'],
             operateur_prenom=row['prenom'],
             poste_code=row['poste_code'],
@@ -351,7 +351,7 @@ def get_operateurs_avec_stats_polyvalences() -> List[tuple]:
                 CASE WHEN poly.prochaine_evaluation < CURDATE() THEN 1 ELSE 0 END
             ) as retard
         FROM personnel p
-        INNER JOIN polyvalence poly ON poly.operateur_id = p.id
+        INNER JOIN polyvalence poly ON poly.personnel_id = p.id
         WHERE p.statut = 'ACTIF'
         GROUP BY p.id, p.nom, p.prenom, p.matricule
         HAVING COUNT(poly.id) > 0
@@ -370,7 +370,7 @@ def get_postes_liste() -> List[Dict]:
 def get_polyvalence_par_id(poly_id: int) -> Optional[Dict]:
     """Retourne les données complètes d'une polyvalence par son ID."""
     return QueryExecutor.fetch_one(
-        """SELECT id, operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation
+        """SELECT id, personnel_id, poste_id, niveau, date_evaluation, prochaine_evaluation
            FROM polyvalence WHERE id = %s""",
         (poly_id,),
         dictionary=True
@@ -389,7 +389,7 @@ def get_stats_polyvalence_operateur(operateur_id: int) -> Optional[Dict]:
                SUM(CASE WHEN prochaine_evaluation BETWEEN CURDATE()
                         AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) as a_planifier
         FROM polyvalence
-        WHERE operateur_id = %s
+        WHERE personnel_id = %s
     """, (operateur_id,), dictionary=True)
 
 
@@ -436,7 +436,7 @@ def has_operateur_deja_eu_niveau_1(
         params.append(exclude_poste_id)
 
     count_other = QueryExecutor.fetch_scalar(
-        f"SELECT COUNT(*) FROM polyvalence WHERE operateur_id = %s{exclude_clause}",
+        f"SELECT COUNT(*) FROM polyvalence WHERE personnel_id = %s{exclude_clause}",
         tuple(params),
         default=0,
     )
@@ -445,7 +445,7 @@ def has_operateur_deja_eu_niveau_1(
 
     # 3. Antécédents dans historique_polyvalence (modifications passées)
     count_hist = QueryExecutor.fetch_scalar(
-        "SELECT COUNT(*) FROM historique_polyvalence WHERE operateur_id = %s",
+        "SELECT COUNT(*) FROM historique_polyvalence WHERE personnel_id = %s",
         (operateur_id,),
         default=0,
     )
@@ -463,11 +463,11 @@ def get_polyvalences_actuelles_operateur(operateur_id: int) -> List[Dict]:
                poly.prochaine_evaluation
         FROM polyvalence poly
         JOIN postes ps ON poly.poste_id = ps.id
-        WHERE poly.operateur_id = %s
+        WHERE poly.personnel_id = %s
           AND poly.id = (
               SELECT MAX(p2.id)
               FROM polyvalence p2
-              WHERE p2.operateur_id = poly.operateur_id
+              WHERE p2.personnel_id = poly.personnel_id
                 AND p2.poste_id = poly.poste_id
           )
         ORDER BY ps.poste_code
@@ -500,7 +500,7 @@ def log_historique_polyvalence(
     try:
         QueryExecutor.execute_write("""
             INSERT INTO historique_polyvalence
-            (operateur_id, poste_id, polyvalence_id, action_type,
+            (personnel_id, poste_id, polyvalence_id, action_type,
              ancien_niveau, nouveau_niveau,
              ancienne_date_evaluation, nouvelle_date_evaluation,
              commentaire, source, date_action)
@@ -527,7 +527,7 @@ def get_historique_polyvalence_operateur(operateur_id: int) -> List[Dict]:
             hp.commentaire
         FROM historique_polyvalence hp
         LEFT JOIN postes p ON hp.poste_id = p.id
-        WHERE hp.operateur_id = %s
+        WHERE hp.personnel_id = %s
         ORDER BY hp.date_action DESC
     """, (operateur_id,), dictionary=True)
 
@@ -546,14 +546,14 @@ def importer_ancienne_polyvalence(operateur_id: int, poste_id: int, niveau: int,
             cur = conn.cursor()
             cur.execute("""
                 INSERT INTO historique_polyvalence
-                (operateur_id, poste_id, action_type, nouveau_niveau,
+                (personnel_id, poste_id, action_type, nouveau_niveau,
                  nouvelle_date_evaluation, commentaire, date_action)
                 VALUES (%s, %s, 'IMPORT_MANUEL', %s, %s, %s, NOW())
             """, (operateur_id, poste_id, niveau, date_eval, commentaire or None))
 
             cur.execute("""
                 INSERT INTO polyvalence
-                (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
+                (personnel_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
                 VALUES (%s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     niveau = VALUES(niveau),
@@ -584,10 +584,10 @@ def update_date_evaluation_polyvalence(poly_id: int, new_date_eval, prochaine_ev
     """
     try:
         ancien = QueryExecutor.fetch_one(
-            "SELECT operateur_id, poste_id, date_evaluation FROM polyvalence WHERE id = %s",
+            "SELECT personnel_id, poste_id, date_evaluation FROM polyvalence WHERE id = %s",
             (poly_id,), dictionary=True
         )
-        operateur_id = ancien['operateur_id'] if ancien else None
+        operateur_id = ancien['personnel_id'] if ancien else None
         poste_id = ancien['poste_id'] if ancien else None
         ancienne_date = ancien['date_evaluation'] if ancien else None
 
@@ -622,15 +622,15 @@ def update_date_champ_polyvalence(poly_id: int, field: str, new_date) -> bool:
     import json
     _ALLOWED = {
         'date_evaluation': (
-            "SELECT pv.date_evaluation, p.nom, p.prenom, po.poste_code, pv.operateur_id, po.id "
-            "FROM polyvalence pv JOIN personnel p ON p.id = pv.operateur_id "
+            "SELECT pv.date_evaluation, p.nom, p.prenom, po.poste_code, pv.personnel_id, po.id "
+            "FROM polyvalence pv JOIN personnel p ON p.id = pv.personnel_id "
             "JOIN postes po ON po.id = pv.poste_id WHERE pv.id = %s",
             "UPDATE polyvalence SET date_evaluation = %s WHERE id = %s",
             "Date d'évaluation"
         ),
         'prochaine_evaluation': (
-            "SELECT pv.prochaine_evaluation, p.nom, p.prenom, po.poste_code, pv.operateur_id, po.id "
-            "FROM polyvalence pv JOIN personnel p ON p.id = pv.operateur_id "
+            "SELECT pv.prochaine_evaluation, p.nom, p.prenom, po.poste_code, pv.personnel_id, po.id "
+            "FROM polyvalence pv JOIN personnel p ON p.id = pv.personnel_id "
             "JOIN postes po ON po.id = pv.poste_id WHERE pv.id = %s",
             "UPDATE polyvalence SET prochaine_evaluation = %s WHERE id = %s",
             "Prochaine évaluation"

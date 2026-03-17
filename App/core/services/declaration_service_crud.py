@@ -48,7 +48,7 @@ class DeclarationServiceCRUD(CRUDService):
     ACTION_PREFIX = "DECLARATION_"
 
     ALLOWED_FIELDS = [
-        'operateur_id',
+        'personnel_id',
         'type_declaration',
         'date_debut',
         'date_fin',
@@ -72,7 +72,7 @@ class DeclarationServiceCRUD(CRUDService):
             Liste des déclarations
         """
         return cls.get_all(
-            conditions={'operateur_id': operateur_id},
+            conditions={'personnel_id': operateur_id},
             order_by=order_by
         )
 
@@ -83,7 +83,7 @@ class DeclarationServiceCRUD(CRUDService):
             return QueryExecutor.fetch_all(
                 """
                 SELECT * FROM declaration
-                WHERE operateur_id = %s
+                WHERE personnel_id = %s
                   AND date_debut <= CURDATE()
                   AND date_fin >= CURDATE()
                 ORDER BY date_debut DESC
@@ -102,7 +102,7 @@ class DeclarationServiceCRUD(CRUDService):
             return QueryExecutor.fetch_scalar(
                 """
                 SELECT COUNT(*) FROM declaration
-                WHERE operateur_id = %s
+                WHERE personnel_id = %s
                   AND date_debut <= CURDATE()
                   AND date_fin >= CURDATE()
                 """,

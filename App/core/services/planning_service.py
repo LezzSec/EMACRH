@@ -19,7 +19,7 @@ def get_absents_du_jour(today: date = None) -> List[Dict]:
     return QueryExecutor.fetch_all("""
         SELECT
             d.id,
-            d.operateur_id,
+            d.personnel_id,
             p.nom,
             p.prenom,
             d.type_declaration,
@@ -27,7 +27,7 @@ def get_absents_du_jour(today: date = None) -> List[Dict]:
             d.date_fin,
             d.motif
         FROM declaration d
-        LEFT JOIN personnel p ON p.id = d.operateur_id
+        LEFT JOIN personnel p ON p.id = d.personnel_id
         WHERE %s BETWEEN d.date_debut AND d.date_fin
         ORDER BY p.nom, p.prenom
     """, (today,), dictionary=True)
@@ -52,7 +52,7 @@ def creer_declaration(operateur_id: int, type_decl: str,
     """
     try:
         new_id = QueryExecutor.execute_write("""
-            INSERT INTO declaration (operateur_id, type_declaration, date_debut, date_fin, motif)
+            INSERT INTO declaration (personnel_id, type_declaration, date_debut, date_fin, motif)
             VALUES (%s, %s, %s, %s, %s)
         """, (operateur_id, type_decl, date_debut, date_fin, motif or None),
         return_lastrowid=True)
@@ -91,7 +91,7 @@ def get_absences_du_jour(selected: date) -> List[Dict]:
             d.type_declaration,
             d.motif
         FROM declaration d
-        LEFT JOIN personnel p ON p.id = d.operateur_id
+        LEFT JOIN personnel p ON p.id = d.personnel_id
         WHERE %s BETWEEN d.date_debut AND d.date_fin
         ORDER BY p.nom, p.prenom
     """, (selected,), dictionary=True)
@@ -113,7 +113,7 @@ def get_evaluations_dates_du_mois(first_day: date, last_day: date) -> List[Dict]
     return QueryExecutor.fetch_all("""
         SELECT DISTINCT DATE(poly.prochaine_evaluation) as eval_date
         FROM polyvalence poly
-        JOIN personnel pers ON poly.operateur_id = pers.id
+        JOIN personnel pers ON poly.personnel_id = pers.id
         JOIN postes p ON poly.poste_id = p.id
         WHERE poly.prochaine_evaluation BETWEEN %s AND %s
           AND pers.statut = 'ACTIF'
@@ -134,7 +134,7 @@ def get_evaluations_du_jour(selected: date, poste_id: int = None) -> List[Dict]:
             poly.niveau,
             poly.prochaine_evaluation
         FROM polyvalence poly
-        JOIN personnel pers ON poly.operateur_id = pers.id
+        JOIN personnel pers ON poly.personnel_id = pers.id
         JOIN postes p ON poly.poste_id = p.id
         WHERE DATE(poly.prochaine_evaluation) = %s
           AND pers.statut = 'ACTIF'
@@ -180,7 +180,7 @@ def get_historique_declarations(type_filter: str = None, period: str = None) -> 
             d.date_fin,
             d.motif
         FROM declaration d
-        LEFT JOIN personnel p ON p.id = d.operateur_id
+        LEFT JOIN personnel p ON p.id = d.personnel_id
         WHERE 1=1
     """
     params = []
@@ -215,7 +215,7 @@ def get_evaluations_mois(first_day, last_day) -> list:
                pos.poste_code,
                poly.niveau
         FROM polyvalence poly
-        JOIN personnel p ON poly.operateur_id = p.id
+        JOIN personnel p ON poly.personnel_id = p.id
         JOIN postes pos ON poly.poste_id = pos.id
         WHERE p.statut = 'ACTIF'
           AND poly.prochaine_evaluation >= %s

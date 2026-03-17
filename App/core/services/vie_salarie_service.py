@@ -49,7 +49,7 @@ def get_donnees_vie_salarie(operateur_id: int) -> Dict[str, Any]:
                    SUM(CASE WHEN type_sanction LIKE 'Mise à pied%%' THEN 1 ELSE 0 END) as mises_a_pied,
                    MAX(date_sanction) as derniere_sanction
                FROM vie_salarie_sanction
-               WHERE operateur_id = %s""",
+               WHERE personnel_id = %s""",
             (operateur_id,), dictionary=True
         )
 
@@ -60,7 +60,7 @@ def get_donnees_vie_salarie(operateur_id: int) -> Dict[str, Any]:
                    SUM(CASE WHEN resultat = 'Positif' THEN 1 ELSE 0 END) as positifs,
                    MAX(date_controle) as dernier_controle
                FROM vie_salarie_alcoolemie
-               WHERE operateur_id = %s""",
+               WHERE personnel_id = %s""",
             (operateur_id,), dictionary=True
         )
 
@@ -71,7 +71,7 @@ def get_donnees_vie_salarie(operateur_id: int) -> Dict[str, Any]:
                    SUM(CASE WHEN resultat = 'Positif' THEN 1 ELSE 0 END) as positifs,
                    MAX(date_test) as dernier_test
                FROM vie_salarie_test_salivaire
-               WHERE operateur_id = %s""",
+               WHERE personnel_id = %s""",
             (operateur_id,), dictionary=True
         )
 
@@ -79,7 +79,7 @@ def get_donnees_vie_salarie(operateur_id: int) -> Dict[str, Any]:
         recap = QueryExecutor.fetch_one(
             """SELECT dernier_epp, dernier_eap, prochain_entretien
                FROM v_vie_salarie_recap
-               WHERE operateur_id = %s""",
+               WHERE personnel_id = %s""",
             (operateur_id,), dictionary=True
         )
 
@@ -108,7 +108,7 @@ def get_sanctions(operateur_id: int) -> List[Dict]:
     try:
         return QueryExecutor.fetch_all(
             """SELECT * FROM vie_salarie_sanction
-               WHERE operateur_id = %s
+               WHERE personnel_id = %s
                ORDER BY date_sanction DESC""",
             (operateur_id,), dictionary=True
         )
@@ -123,7 +123,7 @@ def create_sanction(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
     try:
         sanction_id = QueryExecutor.execute_write(
             """INSERT INTO vie_salarie_sanction (
-                   operateur_id, type_sanction, date_sanction,
+                   personnel_id, type_sanction, date_sanction,
                    duree_jours, motif, document_reference, commentaire
                ) VALUES (%s, %s, %s, %s, %s, %s, %s)""",
             (
@@ -194,7 +194,7 @@ def get_controles_alcool(operateur_id: int) -> List[Dict]:
     try:
         result = QueryExecutor.fetch_all(
             """SELECT * FROM vie_salarie_alcoolemie
-               WHERE operateur_id = %s
+               WHERE personnel_id = %s
                ORDER BY date_controle DESC""",
             (operateur_id,), dictionary=True
         )
@@ -214,7 +214,7 @@ def create_controle_alcool(operateur_id: int, data: Dict) -> Tuple[bool, str, Op
     try:
         controle_id = QueryExecutor.execute_write(
             """INSERT INTO vie_salarie_alcoolemie (
-                   operateur_id, date_controle, resultat,
+                   personnel_id, date_controle, resultat,
                    taux, type_controle, commentaire
                ) VALUES (%s, %s, %s, %s, %s, %s)""",
             (
@@ -257,7 +257,7 @@ def get_tests_salivaires(operateur_id: int) -> List[Dict]:
     try:
         return QueryExecutor.fetch_all(
             """SELECT * FROM vie_salarie_test_salivaire
-               WHERE operateur_id = %s
+               WHERE personnel_id = %s
                ORDER BY date_test DESC""",
             (operateur_id,), dictionary=True
         )
@@ -272,7 +272,7 @@ def create_test_salivaire(operateur_id: int, data: Dict) -> Tuple[bool, str, Opt
     try:
         test_id = QueryExecutor.execute_write(
             """INSERT INTO vie_salarie_test_salivaire (
-                   operateur_id, date_test, resultat,
+                   personnel_id, date_test, resultat,
                    type_controle, commentaire
                ) VALUES (%s, %s, %s, %s, %s)""",
             (
@@ -317,7 +317,7 @@ def get_entretiens(operateur_id: int) -> List[Dict]:
                       CONCAT(m.prenom, ' ', m.nom) as manager_nom
                FROM vie_salarie_entretien e
                LEFT JOIN personnel m ON e.manager_id = m.id
-               WHERE e.operateur_id = %s
+               WHERE e.personnel_id = %s
                ORDER BY e.date_entretien DESC""",
             (operateur_id,), dictionary=True
         )
@@ -348,7 +348,7 @@ def create_entretien(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional
     try:
         entretien_id = QueryExecutor.execute_write(
             """INSERT INTO vie_salarie_entretien (
-                   operateur_id, type_entretien, date_entretien, manager_id,
+                   personnel_id, type_entretien, date_entretien, manager_id,
                    objectifs_atteints, objectifs_fixes, besoins_formation,
                    souhaits_evolution, commentaire_salarie, commentaire_manager,
                    document_reference, prochaine_date
@@ -443,7 +443,7 @@ def get_alertes_entretiens(operateur_id: int = None) -> List[Dict]:
         params = []
 
         if operateur_id:
-            sql += " WHERE operateur_id = %s"
+            sql += " WHERE personnel_id = %s"
             params.append(operateur_id)
 
         sql += " ORDER BY jours_retard DESC"
@@ -477,13 +477,13 @@ def get_entretiens_a_planifier(type_entretien: str = None, jours_avance: int = 3
                 e.prochaine_date,
                 DATEDIFF(e.prochaine_date, CURDATE()) as jours_restants
             FROM personnel p
-            JOIN vie_salarie_entretien e ON p.id = e.operateur_id
+            JOIN vie_salarie_entretien e ON p.id = e.personnel_id
             WHERE p.statut = 'ACTIF'
               AND e.prochaine_date IS NOT NULL
               AND e.prochaine_date <= DATE_ADD(CURDATE(), INTERVAL %s DAY)
               AND e.id = (
                   SELECT MAX(id) FROM vie_salarie_entretien
-                  WHERE operateur_id = p.id
+                  WHERE personnel_id = p.id
         """
         params = [jours_avance]
 
@@ -554,11 +554,11 @@ def get_statistiques_vie_salarie_globales() -> Dict[str, Any]:
                FROM personnel p
                LEFT JOIN personnel_infos pi ON p.id = pi.personnel_id
                LEFT JOIN (
-                   SELECT operateur_id, MAX(date_entretien) as derniere_date
+                   SELECT personnel_id, MAX(date_entretien) as derniere_date
                    FROM vie_salarie_entretien
                    WHERE type_entretien = 'EPP'
-                   GROUP BY operateur_id
-               ) e ON p.id = e.operateur_id
+                   GROUP BY personnel_id
+               ) e ON p.id = e.personnel_id
                WHERE p.statut = 'ACTIF'
                  AND DATEDIFF(CURDATE(),
                      COALESCE(e.derniere_date, pi.date_entree, DATE_SUB(CURDATE(), INTERVAL 3 YEAR))

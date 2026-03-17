@@ -15,7 +15,7 @@ def _query_for_day(cursor, target_day: dt.date):
     try:
         cursor.execute(
             """
-            SELECT id, date_time, action, operateur_id, poste_id,
+            SELECT id, date_time, action, personnel_id, poste_id,
                    description, utilisateur, table_name, record_id
             FROM historique
             WHERE DATE(date_time) = %s
@@ -27,7 +27,7 @@ def _query_for_day(cursor, target_day: dt.date):
     except Exception:
         cursor.execute(
             """
-            SELECT id, date_time, action, operateur_id, poste_id,
+            SELECT id, date_time, action, personnel_id, poste_id,
                    description, utilisateur, table_name, record_id
             FROM historique
             WHERE CAST(date_time AS DATE) = %s
@@ -75,7 +75,7 @@ def export_day(day: dt.date, base_dir: str = None, make_zip: bool = True) -> Dic
             rows = [dict(zip(names, r)) for r in rows]
 
         # écrire CSV - colonnes correspondant à la table historique
-        fieldnames = ["id", "date_time", "action", "operateur_id", "poste_id",
+        fieldnames = ["id", "date_time", "action", "personnel_id", "poste_id",
                       "description", "utilisateur", "table_name", "record_id"]
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             w = csv.DictWriter(f, fieldnames=fieldnames)

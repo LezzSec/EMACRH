@@ -283,7 +283,7 @@ class AlertService:
             SELECT p.id, p.nom, p.prenom, p.matricule, pi.date_entree
             FROM personnel p
             LEFT JOIN personnel_infos pi ON pi.personnel_id = p.id
-            LEFT JOIN polyvalence poly ON poly.operateur_id = p.id
+            LEFT JOIN polyvalence poly ON poly.personnel_id = p.id
             WHERE p.statut = 'ACTIF'
               AND poly.id IS NULL
             ORDER BY pi.date_entree DESC, p.nom
@@ -347,7 +347,7 @@ class AlertService:
                    DATEDIFF(CURDATE(), pi.date_entree) as jours_depuis_entree
             FROM personnel p
             JOIN personnel_infos pi ON pi.personnel_id = p.id
-            LEFT JOIN polyvalence poly ON poly.operateur_id = p.id
+            LEFT JOIN polyvalence poly ON poly.personnel_id = p.id
             WHERE p.statut = 'ACTIF'
               AND pi.date_entree IS NOT NULL
               AND pi.date_entree >= %s
@@ -611,7 +611,7 @@ class AlertService:
             # Évaluations en retard (CRITIQUE)
             result['evaluations_retard'] = QueryExecutor.fetch_scalar("""
                 SELECT COUNT(*) FROM polyvalence poly
-                JOIN personnel p ON p.id = poly.operateur_id
+                JOIN personnel p ON p.id = poly.personnel_id
                 WHERE poly.prochaine_evaluation < CURDATE() AND p.statut = 'ACTIF'
             """, default=0)
 

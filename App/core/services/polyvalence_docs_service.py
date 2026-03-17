@@ -79,7 +79,7 @@ def get_docs_pour_operateur(operateur_id: int) -> List[Dict]:
             FROM polyvalence pv
             JOIN postes po ON po.id = pv.poste_id
             LEFT JOIN atelier a ON a.id = po.atelier_id
-            WHERE pv.operateur_id = %s
+            WHERE pv.personnel_id = %s
             ORDER BY a.nom ASC, po.poste_code ASC
             """,
             (operateur_id,),

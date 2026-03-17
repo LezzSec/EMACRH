@@ -317,7 +317,7 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
             action="CONNEXION",
             table_name="utilisateurs",
             record_id=user['id'],
-            description=f"Connexion de l'utilisateur {username} (rôle: {user['role_nom']})",
+            description="Connexion réussie",
             utilisateur=username
         )
 

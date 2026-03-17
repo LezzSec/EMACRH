@@ -339,7 +339,7 @@ def _get_donnees_declaration(operateur_id: int) -> Dict:
             """
             SELECT *
             FROM declaration
-            WHERE operateur_id = %s
+            WHERE personnel_id = %s
             ORDER BY date_debut DESC
             """,
             (operateur_id,),
@@ -392,7 +392,7 @@ def _get_donnees_medical(operateur_id: int) -> Dict:
         alertes   = medical_service.get_alertes_medicales(operateur_id)
         # 'medical' = données de la table medical (suivi général)
         medical   = QueryExecutor.fetch_one(
-            "SELECT * FROM medical WHERE operateur_id = %s",
+            "SELECT * FROM medical WHERE personnel_id = %s",
             (operateur_id,), dictionary=True
         ) or {}
         return {
@@ -908,7 +908,7 @@ def get_resume_operateur(operateur_id: int) -> Dict[str, Any]:
             """
             SELECT type_contrat, date_fin, DATEDIFF(date_fin, CURDATE()) as jours_restants
             FROM contrat
-            WHERE operateur_id = %s AND actif = 1
+            WHERE personnel_id = %s AND actif = 1
             LIMIT 1
             """,
             (operateur_id,),
@@ -926,7 +926,7 @@ def get_resume_operateur(operateur_id: int) -> Dict[str, Any]:
             SELECT COUNT(*) as total,
                    SUM(CASE WHEN date_debut <= CURDATE() AND date_fin >= CURDATE() THEN 1 ELSE 0 END) as en_cours
             FROM declaration
-            WHERE operateur_id = %s
+            WHERE personnel_id = %s
             """,
             (operateur_id,),
             dictionary=True
@@ -943,7 +943,7 @@ def get_resume_operateur(operateur_id: int) -> Dict[str, Any]:
                    AVG(niveau) as niveau_moyen,
                    SUM(CASE WHEN prochaine_evaluation < CURDATE() THEN 1 ELSE 0 END) as en_retard
             FROM polyvalence
-            WHERE operateur_id = %s
+            WHERE personnel_id = %s
             """,
             (operateur_id,),
             dictionary=True
@@ -961,7 +961,7 @@ def get_resume_operateur(operateur_id: int) -> Dict[str, Any]:
                    SUM(CASE WHEN statut = 'Terminée' THEN 1 ELSE 0 END) as terminees,
                    SUM(CASE WHEN statut = 'Planifiée' THEN 1 ELSE 0 END) as planifiees
             FROM formation
-            WHERE operateur_id = %s
+            WHERE personnel_id = %s
             """,
             (operateur_id,),
             dictionary=True

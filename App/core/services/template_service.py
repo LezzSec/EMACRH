@@ -172,29 +172,40 @@ def _get_template_content(template: Dict) -> Optional[Tuple[bytes, str]]:
             return (row['contenu_fichier'], ext)
 
     # FILESYSTEM (legacy): lire depuis le disque
-    fichier_source = template['fichier_source']
-    templates_dir = get_templates_dir()
-
-    # Nettoyer le chemin
-    fichier_clean = fichier_source.replace('templates/', '').replace('\\', '/').strip('/')
-
-    if '..' in fichier_clean or fichier_clean.startswith('/'):
-        logger.warning(f"Tentative de path traversal detectee: {fichier_source}")
+    fichier_source = template.get('fichier_source', '')
+    if not fichier_source:
         return None
 
-    source_path = (templates_dir / fichier_clean).resolve()
+    templates_dir = get_templates_dir().resolve()
+
+    # SECURITE: construire le chemin absolu puis vérifier le confinement
+    # (résolution AVANT tout test pour éviter les variantes Unicode/backslash)
+    user_path = Path(fichier_source)
+    if user_path.is_absolute():
+        logger.warning(f"Chemin absolu rejete dans template: {fichier_source!r}")
+        return None
 
     try:
-        source_path.relative_to(templates_dir.resolve())
+        source_path = (templates_dir / user_path).resolve()
+    except (OSError, ValueError) as e:
+        logger.warning(f"Chemin invalide dans template: {fichier_source!r} ({e})")
+        return None
+
+    try:
+        source_path.relative_to(templates_dir)
     except ValueError:
         logger.warning(f"Path traversal bloque: {source_path} hors de {templates_dir}")
         return None
 
-    if not source_path.exists():
+    if not source_path.is_file():
         return None
 
-    with open(source_path, 'rb') as f:
-        return (f.read(), source_path.suffix)
+    try:
+        with open(source_path, 'rb') as f:
+            return (f.read(), source_path.suffix)
+    except (IOError, OSError) as e:
+        logger.error(f"Erreur lecture template fichier: {e}")
+        return None
 
 
 def generate_filled_template(
@@ -558,17 +569,33 @@ def print_template_file(file_path: str, printer_name: str) -> Tuple[bool, str]:
         ext = path.suffix.lower()
 
         if ext in ('.xlsx', '.xlsm') and sys.platform == 'win32':
+            # Valider le nom de l'imprimante : caracteres Windows autorises uniquement
+            import re as _re
+            if not _re.match(r'^[\w\s\-\.\(\)\\]+$', printer_name, _re.UNICODE):
+                logger.warning(f"Nom d'imprimante invalide refuse: {printer_name!r}")
+                return False, "Nom d'imprimante invalide"
+
             # Excel: COM via PowerShell → imprime TOUS les onglets du classeur
-            path_esc = str(path).replace("'", "''")
-            printer_esc = printer_name.replace("'", "''")
+            # SECURITE: les arguments sont passes via variables PowerShell encodees en
+            # base64 pour eviter toute injection de commande.
+            import base64 as _b64
+
+            def _ps_b64(value: str) -> str:
+                """Encode une valeur en base64 UTF-16LE pour PowerShell."""
+                return _b64.b64encode(value.encode('utf-16-le')).decode('ascii')
+
+            path_b64 = _ps_b64(str(path))
+            printer_b64 = _ps_b64(printer_name)
 
             ps_cmd = (
                 f"$ErrorActionPreference = 'Stop'; "
+                f"$filePath = [System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String('{path_b64}')); "
+                f"$printerName = [System.Text.Encoding]::Unicode.GetString([System.Convert]::FromBase64String('{printer_b64}')); "
                 f"$xl = New-Object -ComObject Excel.Application; "
                 f"$xl.Visible = $false; $xl.DisplayAlerts = $false; "
                 f"try {{ "
-                f"  $wb = $xl.Workbooks.Open('{path_esc}'); "
-                f"  $wb.PrintOut([Type]::Missing, [Type]::Missing, 1, $false, '{printer_esc}'); "
+                f"  $wb = $xl.Workbooks.Open($filePath); "
+                f"  $wb.PrintOut([Type]::Missing, [Type]::Missing, 1, $false, $printerName); "
                 f"  $wb.Close($false) "
                 f"}} finally {{ "
                 f"  $xl.Quit(); "
@@ -583,7 +610,7 @@ def print_template_file(file_path: str, printer_name: str) -> Tuple[bool, str]:
             if result.returncode != 0:
                 err = (result.stderr or result.stdout or "").strip()
                 logger.warning(f"Impression Excel echouee (PowerShell): {err}")
-                return False, f"Impression echouee: {err}"
+                return False, "Impression echouee. Verifiez que l'imprimante est disponible."
             return True, "Impression lancee (tous les onglets)"
 
         else:
@@ -641,7 +668,7 @@ def get_postes_for_operateur(operateur_id: int) -> List[str]:
         SELECT DISTINCT p.numposte
         FROM polyvalence pv
         JOIN postes p ON pv.poste_id = p.id
-        WHERE pv.operateur_id = %s
+        WHERE pv.personnel_id = %s
     """, (operateur_id,), dictionary=True)
 
     return [r['numposte'] for r in results if r['numposte']]

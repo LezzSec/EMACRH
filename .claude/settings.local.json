@@ -86,7 +86,10 @@
       "Bash(tr -d '`')",
       "Read(//c/Users/tlahirigoyen/Desktop/PROJET/EMAC/**)",
       "Bash(cut -d'`' -f1)",
-      "Bash(git -C /c/Users/tlahirigoyen/Desktop/PROJET/EMAC diff App/core/gui/gestion_rh.py)"
+      "Bash(git -C /c/Users/tlahirigoyen/Desktop/PROJET/EMAC diff App/core/gui/gestion_rh.py)",
+      "Bash(for file:*)",
+      "Bash(do if:*)",
+      "Bash(then echo:*)"
     ],
     "deny": [],
     "ask": []

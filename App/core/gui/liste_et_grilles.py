@@ -865,7 +865,8 @@ class GrillesDialog(QDialog):
                 f"{modifications_count} modification(s) enregistrée(s) dans l'historique !")
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'enregistrement : {e}")
+            logger.exception(f"Erreur enregistrement modifications grille: {e}")
+            QMessageBox.critical(self, "Erreur", "Impossible d'enregistrer les modifications. Consultez les logs pour plus de détails.")
 
     # ----------------- Ajout / Suppression / Duplication -----------------
     def add_data(self):

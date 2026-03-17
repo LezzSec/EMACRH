@@ -18,11 +18,24 @@ Usage:
     new_id = QueryExecutor.execute_write("INSERT INTO personnel (...) VALUES (...)", (...))
 """
 
+import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 from core.db.configbd import DatabaseConnection, DatabaseCursor
 from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
+
+# Regex stricte : lettres, chiffres, underscores uniquement (pas d'espaces, tirets, points)
+_IDENTIFIER_RE = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+
+
+def _validate_identifier(name: str, kind: str = "identifiant") -> None:
+    """
+    Valide qu'un nom de table ou de colonne ne contient que des caractères autorisés.
+    Lève ValueError si le nom est suspect (injection SQL potentielle).
+    """
+    if not name or not _IDENTIFIER_RE.match(name):
+        raise ValueError(f"Nom {kind} invalide (injection SQL potentielle): {name!r}")
 
 
 class QueryExecutor:
@@ -242,6 +255,10 @@ class QueryExecutor:
             ...     {'operateur_id': 1, 'poste_id': 10}
             ... )
         """
+        _validate_identifier(table, "table")
+        for col in conditions.keys():
+            _validate_identifier(col, "colonne")
+
         where_clauses = [f"{k} = %s" for k in conditions.keys()]
         where_str = " AND ".join(where_clauses)
         params = tuple(conditions.values())
@@ -274,7 +291,10 @@ class QueryExecutor:
             >>> total = QueryExecutor.count('personnel')
             >>> actifs = QueryExecutor.count('personnel', {'statut': 'ACTIF'})
         """
+        _validate_identifier(table, "table")
         if conditions:
+            for col in conditions.keys():
+                _validate_identifier(col, "colonne")
             where_clauses = [f"{k} = %s" for k in conditions.keys()]
             where_str = " WHERE " + " AND ".join(where_clauses)
             params = tuple(conditions.values())

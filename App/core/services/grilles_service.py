@@ -52,7 +52,7 @@ class GrillesService:
         operateurs_rows = QueryExecutor.fetch_all("""
             SELECT DISTINCT p.id, p.nom, p.prenom
             FROM personnel p
-            INNER JOIN polyvalence pv ON pv.operateur_id = p.id
+            INNER JOIN polyvalence pv ON pv.personnel_id = p.id
             WHERE p.statut = 'ACTIF'
             ORDER BY p.nom, p.prenom
         """, dictionary=True)
@@ -66,11 +66,11 @@ class GrillesService:
         """, dictionary=True)
 
         polyvalences_rows = QueryExecutor.fetch_all("""
-            SELECT operateur_id, poste_id, niveau
+            SELECT personnel_id, poste_id, niveau
             FROM polyvalence
-            WHERE operateur_id IN (
+            WHERE personnel_id IN (
                 SELECT DISTINCT p.id FROM personnel p
-                INNER JOIN polyvalence pv ON pv.operateur_id = p.id
+                INNER JOIN polyvalence pv ON pv.personnel_id = p.id
                 WHERE p.statut = 'ACTIF'
             )
             AND poste_id IN (
@@ -86,7 +86,7 @@ class GrillesService:
         return {
             'operateurs': [(r['id'], f"{r['nom']} {r['prenom']}".strip()) for r in operateurs_rows],
             'postes': [(r['id'], r['poste_code']) for r in postes_rows],
-            'niveaux': {(r['operateur_id'], r['poste_id']): r['niveau'] for r in polyvalences_rows},
+            'niveaux': {(r['personnel_id'], r['poste_id']): r['niveau'] for r in polyvalences_rows},
             'besoins': {r['id']: r.get('besoins_postes', '') for r in besoins_rows},
         }
 
@@ -94,7 +94,7 @@ class GrillesService:
     def get_polyvalence_niveau(operateur_id: int, poste_id: int) -> Optional[int]:
         """Retourne le niveau de polyvalence ou None si inexistant."""
         result = QueryExecutor.fetch_one(
-            "SELECT niveau FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
+            "SELECT niveau FROM polyvalence WHERE personnel_id = %s AND poste_id = %s",
             (operateur_id, poste_id),
             dictionary=True
         )
@@ -106,7 +106,7 @@ class GrillesService:
         return QueryExecutor.fetch_all("""
             SELECT DISTINCT p.id, p.nom, p.prenom, p.matricule
             FROM personnel p
-            INNER JOIN polyvalence pv ON pv.operateur_id = p.id
+            INNER JOIN polyvalence pv ON pv.personnel_id = p.id
             WHERE p.statut = 'ACTIF'
             ORDER BY p.nom, p.prenom
         """, dictionary=True)
@@ -145,7 +145,7 @@ class GrillesService:
         old_result = QueryExecutor.fetch_one("""
             SELECT niveau, date_evaluation, prochaine_evaluation
             FROM polyvalence
-            WHERE operateur_id = %s AND poste_id = %s
+            WHERE personnel_id = %s AND poste_id = %s
         """, (operateur_id, poste_id))
 
         old_niveau = None
@@ -163,7 +163,7 @@ class GrillesService:
         if new_niveau_str == "":
             # Suppression
             QueryExecutor.execute_write(
-                "DELETE FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
+                "DELETE FROM polyvalence WHERE personnel_id = %s AND poste_id = %s",
                 (operateur_id, poste_id)
             )
             log_historique_polyvalence(
@@ -184,7 +184,7 @@ class GrillesService:
 
             if old_niveau is None:
                 new_poly_id = QueryExecutor.execute_write("""
-                    INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
+                    INSERT INTO polyvalence (personnel_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
                     VALUES (%s, %s, %s, CURDATE(), %s)
                 """, (operateur_id, poste_id, new_niveau_int, prochaine_eval))
                 log_historique_polyvalence(
@@ -208,7 +208,7 @@ class GrillesService:
                 QueryExecutor.execute_write("""
                     UPDATE polyvalence
                     SET niveau = %s, date_evaluation = CURDATE(), prochaine_evaluation = %s
-                    WHERE operateur_id = %s AND poste_id = %s
+                    WHERE personnel_id = %s AND poste_id = %s
                 """, (new_niveau_int, prochaine_eval, operateur_id, poste_id))
                 if old_niveau != new_niveau_int:
                     log_historique_polyvalence(
@@ -387,7 +387,7 @@ class GrillesService:
                 }, ensure_ascii=False)
 
             QueryExecutor.execute_write("""
-                INSERT INTO historique (date_time, action, operateur_id, poste_id, description, utilisateur)
+                INSERT INTO historique (date_time, action, personnel_id, poste_id, description, utilisateur)
                 VALUES (%s, %s, %s, %s, %s, %s)
             """, (datetime.now(), action, operateur_id, poste_id, description, utilisateur))
 
@@ -417,7 +417,7 @@ class GrillesService:
                 # Vérifier ancienne valeur
                 existing = QueryExecutor.fetch_one("""
                     SELECT niveau FROM polyvalence
-                    WHERE operateur_id = %s AND poste_id = %s
+                    WHERE personnel_id = %s AND poste_id = %s
                 """, (operateur_id, poste_id), dictionary=True)
 
                 old_niveau = existing.get('niveau') if existing else None
@@ -425,7 +425,7 @@ class GrillesService:
                 new_niveau_int = int(new_niveau_str) if new_niveau_str else None
 
                 QueryExecutor.execute_write(
-                    "REPLACE INTO polyvalence (operateur_id, poste_id, niveau) VALUES (%s, %s, %s)",
+                    "REPLACE INTO polyvalence (personnel_id, poste_id, niveau) VALUES (%s, %s, %s)",
                     (operateur_id, poste_id, new_niveau_int)
                 )
 
@@ -449,7 +449,7 @@ class GrillesService:
                     }, ensure_ascii=False)
 
                     QueryExecutor.execute_write("""
-                        INSERT INTO historique (date_time, action, operateur_id, poste_id, description, utilisateur)
+                        INSERT INTO historique (date_time, action, personnel_id, poste_id, description, utilisateur)
                         VALUES (%s, %s, %s, %s, %s, %s)
                     """, (datetime.now(), action, operateur_id, poste_id, description, utilisateur))
                 except Exception as e:
@@ -536,8 +536,8 @@ class GrillesService:
             )
             new_poste_id = cur.lastrowid
             cur.execute("""
-                INSERT INTO polyvalence (operateur_id, poste_id, niveau)
-                SELECT operateur_id, %s, niveau FROM polyvalence WHERE poste_id = %s
+                INSERT INTO polyvalence (personnel_id, poste_id, niveau)
+                SELECT personnel_id, %s, niveau FROM polyvalence WHERE poste_id = %s
             """, (new_poste_id, poste['id']))
 
         return True, f"Poste '{poste_code}' dupliqué en '{poste_code}_copy'."
@@ -560,8 +560,8 @@ class GrillesService:
             )
             new_op_id = cur.lastrowid
             cur.execute("""
-                INSERT INTO polyvalence (operateur_id, poste_id, niveau)
-                SELECT %s, poste_id, niveau FROM polyvalence WHERE operateur_id = %s
+                INSERT INTO polyvalence (personnel_id, poste_id, niveau)
+                SELECT %s, poste_id, niveau FROM polyvalence WHERE personnel_id = %s
             """, (new_op_id, operateur['id']))
 
         return True, f"Opérateur '{nom_complet}' dupliqué."

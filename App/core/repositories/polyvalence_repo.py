@@ -34,7 +34,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
     TABLE = "polyvalence"
     MODEL = Polyvalence
     COLUMNS = [
-        "id", "operateur_id", "poste_id", "niveau",
+        "id", "personnel_id", "poste_id", "niveau",
         "date_evaluation", "prochaine_evaluation"
     ]
 
@@ -50,7 +50,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             SELECT p.*, pos.poste_code, pos.poste_code as poste_nom
             FROM polyvalence p
             JOIN postes pos ON p.poste_id = pos.id
-            WHERE p.operateur_id = %s
+            WHERE p.personnel_id = %s
             ORDER BY pos.poste_code
         """
         with DatabaseCursor(dictionary=True) as cur:
@@ -64,7 +64,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         query = """
             SELECT p.*, pers.nom as operateur_nom, pers.prenom as operateur_prenom
             FROM polyvalence p
-            JOIN personnel pers ON p.operateur_id = pers.id
+            JOIN personnel pers ON p.personnel_id = pers.id
             WHERE p.poste_id = %s
         """
         params = [poste_id]
@@ -85,7 +85,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         query = """
             SELECT
                 p.id as polyvalence_id,
-                p.operateur_id,
+                p.personnel_id,
                 pers.nom as operateur_nom,
                 pers.prenom as operateur_prenom,
                 pos.poste_code,
@@ -94,7 +94,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 p.prochaine_evaluation,
                 DATEDIFF(CURDATE(), p.prochaine_evaluation) as jours_retard
             FROM polyvalence p
-            JOIN personnel pers ON p.operateur_id = pers.id
+            JOIN personnel pers ON p.personnel_id = pers.id
             JOIN postes pos ON p.poste_id = pos.id
             WHERE pers.statut = 'ACTIF'
               AND p.prochaine_evaluation < CURDATE()
@@ -106,7 +106,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             return [
                 EvaluationResume(
                     polyvalence_id=row['polyvalence_id'],
-                    operateur_id=row['operateur_id'],
+                    operateur_id=row['personnel_id'],
                     operateur_nom=row['operateur_nom'],
                     operateur_prenom=row['operateur_prenom'],
                     poste_code=row['poste_code'],
@@ -127,7 +127,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         query = """
             SELECT
                 p.id as polyvalence_id,
-                p.operateur_id,
+                p.personnel_id,
                 pers.nom as operateur_nom,
                 pers.prenom as operateur_prenom,
                 pos.poste_code,
@@ -136,7 +136,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 p.prochaine_evaluation,
                 DATEDIFF(p.prochaine_evaluation, CURDATE()) as jours_restants
             FROM polyvalence p
-            JOIN personnel pers ON p.operateur_id = pers.id
+            JOIN personnel pers ON p.personnel_id = pers.id
             JOIN postes pos ON p.poste_id = pos.id
             WHERE pers.statut = 'ACTIF'
               AND p.prochaine_evaluation BETWEEN CURDATE() AND %s
@@ -148,7 +148,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             return [
                 EvaluationResume(
                     polyvalence_id=row['polyvalence_id'],
-                    operateur_id=row['operateur_id'],
+                    operateur_id=row['personnel_id'],
                     operateur_nom=row['operateur_nom'],
                     operateur_prenom=row['operateur_prenom'],
                     poste_code=row['poste_code'],
@@ -176,7 +176,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 p.date_evaluation,
                 p.prochaine_evaluation
             FROM personnel pers
-            LEFT JOIN polyvalence p ON pers.id = p.operateur_id AND p.poste_id = %s
+            LEFT JOIN polyvalence p ON pers.id = p.personnel_id AND p.poste_id = %s
             WHERE pers.statut = 'ACTIF'
             ORDER BY pers.nom, pers.prenom
         """
@@ -201,7 +201,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 p.prochaine_evaluation
             FROM postes pos
             LEFT JOIN atelier a ON pos.atelier_id = a.id
-            LEFT JOIN polyvalence p ON pos.id = p.poste_id AND p.operateur_id = %s
+            LEFT JOIN polyvalence p ON pos.id = p.poste_id AND p.personnel_id = %s
             WHERE pos.visible = 1
             ORDER BY a.nom, pos.poste_code
         """
@@ -232,7 +232,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                         BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
                         THEN 1 ELSE 0 END) AS a_venir_30j
                 FROM polyvalence p
-                JOIN personnel pers ON p.operateur_id = pers.id
+                JOIN personnel pers ON p.personnel_id = pers.id
                 WHERE pers.statut = 'ACTIF'
             """)
             row = cur.fetchone()
@@ -250,7 +250,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         query = """
             SELECT niveau, COUNT(*) as count
             FROM polyvalence p
-            JOIN personnel pers ON p.operateur_id = pers.id
+            JOIN personnel pers ON p.personnel_id = pers.id
             WHERE pers.statut = 'ACTIF'
             GROUP BY niveau
             ORDER BY niveau
@@ -272,14 +272,14 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             return False, "Le niveau doit être entre 1 et 4", None
 
         # Vérifier si existe déjà
-        query_check = "SELECT id FROM polyvalence WHERE operateur_id = %s AND poste_id = %s"
+        query_check = "SELECT id FROM polyvalence WHERE personnel_id = %s AND poste_id = %s"
         with DatabaseCursor() as cur:
             cur.execute(query_check, (operateur_id, poste_id))
             if cur.fetchone():
                 return False, "Cette compétence existe déjà", None
 
         query = """
-            INSERT INTO polyvalence (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
+            INSERT INTO polyvalence (personnel_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
             VALUES (%s, %s, %s, %s, %s)
         """
         try:
@@ -334,7 +334,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             return False, "Le niveau doit être entre 1 et 4"
 
         # Récupérer l'ancien niveau pour le log
-        query_old = "SELECT operateur_id, poste_id, niveau FROM polyvalence WHERE id = %s"
+        query_old = "SELECT personnel_id, poste_id, niveau FROM polyvalence WHERE id = %s"
         with DatabaseCursor() as cur:
             cur.execute(query_old, (id,))
             old = cur.fetchone()
@@ -427,7 +427,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             SELECT ps.poste_code, p.niveau, p.date_evaluation, p.prochaine_evaluation
             FROM polyvalence p
             JOIN postes ps ON p.poste_id = ps.id
-            WHERE p.operateur_id = %s
+            WHERE p.personnel_id = %s
             ORDER BY ps.poste_code
             """,
             (operateur_id,),
@@ -450,7 +450,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         """
         from core.db.query_executor import QueryExecutor
         existing = QueryExecutor.fetch_one(
-            "SELECT id FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
+            "SELECT id FROM polyvalence WHERE personnel_id = %s AND poste_id = %s",
             (operateur_id, poste_id),
         )
         if existing:
@@ -462,7 +462,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             return True, "Polyvalence mise à jour"
         else:
             QueryExecutor.execute_write(
-                "INSERT INTO polyvalence (operateur_id, poste_id, niveau, prochaine_evaluation) "
+                "INSERT INTO polyvalence (personnel_id, poste_id, niveau, prochaine_evaluation) "
                 "VALUES (%s, %s, %s, %s)",
                 (operateur_id, poste_id, niveau, prochaine_evaluation),
             )
@@ -501,7 +501,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         query = """
             SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
             FROM polyvalence poly
-            INNER JOIN personnel p ON p.id = poly.operateur_id
+            INNER JOIN personnel p ON p.id = poly.personnel_id
             LEFT JOIN postes pos ON pos.id = poly.poste_id
             WHERE poly.prochaine_evaluation < CURDATE()
               AND p.statut = 'ACTIF'
@@ -530,7 +530,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         query = """
             SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
             FROM polyvalence poly
-            INNER JOIN personnel p ON p.id = poly.operateur_id
+            INNER JOIN personnel p ON p.id = poly.personnel_id
             LEFT JOIN postes pos ON pos.id = poly.poste_id
             WHERE poly.prochaine_evaluation BETWEEN CURDATE()
               AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
@@ -550,11 +550,11 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         # Lire l'état avant suppression pour l'historique
         from core.db.query_executor import QueryExecutor as QE
         old = QE.fetch_one(
-            "SELECT id, niveau, date_evaluation FROM polyvalence WHERE operateur_id = %s AND poste_id = %s",
+            "SELECT id, niveau, date_evaluation FROM polyvalence WHERE personnel_id = %s AND poste_id = %s",
             (operateur_id, poste_id), dictionary=True
         )
 
-        query = "DELETE FROM polyvalence WHERE operateur_id = %s AND poste_id = %s"
+        query = "DELETE FROM polyvalence WHERE personnel_id = %s AND poste_id = %s"
 
         try:
             with DatabaseConnection() as conn:
@@ -596,7 +596,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                    p.date_evaluation, p.prochaine_evaluation, NULL AS commentaire
             FROM polyvalence p
             JOIN postes ps ON p.poste_id = ps.id
-            WHERE p.operateur_id = %s
+            WHERE p.personnel_id = %s
             ORDER BY ps.poste_code
             """,
             (operateur_id,),
@@ -630,7 +630,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                    END AS commentaire
             FROM historique_polyvalence hp
             LEFT JOIN postes p ON hp.poste_id = p.id
-            WHERE hp.operateur_id = %s
+            WHERE hp.personnel_id = %s
             ORDER BY hp.date_action DESC
             """,
             (operateur_id,),

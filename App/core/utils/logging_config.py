@@ -264,6 +264,11 @@ def get_log_file_path() -> Path:
     return _get_logs_dir() / _LOG_FILENAME
 
 
+def get_logs_dir() -> Path:
+    """Retourne le dossier de logs (crée si nécessaire)"""
+    return _get_logs_dir()
+
+
 # ===========================
 # Utilitaires
 # ===========================
@@ -302,5 +307,6 @@ __all__ = [
     'clear_log_context',
     'is_production_mode',
     'get_log_file_path',
+    'get_logs_dir',
     'log_exception',
 ]

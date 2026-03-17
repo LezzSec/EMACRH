@@ -921,7 +921,7 @@ class GestionAlertesRHDialog(QDialog):
             if show_error_message:
                 show_error_message(self, "Erreur Export", "Impossible d'exporter le PDF", e)
             else:
-                QMessageBox.critical(self, "Erreur Export", str(e))
+                QMessageBox.critical(self, "Erreur Export", "Impossible d'exporter le PDF. Consultez les logs pour plus de détails.")
 
     def _get_filtered_alerts(self) -> List[Alert]:
         """Retourne la liste des alertes actuellement visibles apres filtrage."""

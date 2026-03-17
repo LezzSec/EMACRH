@@ -108,7 +108,7 @@ def fetch_historique(
             "("
             "action LIKE %s OR "
             "description LIKE %s OR "
-            "CAST(operateur_id AS CHAR) LIKE %s OR "
+            "CAST(personnel_id AS CHAR) LIKE %s OR "
             "CAST(poste_id AS CHAR) LIKE %s"
             ")"
         )
@@ -116,12 +116,12 @@ def fetch_historique(
 
     where_clause = " AND ".join(where)
     sql = (
-        "SELECT h.id, h.date_time, h.action, h.operateur_id, h.poste_id, h.description, "
+        "SELECT h.id, h.date_time, h.action, h.personnel_id, h.poste_id, h.description, "
         "h.utilisateur, h.table_name, h.record_id, "
         "CONCAT(p.prenom, ' ', p.nom) AS op_name, "
         "pos.poste_code AS po_name "
         "FROM historique h "
-        "LEFT JOIN personnel p ON h.operateur_id = p.id "
+        "LEFT JOIN personnel p ON h.personnel_id = p.id "
         "LEFT JOIN postes pos ON h.poste_id = pos.id "
         f"WHERE {where_clause} "
         "ORDER BY h.date_time DESC, h.id DESC"
@@ -186,7 +186,7 @@ def _build_historique_where(
         like = f"%{search_text}%"
         where.append(
             "(action LIKE %s OR description LIKE %s OR "
-            "CAST(operateur_id AS CHAR) LIKE %s OR "
+            "CAST(personnel_id AS CHAR) LIKE %s OR "
             "CAST(poste_id AS CHAR) LIKE %s)"
         )
         params += [like, like, like, like]
@@ -262,11 +262,11 @@ def fetch_historique_paginated(
     )
     sql = (
         "SELECT h.id, h.date_time, h.action, h.table_name, h.record_id, "
-        "h.operateur_id, h.poste_id, h.description, h.utilisateur, "
+        "h.personnel_id, h.poste_id, h.description, h.utilisateur, "
         "CONCAT(p.prenom, ' ', p.nom) AS op_name, "
         "pos.poste_code AS po_name "
         "FROM historique h "
-        "LEFT JOIN personnel p ON h.operateur_id = p.id "
+        "LEFT JOIN personnel p ON h.personnel_id = p.id "
         "LEFT JOIN postes pos ON h.poste_id = pos.id "
         f"WHERE {where_clause} "
         "ORDER BY h.date_time DESC, h.id DESC "

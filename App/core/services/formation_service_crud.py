@@ -38,7 +38,7 @@ class FormationServiceCRUD(CRUDService):
     ACTION_PREFIX = "FORMATION_"
 
     ALLOWED_FIELDS = [
-        'operateur_id', 'intitule', 'organisme', 'date_debut', 'date_fin',
+        'personnel_id', 'intitule', 'organisme', 'date_debut', 'date_fin',
         'duree_heures', 'statut', 'certificat_obtenu', 'cout', 'commentaire',
         'document_id',
     ]
@@ -59,7 +59,7 @@ class FormationServiceCRUD(CRUDService):
         try:
             sql = """
                 SELECT
-                    f.id, f.operateur_id, f.intitule, f.organisme,
+                    f.id, f.personnel_id, f.intitule, f.organisme,
                     f.date_debut, f.date_fin, f.duree_heures, f.statut,
                     f.certificat_obtenu, f.cout, f.commentaire, f.document_id,
                     f.date_creation, f.date_modification,
@@ -67,7 +67,7 @@ class FormationServiceCRUD(CRUDService):
                     p.matricule,
                     d.nom_fichier as attestation_nom
                 FROM formation f
-                JOIN personnel p ON f.operateur_id = p.id
+                JOIN personnel p ON f.personnel_id = p.id
                 LEFT JOIN documents d ON f.document_id = d.id
                 WHERE 1=1
             """
@@ -76,7 +76,7 @@ class FormationServiceCRUD(CRUDService):
                 sql += " AND f.statut = %s"
                 params.append(statut)
             if operateur_id:
-                sql += " AND f.operateur_id = %s"
+                sql += " AND f.personnel_id = %s"
                 params.append(operateur_id)
             sql += " ORDER BY f.date_debut DESC"
 
@@ -102,7 +102,7 @@ class FormationServiceCRUD(CRUDService):
         try:
             formation = QueryExecutor.fetch_one("""
                 SELECT
-                    f.id, f.operateur_id, f.intitule, f.organisme,
+                    f.id, f.personnel_id, f.intitule, f.organisme,
                     f.date_debut, f.date_fin, f.duree_heures, f.statut,
                     f.certificat_obtenu, f.cout, f.commentaire, f.document_id,
                     f.date_creation, f.date_modification,
@@ -110,7 +110,7 @@ class FormationServiceCRUD(CRUDService):
                     p.matricule,
                     d.nom_fichier as attestation_nom
                 FROM formation f
-                JOIN personnel p ON f.operateur_id = p.id
+                JOIN personnel p ON f.personnel_id = p.id
                 LEFT JOIN documents d ON f.document_id = d.id
                 WHERE f.id = %s
             """, (formation_id,), dictionary=True)
@@ -235,7 +235,7 @@ class FormationServiceCRUD(CRUDService):
             ...     print(f"{f['intitule']} - {f['statut']}")
         """
         return cls.get_all(
-            conditions={'operateur_id': operateur_id},
+            conditions={'personnel_id': operateur_id},
             order_by=order_by
         )
 
@@ -335,7 +335,7 @@ class FormationServiceCRUD(CRUDService):
         Example:
             >>> total = FormationServiceCRUD.count_by_operateur(1)
         """
-        return cls.count(operateur_id=operateur_id)
+        return cls.count(personnel_id=operateur_id)
 
     @classmethod
     def count_by_statut(cls, statut: str) -> int:

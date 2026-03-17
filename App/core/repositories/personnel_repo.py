@@ -157,7 +157,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
         query = """
             SELECT DISTINCT p.id, p.nom, p.prenom, p.matricule, p.statut, p.service_id, p.numposte
             FROM personnel p
-            JOIN polyvalence pv ON pv.operateur_id = p.id
+            JOIN polyvalence pv ON pv.personnel_id = p.id
             JOIN postes po ON po.id = pv.poste_id
             WHERE po.atelier_id = %s AND p.statut = 'ACTIF'
             ORDER BY p.nom
@@ -478,7 +478,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
                 SUM(CASE WHEN p.niveau = 3 THEN 1 ELSE 0 END) AS n3,
                 SUM(CASE WHEN p.niveau = 4 THEN 1 ELSE 0 END) AS n4
             FROM personnel o
-            LEFT JOIN polyvalence p ON o.id = p.operateur_id
+            LEFT JOIN polyvalence p ON o.id = p.personnel_id
             LEFT JOIN contrat ct ON ct.personnel_id = o.id AND ct.actif = 1
             GROUP BY o.id, o.nom, o.prenom, o.matricule, o.numposte, o.statut, ct.type_contrat
             ORDER BY o.nom, o.prenom
@@ -583,7 +583,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
 
         if filters.get("atelier_id"):
             where_clauses.append("""p.id IN (
-                SELECT DISTINCT pv.operateur_id FROM polyvalence pv
+                SELECT DISTINCT pv.personnel_id FROM polyvalence pv
                 JOIN postes po ON po.id = pv.poste_id
                 WHERE po.atelier_id = %s
             )""")
@@ -607,7 +607,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
                 SUM(CASE WHEN poly.niveau = 3 THEN 1 ELSE 0 END) AS n3,
                 SUM(CASE WHEN poly.niveau = 4 THEN 1 ELSE 0 END) AS n4
             FROM personnel p
-            LEFT JOIN polyvalence poly ON p.id = poly.operateur_id
+            LEFT JOIN polyvalence poly ON p.id = poly.personnel_id
             LEFT JOIN contrat ct ON ct.personnel_id = p.id AND ct.actif = 1
             WHERE {where_sql}
             GROUP BY p.id, p.nom, p.prenom, p.matricule, p.numposte, p.statut, ct.type_contrat

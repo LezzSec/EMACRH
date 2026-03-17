@@ -15,6 +15,9 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
 from core.gui.emac_ui_kit import add_custom_title_bar
+from core.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 # Import des composants modernes EMAC
 try:
@@ -873,7 +876,8 @@ class TemplateSelectionDialog(QDialog):
                 QMessageBox.warning(self, "Erreur", "Aucun document n'a pu être généré.")
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+            logger.exception(f"Erreur génération template: {e}")
+            QMessageBox.critical(self, "Erreur", "Impossible de générer le document. Consultez les logs pour plus de détails.")
 
 
 class ImportTemplateDialog(QDialog):
@@ -1181,4 +1185,5 @@ class ImportTemplateDialog(QDialog):
             self.accept()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'import:\n{str(e)}")
+            logger.exception(f"Erreur import template: {e}")
+            QMessageBox.critical(self, "Erreur", "Impossible d'importer le template. Consultez les logs pour plus de détails.")

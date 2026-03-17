@@ -85,7 +85,7 @@ def log_hist(
         cur.execute(
             """
             INSERT INTO historique
-                (date_time, action, table_name, record_id, utilisateur, description, operateur_id, poste_id)
+                (date_time, action, table_name, record_id, utilisateur, description, personnel_id, poste_id)
             VALUES (NOW(), %s, %s, %s, %s, %s, %s, %s)
             """,
             (

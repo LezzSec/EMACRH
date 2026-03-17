@@ -74,7 +74,7 @@ def log_polyvalence_action(
             INSERT INTO historique_polyvalence (
                 date_action,
                 action_type,
-                operateur_id,
+                personnel_id,
                 poste_id,
                 polyvalence_id,
                 ancien_niveau,
@@ -247,7 +247,7 @@ def get_historique_operateur(operateur_id, limit=None):
     try:
         query = """
             SELECT * FROM v_historique_polyvalence_complet
-            WHERE operateur_id = %s
+            WHERE personnel_id = %s
             ORDER BY date_action DESC
         """
 
@@ -287,7 +287,7 @@ def get_historique_poste(operateur_id, poste_id, limit=None):
     try:
         query = """
             SELECT * FROM v_historique_polyvalence_complet
-            WHERE operateur_id = %s AND poste_id = %s
+            WHERE personnel_id = %s AND poste_id = %s
             ORDER BY date_action DESC
         """
 
@@ -349,7 +349,7 @@ def get_statistiques_operateur(operateur_id):
                 MIN(date_action) as premiere_action,
                 MAX(date_action) as derniere_action
             FROM historique_polyvalence
-            WHERE operateur_id = %s
+            WHERE personnel_id = %s
         """
 
         cur.execute(query, (operateur_id,))

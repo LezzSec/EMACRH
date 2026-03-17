@@ -18,6 +18,9 @@ from core.services.absence_service_crud import AbsenceServiceCRUD, calculer_jour
 from core.services.planning_service import get_evaluations_mois
 from core.repositories.personnel_repo import PersonnelRepository
 from core.gui.emac_ui_kit import add_custom_title_bar
+from core.utils.logging_config import get_logger
+
+logger = get_logger(__name__)
 from core.services.permission_manager import can
 
 
@@ -626,7 +629,8 @@ class NouvelleDemande(QDialog):
             self.accept()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Impossible de créer la demande:\n{str(e)}")
+            logger.exception(f"Erreur création demande absence: {e}")
+            QMessageBox.critical(self, "Erreur", "Impossible de créer la demande. Consultez les logs pour plus de détails.")
 
 
 class MesDemandesDialog(QDialog):
@@ -758,7 +762,8 @@ class MesDemandesDialog(QDialog):
                 self.load_demandes()
 
             except Exception as e:
-                QMessageBox.critical(self, "Erreur", f"Erreur: {str(e)}")
+                logger.exception(f"Erreur annulation demande absence: {e}")
+                QMessageBox.critical(self, "Erreur", "Impossible d'annuler la demande. Consultez les logs pour plus de détails.")
 
 
 if __name__ == "__main__":

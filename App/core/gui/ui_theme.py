@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Thème visuel EMAC – Variante CLAIRE (Light) et SOMBRE (Dark)
-• Fond clair, cartes blanches, contrasts lisibles
+Thème visuel EMAC – Variante CLAIRE (Light)
+• Fond clair, cartes blanches, contrastes lisibles
 • Widgets : EmacButton, EmacCard, EmacHeader, EmacStatusCard, HamburgerButton
 
 Usage :
-from core.gui.ui_theme import EmacTheme, EmacDarkTheme, EmacButton, ...
+from core.gui.ui_theme import EmacTheme, EmacButton, ...
 EmacTheme.apply(app)
 """
 from PyQt5 import QtCore, QtGui
@@ -91,6 +91,11 @@ class EmacTheme:
             color: {cls.TXT};
         }}
         QPushButton[class="ghost"]:hover {{ background: #f8fafc; }}
+        QPushButton[class="ghost"]:disabled {{
+            background: #f8f9fa;
+            border: 1px solid #e2e8f0;
+            color: #b0b8c4;
+        }}
 
         QPushButton[class="secondary"] {{
             background: #f1f5f9;
@@ -198,242 +203,6 @@ class EmacTheme:
         # QSS global
         app.setStyleSheet(cls.qss())
 
-
-# -------------------------------------------------------------------
-# === THÈME SOMBRE ===
-class EmacDarkTheme(EmacTheme):
-    """Palette + QSS centralisés (version sombre) avec FIX généralisé."""
-    BG = "#121212"          # fond application
-    BG_CARD = "#1e1e1e"     # cartes
-    BG_ELEV = "#1e1e1e"     # surfaces élevées
-    BG_TABLE = "#0a0a0a"    # listes/tableaux
-
-    TXT = "#e0e0e0"         # texte principal (blanc cassé)
-    TXT_DIM = "#9c9c9c"     # texte secondaire (gris moyen)
-
-    BDR = "#2c2c2c"         # Bordures: Gris très sombre, visible
-    BDR_STRONG = "#3f3f3f"  # Bordures fortes: un peu plus de contraste
-
-    PRI = "#4f46e5"         # Bleu Indigo (primary)
-    PRI_H = "#4338ca"
-
-    ACC = "#10b981"         # succès (vert)
-    WARN = "#f59e0b"        # Avertissement (jaune/orange)
-    ERR = "#ef4444"         # Erreur (rouge)
-
-    @classmethod
-    def qss(cls) -> str:
-        return f'''
-        QWidget {{
-            color: {cls.TXT};
-            background: {cls.BG};
-            font-family: 'Segoe UI', Roboto, Arial;
-            font-size: 14px;
-        }}
-
-        /* Cartes */
-        QFrame#card {{
-            background: {cls.BG_CARD};
-            border: 1px solid {cls.BDR}; 
-            border-radius: 14px;
-        }}
-        
-        /* Titres */
-        QLabel[class="h1"] {{ font-size: 24px; font-weight: 700; }}
-        QLabel[class="h2"] {{ font-size: 18px; font-weight: 600; color: {cls.TXT}; }}
-        QLabel[class="muted"] {{ color: {cls.TXT_DIM}; }}
-
-        /* Boutons */
-        QPushButton {{
-            background: {cls.BG_TABLE};
-            border: 1px solid {cls.BDR};
-            border-radius: 10px;
-            padding: 10px 14px;
-            color: {cls.TXT};
-            text-align: center;
-        }}
-        QPushButton:hover {{
-            border-color: {cls.BDR_STRONG};
-            background: {cls.BG_CARD};
-        }}
-        QPushButton:pressed {{ background: {cls.BDR}; }}
-
-        /* Variantes */
-        QPushButton[class="primary"] {{
-            background: {cls.PRI};
-            color: #ffffff;
-            border: 1px solid {cls.PRI};
-            font-weight: 600;
-        }}
-        QPushButton[class="primary"]:hover {{ background: {cls.PRI_H}; border-color: {cls.PRI_H}; }}
-
-        QPushButton[class="ghost"] {{
-            background: {cls.BG_TABLE};
-            border: 1px solid {cls.BDR};
-            color: {cls.TXT};
-        }}
-        QPushButton[class="ghost"]:hover {{ background: {cls.BG_CARD}; border-color: {cls.BDR_STRONG};}}
-
-        QPushButton[class="secondary"] {{
-            background: {cls.BG_ELEV};
-            border: 1px solid {cls.BDR_STRONG};
-            color: {cls.TXT_DIM};
-            font-weight: 500;
-        }}
-        QPushButton[class="secondary"]:hover {{ background: {cls.BDR}; border-color: {cls.TXT_DIM}; }}
-
-        QPushButton[class="outline"] {{
-            background: transparent;
-            border: 1.5px solid {cls.PRI};
-            color: {cls.PRI};
-            font-weight: 500;
-        }}
-        QPushButton[class="outline"]:hover {{ background: {cls.BG_CARD}; border-color: {cls.PRI_H}; }}
-
-        QPushButton[class="danger"] {{
-            background: transparent;
-            border: 1.5px solid #ef4444;
-            color: #f87171;
-            font-weight: 500;
-        }}
-        QPushButton[class="danger"]:hover {{ background: #2d1515; border-color: #ef4444; }}
-
-        QPushButton[size="sm"] {{
-            padding: 4px 12px;
-            font-size: 12px;
-            border-radius: 6px;
-            min-width: 76px;
-        }}
-
-        /* Inputs & listes */
-        QComboBox, QLineEdit {{
-            background: {cls.BG_TABLE};
-            border: 1px solid {cls.BDR};
-            border-radius: 10px;
-            padding: 6px 8px;
-            color: {cls.TXT}; 
-        }}
-        QListWidget {{
-            background: {cls.BG_TABLE};
-            border: 1px solid {cls.BDR}; /* Bordure rétablie pour QListWidget */
-            border-radius: 10px;
-            padding: 0px; 
-            color: {cls.TXT};
-        }}
-        QListWidget::item {{ padding: 8px 10px; height: 28px; }}
-        QListWidget::item:selected {{ background: {cls.BDR_STRONG}; color: {cls.TXT}; }}
-        QListView::item {{ border-bottom: 1px solid {cls.BDR}; }}
-
-        /* Tables / QAbstractItemView */
-        QAbstractItemView {{
-            background: {cls.BG_TABLE};
-            color: {cls.TXT};
-            gridline-color: {cls.BDR_STRONG};
-            selection-background-color: {cls.PRI}; 
-            selection-color: #ffffff; 
-        }}
-        QHeaderView::section {{
-            background: {cls.BG_CARD};
-            color: {cls.TXT};
-            border: 1px solid {cls.BDR_STRONG};
-            padding: 6px 10px;
-        }}
-        
-        /* FIX TABLEAUX: Alternance de lignes pour meilleure lisibilité */
-        QTableView {{
-            alternate-background-color: {cls.BG_CARD};
-            background: {cls.BG_TABLE};
-        }}
-        QTableView::item {{
-            color: {cls.TXT};
-            padding: 4px;
-        }}
-        QTableView::item:selected {{
-            background: {cls.PRI};
-            color: #ffffff;
-        }}
-
-        /* Scrollbars fines */
-        QScrollBar:vertical {{ width: 10px; background: transparent; }}
-        QScrollBar::handle:vertical {{ min-height: 24px; background: {cls.BDR_STRONG}; border-radius: 6px; }}
-        QScrollBar::handle:vertical:hover {{ background: {cls.BDR}; }}
-        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0; }}
-
-        
-        /* Barre de navigation du calendrier (mois/année) */
-        QCalendarWidget QWidget#qt_calendar_navigationbar {{
-            background-color: {cls.BG_CARD}; 
-            border-bottom: 1px solid {cls.BDR_STRONG};
-        }}
-        QCalendarWidget QToolButton {{
-            color: {cls.TXT}; /* Flèches et boutons de navigation */
-            background: transparent;
-            font-size: 16px;
-        }}
-        QCalendarWidget QToolButton:hover {{
-            background: {cls.BG};
-            border-radius: 4px;
-        }}
-        QCalendarWidget QMenu {{
-            background: {cls.BG_CARD};
-            color: {cls.TXT};
-        }}
-
-        /* FIX GRILLE: Jours du mois en cours (enabled) */
-        QCalendarWidget QTableView {{
-            background: {cls.BG_TABLE};
-            color: {cls.TXT}; /* Texte blanc cassé pour les jours normaux */
-        }}
-        
-        /* FIX CRITIQUE: Jour sélectionné visible */
-        QCalendarWidget QAbstractItemView:enabled {{
-            selection-background-color: {cls.PRI}; /* Fond indigo */
-            selection-color: #ffffff; /* Texte blanc */
-        }}
-
-        /* FIX: Jours d'autres mois (disabled) en gris estompé */
-        QCalendarWidget QAbstractItemView:disabled {{
-            color: {cls.TXT_DIM}; /* Gris moyen pour les jours inactifs */
-        }}
-        
-        /* FIX: En-têtes des jours de la semaine */
-        QCalendarWidget QWidget {{
-            alternate-background-color: {cls.BG_CARD};
-        }}
-        QCalendarWidget QWidget QHeaderView::section {{
-            background: {cls.BG_CARD};
-            color: {cls.TXT};
-            border: none;
-            padding: 4px;
-        }}
-        
-        '''
-
-    @classmethod
-    def apply(cls, app):
-        # Police par défaut
-        app.setFont(QFont('Segoe UI', 10))
-        # Palette Qt (widgets natifs)
-        pal = app.palette()
-        pal.setColor(QPalette.Window, QColor(cls.BG))
-        pal.setColor(QPalette.WindowText, QColor(cls.TXT))
-        pal.setColor(QPalette.Base, QColor(cls.BG_TABLE)) # Fond des cellules
-        pal.setColor(QPalette.AlternateBase, QColor(cls.BG_CARD)) # Alternance lignes
-        pal.setColor(QPalette.Text, QColor(cls.TXT))
-        pal.setColor(QPalette.Button, QColor(cls.BG_CARD))
-        pal.setColor(QPalette.ButtonText, QColor(cls.TXT))
-        pal.setColor(QPalette.Highlight, QColor(cls.PRI)) # pour la sélection
-        pal.setColor(QPalette.HighlightedText, QColor("#ffffff"))
-        
-        pal.setColor(QPalette.Light, QColor(cls.BG_TABLE)) # Fond des cellules du calendrier
-        pal.setColor(QPalette.Midlight, QColor(cls.TXT_DIM)) # Jours d'autres mois
-        pal.setColor(QPalette.Dark, QColor(cls.TXT)) # Texte des jours du mois courant
-        
-        app.setPalette(pal)
-        # QSS global
-        app.setStyleSheet(cls.qss())
-
-
 # -------------------------------------------------------------------
 # === Fonction utilitaire de Thème ===
 # -------------------------------------------------------------------
@@ -493,24 +262,16 @@ class EmacStatusCard(EmacCard):
         c = self.COLORS_MAP.get(variant, self.COLORS_MAP['info'])
         header = QHBoxLayout(); header.setSpacing(8)
         
-        # Détermination du thème actuel pour obtenir les couleurs (via la nouvelle fonction)
-        ThemeCls = get_current_theme()
-        
-        # Récupération de la couleur vive (ERR, ACC, PRI) du thème actuel
-        accent_color = getattr(ThemeCls, c['acc_key'])
-        
-        # Le texte sera blanc si la couleur est foncée (Dark/Primary/Error/Success du thème)
-        is_dark_background = ThemeCls == EmacDarkTheme or c['acc_key'] in ['PRI', 'ERR', 'ACC']
-        text_color = "#ffffff" if is_dark_background else ThemeCls.TXT
-            
+        accent_color = getattr(EmacTheme, c['acc_key'])
+        text_color = "#ffffff" if c['acc_key'] in ['PRI', 'ERR', 'ACC'] else EmacTheme.TXT
+
         pill = QLabel(f" {c['icon']}  {title}")
         pill.setStyleSheet(
             f"background:{accent_color}; color:{text_color}; font-weight:600; padding:6px 10px; border-radius:8px;")
         header.addWidget(pill, 0, Qt.AlignLeft)
         header.addStretch(1)
         if subtitle:
-            # Texte du sous-titre utilise la couleur TXT_DIM du thème
-            sub = QLabel(subtitle); sub.setStyleSheet(f"color:{ThemeCls.TXT_DIM};")
+            sub = QLabel(subtitle); sub.setStyleSheet(f"color:{EmacTheme.TXT_DIM};")
             header.addWidget(sub, 0, Qt.AlignRight)
         w = QWidget(); w.setLayout(header)
         
@@ -577,49 +338,39 @@ class HamburgerButton(QToolButton):
         self.setToolButtonStyle(QtCore.Qt.ToolButtonIconOnly)
         self.setFixedSize(diameter, diameter)
 
-        # Détermine le thème pour les couleurs des barres
-        ThemeCls = get_current_theme()
-        is_dark = ThemeCls == EmacDarkTheme
-
-        # ----- STYLE selon variante (utilisant le thème actuel) -----
+        # ----- STYLE selon variante -----
         if variant == "primary":
-            # Fond primary (Indigo ou Anthracite), barres blanches
             self.setStyleSheet(f"""
                 QToolButton {{
-                    background: {ThemeCls.PRI};
-                    border: 1px solid {ThemeCls.PRI};
+                    background: {EmacTheme.PRI};
+                    border: 1px solid {EmacTheme.PRI};
                     border-radius: 12px;
                 }}
-                QToolButton:hover {{ 
-                    background: {ThemeCls.PRI_H}; 
-                    border-color: {ThemeCls.PRI_H};
+                QToolButton:hover {{
+                    background: {EmacTheme.PRI_H};
+                    border-color: {EmacTheme.PRI_H};
                 }}
-                QToolButton:pressed {{ 
-                    background: {ThemeCls.PRI_H}; 
+                QToolButton:pressed {{
+                    background: {EmacTheme.PRI_H};
                 }}
             """)
             self._color_normal = QtGui.QColor(255, 255, 255)
             self._color_hover  = QtGui.QColor(255, 255, 255)
         else:
-            # Fond transparent ou BG_CARD, barres TXT
-            bg = ThemeCls.BG_CARD if is_dark else "rgba(255,255,255,0.95)"
-            bg_hover = ThemeCls.BG_ELEV if is_dark else "#f0f2f7"
-            bdr = ThemeCls.BDR
-            bdr_strong = ThemeCls.BDR_STRONG
             self.setStyleSheet(f"""
                 QToolButton {{
-                    background: {bg};
-                    border: 1px solid {bdr};
+                    background: rgba(255,255,255,0.95);
+                    border: 1px solid {EmacTheme.BDR};
                     border-radius: 12px;
                 }}
-                QToolButton:hover {{ 
-                    background: {bg_hover}; 
-                    border-color: {bdr_strong};
+                QToolButton:hover {{
+                    background: #f0f2f7;
+                    border-color: {EmacTheme.BDR_STRONG};
                 }}
-                QToolButton:pressed {{ background: {bg_hover}; }}
+                QToolButton:pressed {{ background: #f0f2f7; }}
             """)
-            self._color_normal = QtGui.QColor(ThemeCls.TXT)
-            self._color_hover  = QtGui.QColor(ThemeCls.TXT)
+            self._color_normal = QtGui.QColor(EmacTheme.TXT)
+            self._color_hover  = QtGui.QColor(EmacTheme.TXT)
 
         # Pictogramme
         self._bar_w = bar_width

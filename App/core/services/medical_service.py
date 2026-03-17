@@ -44,7 +44,7 @@ def get_validites_operateur(operateur_id: int) -> List[Dict[str, Any]]:
         """
         SELECT type_validite, date_debut, date_fin, periodicite, taux_incapacite
         FROM validite
-        WHERE operateur_id = %s
+        WHERE personnel_id = %s
         ORDER BY date_debut DESC
         """,
         (operateur_id,),
@@ -69,21 +69,21 @@ def get_donnees_medicales(operateur_id: int) -> Dict[str, Any]:
     try:
         # Données principales (table medical)
         medical = QueryExecutor.fetch_one(
-            "SELECT m.* FROM medical m WHERE m.operateur_id = %s",
+            "SELECT m.* FROM medical m WHERE m.personnel_id = %s",
             (operateur_id,), dictionary=True
         )
 
         # RQTH/OETH depuis table validite existante
         rqth = QueryExecutor.fetch_one(
             """SELECT * FROM validite
-               WHERE operateur_id = %s AND type_validite = 'RQTH'
+               WHERE personnel_id = %s AND type_validite = 'RQTH'
                ORDER BY date_debut DESC LIMIT 1""",
             (operateur_id,), dictionary=True
         )
 
         oeth = QueryExecutor.fetch_one(
             """SELECT * FROM validite
-               WHERE operateur_id = %s AND type_validite = 'OETH'
+               WHERE personnel_id = %s AND type_validite = 'OETH'
                ORDER BY date_debut DESC LIMIT 1""",
             (operateur_id,), dictionary=True
         )
@@ -91,7 +91,7 @@ def get_donnees_medicales(operateur_id: int) -> Dict[str, Any]:
         # Dernière visite
         derniere_visite = QueryExecutor.fetch_one(
             """SELECT * FROM medical_visite
-               WHERE operateur_id = %s
+               WHERE personnel_id = %s
                ORDER BY date_visite DESC LIMIT 1""",
             (operateur_id,), dictionary=True
         )
@@ -103,7 +103,7 @@ def get_donnees_medicales(operateur_id: int) -> Dict[str, Any]:
                    MIN(date_visite) as premiere_visite,
                    MAX(date_visite) as derniere_visite
                FROM medical_visite
-               WHERE operateur_id = %s""",
+               WHERE personnel_id = %s""",
             (operateur_id,), dictionary=True
         )
 
@@ -113,7 +113,7 @@ def get_donnees_medicales(operateur_id: int) -> Dict[str, Any]:
                       SUM(CASE WHEN avec_arret = 1 THEN 1 ELSE 0 END) as nb_avec_arret,
                       SUM(COALESCE(nb_jours_absence, 0)) as total_jours_absence
                FROM medical_accident_travail
-               WHERE operateur_id = %s""",
+               WHERE personnel_id = %s""",
             (operateur_id,), dictionary=True
         )
 
@@ -121,7 +121,7 @@ def get_donnees_medicales(operateur_id: int) -> Dict[str, Any]:
         stats_mp = QueryExecutor.fetch_one(
             """SELECT COUNT(*) as nb_mp
                FROM medical_maladie_pro
-               WHERE operateur_id = %s""",
+               WHERE personnel_id = %s""",
             (operateur_id,), dictionary=True
         )
 
@@ -163,17 +163,17 @@ def get_ou_creer_medical(operateur_id: int) -> Optional[Dict]:
     """
     try:
         medical = QueryExecutor.fetch_one(
-            "SELECT * FROM medical WHERE operateur_id = %s",
+            "SELECT * FROM medical WHERE personnel_id = %s",
             (operateur_id,), dictionary=True
         )
 
         if not medical:
             QueryExecutor.execute_write(
-                "INSERT INTO medical (operateur_id) VALUES (%s)",
+                "INSERT INTO medical (personnel_id) VALUES (%s)",
                 (operateur_id,)
             )
             medical = QueryExecutor.fetch_one(
-                "SELECT * FROM medical WHERE operateur_id = %s",
+                "SELECT * FROM medical WHERE personnel_id = %s",
                 (operateur_id,), dictionary=True
             )
 
@@ -206,7 +206,7 @@ def update_donnees_medicales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
 
     try:
         exists = QueryExecutor.fetch_one(
-            "SELECT id FROM medical WHERE operateur_id = %s",
+            "SELECT id FROM medical WHERE personnel_id = %s",
             (operateur_id,), dictionary=True
         )
 
@@ -221,11 +221,11 @@ def update_donnees_medicales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
 
             if fields:
                 values.append(operateur_id)
-                sql = "UPDATE medical SET " + ", ".join(fields) + " WHERE operateur_id = %s"
+                sql = "UPDATE medical SET " + ", ".join(fields) + " WHERE personnel_id = %s"
                 QueryExecutor.execute_write(sql, tuple(values), return_lastrowid=False)
         else:
             # INSERT
-            columns = ['operateur_id']
+            columns = ['personnel_id']
             values = [operateur_id]
             placeholders = ['%s']
 
@@ -254,7 +254,7 @@ def get_visites(operateur_id: int) -> List[Dict]:
     try:
         return QueryExecutor.fetch_all(
             """SELECT * FROM medical_visite
-               WHERE operateur_id = %s
+               WHERE personnel_id = %s
                ORDER BY date_visite DESC""",
             (operateur_id,), dictionary=True
         )
@@ -269,7 +269,7 @@ def create_visite(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[in
         require('rh.medical.edit')
         visite_id = QueryExecutor.execute_write(
             """INSERT INTO medical_visite (
-                   operateur_id, date_visite, type_visite, resultat,
+                   personnel_id, date_visite, type_visite, resultat,
                    restrictions, medecin, commentaire, prochaine_visite
                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
             (
@@ -346,7 +346,7 @@ def get_accidents(operateur_id: int) -> List[Dict]:
                       (SELECT COUNT(*) FROM medical_prolongation_arret p
                        WHERE p.accident_id = at.id) as nb_prolongations
                FROM medical_accident_travail at
-               WHERE at.operateur_id = %s
+               WHERE at.personnel_id = %s
                ORDER BY at.date_accident DESC""",
             (operateur_id,), dictionary=True
         )
@@ -384,7 +384,7 @@ def create_accident(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
         require('rh.medical.edit')
         accident_id = QueryExecutor.execute_write(
             """INSERT INTO medical_accident_travail (
-                   operateur_id, date_accident, heure_accident, jour_semaine,
+                   personnel_id, date_accident, heure_accident, jour_semaine,
                    horaires, circonstances, siege_lesions, nature_lesions,
                    avec_arret, date_reconnaissance_at, date_debut_arret,
                    date_fin_arret_initial, commentaire
@@ -540,7 +540,7 @@ def get_maladies_pro(operateur_id: int) -> List[Dict]:
     try:
         result = QueryExecutor.fetch_all(
             """SELECT * FROM medical_maladie_pro
-               WHERE operateur_id = %s
+               WHERE personnel_id = %s
                ORDER BY date_reconnaissance DESC""",
             (operateur_id,), dictionary=True
         )
@@ -560,7 +560,7 @@ def create_maladie_pro(operateur_id: int, data: Dict) -> Tuple[bool, str, Option
         require('rh.medical.edit')
         mp_id = QueryExecutor.execute_write(
             """INSERT INTO medical_maladie_pro (
-                   operateur_id, date_reconnaissance, numero_tableau,
+                   personnel_id, date_reconnaissance, numero_tableau,
                    designation, taux_ipp, commentaire
                ) VALUES (%s, %s, %s, %s, %s, %s)""",
             (
@@ -575,7 +575,7 @@ def create_maladie_pro(operateur_id: int, data: Dict) -> Tuple[bool, str, Option
 
         # Mettre à jour le flag maladie_pro dans la table medical
         QueryExecutor.execute_write(
-            "UPDATE medical SET maladie_pro = 1 WHERE operateur_id = %s",
+            "UPDATE medical SET maladie_pro = 1 WHERE personnel_id = %s",
             (operateur_id,), return_lastrowid=False
         )
 
@@ -593,13 +593,13 @@ def delete_maladie_pro(mp_id: int) -> Tuple[bool, str]:
 
         # Récupérer l'operateur_id avant suppression
         row = QueryExecutor.fetch_one(
-            "SELECT operateur_id FROM medical_maladie_pro WHERE id = %s",
+            "SELECT personnel_id FROM medical_maladie_pro WHERE id = %s",
             (mp_id,), dictionary=True
         )
         if not row:
             return False, "Maladie professionnelle introuvable"
 
-        operateur_id = row['operateur_id']
+        operateur_id = row['personnel_id']
 
         QueryExecutor.execute_write(
             "DELETE FROM medical_maladie_pro WHERE id = %s",
@@ -608,12 +608,12 @@ def delete_maladie_pro(mp_id: int) -> Tuple[bool, str]:
 
         # Vérifier s'il reste des MP pour cet opérateur
         cnt = QueryExecutor.fetch_scalar(
-            "SELECT COUNT(*) FROM medical_maladie_pro WHERE operateur_id = %s",
+            "SELECT COUNT(*) FROM medical_maladie_pro WHERE personnel_id = %s",
             (operateur_id,), default=0
         )
         if cnt == 0:
             QueryExecutor.execute_write(
-                "UPDATE medical SET maladie_pro = 0 WHERE operateur_id = %s",
+                "UPDATE medical SET maladie_pro = 0 WHERE personnel_id = %s",
                 (operateur_id,), return_lastrowid=False
             )
 
@@ -643,7 +643,7 @@ def get_alertes_medicales(operateur_id: int = None) -> List[Dict]:
         params = []
 
         if operateur_id:
-            sql += " WHERE operateur_id = %s"
+            sql += " WHERE personnel_id = %s"
             params.append(operateur_id)
 
         sql += " ORDER BY jours_retard DESC"
@@ -676,11 +676,11 @@ def get_visites_a_planifier(jours_avance: int = 30) -> List[Dict]:
                    DATEDIFF(mv.prochaine_visite, CURDATE()) as jours_restants,
                    m.type_suivi_vip
                FROM personnel p
-               JOIN medical_visite mv ON p.id = mv.operateur_id
-               LEFT JOIN medical m ON p.id = m.operateur_id
+               JOIN medical_visite mv ON p.id = mv.personnel_id
+               LEFT JOIN medical m ON p.id = m.personnel_id
                WHERE p.statut = 'ACTIF'
                  AND mv.prochaine_visite <= DATE_ADD(CURDATE(), INTERVAL %s DAY)
-                 AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE operateur_id = p.id)
+                 AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE personnel_id = p.id)
                ORDER BY mv.prochaine_visite""",
             (jours_avance,), dictionary=True
         )
@@ -703,7 +703,7 @@ def get_rqth_expirant(jours_avance: int = 90) -> List[Dict]:
     """
     try:
         return QueryExecutor.fetch_all(
-            """SELECT operateur_id, nom, prenom, matricule, date_fin_rqth,
+            """SELECT personnel_id, nom, prenom, matricule, date_fin_rqth,
                       DATEDIFF(date_fin_rqth, CURDATE()) AS jours_restants
                FROM v_suivi_medical
                WHERE date_fin_rqth IS NOT NULL
@@ -735,10 +735,10 @@ def get_statistiques_medicales_globales() -> Dict[str, Any]:
         stats['visites_en_retard'] = QueryExecutor.fetch_scalar(
             """SELECT COUNT(DISTINCT p.id)
                FROM personnel p
-               JOIN medical_visite mv ON p.id = mv.operateur_id
+               JOIN medical_visite mv ON p.id = mv.personnel_id
                WHERE p.statut = 'ACTIF'
                  AND mv.prochaine_visite < CURDATE()
-                 AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE operateur_id = p.id)""",
+                 AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE personnel_id = p.id)""",
             default=0
         )
 
@@ -746,10 +746,10 @@ def get_statistiques_medicales_globales() -> Dict[str, Any]:
         stats['visites_a_planifier'] = QueryExecutor.fetch_scalar(
             """SELECT COUNT(DISTINCT p.id)
                FROM personnel p
-               JOIN medical_visite mv ON p.id = mv.operateur_id
+               JOIN medical_visite mv ON p.id = mv.personnel_id
                WHERE p.statut = 'ACTIF'
                  AND mv.prochaine_visite BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                 AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE operateur_id = p.id)""",
+                 AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE personnel_id = p.id)""",
             default=0
         )
 
@@ -805,7 +805,7 @@ def get_validites(operateur_id: int, type_validite: str = None) -> List[Dict]:
         Liste des validités
     """
     try:
-        sql = "SELECT * FROM validite WHERE operateur_id = %s"
+        sql = "SELECT * FROM validite WHERE personnel_id = %s"
         params = [operateur_id]
 
         if type_validite:
@@ -842,7 +842,7 @@ def create_validite(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
         require('rh.medical.edit')
         validite_id = QueryExecutor.execute_write(
             """INSERT INTO validite (
-                   operateur_id, type_validite, date_debut, date_fin,
+                   personnel_id, type_validite, date_debut, date_fin,
                    periodicite, taux_incapacite, document_justificatif, commentaire
                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
             (
