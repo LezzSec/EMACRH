@@ -195,7 +195,7 @@ class PosteRepository(BaseRepository[Poste]):
                 new_id = cur.lastrowid
                 conn.commit()
 
-                from core.services.logger import log_hist
+                from core.services.optimized_db_logger import log_hist
                 log_hist("CREATE", "postes", new_id, f"Poste {data['poste_code']} créé")
 
                 return True, "Poste créé", new_id
@@ -231,7 +231,7 @@ class PosteRepository(BaseRepository[Poste]):
                 cur.execute(query, tuple(list(update_data.values()) + [id]))
                 conn.commit()
 
-                from core.services.logger import log_hist
+                from core.services.optimized_db_logger import log_hist
                 log_hist("UPDATE", "postes", id, f"Mise à jour: {list(update_data.keys())}")
 
                 return True, "Poste mis à jour"
@@ -266,7 +266,7 @@ class PosteRepository(BaseRepository[Poste]):
     def delete_by_code(cls, poste_code: str) -> Tuple[bool, str]:
         """Supprime un poste par son code."""
         from core.db.query_executor import QueryExecutor
-        from core.services.logger import log_hist
+        from core.services.optimized_db_logger import log_hist
         import json
         try:
             QueryExecutor.execute_write(

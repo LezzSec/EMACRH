@@ -260,6 +260,6 @@ Après installation, vérifiez :
 
 ---
 
-**Version** : 1.0
-**Date** : 2026-01-07
+**Version** : 3.0
+**Date** : 2026-03-17
 **Application** : EMAC - Gestion du Personnel

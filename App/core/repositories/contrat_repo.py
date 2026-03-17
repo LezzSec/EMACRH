@@ -232,7 +232,7 @@ class ContratRepository(BaseRepository[Contrat]):
                 new_id = cur.lastrowid
                 conn.commit()
 
-                from core.services.logger import log_hist
+                from core.services.optimized_db_logger import log_hist
                 log_hist("CREATE", "contrat", new_id,
                         f"Contrat {data.get('type_contrat')} créé pour personnel {data.get('personnel_id')}")
 
@@ -288,7 +288,7 @@ class ContratRepository(BaseRepository[Contrat]):
                 cur.execute(query, tuple(list(update_data.values()) + [id]))
                 conn.commit()
 
-                from core.services.logger import log_hist
+                from core.services.optimized_db_logger import log_hist
                 log_hist("UPDATE", "contrat", id, f"Mise à jour: {list(update_data.keys())}")
 
                 return True, "Contrat mis à jour"

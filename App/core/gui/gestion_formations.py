@@ -20,6 +20,7 @@ from core.services.formation_service_crud import FormationServiceCRUD as formati
 from core.services.document_service import DocumentService as _DocumentService
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.utils.logging_config import get_logger
+from core.utils.date_format import format_date
 
 _doc_service = _DocumentService()
 
@@ -468,7 +469,7 @@ class GestionFormationsDialog(QDialog):
                 if isinstance(date_debut, str):
                     date_str = date_debut
                 else:
-                    date_str = date_debut.strftime('%d/%m/%Y')
+                    date_str = format_date(date_debut)
                 self.table.setItem(row, 4, QTableWidgetItem(date_str))
             else:
                 self.table.setItem(row, 4, QTableWidgetItem(''))
@@ -479,7 +480,7 @@ class GestionFormationsDialog(QDialog):
                 if isinstance(date_fin, str):
                     date_str = date_fin
                 else:
-                    date_str = date_fin.strftime('%d/%m/%Y')
+                    date_str = format_date(date_fin)
                 self.table.setItem(row, 5, QTableWidgetItem(date_str))
             else:
                 self.table.setItem(row, 5, QTableWidgetItem(''))

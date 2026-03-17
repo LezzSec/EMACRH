@@ -47,7 +47,7 @@ EMAC.exe          # Lancer l'application
 ## 🐛 Problèmes courants
 
 **"Python non installé"**
-→ Installer Python 3.8+ et l'ajouter au PATH
+→ Installer Python 3.12 et l'ajouter au PATH
 
 **"Module not found"**
 → Le script installe automatiquement les dépendances
@@ -69,8 +69,8 @@ Le script exclut automatiquement :
 - Build dans `build/` (temporaire)
 - Distribution dans `dist/EMAC/`
 - Le script nettoie automatiquement les anciens builds
-- Compatible Windows 7/10/11
+- Compatible Windows 10/11
 
 ---
 
-**Dernière mise à jour** : 2026-01-07
+**Dernière mise à jour** : 2026-03-17

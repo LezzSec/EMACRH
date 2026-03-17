@@ -58,6 +58,7 @@ from core.services.vie_salarie_service import (
     get_entretiens, delete_entretien,
 )
 from core.services.permission_manager import can, require
+from core.utils.date_format import format_date
 from core.gui.gestion_rh_dialogs import (
     EditInfosGeneralesDialog, EditContratDialog, EditDeclarationDialog,
     EditCompetenceDialog, EditFormationDialog, EditVisiteDialog,
@@ -66,7 +67,116 @@ from core.gui.gestion_rh_dialogs import (
 )
 
 
-class GestionRHDialog(QDialog):
+class _GestionRHMixin:
+    """
+    Mixin partagé entre GestionRHDialog et GestionRHWidget.
+    Contient la logique commune qui ne dépend pas du type de widget Qt parent.
+    """
+
+    def _executer_recherche(self):
+        """Exécute la recherche d'opérateurs (async)."""
+        recherche = self.search_input.text().strip()
+
+        self.liste_operateurs.clear()
+        self.liste_operateurs.addItem("⏳ Recherche en cours…")
+        self.compteur_resultats.setText("…")
+
+        def fetch(progress_callback=None):
+            return rechercher_operateurs(recherche=recherche if recherche else None)
+
+        def on_result(resultats):
+            self.liste_operateurs.clear()
+            for op in resultats:
+                item = QListWidgetItem()
+                item.setData(Qt.UserRole, op['id'])
+                nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
+                matricule = op.get('matricule', '-')
+                statut = op.get('statut', 'ACTIF')
+                item.setText(f"{nom_complet}\n{matricule}")
+                item.setToolTip(f"ID: {op['id']} | Statut: {statut}")
+                self.liste_operateurs.addItem(item)
+            self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
+
+        def on_error(err):
+            self.liste_operateurs.clear()
+            self.compteur_resultats.setText("Erreur")
+            logger.error(f"Erreur recherche opérateurs: {err}")
+
+        worker = DbWorker(fetch)
+        worker.signals.result.connect(on_result)
+        worker.signals.error.connect(on_error)
+        DbThreadPool.start(worker)
+
+    def _charger_contenu_domaine(self):
+        """Charge le contenu du domaine RH actif (async)."""
+        if not self.operateur_selectionne:
+            return
+
+        # Annuler le chargement précédent s'il est encore en cours
+        if self._loading_worker:
+            self._loading_worker.cancel()
+            self._loading_worker = None
+
+        operateur_id = self.operateur_selectionne['id']
+        domaine = self.domaine_actif  # Capturer pour éviter la race condition
+
+        # Vider les zones et afficher un indicateur de chargement
+        self._vider_layout(self.layout_resume)
+        self._vider_layout(self.layout_documents)
+        loading = LoadingLabel("Chargement")
+        self.layout_resume.addWidget(loading)
+
+        def fetch(progress_callback=None):
+            donnees   = get_donnees_domaine(operateur_id, domaine)
+            documents = get_documents_domaine(operateur_id, domaine, include_archives=True)
+            return donnees, documents, domaine
+
+        def on_result(result):
+            donnees, documents, fetched_domaine = result
+            # Ignorer si le domaine actif a changé pendant le chargement
+            if self.domaine_actif != fetched_domaine:
+                return
+            self._vider_layout(self.layout_resume)
+            self._vider_layout(self.layout_documents)
+            widget_resume = self._creer_widget_resume(donnees, documents)
+            if widget_resume:
+                self.layout_resume.addWidget(widget_resume)
+            if fetched_domaine != DomaineRH.CONTRAT and self._domaine_a_contenu(donnees, fetched_domaine):
+                widget_documents = self._creer_widget_documents(documents)
+                self.layout_resume.addWidget(widget_documents)
+            self.data_changed.emit()
+
+        def on_error(err):
+            self._vider_layout(self.layout_resume)
+            logger.error(f"Erreur chargement domaine RH: {err}")
+
+        self._loading_worker = DbWorker(fetch)
+        self._loading_worker.signals.result.connect(on_result)
+        self._loading_worker.signals.error.connect(on_error)
+        DbThreadPool.start(self._loading_worker)
+
+    def _creer_widget_resume(self, donnees: dict, documents: list = None) -> QWidget:
+        """Crée le widget de résumé selon le domaine actif."""
+        if self.domaine_actif == DomaineRH.GENERAL:
+            return self._creer_resume_general(donnees)
+        elif self.domaine_actif == DomaineRH.CONTRAT:
+            return self._creer_resume_contrat(donnees, documents or [])
+        elif self.domaine_actif == DomaineRH.DECLARATION:
+            return self._creer_resume_declaration(donnees)
+        elif self.domaine_actif == DomaineRH.COMPETENCES:
+            return self._creer_resume_competences(donnees)
+        elif self.domaine_actif == DomaineRH.FORMATION:
+            return self._creer_resume_formation(donnees)
+        elif self.domaine_actif == DomaineRH.MEDICAL:
+            return self._creer_resume_medical(donnees)
+        elif self.domaine_actif == DomaineRH.VIE_SALARIE:
+            return self._creer_resume_vie_salarie(donnees)
+        elif self.domaine_actif == DomaineRH.POLYVALENCE:
+            return self._creer_resume_polyvalence(donnees)
+        return None
+
+
+class GestionRHDialog(_GestionRHMixin, QDialog):
     """
     Fenêtre principale de gestion RH.
     Divisée en deux zones: sélection opérateur (gauche) et détails RH (droite).
@@ -228,40 +338,6 @@ class GestionRHDialog(QDialog):
         """Déclenche une recherche avec délai (debounce)."""
         self._search_timer.stop()
         self._search_timer.start(300)  # 300ms de délai
-
-    def _executer_recherche(self):
-        """Exécute la recherche d'opérateurs (async)."""
-        recherche = self.search_input.text().strip()
-
-        self.liste_operateurs.clear()
-        self.liste_operateurs.addItem("⏳ Recherche en cours…")
-        self.compteur_resultats.setText("…")
-
-        def fetch(progress_callback=None):
-            return rechercher_operateurs(recherche=recherche if recherche else None)
-
-        def on_result(resultats):
-            self.liste_operateurs.clear()
-            for op in resultats:
-                item = QListWidgetItem()
-                item.setData(Qt.UserRole, op['id'])
-                nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
-                matricule = op.get('matricule', '-')
-                statut = op.get('statut', 'ACTIF')
-                item.setText(f"{nom_complet}\n{matricule}")
-                item.setToolTip(f"ID: {op['id']} | Statut: {statut}")
-                self.liste_operateurs.addItem(item)
-            self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
-
-        def on_error(err):
-            self.liste_operateurs.clear()
-            self.compteur_resultats.setText("Erreur")
-            logger.error(f"Erreur recherche opérateurs: {err}")
-
-        worker = DbWorker(fetch)
-        worker.signals.result.connect(on_result)
-        worker.signals.error.connect(on_error)
-        DbThreadPool.start(worker)
 
     def _on_operateur_selectionne(self, item: QListWidgetItem):
         """Appelé quand un opérateur est sélectionné dans la liste."""
@@ -588,74 +664,6 @@ class GestionRHDialog(QDialog):
 
         # Afficher la zone de contenu
         self.stack_details.setCurrentIndex(1)
-
-    def _charger_contenu_domaine(self):
-        """Charge le contenu du domaine RH actif (async)."""
-        if not self.operateur_selectionne:
-            return
-
-        # Annuler le chargement précédent s'il est encore en cours
-        if self._loading_worker:
-            self._loading_worker.cancel()
-            self._loading_worker = None
-
-        operateur_id = self.operateur_selectionne['id']
-        domaine = self.domaine_actif  # Capturer pour éviter la race condition
-
-        # Vider les zones et afficher un indicateur de chargement
-        self._vider_layout(self.layout_resume)
-        self._vider_layout(self.layout_documents)
-        loading = LoadingLabel("Chargement")
-        self.layout_resume.addWidget(loading)
-
-        def fetch(progress_callback=None):
-            donnees   = get_donnees_domaine(operateur_id, domaine)
-            documents = get_documents_domaine(operateur_id, domaine, include_archives=True)
-            return donnees, documents, domaine
-
-        def on_result(result):
-            donnees, documents, fetched_domaine = result
-            # Ignorer si le domaine actif a changé pendant le chargement
-            if self.domaine_actif != fetched_domaine:
-                return
-            self._vider_layout(self.layout_resume)
-            self._vider_layout(self.layout_documents)
-            widget_resume = self._creer_widget_resume(donnees, documents)
-            if widget_resume:
-                self.layout_resume.addWidget(widget_resume)
-            if fetched_domaine != DomaineRH.CONTRAT and self._domaine_a_contenu(donnees, fetched_domaine):
-                widget_documents = self._creer_widget_documents(documents)
-                self.layout_resume.addWidget(widget_documents)
-            self.data_changed.emit()
-
-        def on_error(err):
-            self._vider_layout(self.layout_resume)
-            logger.error(f"Erreur chargement domaine RH: {err}")
-
-        self._loading_worker = DbWorker(fetch)
-        self._loading_worker.signals.result.connect(on_result)
-        self._loading_worker.signals.error.connect(on_error)
-        DbThreadPool.start(self._loading_worker)
-
-    def _creer_widget_resume(self, donnees: dict, documents: list = None) -> QWidget:
-        """Crée le widget de résumé selon le domaine actif."""
-        if self.domaine_actif == DomaineRH.GENERAL:
-            return self._creer_resume_general(donnees)
-        elif self.domaine_actif == DomaineRH.CONTRAT:
-            return self._creer_resume_contrat(donnees, documents or [])
-        elif self.domaine_actif == DomaineRH.DECLARATION:
-            return self._creer_resume_declaration(donnees)
-        elif self.domaine_actif == DomaineRH.COMPETENCES:
-            return self._creer_resume_competences(donnees)
-        elif self.domaine_actif == DomaineRH.FORMATION:
-            return self._creer_resume_formation(donnees)
-        elif self.domaine_actif == DomaineRH.MEDICAL:
-            return self._creer_resume_medical(donnees)
-        elif self.domaine_actif == DomaineRH.VIE_SALARIE:
-            return self._creer_resume_vie_salarie(donnees)
-        elif self.domaine_actif == DomaineRH.POLYVALENCE:
-            return self._creer_resume_polyvalence(donnees)
-        return None
 
     def _creer_resume_general(self, donnees: dict) -> QWidget:
         """Crée le résumé des données générales."""
@@ -1917,17 +1925,6 @@ class GestionRHDialog(QDialog):
         dialog.exec_()
         if self.domaine_actif == DomaineRH.POLYVALENCE:
             self._charger_contenu_domaine()
-
-    def _format_datetime(self, dt) -> str:
-        """Formate une datetime pour affichage."""
-        if not dt:
-            return "-"
-        try:
-            if hasattr(dt, 'strftime'):
-                return dt.strftime('%d/%m/%Y %H:%M')
-            return str(dt)
-        except Exception:
-            return str(dt)
 
     # ===== Handlers Medical =====
     def _add_visite(self):
@@ -2501,11 +2498,11 @@ class GestionRHDialog(QDialog):
         if not date_val:
             return '-'
         if hasattr(date_val, 'strftime'):
-            return date_val.strftime('%d/%m/%Y')
+            return format_date(date_val)
         return str(date_val)
 
 
-class GestionRHWidget(QWidget):
+class GestionRHWidget(_GestionRHMixin, QWidget):
     """
     Widget RH (sans fenêtre) pour intégration dans d'autres dialogues.
     Version embarquable de GestionRHDialog.
@@ -2676,40 +2673,6 @@ class GestionRHWidget(QWidget):
         """Déclenche une recherche avec délai (debounce)."""
         self._search_timer.stop()
         self._search_timer.start(300)  # 300ms de délai
-
-    def _executer_recherche(self):
-        """Exécute la recherche d'opérateurs (async)."""
-        recherche = self.search_input.text().strip()
-
-        self.liste_operateurs.clear()
-        self.liste_operateurs.addItem("⏳ Recherche en cours…")
-        self.compteur_resultats.setText("…")
-
-        def fetch(progress_callback=None):
-            return rechercher_operateurs(recherche=recherche if recherche else None)
-
-        def on_result(resultats):
-            self.liste_operateurs.clear()
-            for op in resultats:
-                item = QListWidgetItem()
-                item.setData(Qt.UserRole, op['id'])
-                nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
-                matricule = op.get('matricule', '-')
-                statut = op.get('statut', 'ACTIF')
-                item.setText(f"{nom_complet}\n{matricule}")
-                item.setToolTip(f"ID: {op['id']} | Statut: {statut}")
-                self.liste_operateurs.addItem(item)
-            self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
-
-        def on_error(err):
-            self.liste_operateurs.clear()
-            self.compteur_resultats.setText("Erreur")
-            logger.error(f"Erreur recherche opérateurs: {err}")
-
-        worker = DbWorker(fetch)
-        worker.signals.result.connect(on_result)
-        worker.signals.error.connect(on_error)
-        DbThreadPool.start(worker)
 
     def _on_operateur_selectionne(self, item: QListWidgetItem):
         """Appelé quand un opérateur est sélectionné dans la liste."""
@@ -3036,74 +2999,6 @@ class GestionRHWidget(QWidget):
 
         # Afficher la zone de contenu
         self.stack_details.setCurrentIndex(1)
-
-    def _charger_contenu_domaine(self):
-        """Charge le contenu du domaine RH actif (async)."""
-        if not self.operateur_selectionne:
-            return
-
-        # Annuler le chargement précédent s'il est encore en cours
-        if self._loading_worker:
-            self._loading_worker.cancel()
-            self._loading_worker = None
-
-        operateur_id = self.operateur_selectionne['id']
-        domaine = self.domaine_actif  # Capturer pour éviter la race condition
-
-        # Vider les zones et afficher un indicateur de chargement
-        self._vider_layout(self.layout_resume)
-        self._vider_layout(self.layout_documents)
-        loading = LoadingLabel("Chargement")
-        self.layout_resume.addWidget(loading)
-
-        def fetch(progress_callback=None):
-            donnees   = get_donnees_domaine(operateur_id, domaine)
-            documents = get_documents_domaine(operateur_id, domaine, include_archives=True)
-            return donnees, documents, domaine
-
-        def on_result(result):
-            donnees, documents, fetched_domaine = result
-            # Ignorer si le domaine actif a changé pendant le chargement
-            if self.domaine_actif != fetched_domaine:
-                return
-            self._vider_layout(self.layout_resume)
-            self._vider_layout(self.layout_documents)
-            widget_resume = self._creer_widget_resume(donnees, documents)
-            if widget_resume:
-                self.layout_resume.addWidget(widget_resume)
-            if fetched_domaine != DomaineRH.CONTRAT and self._domaine_a_contenu(donnees, fetched_domaine):
-                widget_documents = self._creer_widget_documents(documents)
-                self.layout_resume.addWidget(widget_documents)
-            self.data_changed.emit()
-
-        def on_error(err):
-            self._vider_layout(self.layout_resume)
-            logger.error(f"Erreur chargement domaine RH: {err}")
-
-        self._loading_worker = DbWorker(fetch)
-        self._loading_worker.signals.result.connect(on_result)
-        self._loading_worker.signals.error.connect(on_error)
-        DbThreadPool.start(self._loading_worker)
-
-    def _creer_widget_resume(self, donnees: dict, documents: list = None) -> QWidget:
-        """Crée le widget de résumé selon le domaine actif."""
-        if self.domaine_actif == DomaineRH.GENERAL:
-            return self._creer_resume_general(donnees)
-        elif self.domaine_actif == DomaineRH.CONTRAT:
-            return self._creer_resume_contrat(donnees, documents or [])
-        elif self.domaine_actif == DomaineRH.DECLARATION:
-            return self._creer_resume_declaration(donnees)
-        elif self.domaine_actif == DomaineRH.COMPETENCES:
-            return self._creer_resume_competences(donnees)
-        elif self.domaine_actif == DomaineRH.FORMATION:
-            return self._creer_resume_formation(donnees)
-        elif self.domaine_actif == DomaineRH.MEDICAL:
-            return self._creer_resume_medical(donnees)
-        elif self.domaine_actif == DomaineRH.VIE_SALARIE:
-            return self._creer_resume_vie_salarie(donnees)
-        elif self.domaine_actif == DomaineRH.POLYVALENCE:
-            return self._creer_resume_polyvalence(donnees)
-        return None
 
     def _creer_resume_general(self, donnees: dict) -> QWidget:
         """Crée le résumé des données générales."""
@@ -4366,17 +4261,6 @@ class GestionRHWidget(QWidget):
         if self.domaine_actif == DomaineRH.POLYVALENCE:
             self._charger_contenu_domaine()
 
-    def _format_datetime(self, dt) -> str:
-        """Formate une datetime pour affichage."""
-        if not dt:
-            return "-"
-        try:
-            if hasattr(dt, 'strftime'):
-                return dt.strftime('%d/%m/%Y %H:%M')
-            return str(dt)
-        except Exception:
-            return str(dt)
-
     # ===== Handlers Medical =====
     def _add_visite(self):
         """Ajoute une nouvelle visite médicale."""
@@ -4906,7 +4790,7 @@ class GestionRHWidget(QWidget):
         if not date_val:
             return '-'
         if hasattr(date_val, 'strftime'):
-            return date_val.strftime('%d/%m/%Y')
+            return format_date(date_val)
         return str(date_val)
 
 

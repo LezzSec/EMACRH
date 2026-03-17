@@ -267,7 +267,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
                 conn.commit()
 
                 # Log
-                from core.services.logger import log_hist
+                from core.services.optimized_db_logger import log_hist
                 log_hist("CREATE", "personnel", new_id,
                         f"Création: {data.get('nom')} {data.get('prenom')}")
 
@@ -330,7 +330,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
                 conn.commit()
 
                 # Log
-                from core.services.logger import log_hist
+                from core.services.optimized_db_logger import log_hist
                 log_hist("UPDATE", "personnel", id,
                         f"Mise à jour: {list(update_data.keys())}")
 
@@ -634,59 +634,3 @@ class PersonnelRepository(BaseRepository[Personnel]):
 
         return rows, total
 
-    @classmethod
-    @monitor_query('PersonnelRepo.search_paginated')
-    def search_paginated(
-        cls,
-        terme: str,
-        offset: int = 0,
-        limit: int = 50,
-        statut: Optional[str] = None
-    ) -> Tuple[List[Personnel], int]:
-        """
-        Recherche paginée des employés.
-
-        Args:
-            terme: Terme de recherche
-            offset: Début de la pagination
-            limit: Nombre de résultats
-            statut: Filtrer par statut
-
-        Returns:
-            (liste_personnel, total_count)
-        """
-        search_pattern = f"%{terme}%"
-        params = [search_pattern, search_pattern, search_pattern]
-
-        where_extra = ""
-        if statut:
-            where_extra = " AND statut = %s"
-            params.append(statut)
-
-        # Données
-        query = f"""
-            SELECT id, nom, prenom, matricule, statut, service_id, numposte
-            FROM personnel
-            WHERE (nom LIKE %s OR prenom LIKE %s OR matricule LIKE %s)
-            {where_extra}
-            ORDER BY nom
-            LIMIT %s OFFSET %s
-        """
-        params_data = params + [limit, offset]
-
-        # Comptage
-        count_query = f"""
-            SELECT COUNT(*) as total
-            FROM personnel
-            WHERE (nom LIKE %s OR prenom LIKE %s OR matricule LIKE %s)
-            {where_extra}
-        """
-
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, tuple(params_data))
-            rows = cls._rows_to_models(cur.fetchall())
-
-            cur.execute(count_query, tuple(params))
-            total = cur.fetchone()['total']
-
-        return rows, total

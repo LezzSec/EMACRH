@@ -289,19 +289,22 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 new_id = cur.lastrowid
                 conn.commit()
 
-                from core.services.logger import log_hist
+                from core.services.optimized_db_logger import log_hist
                 log_hist("CREATE", "polyvalence", new_id,
                         f"Compétence N{niveau} créée", operateur_id=operateur_id, poste_id=poste_id)
 
-                from core.services.evaluation_service import log_historique_polyvalence
-                log_historique_polyvalence(
-                    operateur_id=operateur_id, poste_id=poste_id,
-                    polyvalence_id=new_id,
-                    action_type='AJOUT',
-                    nouveau_niveau=niveau,
-                    nouvelle_date_evaluation=date_evaluation,
-                    source='GUI',
-                )
+                try:
+                    from core.services.polyvalence_logger import log_polyvalence_action
+                    log_polyvalence_action(
+                        action_type='AJOUT',
+                        operateur_id=operateur_id, poste_id=poste_id,
+                        polyvalence_id=new_id,
+                        nouveau_niveau=niveau,
+                        nouvelle_date_evaluation=date_evaluation,
+                        source='GUI',
+                    )
+                except Exception as _e:
+                    logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
 
                 # Émettre l'événement pour déclencher les documents
                 from core.services.event_bus import EventBus
@@ -352,22 +355,25 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 cur.execute(query, (nouveau_niveau, date_evaluation, prochaine_evaluation, id))
                 conn.commit()
 
-                from core.services.logger import log_hist
+                from core.services.optimized_db_logger import log_hist
                 log_hist("UPDATE", "polyvalence", id,
                         f"Évaluation: N{old[2]}→N{nouveau_niveau}",
                         operateur_id=old[0], poste_id=old[1])
 
                 if old[2] != nouveau_niveau:
-                    from core.services.evaluation_service import log_historique_polyvalence
-                    log_historique_polyvalence(
-                        operateur_id=old[0], poste_id=old[1],
-                        polyvalence_id=id,
-                        action_type='MODIFICATION',
-                        ancien_niveau=old[2],
-                        nouveau_niveau=nouveau_niveau,
-                        nouvelle_date_evaluation=date_evaluation,
-                        source='GUI',
-                    )
+                    try:
+                        from core.services.polyvalence_logger import log_polyvalence_action
+                        log_polyvalence_action(
+                            action_type='MODIFICATION',
+                            operateur_id=old[0], poste_id=old[1],
+                            polyvalence_id=id,
+                            ancien_niveau=old[2],
+                            nouveau_niveau=nouveau_niveau,
+                            nouvelle_date_evaluation=date_evaluation,
+                            source='GUI',
+                        )
+                    except Exception as _e:
+                        logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
 
                 # Émettre les événements si le niveau a changé
                 old_niveau = old[2]
@@ -564,18 +570,21 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 conn.commit()
 
                 if deleted:
-                    from core.services.logger import log_hist
+                    from core.services.optimized_db_logger import log_hist
                     log_hist("DELETE", "polyvalence", None,
                             f"Compétence supprimée", operateur_id=operateur_id, poste_id=poste_id)
 
-                    from core.services.evaluation_service import log_historique_polyvalence
-                    log_historique_polyvalence(
-                        operateur_id=operateur_id, poste_id=poste_id,
-                        action_type='SUPPRESSION',
-                        ancien_niveau=old['niveau'] if old else None,
-                        ancienne_date_evaluation=old['date_evaluation'] if old else None,
-                        source='GUI',
-                    )
+                    try:
+                        from core.services.polyvalence_logger import log_polyvalence_action
+                        log_polyvalence_action(
+                            action_type='SUPPRESSION',
+                            operateur_id=operateur_id, poste_id=poste_id,
+                            ancien_niveau=old['niveau'] if old else None,
+                            ancienne_date_evaluation=old['date_evaluation'] if old else None,
+                            source='GUI',
+                        )
+                    except Exception as _e:
+                        logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
 
                 return deleted, "Compétence supprimée" if deleted else "Compétence non trouvée"
 

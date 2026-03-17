@@ -20,6 +20,7 @@ from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
+from core.utils.date_format import format_date
 
 # Fonctions de logging legacy redirigées vers log_hist
 def log_action(action, table_name="", description="", details=None, connection=None, cursor=None):
@@ -139,7 +140,7 @@ class RegularisationDialog(QDialog):
         layout = QVBoxLayout(widget)
 
         # Info date
-        today_label = QLabel(f"📅 Absences du {date.today().strftime('%d/%m/%Y')}")
+        today_label = QLabel(f"📅 Absences du {format_date(date.today())}")
         today_label.setFont(QFont("Arial", 14, QFont.Bold))
         today_label.setStyleSheet("color: #1f2937; padding: 10px;")
         layout.addWidget(today_label)
@@ -222,7 +223,7 @@ class RegularisationDialog(QDialog):
                 if isinstance(date_debut, str):
                     date_debut_str = date_debut
                 else:
-                    date_debut_str = date_debut.strftime('%d/%m/%Y')
+                    date_debut_str = format_date(date_debut)
                 self.absents_table.setItem(row_pos, 3, QTableWidgetItem(date_debut_str))
 
                 # Date fin
@@ -230,7 +231,7 @@ class RegularisationDialog(QDialog):
                 if isinstance(date_fin, str):
                     date_fin_str = date_fin
                 else:
-                    date_fin_str = date_fin.strftime('%d/%m/%Y')
+                    date_fin_str = format_date(date_fin)
                 self.absents_table.setItem(row_pos, 4, QTableWidgetItem(date_fin_str))
 
                 # Motif
@@ -370,7 +371,7 @@ class RegularisationDialog(QDialog):
                 self, "Succès",
                 f"✅ Déclaration enregistrée avec succès !\n\n"
                 f"Type : {type_decl}\n"
-                f"Du {date_debut.strftime('%d/%m/%Y')} au {date_fin.strftime('%d/%m/%Y')}"
+                f"Du {format_date(date_debut)} au {format_date(date_fin)}"
             )
 
             # Réinitialiser le formulaire
@@ -473,7 +474,7 @@ class RegularisationDialog(QDialog):
     def on_calendar_date_clicked(self, qdate):
         """Affiche les absences du jour sélectionné."""
         selected = qdate.toPyDate()
-        self.selected_date_label.setText(f"📅 Absences du {selected.strftime('%d/%m/%Y')}")
+        self.selected_date_label.setText(f"📅 Absences du {format_date(selected)}")
 
         try:
             rows = get_absences_du_jour(selected)
@@ -666,7 +667,7 @@ class RegularisationDialog(QDialog):
     def on_eval_calendar_date_clicked(self, qdate):
         """Affiche les évaluations du jour sélectionné."""
         selected = qdate.toPyDate()
-        self.eval_selected_date_label.setText(f"📆 Évaluations du {selected.strftime('%d/%m/%Y')}")
+        self.eval_selected_date_label.setText(f"📆 Évaluations du {format_date(selected)}")
 
         try:
             search_text = self.eval_search.text().lower()
@@ -834,7 +835,7 @@ class RegularisationDialog(QDialog):
                 if isinstance(date_debut, str):
                     date_debut_str = date_debut
                 else:
-                    date_debut_str = date_debut.strftime('%d/%m/%Y')
+                    date_debut_str = format_date(date_debut)
                 self.history_table.setItem(row_pos, 4, QTableWidgetItem(date_debut_str))
 
                 # Date fin
@@ -842,7 +843,7 @@ class RegularisationDialog(QDialog):
                 if isinstance(date_fin, str):
                     date_fin_str = date_fin
                 else:
-                    date_fin_str = date_fin.strftime('%d/%m/%Y')
+                    date_fin_str = format_date(date_fin)
                 self.history_table.setItem(row_pos, 5, QTableWidgetItem(date_fin_str))
 
                 # Motif

@@ -3,6 +3,7 @@ from dataclasses import dataclass
 
 # Configuration centralisée du logging (doit être en premier)
 from core.utils.logging_config import setup_logging, get_logger, set_log_context, clear_log_context, get_logs_dir
+from core.utils.date_format import format_date
 
 # Déterminer le mode (production si variable d'environnement définie)
 _production_mode = os.getenv('EMAC_ENV', '').lower() == 'production'
@@ -856,7 +857,7 @@ class MainWindow(QMainWindow):
                 prenom = r.get('prenom', '')
                 poste = r.get('poste_code', '')
                 date_ev = r.get('prochaine_evaluation')
-                date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
+                date_txt = format_date(date_ev) if hasattr(date_ev, 'strftime') else str(date_ev)
                 self.retard_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Retard: {date_txt}")
 
             self.next_eval_list.clear()
@@ -865,7 +866,7 @@ class MainWindow(QMainWindow):
                 prenom = r.get('prenom', '')
                 poste = r.get('poste_code', '')
                 date_ev = r.get('prochaine_evaluation')
-                date_txt = date_ev.strftime('%d/%m/%Y') if hasattr(date_ev, 'strftime') else str(date_ev)
+                date_txt = format_date(date_ev) if hasattr(date_ev, 'strftime') else str(date_ev)
                 self.next_eval_list.addItem(f"{nom} {prenom} · {poste or ''}  —  Prévu: {date_txt}")
         except Exception as e:
             logger.error(f"Erreur dans _apply_evaluations_to_ui: {e}", exc_info=True)
@@ -906,7 +907,7 @@ class MainWindow(QMainWindow):
                 prenom = c.get('prenom', '')
                 type_contrat = c.get('type_contrat', '')
                 date_fin = c.get('date_fin')
-                date_txt = date_fin.strftime('%d/%m/%Y') if hasattr(date_fin, 'strftime') else str(date_fin)
+                date_txt = format_date(date_fin) if hasattr(date_fin, 'strftime') else str(date_fin)
                 self.alertes_rh_list.addItem(f"{nom} {prenom} · {type_contrat}  —  Expire: {date_txt}")
 
             if not contrats:

@@ -28,6 +28,7 @@ from PyQt5.QtGui import QColor, QFont
 from core.gui.ui_theme import EmacTheme, EmacButton
 from core.gui.db_worker import DbWorker, DbThreadPool
 from core.utils.logging_config import get_logger
+from core.utils.date_format import format_date, format_datetime
 
 logger = get_logger(__name__)
 
@@ -79,6 +80,13 @@ class _ConfigTab(QWidget):
 
     # Sous-classes : liste de (header, key_dans_dict)
     COLUMNS: list = []
+
+    # Clés dont la valeur est un booléen → affiché "Oui"/"Non"
+    BOOL_KEYS: set = set()
+    # Clés dont la valeur est une date → affiché en DD/MM/YYYY
+    DATE_KEYS: set = set()
+    # Clés dont la valeur est une datetime → affiché en DD/MM/YYYY HH:MM:SS
+    DATETIME_KEYS: set = set()
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -217,6 +225,12 @@ class _ConfigTab(QWidget):
 
     def _format_cell(self, key: str, val, record: dict) -> str:
         """Peut être surchargée pour formater certaines colonnes."""
+        if key in self.BOOL_KEYS:
+            return _bool_label(val)
+        if key in self.DATE_KEYS and val is not None:
+            return format_date(val) or str(val)
+        if key in self.DATETIME_KEYS and val is not None:
+            return format_datetime(val) or str(val)
         if isinstance(val, bool):
             return _bool_label(val)
         if val is None:
@@ -547,11 +561,7 @@ class TypesAbsenceTab(_ConfigTab):
         ("ID", "id"), ("Code", "code"), ("Libellé", "libelle"),
         ("Décompte solde", "decompte_solde"), ("Couleur", "couleur"), ("Actif", "actif")
     ]
-
-    def _format_cell(self, key, val, record):
-        if key in ('decompte_solde', 'actif'):
-            return _bool_label(val)
-        return _txt(val)
+    BOOL_KEYS = {'decompte_solde', 'actif'}
 
     def fetch_data(self):
         from core.services.config_service import TypeAbsenceService
@@ -628,18 +638,8 @@ class JoursFeriesTab(_ConfigTab):
     COLUMNS = [
         ("ID", "id"), ("Date", "date_ferie"), ("Libellé", "libelle"), ("Fixe", "fixe")
     ]
-
-    def _format_cell(self, key, val, record):
-        if key == 'fixe':
-            return _bool_label(val)
-        if key == 'date_ferie' and val:
-            try:
-                if hasattr(val, 'strftime'):
-                    return val.strftime('%d/%m/%Y')
-                return str(val)
-            except Exception:
-                return str(val)
-        return _txt(val)
+    BOOL_KEYS = {'fixe'}
+    DATE_KEYS = {'date_ferie'}
 
     def fetch_data(self):
         from core.services.config_service import JoursFeriesService
@@ -732,10 +732,7 @@ class CompetencesTab(_ConfigTab):
         ("Catégorie", "categorie"), ("Validité (mois)", "duree_validite_mois"), ("Actif", "actif")
     ]
 
-    def _format_cell(self, key, val, record):
-        if key == 'actif':
-            return _bool_label(val)
-        return _txt(val)
+    BOOL_KEYS = {'actif'}
 
     def fetch_data(self):
         from core.services.config_service import CompetencesCatalogueService
@@ -839,11 +836,7 @@ class CategoriesDocsTab(_ConfigTab):
         ("ID", "id"), ("Nom", "nom"), ("Couleur", "couleur"),
         ("Expiration requise", "exige_date_expiration"), ("Ordre", "ordre_affichage")
     ]
-
-    def _format_cell(self, key, val, record):
-        if key == 'exige_date_expiration':
-            return _bool_label(val)
-        return _txt(val)
+    BOOL_KEYS = {'exige_date_expiration'}
 
     def fetch_data(self):
         from core.services.config_service import CategoriesDocsService
@@ -901,11 +894,7 @@ class _MotifSortieForm(_SimpleFormDialog):
 
 class MotifsortieTab(_ConfigTab):
     COLUMNS = [("ID", "id"), ("Libellé", "libelle"), ("Actif", "actif")]
-
-    def _format_cell(self, key, val, record):
-        if key == 'actif':
-            return _bool_label(val)
-        return _txt(val)
+    BOOL_KEYS = {'actif'}
 
     def fetch_data(self):
         from core.services.config_service import RefMotifSortieService
@@ -1242,7 +1231,7 @@ class SoldeCongesTab(_ConfigTab):
     def _format_cell(self, key, val, record):
         if key == 'personnel_label':
             return f"{record.get('nom', '')} {record.get('prenom', '')}"
-        return _txt(val)
+        return super()._format_cell(key, val, record)
 
     def fetch_data(self):
         from core.services.config_service import SoldeCongesService
@@ -1356,11 +1345,7 @@ class DocumentEventRulesTab(_ConfigTab):
         ("ID", "id"), ("Événement", "event_name"), ("Template", "template_nom"),
         ("Mode", "execution_mode"), ("Priorité", "priority"), ("Actif", "actif"),
     ]
-
-    def _format_cell(self, key, val, record):
-        if key == 'actif':
-            return _bool_label(val)
-        return _txt(val)
+    BOOL_KEYS = {'actif'}
 
     def fetch_data(self):
         from core.services.config_service import DocumentEventRulesService
@@ -1427,6 +1412,7 @@ class DemandeAbsenceTab(_ConfigTab):
         ("Début", "date_debut"), ("Fin", "date_fin"), ("Jours", "nb_jours"),
         ("Statut", "statut"), ("Date création", "date_creation"),
     ]
+    DATE_KEYS = {'date_debut', 'date_fin', 'date_creation'}
 
     def _build_ui(self):
         super()._build_ui()
@@ -1438,14 +1424,7 @@ class DemandeAbsenceTab(_ConfigTab):
     def _format_cell(self, key, val, record):
         if key == 'personnel_label':
             return f"{record.get('nom', '')} {record.get('prenom', '')}"
-        if key in ('date_debut', 'date_fin', 'date_creation') and val:
-            try:
-                if hasattr(val, 'strftime'):
-                    return val.strftime('%d/%m/%Y')
-                return str(val)
-            except Exception:
-                return str(val)
-        return _txt(val)
+        return super()._format_cell(key, val, record)
 
     def fetch_data(self):
         from core.services.config_service import DemandeAbsenceAdminService
@@ -1544,6 +1523,7 @@ class PolyvalenceAdminTab(_ConfigTab):
         ("Niveau", "niveau"), ("Date éval", "date_evaluation"),
         ("Prochaine éval", "prochaine_evaluation"),
     ]
+    DATE_KEYS = {'date_evaluation', 'prochaine_evaluation'}
 
     def _build_ui(self):
         super()._build_ui()
@@ -1558,16 +1538,6 @@ class PolyvalenceAdminTab(_ConfigTab):
             "border-radius: 4px; padding: 6px 10px; font-size: 12px;"
         )
         self.layout().insertWidget(0, lbl_warn)
-
-    def _format_cell(self, key, val, record):
-        if key in ('date_evaluation', 'prochaine_evaluation') and val:
-            try:
-                if hasattr(val, 'strftime'):
-                    return val.strftime('%d/%m/%Y')
-                return str(val)
-            except Exception:
-                return str(val)
-        return _txt(val)
 
     def fetch_data(self):
         from core.services.config_service import PolyvalenceAdminService
@@ -1608,16 +1578,7 @@ class HistoriqueAdminTab(_ReadOnlyTab):
         ("ID", "id"), ("Date/Heure", "date_time"), ("Action", "action"),
         ("Table", "table_name"), ("Utilisateur", "utilisateur"), ("Description", "description"),
     ]
-
-    def _format_cell(self, key, val, record):
-        if key == 'date_time' and val:
-            try:
-                if hasattr(val, 'strftime'):
-                    return val.strftime('%d/%m/%Y %H:%M:%S')
-                return str(val)
-            except Exception:
-                return str(val)
-        return _txt(val)
+    DATETIME_KEYS = {'date_time'}
 
     def fetch_data(self):
         from core.services.config_service import HistoriqueAdminService
@@ -1634,16 +1595,7 @@ class LogsConnexionTab(_ReadOnlyTab):
         ("ID", "id"), ("Utilisateur", "username"), ("Connexion", "date_connexion"),
         ("Déconnexion", "date_deconnexion"), ("IP", "ip_address"),
     ]
-
-    def _format_cell(self, key, val, record):
-        if key in ('date_connexion', 'date_deconnexion') and val:
-            try:
-                if hasattr(val, 'strftime'):
-                    return val.strftime('%d/%m/%Y %H:%M:%S')
-                return str(val)
-            except Exception:
-                return str(val)
-        return _txt(val)
+    DATETIME_KEYS = {'date_connexion', 'date_deconnexion'}
 
     def fetch_data(self):
         from core.services.config_service import LogsConnexionService

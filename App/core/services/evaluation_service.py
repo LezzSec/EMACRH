@@ -173,16 +173,20 @@ def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
         """, (nouveau_niveau, date_evaluation, prochaine_evaluation, polyvalence_id))
 
         # Archiver dans historique_polyvalence
-        log_historique_polyvalence(
-            operateur_id=operateur_id,
-            poste_id=poste_id,
-            polyvalence_id=polyvalence_id,
-            action_type='MODIFICATION',
-            ancien_niveau=ancien_niveau,
-            nouveau_niveau=nouveau_niveau,
-            ancienne_date_evaluation=ancienne_date,
-            nouvelle_date_evaluation=date_evaluation,
-        )
+        try:
+            from core.services.polyvalence_logger import log_polyvalence_action
+            log_polyvalence_action(
+                action_type='MODIFICATION',
+                operateur_id=operateur_id,
+                poste_id=poste_id,
+                polyvalence_id=polyvalence_id,
+                ancien_niveau=ancien_niveau,
+                nouveau_niveau=nouveau_niveau,
+                ancienne_date_evaluation=ancienne_date,
+                nouvelle_date_evaluation=date_evaluation,
+            )
+        except Exception as _e:
+            logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
 
         return True
 
@@ -474,44 +478,6 @@ def get_polyvalences_actuelles_operateur(operateur_id: int) -> List[Dict]:
     """, (operateur_id,), dictionary=True)
 
 
-def log_historique_polyvalence(
-    operateur_id: int,
-    poste_id: int,
-    action_type: str,
-    ancien_niveau: int = None,
-    nouveau_niveau: int = None,
-    ancienne_date_evaluation=None,
-    nouvelle_date_evaluation=None,
-    polyvalence_id: int = None,
-    commentaire: str = None,
-    source: str = 'GUI',
-) -> None:
-    """
-    Centralise l'écriture dans historique_polyvalence.
-
-    À appeler depuis tout endroit qui modifie la table polyvalence.
-    Ne lève pas d'exception : les erreurs sont loguées en warning.
-
-    Args:
-        action_type: 'AJOUT', 'MODIFICATION', 'SUPPRESSION' ou 'IMPORT_MANUEL'
-        ancien_niveau: niveau avant modification (MODIFICATION, SUPPRESSION)
-        nouveau_niveau: niveau après modification (AJOUT, MODIFICATION)
-    """
-    try:
-        QueryExecutor.execute_write("""
-            INSERT INTO historique_polyvalence
-            (personnel_id, poste_id, polyvalence_id, action_type,
-             ancien_niveau, nouveau_niveau,
-             ancienne_date_evaluation, nouvelle_date_evaluation,
-             commentaire, source, date_action)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-        """, (operateur_id, poste_id, polyvalence_id, action_type,
-              ancien_niveau, nouveau_niveau,
-              ancienne_date_evaluation, nouvelle_date_evaluation,
-              commentaire, source))
-    except Exception as e:
-        logger.warning(f"Erreur archivage historique_polyvalence op={operateur_id} poste={poste_id}: {e}")
-
 
 def get_historique_polyvalence_operateur(operateur_id: int) -> List[Dict]:
     """Historique complet des modifications de polyvalence pour un opérateur."""
@@ -561,7 +527,7 @@ def importer_ancienne_polyvalence(operateur_id: int, poste_id: int, niveau: int,
                     prochaine_evaluation = VALUES(prochaine_evaluation)
             """, (operateur_id, poste_id, niveau, date_eval, date_prochaine))
 
-        from core.services.logger import log_hist
+        from core.services.optimized_db_logger import log_hist
         log_hist(
             action="IMPORT_MANUEL",
             table_name="polyvalence",
@@ -597,7 +563,7 @@ def update_date_evaluation_polyvalence(poly_id: int, new_date_eval, prochaine_ev
             WHERE id = %s
         """, (new_date_eval, prochaine_eval, poly_id))
 
-        from core.services.logger import log_hist
+        from core.services.optimized_db_logger import log_hist
         log_hist(
             action="UPDATE",
             table_name="polyvalence",
@@ -652,7 +618,7 @@ def update_date_champ_polyvalence(poly_id: int, field: str, new_date) -> bool:
 
         QueryExecutor.execute_write(query_update, (new_date, poly_id))
 
-        from core.services.logger import log_hist
+        from core.services.optimized_db_logger import log_hist
         log_hist(
             action="UPDATE",
             table_name="polyvalence",

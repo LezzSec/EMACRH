@@ -8,7 +8,8 @@ import json
 import logging
 from datetime import datetime
 
-from core.db.configbd import get_connection
+from core.db.configbd import DatabaseConnection
+from core.db.query_executor import QueryExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -59,75 +60,35 @@ def log_polyvalence_action(
     Returns:
         int: ID de l'enregistrement créé dans historique_polyvalence
     """
-    conn = get_connection()
-    cur = conn.cursor()
+    metadata_json = json.dumps(metadata, ensure_ascii=False) if metadata else None
+    if date_action is None:
+        date_action = datetime.now()
+
+    query = """
+        INSERT INTO historique_polyvalence (
+            date_action, action_type, personnel_id, poste_id, polyvalence_id,
+            ancien_niveau, ancienne_date_evaluation, ancienne_prochaine_evaluation,
+            ancien_statut, nouveau_niveau, nouvelle_date_evaluation,
+            nouvelle_prochaine_evaluation, nouveau_statut, utilisateur,
+            commentaire, source, import_batch_id, metadata_json
+        ) VALUES (
+            %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+        )
+    """
+    params = (
+        date_action, action_type, operateur_id, poste_id, polyvalence_id,
+        ancien_niveau, ancienne_date_evaluation, ancienne_prochaine_evaluation,
+        ancien_statut, nouveau_niveau, nouvelle_date_evaluation,
+        nouvelle_prochaine_evaluation, nouveau_statut, utilisateur,
+        commentaire, source, import_batch_id, metadata_json,
+    )
 
     try:
-        # Convertir metadata en JSON si fourni
-        metadata_json = json.dumps(metadata, ensure_ascii=False) if metadata else None
-
-        # Utiliser la date actuelle si non fournie
-        if date_action is None:
-            date_action = datetime.now()
-
-        query = """
-            INSERT INTO historique_polyvalence (
-                date_action,
-                action_type,
-                personnel_id,
-                poste_id,
-                polyvalence_id,
-                ancien_niveau,
-                ancienne_date_evaluation,
-                ancienne_prochaine_evaluation,
-                ancien_statut,
-                nouveau_niveau,
-                nouvelle_date_evaluation,
-                nouvelle_prochaine_evaluation,
-                nouveau_statut,
-                utilisateur,
-                commentaire,
-                source,
-                import_batch_id,
-                metadata_json
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-        """
-
-        cur.execute(query, (
-            date_action,
-            action_type,
-            operateur_id,
-            poste_id,
-            polyvalence_id,
-            ancien_niveau,
-            ancienne_date_evaluation,
-            ancienne_prochaine_evaluation,
-            ancien_statut,
-            nouveau_niveau,
-            nouvelle_date_evaluation,
-            nouvelle_prochaine_evaluation,
-            nouveau_statut,
-            utilisateur,
-            commentaire,
-            source,
-            import_batch_id,
-            metadata_json
-        ))
-
-        hist_id = cur.lastrowid
-        conn.commit()
-
+        hist_id = QueryExecutor.execute_write(query, params)
         return hist_id
-
     except Exception as e:
-        conn.rollback()
         logger.error(f"Impossible d'enregistrer l'action polyvalence : {e}")
         raise
-    finally:
-        cur.close()
-        conn.close()
 
 
 def log_polyvalence_ajout(operateur_id, poste_id, polyvalence_id, niveau, date_evaluation, prochaine_evaluation, utilisateur=None, source="GUI"):
@@ -241,32 +202,22 @@ def get_historique_operateur(operateur_id, limit=None):
     Returns:
         list: Liste des actions (dictionnaires)
     """
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
+    query = """
+        SELECT * FROM v_historique_polyvalence_complet
+        WHERE personnel_id = %s
+        ORDER BY date_action DESC
+    """
+    # ✅ SÉCURITÉ: Validation stricte de LIMIT (MySQL ne supporte pas les paramètres pour LIMIT)
+    if limit:
+        try:
+            limit_val = int(limit)
+            if limit_val <= 0 or limit_val > 10000:
+                raise ValueError("LIMIT doit être entre 1 et 10000")
+            query += f" LIMIT {limit_val}"
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Valeur LIMIT invalide: {e}")
 
-    try:
-        query = """
-            SELECT * FROM v_historique_polyvalence_complet
-            WHERE personnel_id = %s
-            ORDER BY date_action DESC
-        """
-
-        # ✅ SÉCURITÉ: Validation stricte de LIMIT (MySQL ne supporte pas les paramètres pour LIMIT)
-        if limit:
-            try:
-                limit_val = int(limit)
-                if limit_val <= 0 or limit_val > 10000:  # Protection contre valeurs extrêmes
-                    raise ValueError("LIMIT doit être entre 1 et 10000")
-                query += f" LIMIT {limit_val}"
-            except (ValueError, TypeError) as e:
-                raise ValueError(f"Valeur LIMIT invalide: {e}")
-
-        cur.execute(query, (operateur_id,))
-        return cur.fetchall()
-
-    finally:
-        cur.close()
-        conn.close()
+    return QueryExecutor.fetch_all(query, (operateur_id,), dictionary=True)
 
 
 def get_historique_poste(operateur_id, poste_id, limit=None):
@@ -281,32 +232,22 @@ def get_historique_poste(operateur_id, poste_id, limit=None):
     Returns:
         list: Liste des actions
     """
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
+    query = """
+        SELECT * FROM v_historique_polyvalence_complet
+        WHERE personnel_id = %s AND poste_id = %s
+        ORDER BY date_action DESC
+    """
+    # ✅ SÉCURITÉ: Validation stricte de LIMIT
+    if limit:
+        try:
+            limit_val = int(limit)
+            if limit_val <= 0 or limit_val > 10000:
+                raise ValueError("LIMIT doit être entre 1 et 10000")
+            query += f" LIMIT {limit_val}"
+        except (ValueError, TypeError) as e:
+            raise ValueError(f"Valeur LIMIT invalide: {e}")
 
-    try:
-        query = """
-            SELECT * FROM v_historique_polyvalence_complet
-            WHERE personnel_id = %s AND poste_id = %s
-            ORDER BY date_action DESC
-        """
-
-        # ✅ SÉCURITÉ: Validation stricte de LIMIT
-        if limit:
-            try:
-                limit_val = int(limit)
-                if limit_val <= 0 or limit_val > 10000:
-                    raise ValueError("LIMIT doit être entre 1 et 10000")
-                query += f" LIMIT {limit_val}"
-            except (ValueError, TypeError) as e:
-                raise ValueError(f"Valeur LIMIT invalide: {e}")
-
-        cur.execute(query, (operateur_id, poste_id))
-        return cur.fetchall()
-
-    finally:
-        cur.close()
-        conn.close()
+    return QueryExecutor.fetch_all(query, (operateur_id, poste_id), dictionary=True)
 
 
 def get_derniere_action_poste(operateur_id, poste_id):
@@ -334,27 +275,16 @@ def get_statistiques_operateur(operateur_id):
     Returns:
         dict: Statistiques (nb total, nb par type, postes touchés, etc.)
     """
-    conn = get_connection()
-    cur = conn.cursor(dictionary=True)
-
-    try:
-        query = """
-            SELECT
-                COUNT(*) as total_actions,
-                SUM(CASE WHEN action_type = 'AJOUT' THEN 1 ELSE 0 END) as nb_ajouts,
-                SUM(CASE WHEN action_type = 'MODIFICATION' THEN 1 ELSE 0 END) as nb_modifications,
-                SUM(CASE WHEN action_type = 'SUPPRESSION' THEN 1 ELSE 0 END) as nb_suppressions,
-                SUM(CASE WHEN action_type = 'IMPORT_MANUEL' THEN 1 ELSE 0 END) as nb_imports,
-                COUNT(DISTINCT poste_id) as nb_postes_touches,
-                MIN(date_action) as premiere_action,
-                MAX(date_action) as derniere_action
-            FROM historique_polyvalence
-            WHERE personnel_id = %s
-        """
-
-        cur.execute(query, (operateur_id,))
-        return cur.fetchone()
-
-    finally:
-        cur.close()
-        conn.close()
+    return QueryExecutor.fetch_one("""
+        SELECT
+            COUNT(*) as total_actions,
+            SUM(CASE WHEN action_type = 'AJOUT' THEN 1 ELSE 0 END) as nb_ajouts,
+            SUM(CASE WHEN action_type = 'MODIFICATION' THEN 1 ELSE 0 END) as nb_modifications,
+            SUM(CASE WHEN action_type = 'SUPPRESSION' THEN 1 ELSE 0 END) as nb_suppressions,
+            SUM(CASE WHEN action_type = 'IMPORT_MANUEL' THEN 1 ELSE 0 END) as nb_imports,
+            COUNT(DISTINCT poste_id) as nb_postes_touches,
+            MIN(date_action) as premiere_action,
+            MAX(date_action) as derniere_action
+        FROM historique_polyvalence
+        WHERE personnel_id = %s
+    """, (operateur_id,), dictionary=True)

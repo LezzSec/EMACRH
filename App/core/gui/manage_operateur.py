@@ -13,7 +13,7 @@ from core.repositories.personnel_repo import PersonnelRepository
 from core.repositories.poste_repo import PosteRepository
 from core.repositories.polyvalence_repo import PolyvalenceRepository
 from core.services.matricule_service import generer_prochain_matricule
-from core.services.logger import log_hist
+from core.services.optimized_db_logger import log_hist
 from core.gui.emac_ui_kit import show_error_message
 from core.services.permission_manager import require
 from core.utils.logging_config import get_logger

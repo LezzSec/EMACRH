@@ -20,6 +20,7 @@ from PyQt5.QtGui import QFont, QCursor
 from core.services.alert_service import AlertService, TypeAlerte
 from core.models import Alert
 from core.services.permission_manager import can
+from core.utils.date_format import format_date
 
 logger = logging.getLogger(__name__)
 
@@ -331,7 +332,7 @@ class AlertCard(QFrame):
         if type_contrat:
             parts.append(type_contrat)
         if alert.date_echeance:
-            parts.append(f"Echeance: {alert.date_echeance.strftime('%d/%m/%Y')}")
+            parts.append(f"Echeance: {format_date(alert.date_echeance)}")
         matricule = alert.data.get('matricule')
         if matricule:
             parts.append(f"Mat. {matricule}")
@@ -868,7 +869,7 @@ class GestionAlertesRHDialog(QDialog):
             elements = []
             styles = getSampleStyleSheet()
 
-            elements.append(Paragraph(f"Rapport Alertes RH - {date.today().strftime('%d/%m/%Y')}", styles['Title']))
+            elements.append(Paragraph(f"Rapport Alertes RH - {format_date(date.today())}", styles['Title']))
             elements.append(Spacer(1, 20))
 
             # Recuperer les alertes filtrees visibles
@@ -882,7 +883,7 @@ class GestionAlertesRHDialog(QDialog):
                 detail = ""
                 if a.date_echeance:
                     jours = f" ({a.jours_restants}j)" if a.jours_restants is not None else ""
-                    detail = f"Fin: {a.date_echeance.strftime('%d/%m/%Y')}{jours}"
+                    detail = f"Fin: {format_date(a.date_echeance)}{jours}"
                 elif a.description:
                     detail = a.description
 

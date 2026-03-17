@@ -26,6 +26,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 from core.db.query_executor import QueryExecutor
 from core.db.configbd import DatabaseConnection
+from core.services.optimized_db_logger import log_hist
 
 logger = logging.getLogger(__name__)
 
@@ -158,7 +159,7 @@ class GrillesService:
         action = None
         new_niveau_int = None
 
-        from core.services.evaluation_service import log_historique_polyvalence
+        from core.services.polyvalence_logger import log_polyvalence_action as _log_poly
 
         if new_niveau_str == "":
             # Suppression
@@ -166,13 +167,16 @@ class GrillesService:
                 "DELETE FROM polyvalence WHERE personnel_id = %s AND poste_id = %s",
                 (operateur_id, poste_id)
             )
-            log_historique_polyvalence(
-                operateur_id=operateur_id, poste_id=poste_id,
-                action_type='SUPPRESSION',
-                ancien_niveau=old_niveau,
-                ancienne_date_evaluation=old_date_eval,
-                source='GRILLE',
-            )
+            try:
+                _log_poly(
+                    action_type='SUPPRESSION',
+                    operateur_id=operateur_id, poste_id=poste_id,
+                    ancien_niveau=old_niveau,
+                    ancienne_date_evaluation=old_date_eval,
+                    source='GRILLE',
+                )
+            except Exception as _e:
+                logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
             action = 'DELETE'
 
         else:
@@ -187,14 +191,17 @@ class GrillesService:
                     INSERT INTO polyvalence (personnel_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
                     VALUES (%s, %s, %s, CURDATE(), %s)
                 """, (operateur_id, poste_id, new_niveau_int, prochaine_eval))
-                log_historique_polyvalence(
-                    operateur_id=operateur_id, poste_id=poste_id,
-                    polyvalence_id=new_poly_id,
-                    action_type='AJOUT',
-                    nouveau_niveau=new_niveau_int,
-                    nouvelle_date_evaluation=date.today(),
-                    source='GRILLE',
-                )
+                try:
+                    _log_poly(
+                        action_type='AJOUT',
+                        operateur_id=operateur_id, poste_id=poste_id,
+                        polyvalence_id=new_poly_id,
+                        nouveau_niveau=new_niveau_int,
+                        nouvelle_date_evaluation=date.today(),
+                        source='GRILLE',
+                    )
+                except Exception as _e:
+                    logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
                 action = 'INSERT'
                 GrillesService._emit_polyvalence_events(
                     action='INSERT',
@@ -211,15 +218,18 @@ class GrillesService:
                     WHERE personnel_id = %s AND poste_id = %s
                 """, (new_niveau_int, prochaine_eval, operateur_id, poste_id))
                 if old_niveau != new_niveau_int:
-                    log_historique_polyvalence(
-                        operateur_id=operateur_id, poste_id=poste_id,
-                        action_type='MODIFICATION',
-                        ancien_niveau=old_niveau,
-                        nouveau_niveau=new_niveau_int,
-                        ancienne_date_evaluation=old_date_eval,
-                        nouvelle_date_evaluation=date.today(),
-                        source='GRILLE',
-                    )
+                    try:
+                        _log_poly(
+                            action_type='MODIFICATION',
+                            operateur_id=operateur_id, poste_id=poste_id,
+                            ancien_niveau=old_niveau,
+                            nouveau_niveau=new_niveau_int,
+                            ancienne_date_evaluation=old_date_eval,
+                            nouvelle_date_evaluation=date.today(),
+                            source='GRILLE',
+                        )
+                    except Exception as _e:
+                        logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
                 action = 'UPDATE'
                 GrillesService._emit_polyvalence_events(
                     action='UPDATE',
@@ -386,10 +396,8 @@ class GrillesService:
                     "type": "modification"
                 }, ensure_ascii=False)
 
-            QueryExecutor.execute_write("""
-                INSERT INTO historique (date_time, action, personnel_id, poste_id, description, utilisateur)
-                VALUES (%s, %s, %s, %s, %s, %s)
-            """, (datetime.now(), action, operateur_id, poste_id, description, utilisateur))
+            log_hist(action, "polyvalence", None, description,
+                     operateur_id=operateur_id, poste_id=poste_id, utilisateur=utilisateur)
 
         except Exception as e:
             logger.warning(f"Erreur logging historique grille: {e}")
@@ -448,10 +456,8 @@ class GrillesService:
                         "type": "ajout" if action == 'INSERT' else "modification"
                     }, ensure_ascii=False)
 
-                    QueryExecutor.execute_write("""
-                        INSERT INTO historique (date_time, action, personnel_id, poste_id, description, utilisateur)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                    """, (datetime.now(), action, operateur_id, poste_id, description, utilisateur))
+                    log_hist(action, "polyvalence", None, description,
+                             operateur_id=operateur_id, poste_id=poste_id, utilisateur=utilisateur)
                 except Exception as e:
                     logger.warning(f"Erreur logging batch: {e}")
 

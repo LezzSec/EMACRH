@@ -20,6 +20,7 @@ from core.repositories.personnel_repo import PersonnelRepository
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.gui.db_worker import DbWorker, DbThreadPool
 from core.utils.logging_config import get_logger
+from core.utils.date_format import format_date, format_datetime
 
 logger = get_logger(__name__)
 
@@ -435,13 +436,13 @@ class GestionAbsencesDialog(QDialog):
         for row, demande in enumerate(demandes):
             self.table_demandes.setItem(row, 0, QTableWidgetItem(str(demande['id'])))
             self.table_demandes.setItem(row, 1, QTableWidgetItem(demande['type_libelle']))
-            self.table_demandes.setItem(row, 2, QTableWidgetItem(demande['date_debut'].strftime('%d/%m/%Y')))
-            self.table_demandes.setItem(row, 3, QTableWidgetItem(demande['date_fin'].strftime('%d/%m/%Y')))
+            self.table_demandes.setItem(row, 2, QTableWidgetItem(format_date(demande['date_debut'])))
+            self.table_demandes.setItem(row, 3, QTableWidgetItem(format_date(demande['date_fin'])))
             self.table_demandes.setItem(row, 4, QTableWidgetItem(str(demande['nb_jours'])))
             self.table_demandes.setItem(row, 5, QTableWidgetItem(demande['motif'] or ''))
             self.table_demandes.setItem(row, 6, QTableWidgetItem(demande['statut']))
             self.table_demandes.setItem(row, 7, QTableWidgetItem(demande['validateur'] or ''))
-            date_val = demande['date_validation'].strftime('%d/%m/%Y %H:%M') if demande['date_validation'] else ''
+            date_val = format_datetime(demande['date_validation'])
             self.table_demandes.setItem(row, 8, QTableWidgetItem(date_val))
 
             # Colorer selon le statut
@@ -490,8 +491,8 @@ class GestionAbsencesDialog(QDialog):
                 self.table_validation.setItem(row, 0, QTableWidgetItem(str(demande['id'])))
                 self.table_validation.setItem(row, 1, QTableWidgetItem(demande['nom_complet']))
                 self.table_validation.setItem(row, 2, QTableWidgetItem(demande['type_libelle']))
-                self.table_validation.setItem(row, 3, QTableWidgetItem(demande['date_debut'].strftime('%d/%m/%Y')))
-                self.table_validation.setItem(row, 4, QTableWidgetItem(demande['date_fin'].strftime('%d/%m/%Y')))
+                self.table_validation.setItem(row, 3, QTableWidgetItem(format_date(demande['date_debut'])))
+                self.table_validation.setItem(row, 4, QTableWidgetItem(format_date(demande['date_fin'])))
                 self.table_validation.setItem(row, 5, QTableWidgetItem(str(demande['nb_jours'])))
                 self.table_validation.setItem(row, 6, QTableWidgetItem(demande['motif'] or ''))
 

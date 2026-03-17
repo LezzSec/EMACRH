@@ -57,7 +57,7 @@ def creer_declaration(operateur_id: int, type_decl: str,
         """, (operateur_id, type_decl, date_debut, date_fin, motif or None),
         return_lastrowid=True)
 
-        from core.services.logger import log_hist
+        from core.services.optimized_db_logger import log_hist
         log_hist(
             "INSERT",
             f"Déclaration d'absence : {type_decl}",

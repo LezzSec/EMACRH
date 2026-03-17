@@ -18,7 +18,7 @@ from datetime import date, datetime, timedelta
 from typing import List, Dict, Optional, Tuple, Any
 
 from core.db.query_executor import QueryExecutor
-from core.services.logger import log_hist
+from core.services.optimized_db_logger import log_hist
 from core.services.permission_manager import require
 from core.utils.logging_config import get_logger
 

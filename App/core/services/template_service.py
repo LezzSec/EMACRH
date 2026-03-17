@@ -21,8 +21,9 @@ from typing import List, Dict, Optional, Tuple
 
 from core.db.query_executor import QueryExecutor
 from core.db.configbd import get_connection
-from core.services.logger import log_hist
+from core.services.optimized_db_logger import log_hist
 from core.utils.logging_config import get_logger
+from core.utils.date_format import format_date, format_timestamp
 
 logger = get_logger(__name__)
 
@@ -249,13 +250,13 @@ def generate_filled_template(
 
     # Date par defaut
     if not date_str:
-        date_str = datetime.now().strftime('%d/%m/%Y')
+        date_str = format_date(datetime.now())
 
     # Nom complet de l'operateur
     operateur_complet = f"{operateur_prenom} {operateur_nom}".strip()
 
     # Creer le nom du fichier de sortie
-    safe_name = f"{template['nom']}_{operateur_complet}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    safe_name = f"{template['nom']}_{operateur_complet}_{format_timestamp()}"
     safe_name = "".join(c for c in safe_name if c.isalnum() or c in (' ', '_', '-')).strip()
     output_filename = f"{safe_name}{extension}"
 

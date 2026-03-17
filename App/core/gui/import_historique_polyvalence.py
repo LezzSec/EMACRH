@@ -8,6 +8,7 @@ import csv
 import uuid
 import logging
 from datetime import datetime
+from core.utils.date_format import format_timestamp
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
@@ -443,7 +444,7 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
 
         # Générer un batch ID unique pour ce lot d'import
         if not self.import_batch_id:
-            self.import_batch_id = f"IMPORT_{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}"
+            self.import_batch_id = f"IMPORT_{format_timestamp()}_{uuid.uuid4().hex[:8]}"
 
         import json
         success_count = 0

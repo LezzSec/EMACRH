@@ -1535,7 +1535,8 @@ class BulkOperationProgressDialog(QDialog):
             self.accept()
 
         def on_error(error):
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'opération:\n{error}")
+            logger.error(f"Erreur lors de l'opération bulk: {error}")
+            QMessageBox.critical(self, "Erreur", "Une erreur est survenue lors de l'opération. Consultez les logs pour plus de détails.")
             self.reject()
 
         self._worker = DbWorker(do_operation)

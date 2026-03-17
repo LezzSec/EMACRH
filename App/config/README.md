@@ -34,8 +34,8 @@ Ou double-cliquer sur `run_emac.vbs`
 ## 📝 Configuration avancée
 
 Pour plus de détails sur la configuration sécurisée, voir :
-- [SECURITE_DB.md](SECURITE_DB.md) - Guide complet de configuration MySQL
-- [../CLAUDE.md](../CLAUDE.md) - Documentation complète du projet
+- [docs/security/database-credentials.md](../../docs/security/database-credentials.md) - Guide complet de configuration MySQL
+- [CLAUDE.md](../../CLAUDE.md) - Documentation complète du projet
 
 ---
 

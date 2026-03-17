@@ -1,182 +1,252 @@
-# Structure du Projet EMAC
+# Architecture EMAC
 
-## 📊 Vue d'ensemble
+---
 
-```
-EMAC/
-├── 📄 docs/                    # Documentation (4 fichiers)
-├── 💻 App/                     # Application principale
-│   ├── 🔧 core/               # Code source
-│   │   ├── db/               # Base de données (5 fichiers)
-│   │   ├── services/         # Services métier (11 fichiers)
-│   │   ├── gui/              # Interface PyQt5 (15 fichiers)
-│   │   └── exporters/        # Exports (3 fichiers)
-│   ├── 🧪 tests/              # Tests (6 fichiers + README)
-│   ├── 🔧 scripts/            # Scripts utilitaires (5 fichiers + README)
-│   ├── 💾 database/           # Fichiers BDD
-│   │   ├── schema/           # 1 schéma principal
-│   │   ├── migrations/       # 1 migration
-│   │   └── backups/          # 8 sauvegardes
-│   ├── 📝 logs/               # Logs applicatifs
-│   ├── ⚙️ run/                # Fichiers runtime
-│   └── 🚀 run_emac.vbs       # Lanceur Windows
-├── 📦 Deploy/                 # Déploiement
-├── 🗑️ Fichiers inutilisés/    # Archives
-├── 📘 CLAUDE.md               # Instructions Claude
-├── 📋 REORGANISATION.md       # Historique réorganisation
-└── 📊 STRUCTURE.md            # Ce fichier
+## Couches applicatives
 
 ```
-
-## 🎯 Points d'entrée
-
-### Lancement de l'application
-```bash
-# Méthode 1 : Double-clic sur le lanceur
-App/run_emac.vbs
-
-# Méthode 2 : Ligne de commande
-cd App
-py -m core.gui.main_qt
+┌──────────────────────────────────────────────────────────────┐
+│  GUI  (core/gui/)                                            │
+│  PyQt5 · Dialogs · Widgets · Thème                          │
+│  Règle : JAMAIS d'accès DB direct                           │
+└───────────────────────┬──────────────────────────────────────┘
+                        │ appels
+┌───────────────────────▼──────────────────────────────────────┐
+│  Services  (core/services/)                                  │
+│  Logique métier · Validation · Logging automatique           │
+│  CRUDService, PersonnelService, rh_service_refactored…       │
+└───────────────────────┬──────────────────────────────────────┘
+                        │ appels
+┌───────────────────────▼──────────────────────────────────────┐
+│  Repositories  (core/repositories/)                          │
+│  Accès données · Pagination · Filtres                        │
+│  PersonnelRepository, PolyvalenceRepository…                 │
+└───────────────────────┬──────────────────────────────────────┘
+                        │ appels
+┌───────────────────────▼──────────────────────────────────────┐
+│  QueryExecutor  (core/db/query_executor.py)                  │
+│  fetch_all · fetch_one · execute_write · exists · count      │
+└───────────────────────┬──────────────────────────────────────┘
+                        │
+┌───────────────────────▼──────────────────────────────────────┐
+│  Pool de connexions  (core/db/configbd.py)                   │
+│  5 connexions · timeout 5s · reconnexion auto                │
+└───────────────────────┬──────────────────────────────────────┘
+                        │
+               MySQL 8.0  (emac_db)
 ```
 
-### Exécution des tests
-```bash
-cd App
-py tests/test_database_integrity.py
+---
+
+## GUI (`core/gui/`)
+
+### Fenêtre principale
+
+- **`main_qt.py`** — Fenêtre principale, menu tiroir (drawer) lazy-loaded, crash handler → `logs/crash.log`
+
+### Dialogs métier
+
+| Fichier | Rôle |
+|---------|------|
+| `gestion_rh.py` | `GestionRHDialog` + `GestionRHWidget` (mixin `_GestionRHMixin`) |
+| `gestion_rh_dialogs.py` | Dialogs RH : contrat, médical, déclaration, formation… |
+| `gestion_personnel.py` | Fiche complète employé |
+| `gestion_evaluation.py` | Évaluations, niveaux, alertes |
+| `gestion_absences.py` | Demandes d'absence, validation |
+| `planning_absences.py` | Vue planning + demandes CP/RTT |
+| `gestion_formations.py` | Suivi des formations |
+| `gestion_alertes_rh.py` | Tableau de bord alertes |
+| `gestion_documentaire.py` | GED principale |
+| `gestion_templates.py` | Templates de documents |
+| `admin_data_panel.py` | Données de référence (ateliers, types, jours fériés…) |
+| `liste_et_grilles.py` | Grilles polyvalence par atelier |
+| `historique.py` | Audit trail |
+| `contract_management_refactored.py` | Gestion contrats |
+| `feature_puzzle.py` | Permissions granulaires |
+| `user_management.py` | Comptes utilisateurs |
+
+### Infrastructure UI
+
+| Fichier | Rôle |
+|---------|------|
+| `ui_theme.py` | `EmacTheme`, `EmacDarkTheme` — appliquer avant `MainWindow` |
+| `emac_ui_kit.py` | `EmacButton`, `EmacCard`, `show_error_message()` |
+| `emac_dialog.py` | `EmacDialog`, `EmacFormDialog`, `EmacTableDialog` |
+| `db_worker.py` | `DbWorker`, `DbThreadPool` — toutes les requêtes DB hors UI thread |
+| `lazy_loading.py` | `LazyTabWidget`, `PaginatedTableWidget` |
+| `loading_components.py` | `LoadingLabel`, `LoadingPlaceholder`, `ErrorPlaceholder` |
+| `session_timeout.py` | Déconnexion auto après 30 min d'inactivité |
+
+---
+
+## Services (`core/services/`)
+
+### Patterns de base
+
+| Fichier | Rôle |
+|---------|------|
+| `crud_service.py` | Classe de base `CRUDService` — create/update/delete + logging auto |
+| `optimized_db_logger.py` | `log_hist()`, `log_hist_async()` — audit trail |
+| `logger.py` | Shim de compatibilité → redirige vers `optimized_db_logger` |
+| `permission_manager.py` | `perm.can()`, `require()`, cache 5 min |
+
+### Services CRUD
+
+| Fichier | Tables |
+|---------|--------|
+| `personnel_service.py` | `personnel` |
+| `contrat_service_crud.py` | `contrats` |
+| `absence_service_crud.py` | `absences` |
+| `formation_service_crud.py` | `formations` |
+| `declaration_service_crud.py` | `declarations` |
+
+### Services métier
+
+| Fichier | Rôle |
+|---------|------|
+| `rh_service_refactored.py` | Agrégation données RH par domaine (1 109 lignes, référence officielle) |
+| `evaluation_service.py` | Planification évaluations, calcul prochaine date |
+| `calendrier_service.py` | Calculs jours ouvrés, fériés |
+| `grilles_service.py` | Génération PDF/Excel grilles polyvalence |
+| `alert_service.py` | Détection et envoi des alertes |
+| `template_service.py` | Génération documents depuis templates Word/ODF |
+| `polyvalence_logger.py` | `log_polyvalence_action()` → `historique_polyvalence` |
+| `config_service.py` | Données de référence (ateliers, types absence, jours fériés…) |
+| `auth_service.py` | Login, bcrypt, session |
+
+---
+
+## Repositories (`core/repositories/`)
+
+| Fichier | Méthodes clés |
+|---------|---------------|
+| `base.py` | `BaseRepository`, `SafeQueryBuilder` |
+| `personnel_repo.py` | `get_actifs()`, `get_paginated()`, `search()` |
+| `polyvalence_repo.py` | `get_by_operateur()`, `update_niveau()` |
+| `contrat_repo.py` | `get_actif()`, `get_expirant_bientot()` |
+| `poste_repo.py` | `get_all_with_atelier()` |
+| `absence_repo.py` | `get_by_personnel()`, `get_paginated()` |
+
+---
+
+## DB (`core/db/`)
+
+### QueryExecutor
+
+```python
+from core.db.query_executor import QueryExecutor
+
+# Lire
+rows = QueryExecutor.fetch_all("SELECT * FROM personnel WHERE statut = %s", ('ACTIF',), dictionary=True)
+row  = QueryExecutor.fetch_one("SELECT * FROM personnel WHERE id = %s", (1,), dictionary=True)
+
+# Écrire (retourne last insert id)
+new_id = QueryExecutor.execute_write("INSERT INTO ...", params)
+
+# Vérifier
+exists = QueryExecutor.exists('personnel', {'id': 1})
+count  = QueryExecutor.count('personnel', {'statut': 'ACTIF'})
 ```
 
-### Scripts utilitaires
-```bash
-cd App
-py scripts/cleanup_test_data.py
-py scripts/quick_db_query.py
+### Connection Pool
+
+```python
+# ✅ Utiliser DatabaseCursor pour les cas complexes
+from core.db.configbd import DatabaseCursor
+with DatabaseCursor(dictionary=True) as cur:
+    cur.execute("SELECT ...")
+    rows = cur.fetchall()
+
+# ❌ NE JAMAIS utiliser mysql.connector.connect() directement
 ```
 
-## 📚 Documentation
+---
 
-| Fichier | Description |
-|---------|-------------|
-| [CLAUDE.md](CLAUDE.md) | Instructions complètes pour Claude Code |
-| [docs/README.md](docs/README.md) | Index de toute la documentation |
-| [docs/GUIDE_UTILISATION_ABSENCES.md](docs/GUIDE_UTILISATION_ABSENCES.md) | Guide utilisateur absences |
-| [docs/MODULE_ABSENCES_README.md](docs/MODULE_ABSENCES_README.md) | Doc technique absences |
-| [docs/ANALYSE_FONCTIONNALITES_RH_MANQUANTES.md](docs/ANALYSE_FONCTIONNALITES_RH_MANQUANTES.md) | Analyse fonctionnalités RH |
+## Utils (`core/utils/`)
 
-## 🗄️ Base de données
+| Fichier | Exports principaux |
+|---------|-------------------|
+| `date_format.py` | `format_date()`, `format_datetime()`, `format_timestamp()` |
+| `logging_config.py` | `get_logger()`, `set_log_context()`, `setup_logging()`, `get_logs_dir()` |
+| `config_crypter.py` | Chiffrement `.env.encrypted` — clé dérivée de la machine |
+| `cache.py` | Cache générique TTL |
+| `performance_monitor.py` | `@monitor_query` décorateur |
 
-### Configuration
-- **Serveur**: 192.168.1.128:3306
-- **Base**: emac_db
-- **User**: gestionrh
-- **Config**: [App/core/db/configbd.py](App/core/db/configbd.py)
+---
 
-### Fichiers importants
-- **Schéma principal**: [App/database/schema/bddemac.sql](App/database/schema/bddemac.sql)
-- **Migration absences**: [App/database/migrations/schema_absences_conges.sql](App/database/migrations/schema_absences_conges.sql)
-- **Sauvegardes**: [App/database/backups/](App/database/backups/)
+## Base de données
 
-## 🧩 Modules principaux
+### Tables principales
 
-### Core (`App/core/`)
+| Table | Rôle |
+|-------|------|
+| `personnel` | Employés (id, nom, prenom, matricule, statut) |
+| `postes` | Postes de travail (code, atelier_id) |
+| `atelier` | Ateliers (contiennent des postes) |
+| `polyvalence` | Compétences employé×poste (niveau 1–4, dates éval) |
+| `historique` | Audit trail global |
+| `historique_polyvalence` | Historique modifications polyvalence |
+| `contrats` | Contrats (type, dates, actif) |
+| `absences` | Absences / congés |
+| `documents` | GED (chemin, catégorie, expiration) |
+| `users` | Comptes applicatifs (bcrypt) |
+| `features` | Catalogue de permissions granulaires |
+| `role_features` | Permissions par rôle |
+| `user_features` | Overrides par utilisateur |
 
-#### Database Layer (`db/`)
-- `configbd.py` - Connexion MySQL
-- `insert_*.py` - Scripts de population
-- `import_infos.py` - Import de données
+### Migrations
 
-#### Service Layer (`services/`)
-- `evaluation_service.py` - Gestion des évaluations
-- `absence_service.py` - Gestion des absences
-- `contrat_service.py` - Gestion des contrats
-- `matricule_service.py` - Gestion des matricules
-- `logger.py` - Système de logs
+Fichiers SQL dans `App/database/migrations/` — numérotés `001_` → `~040_`.
+Appliquer dans l'ordre sur une nouvelle base.
 
-#### GUI Layer (`gui/`)
-- `main_qt.py` - Fenêtre principale
-- `ui_theme.py` - Système de thèmes
-- `gestion_*.py` - Dialogs de gestion
-- `emac_ui_kit.py` - Composants réutilisables
+---
 
-#### Exporters (`exporters/`)
-- `excel_export.py` - Export Excel
-- `pdf_export.py` - Export PDF
-- `log_export.py` - Export CSV
+## Patterns obligatoires
 
-## 📈 Statistiques
+### Logging (audit trail)
 
-- **Tests**: 6 fichiers
-- **Scripts**: 5 fichiers
-- **Sauvegardes SQL**: 8 fichiers
-- **Documentation**: 4 fichiers Markdown
-- **Services**: 11 fichiers
-- **Interfaces GUI**: 15 fichiers
+```python
+from core.services.optimized_db_logger import log_hist
 
-## 🔄 Workflow de développement
-
-### 1. Modification du schéma BDD
-1. Modifier `App/database/schema/bddemac.sql`
-2. Créer migration dans `App/database/migrations/`
-3. Appliquer à la BDD
-4. Mettre à jour les services concernés
-5. Tester les interfaces GUI
-
-### 2. Ajout d'une fonctionnalité
-1. Créer/modifier service dans `App/core/services/`
-2. Créer/modifier dialog dans `App/core/gui/`
-3. Intégrer dans `main_qt.py`
-4. Créer tests dans `App/tests/`
-5. Documenter dans `docs/`
-
-### 3. Maintenance
-1. Utiliser scripts dans `App/scripts/`
-2. Créer sauvegardes dans `App/database/backups/`
-3. Vérifier logs dans `App/logs/`
-
-## 🛠️ Outils de développement
-
-### Git
-```bash
-# Ignorer les fichiers temporaires
-# Voir App/.gitignore pour la liste complète
+log_hist("CREATION_CONTRAT", "operateurs", operateur_id, "CDI signé", utilisateur="jdupont")
 ```
 
-### Dépendances
-```bash
-pip install -r Fichiers\ inutilisés/requirements.txt
+### Permissions
+
+```python
+from core.services.permission_manager import perm, can, require
+
+# UI (cache, non critique)
+if can("rh.personnel.edit"):
+    btn_edit.setEnabled(True)
+
+# Service (vérifie en DB, critique)
+require("rh.personnel.delete")  # lève PermissionError si refusé
 ```
 
-### Base de données
-```bash
-# Sauvegarde
-mysqldump -u gestionrh -p emac_db > App/database/backups/backup_$(date +%Y%m%d).sql
+### Dates
 
-# Restauration
-mysql -u gestionrh -p emac_db < App/database/backups/bddserver12.sql
+```python
+from core.utils.date_format import format_date, format_datetime, format_timestamp
+
+label.setText(format_date(some_date))          # "17/03/2026"
+label.setText(format_datetime(some_datetime))  # "17/03/2026 14:30:00"
+batch_id = f"IMPORT_{format_timestamp()}"      # "IMPORT_20260317_143000"
 ```
 
-## 🎨 Conventions de code
+### Erreurs (ne pas exposer les détails à l'utilisateur)
 
-- **Encodage**: UTF-8 avec header `# -*- coding: utf-8 -*-`
-- **Langue**: Tout le texte UI en français
-- **Dates**: Format DD/MM/YYYY (`strftime('%d/%m/%Y')`)
-- **Nommage**: snake_case pour fonctions, PascalCase pour classes
-- **Dialogs**: Suffixe `*Dialog` (ex: `GestionEvaluationDialog`)
+```python
+from core.utils.logging_config import get_logger
+logger = get_logger(__name__)
 
-## ⚠️ Notes importantes
+try:
+    do_something()
+except Exception as e:
+    logger.exception(f"Erreur XYZ: {e}")  # traceback complet dans les logs
+    QMessageBox.critical(self, "Erreur", "Operation impossible. Consultez les logs.")
+```
 
-1. **Tables duales**: `personnel` ET `operateurs` existent dans la BDD
-2. **Logging**: Utiliser `logger.py`, pas `audit_logger.py` (deprecated)
-3. **Theme**: Appliquer avant création fenêtre principale
-4. **Drawer menu**: Chargement lazy, vérifier `is not None`
-5. **Évaluations**: Dates à 10 ans = normal (maintenance long terme)
+---
 
-## 🚀 Déploiement
-
-Les fichiers de déploiement se trouvent dans le dossier `Deploy/`.
-
-## 📞 Support
-
-Pour toute question sur la structure ou l'organisation du projet, consultez :
-- [CLAUDE.md](CLAUDE.md) pour les instructions détaillées
-- [REORGANISATION.md](REORGANISATION.md) pour l'historique des changements
+**Dernière mise à jour** : 2026-03-17

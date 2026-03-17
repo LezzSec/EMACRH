@@ -821,4 +821,5 @@ class FeatureEditorDialog(QDialog):
             QMessageBox.information(self, "Succès", "Permissions enregistrées avec succès.")
             self.save_btn.setEnabled(False)
         else:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de l'enregistrement:\n{error}")
+            logger.error(f"Erreur lors de l'enregistrement des permissions: {error}")
+            QMessageBox.critical(self, "Erreur", "Impossible d'enregistrer les permissions. Consultez les logs pour plus de détails.")

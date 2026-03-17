@@ -19,13 +19,14 @@ from core.services.contrat_service_crud import ContratServiceCRUD
 from core.services.formation_service_crud import FormationServiceCRUD
 from core.services import medical_service
 from core.gui.db_worker import DbWorker, DbThreadPool
-from core.services.logger import log_hist
+from core.services.optimized_db_logger import log_hist
 from core.gui.historique_personnel import HistoriquePersonnelTab
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.services.auth_service import get_current_user
 from core.services.permission_manager import require
 
 import datetime as dt
+from core.utils.date_format import format_date, format_datetime
 
 
 class DetailOperateurDialog(QDialog):
@@ -877,7 +878,7 @@ class DetailOperateurDialog(QDialog):
                 canvas.setFont("Helvetica", 8)
                 canvas.drawCentredString(A4[0]/2, 15, f"Page {doc.page}")
                 canvas.drawRightString(A4[0]-doc.rightMargin, 15, 
-                                     f"Généré le {_dt.date.today().strftime('%d/%m/%Y')}")
+                                     f"Généré le {format_date(_dt.date.today())}")
                 
                 canvas.restoreState()
     
@@ -1227,19 +1228,6 @@ class DetailOperateurDialog(QDialog):
             return date_val.strftime("%d/%m/%Y")
         return str(date_val)
     
-    def _format_datetime(self, datetime_val):
-        """Formate un datetime."""
-        if datetime_val is None:
-            return "N/A"
-        if isinstance(datetime_val, str):
-            try:
-                return dt.datetime.fromisoformat(datetime_val).strftime("%d/%m/%Y %H:%M")
-            except Exception:
-                return datetime_val
-        if hasattr(datetime_val, "strftime"):
-            return datetime_val.strftime("%d/%m/%Y %H:%M")
-        return str(datetime_val)
-
     def _load_date_entree(self):
         """Charge la date d'entrée de l'opérateur depuis personnel_infos."""
         try:

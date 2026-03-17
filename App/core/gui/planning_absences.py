@@ -22,6 +22,7 @@ from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 from core.services.permission_manager import can
+from core.utils.date_format import format_date
 
 
 class PlanningAbsencesDialog(QDialog):
@@ -422,8 +423,8 @@ class PlanningAbsencesDialog(QDialog):
         for row, absence in enumerate(absences):
             self.absents_table.setItem(row, 0, QTableWidgetItem(absence['nom']))
             self.absents_table.setItem(row, 1, QTableWidgetItem(absence['type']))
-            self.absents_table.setItem(row, 2, QTableWidgetItem(absence['debut'].strftime('%d/%m/%Y')))
-            self.absents_table.setItem(row, 3, QTableWidgetItem(absence['fin'].strftime('%d/%m/%Y')))
+            self.absents_table.setItem(row, 2, QTableWidgetItem(format_date(absence['debut'])))
+            self.absents_table.setItem(row, 3, QTableWidgetItem(format_date(absence['fin'])))
 
         # Remplir la table des évaluations
         self.evaluations_table.setRowCount(len(evaluations))
@@ -718,8 +719,8 @@ class MesDemandesDialog(QDialog):
             for row, demande in enumerate(demandes):
                 self.table.setItem(row, 0, QTableWidgetItem(str(demande['id'])))
                 self.table.setItem(row, 1, QTableWidgetItem(demande['type_libelle']))
-                self.table.setItem(row, 2, QTableWidgetItem(demande['date_debut'].strftime('%d/%m/%Y')))
-                self.table.setItem(row, 3, QTableWidgetItem(demande['date_fin'].strftime('%d/%m/%Y')))
+                self.table.setItem(row, 2, QTableWidgetItem(format_date(demande['date_debut'])))
+                self.table.setItem(row, 3, QTableWidgetItem(format_date(demande['date_fin'])))
                 self.table.setItem(row, 4, QTableWidgetItem(str(demande['nb_jours'])))
                 self.table.setItem(row, 5, QTableWidgetItem(demande['statut']))
                 self.table.setItem(row, 6, QTableWidgetItem(demande['motif'] or ''))

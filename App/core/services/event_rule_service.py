@@ -388,7 +388,7 @@ def create_rule(
             (event_name.strip(), template_id, execution_mode, condition_str, priority, description)
         )
 
-        from core.services.logger import log_hist
+        from core.services.optimized_db_logger import log_hist
         log_hist(
             action="CREATION_REGLE_EVENEMENT",
             table_name="document_event_rules",

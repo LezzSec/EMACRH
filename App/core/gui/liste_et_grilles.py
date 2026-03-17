@@ -12,9 +12,10 @@ import sys
 from datetime import datetime, timedelta
 from core.gui.historique import HistoriqueDialog
 from .besoin_poste_dialog import BesoinPosteDialog
-from core.services.logger import log_hist
+from core.services.optimized_db_logger import log_hist
 from core.services.grilles_service import GrillesService
 from core.utils.logging_config import get_logger
+from core.utils.date_format import format_date
 logger = get_logger(__name__)
 try:
     from core.gui.ui_theme import EmacButton, get_current_theme
@@ -1423,7 +1424,7 @@ class GrillesDialog(QDialog):
                 canvas.saveState()
                 canvas.setFont("Helvetica-Bold", title_size)
                 canvas.drawCentredString(page[0]/2, page[1] - TM + 3*mm,
-                                        f"Grille de Polyvalence au {datetime.now().strftime('%d/%m/%Y')}")
+                                        f"Grille de Polyvalence au {format_date(datetime.now())}")
                 canvas.setFont("Helvetica", 6)
                 canvas.drawString(LM, TM - 3*mm, "LQ 07 02 02 rév.1")
                 canvas.restoreState()

@@ -670,7 +670,7 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
                 )
 
         # ✅ Logging manuel (pour l'instant, en attendant PersonnelService.update())
-        from core.services.logger import log_hist
+        from core.services.optimized_db_logger import log_hist
         log_hist(
             action="UPDATE_INFOS_GENERALES",
             table_name="personnel",

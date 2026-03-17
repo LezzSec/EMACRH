@@ -21,9 +21,10 @@ from PyQt5.QtGui import QFont, QColor, QIcon, QDesktopServices
 
 from core.services.document_service import DocumentService
 from core.repositories.personnel_repo import PersonnelRepository
-from core.services.logger import log_hist
+from core.services.optimized_db_logger import log_hist
 from core.gui.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.utils.logging_config import get_logger
+from core.utils.date_format import format_date
 
 logger = get_logger(__name__)
 
@@ -498,7 +499,7 @@ class GestionDocumentaireDialog(QDialog):
             # Date ajout
             date_upload = doc.get('date_upload', '')
             if isinstance(date_upload, datetime):
-                date_upload = date_upload.strftime('%d/%m/%Y')
+                date_upload = format_date(date_upload)
             elif isinstance(date_upload, str):
                 pass  # Déjà une chaîne
             else:
@@ -509,7 +510,7 @@ class GestionDocumentaireDialog(QDialog):
             date_exp = doc.get('date_expiration', '')
             if date_exp:
                 if isinstance(date_exp, (datetime, date)):
-                    date_exp = date_exp.strftime('%d/%m/%Y')
+                    date_exp = format_date(date_exp)
             else:
                 date_exp = "—"
             self.table.setItem(row, 5, QTableWidgetItem(str(date_exp)))

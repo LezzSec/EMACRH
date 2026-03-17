@@ -21,6 +21,7 @@ from core.services.evaluation_service import (
     update_date_champ_polyvalence, get_operateurs_avec_stats_polyvalences,
 )
 from core.utils.logging_config import get_logger
+from core.utils.date_format import format_date, format_datetime
 
 logger = get_logger(__name__)
 
@@ -262,11 +263,11 @@ class DetailOperateurDialog(QDialog):
                 niveau_item.setTextAlignment(Qt.AlignCenter)
                 self.poly_table.setItem(row_idx, 1, niveau_item)
                 # Colonne 2 : Date évaluation (éditable)
-                date_eval = poly['date_evaluation'].strftime('%d/%m/%Y') if poly['date_evaluation'] else "N/A"
+                date_eval = format_date(poly['date_evaluation']) if poly['date_evaluation'] else "N/A"
                 date_eval_item = QTableWidgetItem(date_eval)
                 self.poly_table.setItem(row_idx, 2, date_eval_item)
                 # Colonne 3 : Prochaine évaluation (NON éditable - calculée automatiquement)
-                date_next = poly['prochaine_evaluation'].strftime('%d/%m/%Y') if poly['prochaine_evaluation'] else "N/A"
+                date_next = format_date(poly['prochaine_evaluation']) if poly['prochaine_evaluation'] else "N/A"
                 date_next_item = QTableWidgetItem(date_next)
                 date_next_item.setFlags(date_next_item.flags() & ~Qt.ItemIsEditable)
                 self.poly_table.setItem(row_idx, 3, date_next_item)
@@ -317,7 +318,7 @@ class DetailOperateurDialog(QDialog):
             # Col 0 : Date de l'action
             date_action = anc['date_action']
             if date_action:
-                date_str = date_action.strftime('%d/%m/%Y %H:%M') if hasattr(date_action, 'strftime') else str(date_action)
+                date_str = format_datetime(date_action, default=str(date_action))
             else:
                 date_str = "N/A"
             date_item = QTableWidgetItem(date_str)
@@ -429,7 +430,7 @@ class DetailOperateurDialog(QDialog):
                 self._load_data()
 
                 QMessageBox.information(self, "Succès",
-                    f"Niveau mis à jour.\nProchaine évaluation automatiquement calculée : {prochaine_eval.strftime('%d/%m/%Y')}")
+                    f"Niveau mis à jour.\nProchaine évaluation automatiquement calculée : {format_date(prochaine_eval)}")
 
                 # Émettre l'événement pour le système de déclenchement de documents
                 if ancien_niveau != new_niveau:
@@ -528,7 +529,7 @@ class DetailOperateurDialog(QDialog):
 
                         self._load_data()
                         QMessageBox.information(self, "Succès",
-                            f"Date d'évaluation mise à jour.\nProchaine évaluation automatiquement recalculée : {prochaine_eval.strftime('%d/%m/%Y')}")
+                            f"Date d'évaluation mise à jour.\nProchaine évaluation automatiquement recalculée : {format_date(prochaine_eval)}")
 
                         # Émettre l'événement evaluation.completed
                         try:
