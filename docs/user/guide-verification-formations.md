@@ -2,7 +2,7 @@
 
 Ce guide explique comment vérifier dans la base de données quels employés ont reçu des formations assignées (via bulk assignment ou manuellement).
 
-## Méthode 1 : Script Python (Recommandé) ⚡
+## Méthode 1 : Script Python (Recommandé) 
 
 ### Afficher les formations récentes
 
@@ -31,11 +31,11 @@ py scripts/check_formations.py --stats
 
 ---
 
-## Méthode 2 : Requêtes SQL directes 🗄️
+## Méthode 2 : Requêtes SQL directes 
 
 Ouvrez **MySQL Workbench**, **phpMyAdmin**, ou tout autre client SQL et utilisez les requêtes du fichier :
 
-📁 `App/scripts/requetes_formations.sql`
+ `App/scripts/requetes_formations.sql`
 
 ### Requête la plus simple : Voir toutes les formations
 
@@ -70,7 +70,7 @@ ORDER BY p.nom;
 
 ---
 
-## Méthode 3 : Interface EMAC (Future fonctionnalité) 🖥️
+## Méthode 3 : Interface EMAC (Future fonctionnalité) 
 
 **Note** : Si vous souhaitez une interface graphique dans l'application EMAC pour consulter les formations, il faudrait développer un nouvel onglet ou dialog.
 
@@ -159,7 +159,7 @@ ORDER BY f.date_fin ASC;
 
 ### Erreur : "Unknown column 'created_at'"
 
-➜ Votre table `formation` n'a pas encore la colonne `created_at`.
+ Votre table `formation` n'a pas encore la colonne `created_at`.
 
 **Solution** : Ajoutez-la avec cette migration SQL :
 
@@ -171,7 +171,7 @@ ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIME
 
 ### Aucune formation n'apparaît
 
-➜ Vérifiez que :
+ Vérifiez que :
 1. La table `formation` existe : `SHOW TABLES LIKE 'formation';`
 2. Les données ont été insérées : `SELECT COUNT(*) FROM formation;`
 3. L'opération de bulk assignment a réussi (vérifiez les logs)

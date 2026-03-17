@@ -4,7 +4,7 @@
 
 ---
 
-## 📋 Table des matières
+## Table des matières
 
 1. [Cas 1 : Certificat médical d'embauche](#cas-1--certificat-médical-dembauche)
 2. [Cas 2 : Diplôme ou formation](#cas-2--diplôme-ou-formation)
@@ -24,13 +24,13 @@ Un nouvel employé, **Jean Dupont**, vient d'être embauché. Vous avez reçu so
 ### Actions à réaliser
 
 1. **Ouvrir le module**
-   - Menu ☰ → "Documents RH"
+   - Menu  → "Documents RH"
 
 2. **Sélectionner l'employé**
    - Employé : `Jean Dupont`
 
 3. **Ajouter le document**
-   - Cliquer sur "➕ Ajouter un document"
+   - Cliquer sur " Ajouter un document"
    - **Fichier** : Parcourir → Sélectionner `certificat_medical_dupont_2024.pdf`
    - **Catégorie** : `Certificats médicaux`
    - **Nom d'affichage** : `Visite médicale d'embauche 2024`
@@ -44,8 +44,8 @@ Un nouvel employé, **Jean Dupont**, vient d'être embauché. Vous avez reçu so
 - ✅ Une alerte apparaîtra 30 jours avant la date d'expiration
 
 ### Conseils
-- 💡 Profitez-en pour ajouter tous les autres documents d'embauche (contrat, pièce d'identité, etc.)
-- 💡 Mettez une date d'expiration pour recevoir une alerte avant le renouvellement
+-  Profitez-en pour ajouter tous les autres documents d'embauche (contrat, pièce d'identité, etc.)
+-  Mettez une date d'expiration pour recevoir une alerte avant le renouvellement
 
 ---
 
@@ -57,13 +57,13 @@ Un nouvel employé, **Jean Dupont**, vient d'être embauché. Vous avez reçu so
 ### Actions à réaliser
 
 1. **Ouvrir le module**
-   - Menu ☰ → "Documents RH"
+   - Menu  → "Documents RH"
 
 2. **Sélectionner l'employé**
    - Employé : `Marie Martin`
 
 3. **Ajouter le document**
-   - Cliquer sur "➕ Ajouter un document"
+   - Cliquer sur " Ajouter un document"
    - **Fichier** : Sélectionner `habilitation_electrique_B1V.pdf`
    - **Catégorie** : `Diplômes et formations`
    - **Nom d'affichage** : `Habilitation électrique B1V`
@@ -78,8 +78,8 @@ Un nouvel employé, **Jean Dupont**, vient d'être embauché. Vous avez reçu so
 - ✅ Alerte automatique 3 ans plus tard pour renouvellement
 
 ### Conseils
-- 💡 Ajoutez la référence de formation dans les notes
-- 💡 Scannez le verso du certificat s'il contient des informations importantes
+-  Ajoutez la référence de formation dans les notes
+-  Scannez le verso du certificat s'il contient des informations importantes
 
 ---
 
@@ -91,7 +91,7 @@ Un nouvel employé, **Jean Dupont**, vient d'être embauché. Vous avez reçu so
 ### Actions à réaliser
 
 1. **Ouvrir le module**
-   - Menu ☰ → "Documents RH"
+   - Menu  → "Documents RH"
 
 2. **Sélectionner l'employé**
    - Employé : `Ahmed Benali`
@@ -110,9 +110,9 @@ Un nouvel employé, **Jean Dupont**, vient d'être embauché. Vous avez reçu so
 - ✅ L'employeur sera notifié à temps pour demander le renouvellement
 
 ### Conseils
-- 💡 **CRITIQUE** : Vérifiez bien la date d'expiration !
-- 💡 Ajoutez une note dans votre agenda 2 mois avant l'expiration
-- 💡 Scannez recto ET verso du titre de séjour
+-  **CRITIQUE** : Vérifiez bien la date d'expiration !
+-  Ajoutez une note dans votre agenda 2 mois avant l'expiration
+-  Scannez recto ET verso du titre de séjour
 
 ---
 
@@ -124,7 +124,7 @@ Vous devez archiver une copie de la carte d'identité de **Sophie Lefebvre** pou
 ### Actions à réaliser
 
 1. **Ouvrir le module**
-   - Menu ☰ → "Documents RH"
+   - Menu  → "Documents RH"
 
 2. **Sélectionner l'employé**
    - Employé : `Sophie Lefebvre`
@@ -143,9 +143,9 @@ Vous devez archiver une copie de la carte d'identité de **Sophie Lefebvre** pou
 - ✅ Alerte avant expiration pour demander une mise à jour
 
 ### Conseils
-- 💡 Scannez **recto ET verso** en un seul PDF
-- 💡 Masquez le numéro de sécurité sociale si présent (RGPD)
-- 💡 Vérifiez la date d'expiration sur le document physique
+-  Scannez **recto ET verso** en un seul PDF
+-  Masquez le numéro de sécurité sociale si présent (RGPD)
+-  Vérifiez la date d'expiration sur le document physique
 
 ---
 
@@ -162,9 +162,9 @@ Vous devez archiver une copie de la carte d'identité de **Sophie Lefebvre** pou
 
 **Répétez ces étapes 4 fois** (une fois par document) :
 
-1. Menu ☰ → "Documents RH"
+1. Menu  → "Documents RH"
 2. Sélectionner `Thomas Rousseau`
-3. Cliquer sur "➕ Ajouter un document"
+3. Cliquer sur " Ajouter un document"
 4. Remplir le formulaire et enregistrer
 5. Le dialogue se ferme automatiquement
 6. Recommencer pour le document suivant
@@ -184,9 +184,9 @@ documents/operateurs/M000789/
 ```
 
 ### Conseils
-- 💡 Commencez par les documents les plus importants (contrat, visite médicale)
-- 💡 Utilisez des noms de fichiers clairs et cohérents
-- 💡 Renseignez bien les dates d'expiration pour les documents à validité limitée
+-  Commencez par les documents les plus importants (contrat, visite médicale)
+-  Utilisez des noms de fichiers clairs et cohérents
+-  Renseignez bien les dates d'expiration pour les documents à validité limitée
 
 ---
 
@@ -198,7 +198,7 @@ L'inspection du travail demande à consulter la **dernière visite médicale** d
 ### Méthode rapide
 
 1. **Ouvrir le module**
-   - Menu ☰ → "Documents RH"
+   - Menu  → "Documents RH"
 
 2. **Utiliser les filtres**
    - **Employé** : `Claire Blanc`
@@ -210,7 +210,7 @@ L'inspection du travail demande à consulter la **dernière visite médicale** d
 
 4. **Ouvrir le document**
    - Double-clic sur la ligne du tableau
-   - Ou cliquer sur le bouton 📂
+   - Ou cliquer sur le bouton 
 
 ### Résultat
 - ✅ Document trouvé en moins de 10 secondes
@@ -218,9 +218,9 @@ L'inspection du travail demande à consulter la **dernière visite médicale** d
 - ✅ Prêt à être imprimé ou envoyé par email
 
 ### Conseils
-- 💡 Les filtres sont cumulatifs (employé + catégorie + recherche)
-- 💡 La recherche textuelle cherche dans le nom d'affichage du document
-- 💡 Double-clic est le moyen le plus rapide d'ouvrir
+-  Les filtres sont cumulatifs (employé + catégorie + recherche)
+-  La recherche textuelle cherche dans le nom d'affichage du document
+-  Double-clic est le moyen le plus rapide d'ouvrir
 
 ---
 
@@ -232,7 +232,7 @@ Vous voulez identifier tous les **certificats médicaux expirés** pour planifie
 ### Méthode
 
 1. **Ouvrir le module**
-   - Menu ☰ → "Documents RH"
+   - Menu  → "Documents RH"
 
 2. **Appliquer les filtres**
    - **Employé** : `Tous les employés`
@@ -257,13 +257,13 @@ Vous voulez identifier tous les **certificats médicaux expirés** pour planifie
 | Paul Durand | Visite médicale 2024 | 20/08/2024 | 142 jours |
 
 ### Conseils
-- 💡 Faites cette vérification **chaque mois**
-- 💡 Exportez la liste des documents expirés (copie d'écran ou export Excel)
-- 💡 Planifiez les renouvellements **2 mois à l'avance**
+-  Faites cette vérification **chaque mois**
+-  Exportez la liste des documents expirés (copie d'écran ou export Excel)
+-  Planifiez les renouvellements **2 mois à l'avance**
 
 ---
 
-## 💡 Bonnes pratiques générales
+## Bonnes pratiques générales
 
 ### Nomenclature des fichiers
 
@@ -289,13 +289,13 @@ Vous voulez identifier tous les **certificats médicaux expirés** pour planifie
 
 ### Sauvegardes
 
-- 📦 **Sauvegardez le dossier** `App/documents/` **chaque semaine**
-- 📦 Conservez au moins **3 copies** (local, cloud, externe)
-- 📦 Testez régulièrement vos sauvegardes (restauration)
+-  **Sauvegardez le dossier** `App/documents/` **chaque semaine**
+-  Conservez au moins **3 copies** (local, cloud, externe)
+-  Testez régulièrement vos sauvegardes (restauration)
 
 ---
 
-## 📞 Besoin d'aide ?
+## Besoin d'aide ?
 
 - **Guide complet** : [guide-upload-documents.md](guide-upload-documents.md)
 - **Documentation technique** : [../features/module-documents.md](../features/module-documents.md)

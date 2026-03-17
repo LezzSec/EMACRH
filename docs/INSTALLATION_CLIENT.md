@@ -1,4 +1,4 @@
-# 📦 Installation EMAC - Poste Client
+# Installation EMAC - Poste Client
 
 ## ⚠️ Information importante
 
@@ -23,7 +23,7 @@ L'application EMAC se connecte à une base de données MySQL **hébergée sur un
 
 ---
 
-## 📥 Installation rapide
+## Installation rapide
 
 ### Étape 1 : Récupérer les fichiers
 
@@ -79,7 +79,7 @@ EMAC_DB_NAME=emac_db
 
 ---
 
-## 🔧 Configuration réseau
+## Configuration réseau
 
 ### Vérifier l'accès au serveur MySQL
 
@@ -119,7 +119,7 @@ FLUSH PRIVILEGES;
 
 ---
 
-## 🚀 Déploiement sur plusieurs postes
+## Déploiement sur plusieurs postes
 
 ### Installation silencieuse (administrateur réseau)
 
@@ -155,7 +155,7 @@ Utilisez **Inno Setup** ou **WiX Toolset** pour créer un installateur :
 
 ---
 
-## 🔒 Sécurité
+## Sécurité
 
 ### Bonnes pratiques
 
@@ -180,7 +180,7 @@ Pour chiffrer les communications MySQL :
 
 ---
 
-## 📊 Architecture réseau typique
+## Architecture réseau typique
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -238,7 +238,7 @@ CREATE DATABASE emac_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 ---
 
-## 📞 Support
+## Support
 
 Pour toute question :
 1. Consultez le fichier `LISEZMOI.txt` dans le dossier EMAC

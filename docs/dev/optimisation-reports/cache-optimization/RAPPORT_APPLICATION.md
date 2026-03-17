@@ -1,13 +1,13 @@
-# 💾 Optimisations Cache Mémoire - GUIDE RAPIDE
+# Optimisations Cache Mémoire - GUIDE RAPIDE
 
 **Date** : 2026-01-07
-**Impact** : 🔥🔥🔥 Gains 100-1000x sur données cachées
+**Impact** :  Gains 100-1000x sur données cachées
 
 ---
 
 ## ✅ Ce qui a été fait
 
-### 1. Système de cache générique 🏗️
+### 1. Système de cache générique 
 
 **Fichier** : [`App/core/utils/cache.py`](App/core/utils/cache.py)
 
@@ -18,7 +18,7 @@
 - ✅ Statistiques - Hits, misses, hit_rate
 - ✅ Décorateurs - `@cached`, `@invalidate_on_change`
 
-### 2. Wrappers EMAC 🎯
+### 2. Wrappers EMAC 
 
 **Fichier** : [`App/core/utils/emac_cache.py`](App/core/utils/emac_cache.py)
 
@@ -45,7 +45,7 @@
 
 ---
 
-## 📊 Gains de performance
+## Gains de performance
 
 ### Avant cache ❌
 
@@ -73,14 +73,14 @@ postes = get_cached_postes()  # 0.05ms ✅ Instantané !
 
 | Type de données | Sans cache | Avec cache | Gain |
 |-----------------|------------|------------|------|
-| Postes | 50ms | **0.05ms** | **1000x** 🔥 |
-| Permissions | 30ms | **0.01ms** | **3000x** 🔥 |
-| Rôles | 20ms | **0.01ms** | **2000x** 🔥 |
-| Personnel | 100ms | **0.1ms** | **1000x** 🔥 |
+| Postes | 50ms | **0.05ms** | **1000x**  |
+| Permissions | 30ms | **0.01ms** | **3000x**  |
+| Rôles | 20ms | **0.01ms** | **2000x**  |
+| Personnel | 100ms | **0.1ms** | **1000x**  |
 
 ---
 
-## 💡 Utilisation
+## Utilisation
 
 ### Cas 1 : Utiliser les wrappers (recommandé)
 
@@ -151,7 +151,7 @@ class MyDialog(QDialog):
 
 ---
 
-## 🎯 TTL recommandés
+## TTL recommandés
 
 | Type | TTL | Raison |
 |------|-----|--------|
@@ -164,7 +164,7 @@ class MyDialog(QDialog):
 
 ---
 
-## 🔧 Invalidation
+## Invalidation
 
 ### Quand invalider ?
 
@@ -202,7 +202,7 @@ def update_poste(poste_id, data):
 
 ---
 
-## 📈 Statistiques
+## Statistiques
 
 ### Afficher les stats
 
@@ -222,7 +222,7 @@ print_cache_stats()
 
 ---
 
-## 🚀 Préchauffage
+## Préchauffage
 
 ### Précharger au démarrage
 
@@ -259,24 +259,24 @@ QTimer.singleShot(500, warm_up_cache)
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 ### Guides complets
-- 📖 [docs/dev/optimisation-cache.md](docs/dev/optimisation-cache.md) - Guide détaillé (40+ pages)
+-  [docs/dev/optimisation-cache.md](docs/dev/optimisation-cache.md) - Guide détaillé (40+ pages)
 
 ### Fichiers créés
-- 🐍 [`App/core/utils/cache.py`](App/core/utils/cache.py) - Système générique
-- 🎯 [`App/core/utils/emac_cache.py`](App/core/utils/emac_cache.py) - Wrappers EMAC
+-  [`App/core/utils/cache.py`](App/core/utils/cache.py) - Système générique
+-  [`App/core/utils/emac_cache.py`](App/core/utils/emac_cache.py) - Wrappers EMAC
 
 ---
 
-## 🎉 Résumé
+## Résumé
 
 ### Gains
-- ⚡ **100-1000x plus rapide** sur données cachées
-- 💾 **10-100x moins de requêtes DB**
-- 🎯 **Hit rate 90%+** (la plupart en cache)
-- 🚀 **UX améliorée** (état écran conservé)
+-  **100-1000x plus rapide** sur données cachées
+-  **10-100x moins de requêtes DB**
+-  **Hit rate 90%+** (la plupart en cache)
+-  **UX améliorée** (état écran conservé)
 
 ### Utilisation
 ```python
@@ -294,10 +294,10 @@ def update_poste(id, data):
 ```
 
 ### Architecture
-- 🏗️ **CacheManager** - Singleton thread-safe
-- 🎯 **Wrappers** - Fonctions prêtes à l'emploi
-- 🔧 **Invalidation** - Automatique avec décorateurs
-- 📊 **Statistiques** - Monitoring intégré
+-  **CacheManager** - Singleton thread-safe
+-  **Wrappers** - Fonctions prêtes à l'emploi
+-  **Invalidation** - Automatique avec décorateurs
+-  **Statistiques** - Monitoring intégré
 
 ---
 

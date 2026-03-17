@@ -1,11 +1,11 @@
-# 📊 Monitoring des Performances - Guide Complet
+# Monitoring des Performances - Guide Complet
 
 **Date** : 2026-01-07
 **Impact** : ✅ Détection proactive des régressions, pratiques "grosses boîtes"
 
 ---
 
-## 📑 Table des matières
+## Table des matières
 
 1. [Pourquoi le monitoring](#pourquoi-le-monitoring)
 2. [Architecture du système](#architecture-du-système)
@@ -311,7 +311,7 @@ print_performance_report()
 **Output** :
 ```
 ================================================================================
-📊 RAPPORT DE PERFORMANCE EMAC
+ RAPPORT DE PERFORMANCE EMAC
 ================================================================================
 Total opérations      : 127
 Opérations lentes     : 8
@@ -558,7 +558,7 @@ if production_mode:
 
 ---
 
-## 📊 Exemple complet
+## Exemple complet
 
 ### Scénario : Monitorer une fonctionnalité complète
 
@@ -622,7 +622,7 @@ def process_evaluations_batch(evaluations):
 
 ---
 
-## 🎯 Seuils recommandés
+## Seuils recommandés
 
 | Catégorie | Seuil | Justification |
 |-----------|-------|---------------|

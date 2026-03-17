@@ -1,20 +1,20 @@
 # Système de Gestion des Utilisateurs - EMAC
 
-## 📋 Résumé
+## Résumé
 
 Un système complet de gestion des utilisateurs avec authentification et contrôle d'accès basé sur les rôles a été implémenté dans l'application EMAC. Ce système permet de gérer 3 types d'utilisateurs avec des permissions différenciées.
 
 ---
 
-## ✨ Fonctionnalités implémentées
+## Fonctionnalités implémentées
 
-### 🔐 Authentification
+### Authentification
 - Écran de connexion au démarrage de l'application
 - Hachage sécurisé des mots de passe avec bcrypt
 - Session utilisateur persistante pendant l'utilisation
 - Déconnexion avec confirmation
 
-### 👥 Gestion des rôles
+### Gestion des rôles
 
 #### 1. Administrateur (`admin`)
 - ✅ Accès complet à toutes les fonctionnalités
@@ -23,29 +23,29 @@ Un système complet de gestion des utilisateurs avec authentification et contrô
 
 #### 2. Gestion Production (`gestion_production`)
 - ✅ Accès complet à la gestion du personnel, évaluations et polyvalence
-- 👁️ Lecture seule sur les contrats
-- 👁️ Lecture seule sur le planning (pas de modification d'absences)
+-  Lecture seule sur les contrats
+-  Lecture seule sur le planning (pas de modification d'absences)
 - ❌ Pas d'accès aux documents RH
 
 #### 3. Gestion RH (`gestion_rh`)
 - ✅ Accès complet aux contrats et documents RH
-- 👁️ Lecture seule sur le personnel et la polyvalence
+-  Lecture seule sur le personnel et la polyvalence
 - ❌ Pas d'accès aux évaluations et au planning
 
-### 🛡️ Contrôle d'accès
+### Contrôle d'accès
 - Filtrage automatique du menu en fonction des permissions
 - Désactivation des boutons non autorisés
 - Messages d'erreur explicites en cas d'accès refusé
 - Affichage du nom et rôle de l'utilisateur connecté
 
-### 📊 Audit et logs
+### Audit et logs
 - Enregistrement de toutes les connexions/déconnexions
 - Logs des créations et modifications d'utilisateurs
 - Historique consultable par les administrateurs
 
 ---
 
-## 📁 Fichiers créés
+## Fichiers créés
 
 ### Base de données
 - [`App/database/migrations/001_add_user_management.sql`](App/database/migrations/001_add_user_management.sql)
@@ -93,7 +93,7 @@ Un système complet de gestion des utilisateurs avec authentification et contrô
 
 ---
 
-## 📝 Fichiers modifiés
+## Fichiers modifiés
 
 ### [`App/core/gui/main_qt.py`](App/core/gui/main_qt.py)
 **Modifications** :
@@ -106,7 +106,7 @@ Un système complet de gestion des utilisateurs avec authentification et contrô
 
 ---
 
-## 🚀 Installation et utilisation
+## Installation et utilisation
 
 ### 1. Installer les dépendances
 
@@ -137,30 +137,30 @@ Cette commande va :
 ### 4. Créer des utilisateurs
 
 1. Connectez-vous en tant qu'admin
-2. Cliquez sur le menu (☰) → "Gestion des Utilisateurs"
-3. Cliquez sur "➕ Nouvel Utilisateur"
+2. Cliquez sur le menu () → "Gestion des Utilisateurs"
+3. Cliquez sur " Nouvel Utilisateur"
 4. Remplissez le formulaire et sélectionnez le rôle approprié
 
 ---
 
-## 🎯 Permissions par rôle
+## Permissions par rôle
 
 | Module | Admin | Gestion Production | Gestion RH |
 |--------|-------|-------------------|------------|
-| Personnel | ✅ Complet | ✅ Complet | 👁️ Lecture |
+| Personnel | ✅ Complet | ✅ Complet |  Lecture |
 | Évaluations | ✅ Complet | ✅ Complet | ❌ Aucun |
-| Polyvalence | ✅ Complet | ✅ Complet | 👁️ Lecture |
-| **Contrats** | ✅ Complet | 👁️ **Lecture** | ✅ Complet |
+| Polyvalence | ✅ Complet | ✅ Complet |  Lecture |
+| **Contrats** | ✅ Complet |  **Lecture** | ✅ Complet |
 | **Documents RH** | ✅ Complet | ❌ **Aucun** | ✅ Complet |
-| **Planning/Absences** | ✅ Complet | 👁️ **Lecture** | ❌ Aucun |
-| Postes | ✅ Complet | ✅ Complet | 👁️ Lecture |
-| Historique | ✅ Complet | 👁️ Lecture | 👁️ Lecture |
-| Grilles | ✅ Complet | ✅ Complet | 👁️ Lecture |
+| **Planning/Absences** | ✅ Complet |  **Lecture** | ❌ Aucun |
+| Postes | ✅ Complet | ✅ Complet |  Lecture |
+| Historique | ✅ Complet |  Lecture |  Lecture |
+| Grilles | ✅ Complet | ✅ Complet |  Lecture |
 | **Utilisateurs** | ✅ **Complet** | ❌ Aucun | ❌ Aucun |
 
 ---
 
-## 🔍 Détails techniques
+## Détails techniques
 
 ### Architecture de sécurité
 
@@ -188,7 +188,7 @@ id | utilisateur_id | date_connexion | date_deconnexion | ip_address
 
 ---
 
-## 🧪 Tester le système
+## Tester le système
 
 ### Test 1 : Connexion en tant qu'admin
 ```
@@ -217,7 +217,7 @@ Password: admin123
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 ### Pour les utilisateurs
 Consultez le guide complet : [`docs/user/guide-gestion-utilisateurs.md`](docs/user/guide-gestion-utilisateurs.md)
@@ -227,7 +227,7 @@ Documentation technique : [`docs/dev/authentication-system.md`](docs/dev/authent
 
 ---
 
-## 🔧 Dépannage
+## Dépannage
 
 ### Problème : Module bcrypt introuvable
 ```bash
@@ -263,7 +263,7 @@ WHERE username = 'admin';
 
 ---
 
-## 🎉 Avantages du système
+## Avantages du système
 
 ### Sécurité
 - ✅ Mots de passe hachés (jamais stockés en clair)
@@ -285,7 +285,7 @@ WHERE username = 'admin';
 
 ---
 
-## 📞 Support
+## Support
 
 Pour toute question ou problème :
 1. Consultez la documentation utilisateur ou développeur

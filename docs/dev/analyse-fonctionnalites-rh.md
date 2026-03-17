@@ -1,6 +1,6 @@
 # Analyse : Fonctionnalités RH manquantes dans EMAC
 
-## 📊 État actuel de l'application
+## État actuel de l'application
 
 ### ✅ Fonctionnalités existantes
 - ✅ Gestion du personnel (ajout, modification, statut ACTIF/INACTIF)
@@ -15,7 +15,7 @@
 - ✅ Gestion des documents (table + vues)
 - ✅ Gestion des formations (table existe mais vide)
 
-### 📈 Tables existantes mais non utilisées
+### Tables existantes mais non utilisées
 - ⚠️ `contrat` (0 enregistrements)
 - ⚠️ `formation` (0 enregistrements)
 - ⚠️ `documents` (probablement peu utilisé)
@@ -26,7 +26,7 @@
 
 ---
 
-## 🔴 FONCTIONNALITÉS RH CRITIQUES MANQUANTES
+## FONCTIONNALITÉS RH CRITIQUES MANQUANTES
 
 ### 1. **GESTION DES ABSENCES ET CONGÉS** ⭐⭐⭐
 **Priorité : CRITIQUE**
@@ -376,7 +376,7 @@
 
 ---
 
-## 📋 TABLEAU RÉCAPITULATIF PAR PRIORITÉ
+## TABLEAU RÉCAPITULATIF PAR PRIORITÉ
 
 ### ⭐⭐⭐ CRITIQUE (à implémenter en priorité)
 1. **Gestion des absences et congés** - Bloquant pour planning
@@ -398,7 +398,7 @@
 
 ---
 
-## 🎯 RECOMMANDATIONS D'IMPLÉMENTATION
+## RECOMMANDATIONS D'IMPLÉMENTATION
 
 ### Phase 1 : Fondamentaux (3-6 mois)
 - ✅ Gestion des absences/congés
@@ -423,48 +423,48 @@
 
 ---
 
-## 💡 BONUS : Fonctionnalités modernes
+## BONUS : Fonctionnalités modernes
 
 ### Digitales
-- 📱 Application mobile (congés, pointage)
-- 🔔 Notifications push
-- ✍️ Signature électronique
-- 🤖 Chatbot RH (FAQ)
-- 📊 Dashboards temps réel
+-  Application mobile (congés, pointage)
+-  Notifications push
+-  Signature électronique
+-  Chatbot RH (FAQ)
+-  Dashboards temps réel
 
 ### Collaboratives
-- 💬 Communication interne (messagerie)
-- 👥 Annuaire d'entreprise
-- 🎯 OKR (Objectives and Key Results)
-- 🌟 Reconnaissance entre pairs
-- 📝 Feedback continu
+-  Communication interne (messagerie)
+-  Annuaire d'entreprise
+-  OKR (Objectives and Key Results)
+-  Reconnaissance entre pairs
+-  Feedback continu
 
 ### Analytiques
-- 🔮 Prédiction de turn-over (IA)
-- 📈 Analyse des compétences manquantes
-- 🎓 Recommandations de formation
-- 💰 Simulation budgétaire
+-  Prédiction de turn-over (IA)
+-  Analyse des compétences manquantes
+-  Recommandations de formation
+-  Simulation budgétaire
 
 ---
 
-## ⚖️ ASPECTS LÉGAUX À CONSIDÉRER
+## ASPECTS LÉGAUX À CONSIDÉRER
 
-- 🔒 **RGPD** : Données personnelles, droit à l'oubli, consentement
-- 📜 **Code du travail** : Durée du travail, congés, entretiens
-- 🏥 **Médecine du travail** : Visites obligatoires
-- 💼 **URSSAF** : Déclarations sociales
-- 📊 **Bilan social** : Obligatoire si > 300 salariés
-- 🔐 **Sécurité** : Données sensibles (santé, salaires)
+-  **RGPD** : Données personnelles, droit à l'oubli, consentement
+-  **Code du travail** : Durée du travail, congés, entretiens
+-  **Médecine du travail** : Visites obligatoires
+-  **URSSAF** : Déclarations sociales
+-  **Bilan social** : Obligatoire si > 300 salariés
+-  **Sécurité** : Données sensibles (santé, salaires)
 
 ---
 
-## 🏁 CONCLUSION
+## CONCLUSION
 
 L'application EMAC est **excellente pour la gestion des compétences et polyvalences**, mais il manque les **modules RH administratifs essentiels** :
 
 **Top 3 priorités :**
-1. 🏖️ **Absences/Congés** - Bloquant pour planning réel
-2. 💰 **Paie/Rémunération** - Essentiel administratif
-3. 🕐 **Gestion des temps** - Nécessaire paie et conformité
+1.  **Absences/Congés** - Bloquant pour planning réel
+2.  **Paie/Rémunération** - Essentiel administratif
+3.  **Gestion des temps** - Nécessaire paie et conformité
 
 Avec ces 3 modules, l'application deviendra un **SIRH complet et opérationnel**.

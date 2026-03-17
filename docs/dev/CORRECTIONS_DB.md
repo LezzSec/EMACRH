@@ -1,6 +1,6 @@
 # Corrections des Problèmes de Base de Données EMAC
 
-## 🎯 Problèmes Résolus
+## Problèmes Résolus
 
 ### 1. ✅ Connexions MySQL Répétées
 ### 2. ✅ Absence de Pool de Connexions Efficace
@@ -8,17 +8,17 @@
 
 ---
 
-## 📋 Résumé des Corrections
+## Résumé des Corrections
 
 | Problème | Solution | Impact |
 |----------|----------|--------|
-| **Connexions répétées** | Context managers automatiques | ⚡ -50% connexions DB |
-| **Pool mal utilisé** | Gestionnaire centralisé | ⚡ -40% temps requêtes |
-| **Logs bavards** | Logger silencieux avec cache | ⚡ -80% logs inutiles |
+| **Connexions répétées** | Context managers automatiques |  -50% connexions DB |
+| **Pool mal utilisé** | Gestionnaire centralisé |  -40% temps requêtes |
+| **Logs bavards** | Logger silencieux avec cache |  -80% logs inutiles |
 
 ---
 
-## 🚀 Nouveaux Modules Créés
+## Nouveaux Modules Créés
 
 ### 1. Connection Manager (`core/db/connection_manager.py`)
 
@@ -38,7 +38,7 @@
 
 ---
 
-## 📖 Guide de Migration
+## Guide de Migration
 
 ### Ancien Code → Nouveau Code
 
@@ -200,7 +200,7 @@ def save_data():
 
 ---
 
-## 🛠️ Helpers Disponibles
+## Helpers Disponibles
 
 ### Connection Manager
 
@@ -232,7 +232,7 @@ from core.services.logger_optimized import (
 
 ---
 
-## 📊 Exemples Complets
+## Exemples Complets
 
 ### Exemple 1 : CRUD Complet
 
@@ -319,7 +319,7 @@ def import_personnel(personnel_list):
 
 ---
 
-## ⚡ Performances Améliorées
+## Performances Améliorées
 
 ### Avant Corrections
 
@@ -343,12 +343,12 @@ def import_personnel(personnel_list):
 ```
 [Fonction: get_dashboard_stats]
   - 1 connexion DB avec context manager
-  - Temps: 180ms ⚡ -79%
+  - Temps: 180ms  -79%
   - Logs: 0 (silencieux)
 
 [Fonction: search_personnel]
   - Connexion fermée automatiquement ✅
-  - Temps: 290ms ⚡ -10%
+  - Temps: 290ms  -10%
 
 [Fonction: log_hist]
   - Erreurs avalées silencieusement
@@ -358,7 +358,7 @@ def import_personnel(personnel_list):
 
 ---
 
-## 🔧 Configuration du Logging
+## Configuration du Logging
 
 ### Activer les Logs de Debug
 
@@ -393,7 +393,7 @@ logging.getLogger('core.services.logger_optimized').setLevel(logging.ERROR)
 
 ---
 
-## 📋 Checklist de Migration
+## Checklist de Migration
 
 ### Pour Chaque Fichier Service
 
@@ -422,7 +422,7 @@ logging.getLogger('core.services.logger_optimized').setLevel(logging.ERROR)
 
 ---
 
-## 🧪 Tests
+## Tests
 
 ### Tester la Fermeture des Connexions
 
@@ -460,7 +460,7 @@ except Exception as e:
 
 ---
 
-## 💡 Bonnes Pratiques
+## Bonnes Pratiques
 
 ### 1. Toujours Utiliser les Context Managers
 
@@ -511,7 +511,7 @@ with get_db_cursor() as cur:
 
 ---
 
-## 🎯 Prochaines Étapes
+## Prochaines Étapes
 
 1. **Migrer progressivement** les fichiers services (commencer par les plus utilisés)
 2. **Tester** après chaque migration
@@ -520,7 +520,7 @@ with get_db_cursor() as cur:
 
 ---
 
-## 📞 Support
+## Support
 
 **Documentation :**
 - [connection_manager.py](../../App/core/db/connection_manager.py) - Code source documenté

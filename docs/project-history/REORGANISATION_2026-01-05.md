@@ -108,11 +108,11 @@ Suppressions :
 
 ```
 EMAC/
-├── 📄 CLAUDE.md                 # Instructions pour Claude Code
-├── 📄 README.md                 # Documentation principale
-├── 📄 requirements.txt          # Dépendances Python
+├──  CLAUDE.md                 # Instructions pour Claude Code
+├──  README.md                 # Documentation principale
+├──  requirements.txt          # Dépendances Python
 │
-├── 📁 App/                      # Application principale
+├──  App/                      # Application principale
 │   ├── core/                    # Code source
 │   ├── build/                   # Scripts et specs de build
 │   │   ├── scripts/             # Scripts .bat de build
@@ -126,7 +126,7 @@ EMAC/
 │   ├── scripts/                 # Scripts utilitaires
 │   └── run_emac.vbs             # Lanceur
 │
-├── 📁 docs/                     # Documentation projet
+├──  docs/                     # Documentation projet
 │   ├── deployment/              # Déploiement
 │   ├── developer/               # Documentation développeur
 │   ├── security/                # Sécurité
@@ -134,16 +134,16 @@ EMAC/
 │   ├── user-guides/             # Guides utilisateur
 │   └── project-history/         # Historique
 │
-├── 📁 archives/                 # Archives (ignoré par git)
+├──  archives/                 # Archives (ignoré par git)
 │   ├── docs-obsoletes/          # Docs obsolètes
 │   ├── reorganisation/          # Fichiers de réorganisation
 │   └── build-tests/             # Tests de build
 │
-├── 📁 tools/                    # Outils de maintenance
-├── 📁 tests/                    # Tests projet
-├── 📁 config/                   # Configuration globale
-├── 📁 database/                 # Schémas et migrations
-└── 📁 Deploy/                   # Déploiement
+├──  tools/                    # Outils de maintenance
+├──  tests/                    # Tests projet
+├──  config/                   # Configuration globale
+├──  database/                 # Schémas et migrations
+└──  Deploy/                   # Déploiement
     ├── diagnostics/
     ├── local/
     └── network/

@@ -1,8 +1,8 @@
-# 🚀 Guide d'optimisation du démarrage de l'exécutable EMAC
+# Guide d'optimisation du démarrage de l'exécutable EMAC
 
 ## Problème identifié
 
-**Temps de démarrage actuel : ~15 secondes** ⏱️
+**Temps de démarrage actuel : ~15 secondes** 
 
 ### Causes principales :
 1. **Mode "one-file"** : L'exécutable décompresse 50-100 Mo dans un dossier temporaire à chaque lancement
@@ -43,7 +43,7 @@ Tkinter, matplotlib, tests exclus du build.
 
 ---
 
-## 📦 Comment recompiler l'exécutable optimisé
+## Comment recompiler l'exécutable optimisé
 
 ### Option A : Script automatique (recommandé)
 
@@ -61,18 +61,18 @@ pyinstaller EMAC_optimized.spec --clean --noconfirm
 
 ---
 
-## 📊 Résultat attendu
+## Résultat attendu
 
 | Version | Taille | Temps de démarrage | Notes |
 |---------|--------|-------------------|-------|
 | Ancienne (one-file) | ~80 Mo | **15 secondes** | Tout extrait à chaque fois |
 | **Nouvelle (one-folder)** | ~120 Mo (dossier) | **2-3 secondes** | Pas d'extraction |
 
-**Gain total : ~12 secondes (80% plus rapide)** 🎉
+**Gain total : ~12 secondes (80% plus rapide)** 
 
 ---
 
-## 🛡️ Bonus : Exclure du Windows Defender
+## Bonus : Exclure du Windows Defender
 
 Pour gagner encore 1-2 secondes, ajoutez le dossier aux exclusions :
 
@@ -83,7 +83,7 @@ Pour gagner encore 1-2 secondes, ajoutez le dossier aux exclusions :
 
 ---
 
-## 🔧 Dépannage
+## Dépannage
 
 ### L'exécutable ne se lance pas
 
@@ -106,7 +106,7 @@ Supprimez les modules inutiles dans `excludes` :
 
 ---
 
-## 📝 Fichiers modifiés
+## Fichiers modifiés
 
 ### Code source (optimisations runtime)
 - ✅ [`App/core/gui/main_qt.py`](App/core/gui/main_qt.py) - Imports paresseux
@@ -118,7 +118,7 @@ Supprimez les modules inutiles dans `excludes` :
 
 ---
 
-## 🎯 Distribution
+## Distribution
 
 ### Pour partager l'application :
 
@@ -142,7 +142,7 @@ Supprimez les modules inutiles dans `excludes` :
 
 ---
 
-## 🚀 Prochaines étapes
+## Prochaines étapes
 
 Si vous voulez optimiser encore plus :
 
@@ -150,4 +150,4 @@ Si vous voulez optimiser encore plus :
 2. **Lazy loading avancé** : Charger PyQt5 en arrière-plan
 3. **Pré-connexion MySQL** : Garder une connexion ouverte en permanence
 
-Mais avec les optimisations actuelles, vous devriez déjà être à **~2-3 secondes** ! 🎉
+Mais avec les optimisations actuelles, vous devriez déjà être à **~2-3 secondes** ! 

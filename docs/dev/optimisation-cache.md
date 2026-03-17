@@ -2,11 +2,11 @@
 
 **Date** : 2026-01-07
 **Version** : 1.0
-**Impact** : 🔥🔥🔥 MAJEUR (gains 100-1000x sur données cachées)
+**Impact** :  MAJEUR (gains 100-1000x sur données cachées)
 
 ---
 
-## 📋 Table des matières
+## Table des matières
 
 1. [Vue d'ensemble](#vue-densemble)
 2. [Système de cache](#système-de-cache)
@@ -45,10 +45,10 @@ Appel 3 : get_postes() → Cache hit (0.05ms)  ✅ Instantané !
 
 | Type de données | Sans cache | Avec cache | Gain |
 |-----------------|------------|------------|------|
-| Postes (50 rows) | 50ms | **0.05ms** | **1000x** 🔥 |
-| Permissions | 30ms | **0.01ms** | **3000x** 🔥 |
-| Listes statiques | 20ms | **0.01ms** | **2000x** 🔥 |
-| Personnel actif | 100ms | **0.1ms** | **1000x** 🔥 |
+| Postes (50 rows) | 50ms | **0.05ms** | **1000x**  |
+| Permissions | 30ms | **0.01ms** | **3000x**  |
+| Listes statiques | 20ms | **0.01ms** | **2000x**  |
+| Personnel actif | 100ms | **0.1ms** | **1000x**  |
 
 ---
 
@@ -91,7 +91,7 @@ if donnees is None:
 
 ## Cache par type de données
 
-### 1. Postes 🏢
+### 1. Postes 
 
 **TTL** : 10 minutes (rarement modifiés)
 
@@ -128,7 +128,7 @@ def update_poste(poste_id, data):
     # ✅ Cache invalidé automatiquement après l'exécution
 ```
 
-### 2. Permissions / User 👤
+### 2. Permissions / User 
 
 **TTL** : 1-5 minutes (peuvent changer)
 
@@ -153,7 +153,7 @@ def update_user_role(user_id, new_role_id):
     # ✅ Cache permissions invalidé automatiquement
 ```
 
-### 3. Listes statiques 📋
+### 3. Listes statiques 
 
 **TTL** : 1 heure (changent très rarement)
 
@@ -183,7 +183,7 @@ from core.utils.emac_cache import invalidate_static_lists_cache
 invalidate_static_lists_cache()
 ```
 
-### 4. Personnel 👥
+### 4. Personnel 
 
 **TTL** : 1 minute (change souvent)
 
@@ -584,7 +584,7 @@ print(f"Cache size: {stats['size']} entries")
 # Stats détaillées
 print_cache_stats()
 # ===========================
-# 📊 Cache Statistics
+# Cache Statistics
 # ===========================
 # Hits          : 1250
 # Misses        : 85
@@ -642,9 +642,9 @@ postes_keys = cache.list_keys('postes')
 | **Total** | **50.75ms** | **1 query** |
 
 **Gains** :
-- ⚡ **13x plus rapide** (650ms → 50ms)
-- 💾 **16x moins de requêtes DB** (16 → 1)
-- 🎯 **93% hit rate** (la plupart des données en cache)
+-  **13x plus rapide** (650ms → 50ms)
+-  **16x moins de requêtes DB** (16 → 1)
+-  **93% hit rate** (la plupart des données en cache)
 
 ---
 
@@ -662,14 +662,14 @@ postes_keys = cache.list_keys('postes')
 ## Prochaines étapes
 
 ### Court terme
-1. 🔄 Appliquer le cache dans tous les dialogs
-2. 🔄 Ajouter `@invalidate_on_change` partout
-3. 🔄 Précharger au démarrage
+1.  Appliquer le cache dans tous les dialogs
+2.  Ajouter `@invalidate_on_change` partout
+3.  Précharger au démarrage
 
 ### Moyen terme
-1. 🔄 Cache persistant (disque) pour certaines données
-2. 🔄 Cache partagé (Redis) si multi-utilisateurs
-3. 🔄 Analyse automatique des patterns d'usage
+1.  Cache persistant (disque) pour certaines données
+2.  Cache partagé (Redis) si multi-utilisateurs
+3.  Analyse automatique des patterns d'usage
 
 ---
 

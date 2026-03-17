@@ -1,8 +1,8 @@
-# 🔐 Journal des améliorations de sécurité
+# Journal des améliorations de sécurité
 
 ## Date : 2025-12-16
 
-### 🛡️ Corrections des injections SQL
+### Corrections des injections SQL
 
 #### 1. [App/core/gui/gestion_evaluation.py](App/core/gui/gestion_evaluation.py)
 **Problème** : Noms de colonnes injectés directement dans les requêtes SQL via f-strings
@@ -75,7 +75,7 @@ cursor.execute("INSERT INTO personnel (`nom`, `prenom`, `statut`) VALUES (%s, %s
 
 ---
 
-### 🔐 Sécurisation des credentials MySQL
+### Sécurisation des credentials MySQL
 
 #### [App/core/db/configbd.py](App/core/db/configbd.py)
 
@@ -111,7 +111,7 @@ if not db_password:
 
 ---
 
-## 📊 Résumé des améliorations
+## Résumé des améliorations
 
 | Catégorie | Avant | Après |
 |-----------|-------|-------|
@@ -123,7 +123,7 @@ if not db_password:
 
 ---
 
-## 🎯 Impact
+## Impact
 
 ### Sécurité
 - ✅ Protection complète contre les injections SQL
@@ -142,7 +142,7 @@ if not db_password:
 
 ---
 
-## 📝 Fichiers modifiés
+## Fichiers modifiés
 
 ### Code source
 - `App/core/db/configbd.py` - Chargement sécurisé des credentials
@@ -186,7 +186,7 @@ git status
 
 ---
 
-## 🚀 Recommandations futures
+## Recommandations futures
 
 ### Haute priorité
 - [ ] Changer le mot de passe MySQL par défaut en production
@@ -205,7 +205,7 @@ git status
 
 ---
 
-## 📞 Contact
+## Contact
 
 Pour toute question sur ces changements de sécurité, consulter :
 - Documentation technique : [CLAUDE.md](CLAUDE.md)

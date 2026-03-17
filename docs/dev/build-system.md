@@ -1,12 +1,12 @@
-# 📦 EMAC - Guide de Build et Déploiement
+# EMAC - Guide de Build et Déploiement
 
-## 🎯 Objectif
+## Objectif
 
 Ce guide explique comment compiler EMAC en **incluant uniquement les fichiers essentiels**, sans tous les fichiers de développement, tests, et scripts inutiles en production.
 
 ---
 
-## 🏗️ Structure du Projet Réorganisée
+## Structure du Projet Réorganisée
 
 ### ✅ Fichiers ESSENTIELS (inclus dans le build)
 
@@ -15,44 +15,44 @@ App/
 ├── core/                           # Code source principal
 │   ├── db/
 │   │   ├── configbd.py             ⭐ Configuration BDD (CRITIQUE)
-│   │   └── import_infos.py         📥 Import de données
+│   │   └── import_infos.py          Import de données
 │   │
 │   ├── services/                   # Logique métier
-│   │   ├── auth_service.py         🔐 Authentification
-│   │   ├── logger.py               📝 Logging
-│   │   ├── evaluation_service.py   📊 Évaluations
-│   │   ├── contrat_service.py      📄 Contrats
-│   │   ├── absence_service.py      📅 Absences
+│   │   ├── auth_service.py          Authentification
+│   │   ├── logger.py                Logging
+│   │   ├── evaluation_service.py    Évaluations
+│   │   ├── contrat_service.py       Contrats
+│   │   ├── absence_service.py       Absences
 │   │   └── ...                     (tous les services)
 │   │
 │   ├── gui/                        # Interface graphique
-│   │   ├── main_qt.py              🪟 Fenêtre principale (CRITIQUE)
-│   │   ├── ui_theme.py             🎨 Thème
-│   │   ├── emac_ui_kit.py          🧩 Composants UI
+│   │   ├── main_qt.py               Fenêtre principale (CRITIQUE)
+│   │   ├── ui_theme.py              Thème
+│   │   ├── emac_ui_kit.py           Composants UI
 │   │   └── ...                     (tous les dialogues)
 │   │
 │   ├── exporters/                  # Exports PDF/Excel
-│   │   ├── excel_export.py         📊 Export Excel
-│   │   ├── pdf_export.py           📄 Export PDF
-│   │   └── log_export.py           📋 Export logs
+│   │   ├── excel_export.py          Export Excel
+│   │   ├── pdf_export.py            Export PDF
+│   │   └── log_export.py            Export logs
 │   │
 │   └── utils/                      # Utilitaires
-│       ├── app_paths.py            📂 Gestion chemins (CRITIQUE)
-│       └── permission_helper.py    🔒 Permissions
+│       ├── app_paths.py             Gestion chemins (CRITIQUE)
+│       └── permission_helper.py     Permissions
 │
 ├── database/                       # Base de données
 │   ├── schema/
-│   │   └── bddemac.sql             💾 Schéma BDD
+│   │   └── bddemac.sql              Schéma BDD
 │   └── migrations/
-│       └── *.sql                   🔄 Migrations
+│       └── *.sql                    Migrations
 │
 ├── config/                         # Configuration
-│   ├── .env.example                📝 Template config
-│   └── configure_db.bat            🔧 Script config
+│   ├── .env.example                 Template config
+│   └── configure_db.bat             Script config
 │
-├── .env                            🔐 Config BDD (OBLIGATOIRE)
-├── requirements.txt                📦 Dépendances Python
-└── EMAC_optimized.spec             ⚙️ Configuration PyInstaller
+├── .env                             Config BDD (OBLIGATOIRE)
+├── requirements.txt                 Dépendances Python
+└── EMAC_optimized.spec              Configuration PyInstaller
 ```
 
 ### ❌ Fichiers EXCLUS (non inclus dans le build)
@@ -60,37 +60,37 @@ App/
 ```
 App/
 ├── core/db/
-│   └── insert_*.py                 🚫 Scripts de peuplement BDD
+│   └── insert_*.py                  Scripts de peuplement BDD
 │
-├── scripts/                        🚫 Scripts de développement/migration
+├── scripts/                         Scripts de développement/migration
 │   ├── cleanup_*.py
 │   ├── fix_*.py
 │   ├── install_*.py
 │   ├── test_*.py
 │   └── ...
 │
-├── tests/                          🚫 Tests unitaires/intégration
+├── tests/                           Tests unitaires/intégration
 │   ├── test_*.py
 │   └── run_all_tests.py
 │
-├── build/                          🚫 Fichiers temporaires de build
-├── dist/                           🚫 Builds précédents
-├── dist_nuitka/                    🚫 Builds Nuitka
-├── logs/                           🚫 Logs générés (créés par l'app)
-├── documents/                      🚫 Documents générés (créés par l'app)
+├── build/                           Fichiers temporaires de build
+├── dist/                            Builds précédents
+├── dist_nuitka/                     Builds Nuitka
+├── logs/                            Logs générés (créés par l'app)
+├── documents/                       Documents générés (créés par l'app)
 │
-├── demo_ui_kit.py                  🚫 Démonstration UI
-├── test_startup_time.py            🚫 Test de performance
-├── BUILD_INFO.txt                  🚫 Info de build
-├── nuitka-crash-report.xml         🚫 Rapport de crash
+├── demo_ui_kit.py                   Démonstration UI
+├── test_startup_time.py             Test de performance
+├── BUILD_INFO.txt                   Info de build
+├── nuitka-crash-report.xml          Rapport de crash
 │
-└── build_*.bat                     🚫 Autres scripts de build
+└── build_*.bat                      Autres scripts de build
     (sauf build_clean.bat et build_optimized.bat)
 ```
 
 ---
 
-## 🚀 Compilation
+## Compilation
 
 ### Option 1: Build Propre (RECOMMANDÉ)
 
@@ -103,11 +103,11 @@ build_clean.bat
 
 **Ce que fait ce script:**
 1. ✅ Vérifie les prérequis (main_qt.py, .env, .spec)
-2. 🧹 Nettoie les anciens builds et __pycache__
-3. 🏗️ Compile avec PyInstaller (mode one-folder)
-4. 📋 Copie .env et fichiers SQL
-5. 🗑️ Supprime les fichiers non-essentiels de dist/
-6. 📊 Génère un rapport détaillé
+2.  Nettoie les anciens builds et __pycache__
+3.  Compile avec PyInstaller (mode one-folder)
+4.  Copie .env et fichiers SQL
+5.  Supprime les fichiers non-essentiels de dist/
+6.  Génère un rapport détaillé
 
 ### Option 2: Build Optimisé (ancien script)
 
@@ -118,19 +118,19 @@ build_optimized.bat
 
 ---
 
-## 📋 Fichiers Importants
+## Fichiers Importants
 
 ### 1. BUILD_MANIFEST.txt
 
 Liste **exhaustive** de tous les fichiers inclus/exclus du build.
-📖 Consultez ce fichier pour comprendre ce qui est embarqué dans l'exe.
+ Consultez ce fichier pour comprendre ce qui est embarqué dans l'exe.
 
 ### 2. EMAC_optimized.spec
 
 Configuration PyInstaller avec:
 - ✅ `hiddenimports`: Modules Python à inclure explicitement
 - ❌ `excludes`: Modules à exclure (tests, dev tools, etc.)
-- ⚙️ `optimize=2`: Optimisation bytecode (supprime docstrings)
+-  `optimize=2`: Optimisation bytecode (supprime docstrings)
 
 **Modifications importantes:**
 ```python
@@ -159,27 +159,27 @@ Mis à jour pour ignorer:
 
 ---
 
-## 🎯 Résultat Final
+## Résultat Final
 
 Après compilation avec `build_clean.bat`:
 
 ```
 dist/EMAC/
-├── EMAC.exe                    🚀 Exécutable principal
-├── .env                        🔐 Configuration BDD (copié automatiquement)
+├── EMAC.exe                     Exécutable principal
+├── .env                         Configuration BDD (copié automatiquement)
 │
-├── _internal/                  📦 Bibliothèques Python + DLLs
+├── _internal/                   Bibliothèques Python + DLLs
 │   ├── python*.dll
 │   ├── PyQt5/
 │   ├── mysql/
 │   └── ...
 │
-├── database/                   💾 Schémas SQL (optionnel)
+├── database/                    Schémas SQL (optionnel)
 │   ├── schema/
 │   └── migrations/
 │
-├── logs/                       📝 Dossier de logs (vide au départ)
-└── documents/                  📄 Documents générés (vide au départ)
+├── logs/                        Dossier de logs (vide au départ)
+└── documents/                   Documents générés (vide au départ)
 ```
 
 **Taille typique:** ~150-250 MB (selon les dépendances)
@@ -213,7 +213,7 @@ EMAC_DB_NAME=emac_db
 
 ---
 
-## 📦 Déploiement sur Réseau
+## Déploiement sur Réseau
 
 ### Étape 1: Préparer le package
 
@@ -243,7 +243,7 @@ Z:\Applications\EMAC\EMAC.exe
 
 ---
 
-## 🐛 Dépannage
+## Dépannage
 
 ### ❌ Erreur: "Module not found"
 
@@ -283,7 +283,7 @@ excludes=[
 
 ---
 
-## 📊 Comparaison des Scripts de Build
+## Comparaison des Scripts de Build
 
 | Script                | Taille | Vitesse | Propreté | Recommandé |
 |-----------------------|--------|---------|----------|------------|
@@ -293,7 +293,7 @@ excludes=[
 
 ---
 
-## 🔒 Sécurité
+## Sécurité
 
 ### ⚠️ IMPORTANT: Ne JAMAIS commiter .env
 
@@ -303,7 +303,7 @@ Le fichier `.env` contient des mots de passe et **NE DOIT JAMAIS** être version
 - ✅ `.env` est dans `.gitignore`
 - ✅ Seul `.env.example` est versionné (template)
 
-### 🔐 Bonnes pratiques
+### Bonnes pratiques
 
 1. **Développement:** Utilisez `.env` local avec mot de passe dev
 2. **Production:** Créez un `.env` séparé sur le serveur avec mot de passe production
@@ -311,7 +311,7 @@ Le fichier `.env` contient des mots de passe et **NE DOIT JAMAIS** être version
 
 ---
 
-## 📚 Fichiers de Documentation
+## Fichiers de Documentation
 
 | Fichier                | Description                          |
 |------------------------|--------------------------------------|
@@ -326,10 +326,10 @@ Le fichier `.env` contient des mots de passe et **NE DOIT JAMAIS** être version
 
 En cas de problème:
 
-1. 📖 Consultez [BUILD_MANIFEST.txt](BUILD_MANIFEST.txt) pour voir ce qui est inclus
-2. 🔍 Vérifiez les logs dans `dist\EMAC\logs\`
-3. 🐛 Activez `console=True` dans `EMAC_optimized.spec` pour voir les erreurs
-4. 📧 Contactez le support technique
+1.  Consultez [BUILD_MANIFEST.txt](BUILD_MANIFEST.txt) pour voir ce qui est inclus
+2.  Vérifiez les logs dans `dist\EMAC\logs\`
+3.  Activez `console=True` dans `EMAC_optimized.spec` pour voir les erreurs
+4.  Contactez le support technique
 
 ---
 

@@ -1,6 +1,6 @@
 # Implémentation du Système d'Historique de Polyvalence - Récapitulatif
 
-## 📋 Vue d'ensemble
+## Vue d'ensemble
 
 Ce document récapitule l'implémentation complète du système d'historique de polyvalence pour EMAC.
 
@@ -75,7 +75,7 @@ Interface complète pour import manuel :
 - Vérification de l'historique
 - Calcul de statistiques
 
-## 📁 Fichiers créés/modifiés
+## Fichiers créés/modifiés
 
 ### Nouveaux fichiers
 
@@ -110,7 +110,7 @@ App/
             - Génération résumé adaptatif
 ```
 
-## 🔄 Flux de données
+## Flux de données
 
 ### Flux automatique (logging normal)
 
@@ -174,7 +174,7 @@ Affichage dans tableau
 Double-clic → Dialogue de détails
 ```
 
-## 🎨 Caractéristiques techniques
+## Caractéristiques techniques
 
 ### Avantages du système double table
 
@@ -207,7 +207,7 @@ Double-clic → Dialogue de détails
   - Si un opérateur/poste est supprimé, son historique est aussi supprimé
   - Comportement voulu pour éviter les orphelins
 
-## 📊 Statistiques d'implémentation
+## Statistiques d'implémentation
 
 - **Lignes de code ajoutées** : ~1500
 - **Fichiers créés** : 7
@@ -221,7 +221,7 @@ Double-clic → Dialogue de détails
 - **Tests créés** : 1
 - **Docs créées** : 2
 
-## 🧪 Tests effectués
+## Tests effectués
 
 ✅ **Test 1** : Création de la table
 - Table créée avec succès
@@ -256,7 +256,7 @@ Double-clic → Dialogue de détails
 - Onglet Historique affiche les données
 - Bouton "Import manuel" fonctionnel
 
-## 🚀 Prochaines étapes (optionnel)
+## Prochaines étapes (optionnel)
 
 ### Améliorations possibles
 
@@ -289,7 +289,7 @@ Double-clic → Dialogue de détails
    - Filtres combinés complexes
    - Recherche par batch ID
 
-## 📝 Notes de migration
+## Notes de migration
 
 ### Pour les utilisateurs existants
 
@@ -337,7 +337,7 @@ for _, row in df.iterrows():
 print(f"Import terminé : {len(df)} actions importées")
 ```
 
-## ✨ Conclusion
+## Conclusion
 
 Le système d'historique de polyvalence est **opérationnel et testé**. Il offre :
 
@@ -348,7 +348,7 @@ Le système d'historique de polyvalence est **opérationnel et testé**. Il offr
 - ✅ Performance optimisée
 - ✅ Documentation complète
 
-**Le système est prêt pour la production** ! 🎉
+**Le système est prêt pour la production** ! 
 
 ---
 

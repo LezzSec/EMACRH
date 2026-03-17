@@ -5,7 +5,7 @@
 
 ---
 
-## 📋 Résumé
+## Résumé
 
 Toutes les optimisations créées lors des étapes précédentes ont été **intégrées systématiquement** dans le code existant de l'application EMAC.
 
@@ -17,7 +17,7 @@ Toutes les optimisations créées lors des étapes précédentes ont été **int
 
 ---
 
-## 📊 Fichiers modifiés
+## Fichiers modifiés
 
 ### 1. Services backend (core/services/)
 
@@ -97,7 +97,7 @@ Toutes les optimisations créées lors des étapes précédentes ont été **int
 
 **Impact** :
 ```
-📊 RAPPORT DE PERFORMANCE DE LA SESSION
+ RAPPORT DE PERFORMANCE DE LA SESSION
 ================================================================================
 Total opérations      : 287
 Opérations lentes     : 12
@@ -116,7 +116,7 @@ Par catégorie:
 
 ---
 
-## 🎯 Résultats attendus
+## Résultats attendus
 
 ### Monitoring en action
 
@@ -172,7 +172,7 @@ roles = get_cached_roles()  # Lecture RAM instantanée
 
 ---
 
-## 📈 Impact global estimé
+## Impact global estimé
 
 ### Performance
 - **Logs** : 30-50x moins de requêtes DB → Moins de charge serveur
@@ -191,7 +191,7 @@ roles = get_cached_roles()  # Lecture RAM instantanée
 
 ---
 
-## 🚀 Utilisation
+## Utilisation
 
 ### Lancer l'application normalement
 
@@ -216,7 +216,7 @@ Ouvrir le fichier CSV exporté avec Excel ou LibreOffice pour voir :
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 ### Guides complets
 - [Monitoring de performance](docs/dev/monitoring-performance.md) - 30+ pages
@@ -254,7 +254,7 @@ Ouvrir le fichier CSV exporté avec Excel ou LibreOffice pour voir :
 
 ---
 
-## 🎯 Prochaines étapes (optionnel)
+## Prochaines étapes (optionnel)
 
 Si vous voulez aller plus loin :
 
@@ -275,13 +275,13 @@ Si vous voulez aller plus loin :
 
 ---
 
-## 📞 Contact
+## Contact
 
 **Équipe EMAC**
 Pour toute question sur les optimisations ou le monitoring, consultez la documentation complète dans `docs/dev/`.
 
 ---
 
-**🎉 TOUTES LES OPTIMISATIONS SONT MAINTENANT INTÉGRÉES DANS LE CODE !**
+** TOUTES LES OPTIMISATIONS SONT MAINTENANT INTÉGRÉES DANS LE CODE !**
 
 L'application EMAC est maintenant instrumentée pour détecter automatiquement les régressions de performance et fournir des rapports détaillés à chaque session.

@@ -6,7 +6,7 @@ Ce dossier contient les migrations SQL pour faire évoluer le schéma de la base
 
 | # | Fichier | Description | Date | Status |
 |---|---------|-------------|------|--------|
-| 001 | `001_add_performance_indexes.sql` | Ajout de 29 index de performance | 2026-01-07 | ⏳ À appliquer |
+| 001 | `001_add_performance_indexes.sql` | Ajout de 29 index de performance | 2026-01-07 |  À appliquer |
 
 ## Comment appliquer une migration
 
@@ -96,13 +96,13 @@ DROP INDEX idx_personnel_matricule ON personnel;
 ### Migration 001 - Index de performance
 
 **Gains attendus** :
-- ⚡ 10-100x plus rapide sur les requêtes de lecture
-- 🚀 Amélioration notable au démarrage de l'app
-- 📊 Meilleure scalabilité
+-  10-100x plus rapide sur les requêtes de lecture
+-  Amélioration notable au démarrage de l'app
+-  Meilleure scalabilité
 
 **Impact négatif** :
-- 💾 +5-10% d'espace disque
-- ⏱️ INSERT/UPDATE légèrement plus lents (négligeable)
+-  +5-10% d'espace disque
+-  INSERT/UPDATE légèrement plus lents (négligeable)
 
 **Durée d'application** : 10-30 secondes
 

@@ -6,7 +6,7 @@
 
 ---
 
-## 📚 Table des matières
+## Table des matières
 
 1. [QueryExecutor - Accès base de données](#1-queryexecutor)
 2. [EmacDialog - Dialogs standardisés](#2-emacdialog)

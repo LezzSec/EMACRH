@@ -1,8 +1,8 @@
-# 🔧 Build Scripts
+# Build Scripts
 
 Scripts pour compiler l'application EMAC en exécutable Windows.
 
-## 🚀 Utilisation
+## Utilisation
 
 ```bash
 cd build-scripts
@@ -19,7 +19,7 @@ Le script va :
 
 **Résultat** : `dist/EMAC/EMAC.exe`
 
-## 📁 Structure de sortie
+## Structure de sortie
 
 ```
 dist/EMAC/
@@ -35,7 +35,7 @@ dist/EMAC/
 └── CONFIGURER.bat     # Script config rapide
 ```
 
-## ⚙️ Configuration après build
+## Configuration après build
 
 ```bash
 cd dist/EMAC
@@ -44,7 +44,7 @@ CONFIGURER.bat    # Créer .env
 EMAC.exe          # Lancer l'application
 ```
 
-## 🐛 Problèmes courants
+## Problèmes courants
 
 **"Python non installé"**
 → Installer Python 3.12 et l'ajouter au PATH
@@ -55,7 +55,7 @@ EMAC.exe          # Lancer l'application
 **Build échoue**
 → Vérifier que `App/core/gui/main_qt.py` existe
 
-## 📊 Optimisations
+## Optimisations
 
 Le script exclut automatiquement :
 - pandas, numpy (non utilisés)
@@ -64,7 +64,7 @@ Le script exclut automatiquement :
 
 **Taille attendue** : 80-120 MB
 
-## 📝 Notes
+## Notes
 
 - Build dans `build/` (temporaire)
 - Distribution dans `dist/EMAC/`

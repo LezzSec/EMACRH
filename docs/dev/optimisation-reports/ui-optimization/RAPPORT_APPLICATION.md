@@ -1,13 +1,13 @@
-# 🎨 Optimisations UI / Threads - GUIDE RAPIDE
+# Optimisations UI / Threads - GUIDE RAPIDE
 
 **Date** : 2026-01-07
-**Impact** : 🔥🔥 Réactivité perçue x5-10
+**Impact** :  Réactivité perçue x5-10
 
 ---
 
 ## ✅ Ce qui a été fait
 
-### 1. Système DbWorker optimisé 🚀
+### 1. Système DbWorker optimisé 
 
 **Fichier** : [`App/core/gui/db_worker.py`](App/core/gui/db_worker.py)
 
@@ -21,7 +21,7 @@
 - Configuration automatique
 - API simple et réutilisable
 
-### 2. Composants de chargement 🎭
+### 2. Composants de chargement 
 
 **Fichier** : [`App/core/gui/loading_components.py`](App/core/gui/loading_components.py)
 
@@ -39,7 +39,7 @@
 - ✅ `replace_widget_with_error()` - Remplace par erreur
 - ✅ `replace_widget_with_empty_state()` - Remplace par état vide
 
-### 3. main_qt.py mis à jour ✨
+### 3. main_qt.py mis à jour 
 
 **Fichier** : [`App/core/gui/main_qt.py`](App/core/gui/main_qt.py)
 
@@ -49,7 +49,7 @@
 
 ---
 
-## 🎯 Principe fondamental
+## Principe fondamental
 
 ### ❌ INTERDIT : DB dans le thread principal
 
@@ -68,7 +68,7 @@ def __init__(self):
 # ✅ BON - UI réactive
 def __init__(self):
     # Placeholder immédiat
-    self.list.addItem("⏳ Chargement...")
+    self.list.addItem(" Chargement...")
 
     # Chargement en background
     worker = DbWorker(self._fetch_data)
@@ -90,7 +90,7 @@ def _on_data_loaded(self, results):
 
 ---
 
-## 📖 Utilisation
+## Utilisation
 
 ### Cas 1 : Charger des données (simple)
 
@@ -172,7 +172,7 @@ def load_data(self):
 
 ---
 
-## 🚀 Chargement en 2 temps
+## Chargement en 2 temps
 
 ### Principe
 
@@ -181,7 +181,7 @@ def load_data(self):
            ✅ UI visible avec placeholders
 
 100-300ms → Chargement données en background
-           ⏳ Requêtes DB
+            Requêtes DB
 
 300-800ms → Mise à jour UI avec données réelles
            ✅ Interface complète
@@ -205,8 +205,8 @@ class MainWindow(QMainWindow):
 
     def setup_ui(self):
         """Construit l'UI SANS requêtes DB"""
-        self.label = QLabel("⏳ ...")
-        self.list.addItem("⏳ Chargement...")
+        self.label = QLabel(" ...")
+        self.list.addItem(" Chargement...")
 
     def load_data_async(self):
         """Charge les données en background"""
@@ -217,7 +217,7 @@ class MainWindow(QMainWindow):
 
 ---
 
-## 📊 Impact
+## Impact
 
 ### Avant ❌
 
@@ -236,10 +236,10 @@ class MainWindow(QMainWindow):
 | Recherche | **0ms** | 100-300ms | Réactif ✅ |
 
 **Gains** :
-- ⚡ **5-10x plus rapide perçu**
-- 🎯 **0 freeze** (UI toujours réactive)
-- 📊 **Feedback visuel** partout
-- 🚀 **Sensation de fluidité**
+-  **5-10x plus rapide perçu**
+-  **0 freeze** (UI toujours réactive)
+-  **Feedback visuel** partout
+-  **Sensation de fluidité**
 
 ---
 
@@ -263,21 +263,21 @@ class MainWindow(QMainWindow):
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 ### Guides complets
-- 📖 [docs/dev/optimisation-ui-threads.md](docs/dev/optimisation-ui-threads.md) - Guide détaillé (50+ pages)
+-  [docs/dev/optimisation-ui-threads.md](docs/dev/optimisation-ui-threads.md) - Guide détaillé (50+ pages)
 
 ### Fichiers créés
-- 🐍 [`App/core/gui/db_worker.py`](App/core/gui/db_worker.py) - Système de workers
-- 🎨 [`App/core/gui/loading_components.py`](App/core/gui/loading_components.py) - Composants UI
+-  [`App/core/gui/db_worker.py`](App/core/gui/db_worker.py) - Système de workers
+-  [`App/core/gui/loading_components.py`](App/core/gui/loading_components.py) - Composants UI
 
 ### Fichiers modifiés
-- ✏️ [`App/core/gui/main_qt.py`](App/core/gui/main_qt.py) - Import du système
+-  [`App/core/gui/main_qt.py`](App/core/gui/main_qt.py) - Import du système
 
 ---
 
-## 🔧 Configuration
+## Configuration
 
 ### Pool de threads
 
@@ -293,7 +293,7 @@ Pas besoin de configuration manuelle !
 
 ---
 
-## 🧪 Tests
+## Tests
 
 ### Test rapide
 
@@ -318,24 +318,24 @@ def _fetch_data(self):
 
 ---
 
-## 🎉 Résumé
+## Résumé
 
 ### Gains obtenus
-- ⚡ **Affichage instantané** (50-100ms)
-- 🎯 **0 freeze** de l'interface
-- 📊 **Feedback visuel** partout
-- 🚀 **Sensation de fluidité**
+-  **Affichage instantané** (50-100ms)
+-  **0 freeze** de l'interface
+-  **Feedback visuel** partout
+-  **Sensation de fluidité**
 
 ### Architecture
-- 🏗️ **DbWorker** - Toutes les requêtes en background
-- 🎨 **Loading components** - Placeholders réutilisables
-- 🔧 **Pool configuré** - Concurrence optimale
-- 📖 **Documentation** - Guide complet
+-  **DbWorker** - Toutes les requêtes en background
+-  **Loading components** - Placeholders réutilisables
+-  **Pool configuré** - Concurrence optimale
+-  **Documentation** - Guide complet
 
 ### Prochaines étapes
-1. 🔄 Appliquer à tous les dialogs existants
-2. 🔄 Ajouter cache mémoire (permissions, postes)
-3. 🔄 Lazy loading pour listes longues
+1.  Appliquer à tous les dialogs existants
+2.  Ajouter cache mémoire (permissions, postes)
+3.  Lazy loading pour listes longues
 
 ---
 

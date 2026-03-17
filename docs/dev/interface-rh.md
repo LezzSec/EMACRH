@@ -6,13 +6,13 @@ La nouvelle interface **Gestion RH** remplace l'ancienne interface "Gestion des 
 
 ## Accès
 
-**Menu Principal** → Bouton hamburger (☰) → **"Gestion RH"**
+**Menu Principal** → Bouton hamburger () → **"Gestion RH"**
 
 ---
 
-## 📊 Onglets disponibles
+## Onglets disponibles
 
-### 1. **📊 Tableau de bord**
+### 1. ** Tableau de bord**
 
 Vue d'ensemble complète avec 4 sections :
 
@@ -24,7 +24,7 @@ Vue d'ensemble complète avec 4 sections :
 - Format : `Nom Prénom - Code Poste (Atelier) - Retard: X jours`
 - Couleur : Rouge (#e74c3c)
 
-**📅 Prochaines Évaluations**
+** Prochaines Évaluations**
 - Évaluations à venir dans les 30 prochains jours
 - Liste des 10 prochaines évaluations
 - Format : `Nom Prénom - Code Poste (Atelier) - Dans X jours`
@@ -32,24 +32,24 @@ Vue d'ensemble complète avec 4 sections :
 
 #### Section Absences/Congés (Colonne droite)
 
-**🏖️ Mes Soldes de Congés**
+** Mes Soldes de Congés**
 - Carte affichant :
   - **Congés Payés** : Nombre de jours restants
   - **RTT** : Nombre de jours restants
 - Couleur : Bleu (#3498db)
 
-**📝 Mes Demandes Récentes**
+** Mes Demandes Récentes**
 - Liste des 5 dernières demandes d'absence
 - Code couleur par statut :
-  - 🟠 EN_ATTENTE : Orange
-  - 🟢 VALIDEE : Vert
-  - 🔴 REFUSEE : Rouge
-  - ⚪ ANNULEE : Gris
-- Bouton **"➕ Nouvelle Demande"** pour accès rapide
+  -  EN_ATTENTE : Orange
+  -  VALIDEE : Vert
+  -  REFUSEE : Rouge
+  -  ANNULEE : Gris
+- Bouton **" Nouvelle Demande"** pour accès rapide
 
 ---
 
-### 2. **📅 Calendrier Évaluations**
+### 2. ** Calendrier Évaluations**
 
 Interface complète de suivi des évaluations :
 
@@ -72,17 +72,17 @@ Colonnes :
 - Jours Restants
 
 **Code couleur** :
-- 🔴 Rouge : En retard (jours < 0)
-- 🟠 Orange : Urgent (jours ≤ 30)
-- ⚪ Normal : Pas d'urgence
+-  Rouge : En retard (jours < 0)
+-  Orange : Urgent (jours ≤ 30)
+-  Normal : Pas d'urgence
 
 #### Actions disponibles
-- **📅 Planifier Évaluation** : Planifier une nouvelle évaluation
-- **📤 Exporter** : Exporter le tableau
+- ** Planifier Évaluation** : Planifier une nouvelle évaluation
+- ** Exporter** : Exporter le tableau
 
 ---
 
-### 3. **🏖️ Mes Absences**
+### 3. ** Mes Absences**
 
 Gestion complète de mes absences et congés avec 3 sous-onglets :
 
@@ -130,8 +130,8 @@ Gestion complète de mes absences et congés avec 3 sous-onglets :
 **Sélection année** : Année courante ± 2 ans
 
 **Cartes visuelles** :
-- 🟢 **Congés Payés** : Jours restants (grande taille)
-- 🔵 **RTT** : Jours restants (grande taille)
+-  **Congés Payés** : Jours restants (grande taille)
+-  **RTT** : Jours restants (grande taille)
 
 **Détails complets** :
 
@@ -148,7 +148,7 @@ RTT :
 
 ---
 
-### 4. **📆 Planning Équipe**
+### 4. ** Planning Équipe**
 
 Visualisation des absences de l'équipe :
 
@@ -178,14 +178,14 @@ Interface de validation des demandes d'absence :
 **Actions** :
 1. Sélectionner une demande
 2. Cliquer sur :
-   - 🟢 **Valider** : Approuver la demande
-   - 🔴 **Refuser** : Refuser la demande
+   -  **Valider** : Approuver la demande
+   -  **Refuser** : Refuser la demande
 
 **Confirmation** : Message de confirmation avant validation/refus
 
 ---
 
-## 🎨 Design et ergonomie
+## Design et ergonomie
 
 ### Codes couleur
 - **Rouge** (#e74c3c) : Urgent / En retard / Refusé
@@ -207,7 +207,7 @@ Interface de validation des demandes d'absence :
 
 ---
 
-## 🔄 Flux de travail typique
+## Flux de travail typique
 
 ### Employé standard
 
@@ -242,11 +242,11 @@ Interface de validation des demandes d'absence :
 3. **Planifier les évaluations** :
    - Onglet "Calendrier Évaluations"
    - Filtrer les évaluations en retard
-   - Planifier via le bouton "📅 Planifier Évaluation"
+   - Planifier via le bouton " Planifier Évaluation"
 
 ---
 
-## ⚡ Fonctionnalités principales
+## Fonctionnalités principales
 
 ### ✅ Ce qui fonctionne
 
@@ -280,7 +280,7 @@ Interface de validation des demandes d'absence :
 
 ---
 
-## 🔮 Améliorations futures possibles
+## Améliorations futures possibles
 
 ### Court terme
 - [ ] Intégration complète avec GestionEvaluationDialog
@@ -299,7 +299,7 @@ Interface de validation des demandes d'absence :
 
 ---
 
-## 🐛 Points d'attention
+## Points d'attention
 
 ### Prérequis
 - Tables `demande_absence`, `type_absence`, `solde_conges` doivent exister
@@ -313,7 +313,7 @@ Interface de validation des demandes d'absence :
 
 ---
 
-## 📝 Comparaison avec l'ancienne interface
+## Comparaison avec l'ancienne interface
 
 | Fonctionnalité | Ancienne interface | Nouvelle interface |
 |----------------|-------------------|-------------------|
@@ -323,12 +323,12 @@ Interface de validation des demandes d'absence :
 | **Planning équipe** | ✅ Oui | ✅ Oui |
 | **Soldes** | ✅ Oui | ✅ Oui (plus visuel) |
 | **Validation** | ✅ Oui | ✅ Oui |
-| **Ergonomie** | ⚪ Correcte | ✅ Excellente |
-| **Organisation** | ⚪ Dispersée | ✅ Unifiée |
+| **Ergonomie** |  Correcte | ✅ Excellente |
+| **Organisation** |  Dispersée | ✅ Unifiée |
 
 ---
 
-## 🎯 Objectif atteint
+## Objectif atteint
 
 ✅ **Interface unique** combinant :
 - Calendriers d'évaluation (retrouvés !)
@@ -348,7 +348,7 @@ Interface de validation des demandes d'absence :
 
 ---
 
-## 📞 Support
+## Support
 
 Pour toute question ou suggestion d'amélioration, consultez :
 - [CLAUDE.md](../CLAUDE.md) - Instructions développeur

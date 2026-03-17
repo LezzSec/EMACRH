@@ -1,6 +1,6 @@
-# 📦 Guide de Déploiement Incrémental - EMAC
+# Guide de Déploiement Incrémental - EMAC
 
-## 🎯 Objectif
+## Objectif
 
 Ce guide explique comment déployer les **nouvelles tables** du système de gestion des utilisateurs sur le serveur de production **SANS ÉCRASER** les données existantes.
 
@@ -30,7 +30,7 @@ Le script utilise :
 - ❌ **AUCUN `DELETE`** - Jamais d'effacement de données
 - ❌ **AUCUN `TRUNCATE`** - Jamais de vidage de tables
 
-## 🚀 Méthode 1 : Déploiement Automatique (Recommandé)
+## Méthode 1 : Déploiement Automatique (Recommandé)
 
 ### Étapes
 
@@ -89,7 +89,7 @@ Utilisateur admin créé:
  - IMPORTANT: Changez ce mot de passe dès la première connexion!
 ```
 
-## 📝 Méthode 2 : Déploiement Manuel
+## Méthode 2 : Déploiement Manuel
 
 Si le script automatique ne fonctionne pas :
 
@@ -113,9 +113,9 @@ mysql -h localhost -u root -p emac_db < deploy_incremental.sql
 2. Se connecter au serveur
 3. Menu **File** → **Open SQL Script**
 4. Sélectionner `deploy_incremental.sql`
-5. Cliquer sur **Execute** (éclair ⚡)
+5. Cliquer sur **Execute** (éclair )
 
-## 🔐 Compte Admin par Défaut
+## Compte Admin par Défaut
 
 Après le déploiement, un compte admin est créé :
 
@@ -124,7 +124,7 @@ Après le déploiement, un compte admin est créé :
 
 ⚠️ **IMPORTANT** : Changez ce mot de passe dès la première connexion !
 
-## 🏗️ Créer un Nouvel EXE
+## Créer un Nouvel EXE
 
 Une fois la base de données déployée, créer l'exécutable :
 
@@ -135,7 +135,7 @@ pyinstaller --onefile --windowed --name EMAC --icon=icon.ico core/gui/main_qt.py
 
 L'EXE sera dans le dossier `dist/`
 
-## 🔍 Vérification Post-Déploiement
+## Vérification Post-Déploiement
 
 ### Vérifier que les tables existent
 
@@ -197,7 +197,7 @@ COLLATE utf8mb4_0900_ai_ci;
 - Si les données existent déjà, elles ne seront pas dupliquées
 - Aucun impact sur les données existantes
 
-## 📊 Fichiers Fournis
+## Fichiers Fournis
 
 ```
 App/database/
@@ -206,7 +206,7 @@ App/database/
 └── DEPLOY_README.md            # Ce fichier (guide)
 ```
 
-## 📞 Support
+## Support
 
 En cas de problème :
 1. Vérifier les messages d'erreur dans le terminal
@@ -215,4 +215,4 @@ En cas de problème :
 
 ---
 
-**✨ Bon déploiement !**
+** Bon déploiement !**

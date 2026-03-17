@@ -1,6 +1,6 @@
-# 📋 GUIDE DE MIGRATION - operateurs → personnel
+# GUIDE DE MIGRATION - operateurs → personnel
 
-## 🎯 Objectif
+## Objectif
 Renommer la table `operateurs` en `personnel` dans la base de données **sans perdre aucune donnée**.
 
 ---
@@ -14,7 +14,7 @@ Renommer la table `operateurs` en `personnel` dans la base de données **sans pe
 
 ---
 
-## 📝 PROCÉDURE COMPLÈTE
+## PROCÉDURE COMPLÈTE
 
 ### Étape 1️⃣ : BACKUP (OBLIGATOIRE)
 
@@ -103,7 +103,7 @@ py -m core.gui.main_qt
 
 ---
 
-## 🚨 EN CAS DE PROBLÈME - ROLLBACK
+## EN CAS DE PROBLÈME - ROLLBACK
 
 Si quelque chose ne va pas, vous pouvez **revenir en arrière** :
 
@@ -117,7 +117,7 @@ mysql -u root -p emac_db < App/database/migrations/rollback_personnel_to_operate
 
 ---
 
-## 📊 CHECKLIST DE MIGRATION
+## CHECKLIST DE MIGRATION
 
 - [ ] Backup créé et vérifié
 - [ ] État actuel vérifié (table `operateurs` existe)
@@ -129,7 +129,7 @@ mysql -u root -p emac_db < App/database/migrations/rollback_personnel_to_operate
 
 ---
 
-## 🔍 DÉTAILS TECHNIQUES
+## DÉTAILS TECHNIQUES
 
 ### Ce qui est modifié :
 - Nom de la table : `operateurs` → `personnel`
@@ -144,7 +144,7 @@ mysql -u root -p emac_db < App/database/migrations/rollback_personnel_to_operate
 
 ---
 
-## ❓ FAQ
+## FAQ
 
 **Q: Pourquoi le champ s'appelle encore `operateur_id` ?**
 R: C'est normal ! Le nom du champ ne change pas, c'est juste la table qui est renommée. `operateur_id` fait référence à `personnel.id`.
@@ -160,7 +160,7 @@ R: Non, tous les fichiers ont déjà été modifiés dans le commit.
 
 ---
 
-## 📞 SUPPORT
+## SUPPORT
 
 Si vous rencontrez un problème :
 1. Ne paniquez pas !

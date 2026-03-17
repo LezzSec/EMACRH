@@ -1,11 +1,11 @@
-# 📦 Optimisation du Packaging PyInstaller - Guide Complet
+# Optimisation du Packaging PyInstaller - Guide Complet
 
 **Date** : 2026-01-07
-**Impact** : 🔥🔥🔥 Démarrage 2-3x plus rapide, taille -30-50%, compatible antivirus
+**Impact** :  Démarrage 2-3x plus rapide, taille -30-50%, compatible antivirus
 
 ---
 
-## 📑 Table des matières
+## Table des matières
 
 1. [Problématiques du packaging](#problématiques-du-packaging)
 2. [Optimisations appliquées](#optimisations-appliquées)
@@ -27,9 +27,9 @@
 ```
 Utilisateur double-clique EMAC.exe
   ↓
-Décompression dans TEMP (5-15 secondes) ⏳
+Décompression dans TEMP (5-15 secondes) 
   ↓
-Antivirus scan tous les fichiers (10-30 secondes) 🐌
+Antivirus scan tous les fichiers (10-30 secondes) 
   ↓
 Lancement Python (2-5 secondes)
   ↓
@@ -68,7 +68,7 @@ import mysql.connector  # 0.5-1s
 ```
 UPX compression → Windows Defender alerte ⚠️
 Obfuscation bytecode → Antivirus bloque ❌
-Fichiers temporaires → Scan répété 🐌
+Fichiers temporaires → Scan répété 
 ```
 
 **Conséquences** :
@@ -95,28 +95,28 @@ TOTAL: 170+ MB ❌ Trop lourd
 
 | Optimisation | Gain | Impact |
 |--------------|------|--------|
-| **One-folder** au lieu de one-file | **Démarrage 3-5x plus rapide** | 🔥🔥🔥 |
-| **optimize=2** bytecode Python | **Taille -10%** | 🔥 |
-| **UPX désactivé** | **Pas de faux positifs antivirus** | 🔥🔥🔥 |
-| **strip binaries** | **Taille -15-20%** | 🔥🔥 |
-| **Exclusions** (25+ modules) | **Taille -30-40%** | 🔥🔥🔥 |
-| **Hooks PyQt5/ReportLab** | **Taille -10-15%** | 🔥🔥 |
-| **Imports lazy** | **Démarrage -30-50%** | 🔥🔥🔥 |
+| **One-folder** au lieu de one-file | **Démarrage 3-5x plus rapide** |  |
+| **optimize=2** bytecode Python | **Taille -10%** |  |
+| **UPX désactivé** | **Pas de faux positifs antivirus** |  |
+| **strip binaries** | **Taille -15-20%** |  |
+| **Exclusions** (25+ modules) | **Taille -30-40%** |  |
+| **Hooks PyQt5/ReportLab** | **Taille -10-15%** |  |
+| **Imports lazy** | **Démarrage -30-50%** |  |
 
-### 📊 Résultats attendus
+### Résultats attendus
 
 | Métrique | Avant | Après | Gain |
 |----------|-------|-------|------|
-| **Temps démarrage** | 15-30s | **3-8s** | **3-5x** ⚡ |
-| **Taille totale** | 170 MB | **90-110 MB** | **-35-47%** 💾 |
-| **Faux positifs AV** | Fréquent | **Rare** | 🛡️ |
-| **Temps de build** | 8-12 min | **5-8 min** | -25-40% ⏱️ |
+| **Temps démarrage** | 15-30s | **3-8s** | **3-5x**  |
+| **Taille totale** | 170 MB | **90-110 MB** | **-35-47%**  |
+| **Faux positifs AV** | Fréquent | **Rare** |  |
+| **Temps de build** | 8-12 min | **5-8 min** | -25-40%  |
 
 ---
 
 ## Architecture one-folder vs one-file
 
-### 📁 One-folder (Recommandé ✅)
+### One-folder (Recommandé ✅)
 
 ```
 dist/EMAC/
@@ -141,7 +141,7 @@ dist/EMAC/
 **Inconvénients** :
 - ⚠️ Plus de fichiers (mais peu visible pour l'utilisateur)
 
-### 📄 One-file (Non recommandé ❌)
+### One-file (Non recommandé ❌)
 
 ```
 dist/
@@ -158,7 +158,7 @@ dist/
 - ❌ **Pas de cache**
 - ❌ **UPX souvent nécessaire** (faux positifs)
 
-### 🎯 Recommandation
+### Recommandation
 
 **Toujours utiliser one-folder** sauf si :
 - Distribution sur clé USB (risque de corruption)
@@ -170,7 +170,7 @@ dist/
 
 ## Réduction des imports
 
-### 🐌 Problème : imports lourds au démarrage
+### Problème : imports lourds au démarrage
 
 ```python
 # ❌ main_qt.py classique (LENT)
@@ -246,11 +246,11 @@ if __name__ == '__main__':
 
 | Phase | Avant | Après |
 |-------|-------|-------|
-| **Imports** | 5-15s | **0.5-2s** ⚡ |
-| **Affichage UI** | +15s | **0.5-2s** ⚡ |
-| **Première interaction** | +15s | **1-3s** ⚡ |
+| **Imports** | 5-15s | **0.5-2s**  |
+| **Affichage UI** | +15s | **0.5-2s**  |
+| **Première interaction** | +15s | **1-3s**  |
 
-### 🎯 Stratégie d'imports
+### Stratégie d'imports
 
 ```python
 # ✅ TOUJOURS importer au démarrage
@@ -277,7 +277,7 @@ if __name__ == '__main__':
 
 ## Gestion de l'antivirus
 
-### 🛡️ Problématique
+### Problématique
 
 **Antivirus détecte comme malware** :
 - **UPX** compression → "Packed executable" ⚠️
@@ -317,7 +317,7 @@ coll = COLLECT(
 ```
 One-file:
   → Décompresse dans %TEMP% à chaque lancement
-  → Antivirus scan complet à chaque fois ⏳
+  → Antivirus scan complet à chaque fois 
   → Comportement "suspect"
 
 One-folder:
@@ -380,7 +380,7 @@ signtool sign /f certificate.pfx /p password /tr http://timestamp.digicert.com E
 
 ## Build optimisé
 
-### 🔧 Fichiers créés
+### Fichiers créés
 
 #### 1. **EMAC_optimized.spec**
 
@@ -448,7 +448,7 @@ REM Post-build : structure, config, docs
 REM ...
 ```
 
-### 🚀 Lancer le build
+### Lancer le build
 
 ```bash
 cd EMAC
@@ -471,7 +471,7 @@ dist/EMAC/
 └── LANCER.bat
 ```
 
-### 📊 Taille finale
+### Taille finale
 
 | Composant | Taille | % |
 |-----------|--------|---|
@@ -486,7 +486,7 @@ dist/EMAC/
 **Comparaison** :
 - Avant optimisation : 170 MB
 - Après optimisation : 100 MB
-- **Gain : -41%** 💾
+- **Gain : -41%** 
 
 ---
 
@@ -661,7 +661,7 @@ hiddenimports=[
 
 ---
 
-## 📚 Résumé des fichiers
+## Résumé des fichiers
 
 ### Fichiers créés
 
@@ -706,14 +706,14 @@ Optionnel mais recommandé :
 
 ---
 
-## 🎯 Gains attendus
+## Gains attendus
 
 | Métrique | Avant | Après | Gain |
 |----------|-------|-------|------|
-| **Temps démarrage** | 15-30s | **3-8s** | **3-5x** ⚡ |
-| **Taille** | 170 MB | **100 MB** | **-41%** 💾 |
-| **Antivirus** | 20-30% | **< 1%** | 🛡️ |
-| **Build** | 8-12 min | **5-8 min** | **-25-40%** ⏱️ |
+| **Temps démarrage** | 15-30s | **3-8s** | **3-5x**  |
+| **Taille** | 170 MB | **100 MB** | **-41%**  |
+| **Antivirus** | 20-30% | **< 1%** |  |
+| **Build** | 8-12 min | **5-8 min** | **-25-40%**  |
 
 ---
 

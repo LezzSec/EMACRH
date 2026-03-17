@@ -2,11 +2,11 @@
 
 **Date** : 2026-01-07
 **Version** : 1.0
-**Impact** : 🔥🔥🔥 CRITIQUE (performances x10 à x100)
+**Impact** :  CRITIQUE (performances x10 à x100)
 
 ---
 
-## 📋 Table des matières
+## Table des matières
 
 1. [Vue d'ensemble](#vue-densemble)
 2. [Optimisations réalisées](#optimisations-réalisées)
@@ -46,11 +46,11 @@
 
 | Optimisation | Gain de performance | Complexité | Priorité |
 |-------------|---------------------|------------|----------|
-| Pool MySQL | ⚡ Modéré (réutilisation) | Faible | 🔥🔥🔥 |
-| Index SQL | ⚡⚡⚡ Majeur (10-100x) | Faible | 🔥🔥🔥 |
-| Requêtes optimisées | ⚡⚡ Important (2-5x) | Moyenne | 🔥🔥🔥 |
-| Timeouts | 🛡️ Robustesse | Faible | 🔥🔥 |
-| Context managers | 🧹 Maintenabilité | Faible | 🔥🔥 |
+| Pool MySQL |  Modéré (réutilisation) | Faible |  |
+| Index SQL |  Majeur (10-100x) | Faible |  |
+| Requêtes optimisées |  Important (2-5x) | Moyenne |  |
+| Timeouts |  Robustesse | Faible |  |
+| Context managers |  Maintenabilité | Faible |  |
 
 ---
 
@@ -111,7 +111,7 @@ _connection_pool = mysql.connector.pooling.MySQLConnectionPool(
     charset="utf8mb4",
     use_unicode=True,
     autocommit=False,
-    connection_timeout=5,  # ⚡ Timeout de 5 secondes
+    connection_timeout=5,  #  Timeout de 5 secondes
 )
 ```
 
@@ -251,7 +251,7 @@ for p in personnel:
     polyvalences = cur.fetchall()
 ```
 
-**Problème** : Si 100 personnes → 101 requêtes (1 + 100) 😱
+**Problème** : Si 100 personnes → 101 requêtes (1 + 100) 
 
 #### ✅ BON : 1 seule requête avec JOIN
 
@@ -270,7 +270,7 @@ results = cur.fetchall()
 # Toutes les données en 1 seul appel
 ```
 
-**Gain** : 100 requêtes → 1 requête = 100x plus rapide ! 🚀
+**Gain** : 100 requêtes → 1 requête = 100x plus rapide ! 
 
 ---
 
@@ -288,7 +288,7 @@ results = cur.fetchall()
 | `idx_personnel_matricule` | `matricule` | Recherche par matricule |
 | `idx_personnel_nom_prenom` | `nom, prenom` | Recherche nom/prénom |
 
-#### Table `polyvalence` (6 index) 🔥 CRITIQUE
+#### Table `polyvalence` (6 index)  CRITIQUE
 
 | Index | Colonnes | Usage |
 |-------|----------|-------|
@@ -513,9 +513,9 @@ print(f"Pool name: {pool.pool_name}")
 - [x] ✅ Optimiser la requête d'authentification (1 au lieu de 2)
 - [x] ✅ Créer le fichier SQL avec 29 index
 - [x] ✅ Créer le script Python `apply_performance_indexes.py`
-- [ ] ⏳ Appliquer les index sur la base de production
-- [ ] ⏳ Tester les performances avant/après
-- [ ] ⏳ Monitorer les temps de réponse
+- [ ]  Appliquer les index sur la base de production
+- [ ]  Tester les performances avant/après
+- [ ]  Monitorer les temps de réponse
 
 ### Tests recommandés
 
@@ -629,21 +629,21 @@ print(f"Gain : {temps_sans_index / temps_avec_index:.1f}x plus rapide")
 
 ### Court terme (gains modérés)
 
-1. 🔄 **Mise en cache des permissions** : Stocker les permissions en mémoire après login
-2. 🔄 **Lazy loading des évaluations** : Charger seulement les X premières lignes
-3. 🔄 **Pagination** : Afficher 50 résultats à la fois au lieu de tout
+1.  **Mise en cache des permissions** : Stocker les permissions en mémoire après login
+2.  **Lazy loading des évaluations** : Charger seulement les X premières lignes
+3.  **Pagination** : Afficher 50 résultats à la fois au lieu de tout
 
 ### Moyen terme (gains importants)
 
-1. 🔄 **Query caching** : MySQL query cache pour requêtes identiques
-2. 🔄 **Prepared statements** : Pré-compiler les requêtes fréquentes
-3. 🔄 **Background workers** : Calculs lourds en tâche de fond
+1.  **Query caching** : MySQL query cache pour requêtes identiques
+2.  **Prepared statements** : Pré-compiler les requêtes fréquentes
+3.  **Background workers** : Calculs lourds en tâche de fond
 
 ### Long terme (changements architecturaux)
 
-1. 🔄 **Passer à PostgreSQL** : Meilleures performances pour les requêtes complexes
-2. 🔄 **Redis cache** : Cache externe pour les données fréquentes
-3. 🔄 **Serveur d'application** : Architecture client-serveur au lieu de direct DB
+1.  **Passer à PostgreSQL** : Meilleures performances pour les requêtes complexes
+2.  **Redis cache** : Cache externe pour les données fréquentes
+3.  **Serveur d'application** : Architecture client-serveur au lieu de direct DB
 
 ---
 

@@ -1,11 +1,11 @@
-# 📚 Exemples d'utilisation du système de cache EMAC
+# Exemples d'utilisation du système de cache EMAC
 
 **Date**: 2026-01-07
 **Module**: `core.utils.cache` & `core.utils.emac_cache`
 
 ---
 
-## 🎯 Table des matières
+## Table des matières
 
 1. [Exemples de base](#exemples-de-base)
 2. [Cas d'usage par module](#cas-dusage-par-module)
@@ -475,7 +475,7 @@ class MainWindow(QMainWindow):
         stats = get_cache_stats()
 
         msg = f"""
-📊 Statistiques du cache
+ Statistiques du cache
 
 Hits: {stats['hits']}
 Misses: {stats['misses']}
@@ -543,9 +543,9 @@ class GestionEvaluationDialog(QDialog):
 
 ```python
 # Chercher dans le code:
-# - cur.execute("SELECT * FROM postes WHERE ...")
-# - cur.execute("SELECT * FROM personnel WHERE statut = 'ACTIF'")
-# - cur.execute("SELECT * FROM roles ...")
+# cur.execute("SELECT * FROM postes WHERE ...")
+# cur.execute("SELECT * FROM personnel WHERE statut = 'ACTIF'")
+# cur.execute("SELECT * FROM roles ...")
 ```
 
 **Étape 2**: Remplacer par les wrappers de cache
@@ -603,7 +603,7 @@ print_cache_stats()
 **Output:**
 ```
 ============================================================
-📊 Cache Statistics
+ Cache Statistics
 ============================================================
 Total Entries : 12
 Total Hits    : 487
@@ -674,7 +674,7 @@ postes = get_cached_postes()
 time_cached = (time.time() - start) * 1000
 
 print(f"""
-📊 Test de performance:
+ Test de performance:
 Sans cache    : {time_no_cache:.2f}ms
 Premier appel : {time_first_call:.2f}ms
 Depuis cache  : {time_cached:.2f}ms
@@ -684,7 +684,7 @@ Gain          : {time_no_cache / time_cached:.0f}x plus rapide
 
 **Output typique:**
 ```
-📊 Test de performance:
+ Test de performance:
 Sans cache    : 52.34ms
 Premier appel : 53.12ms
 Depuis cache  : 0.05ms
@@ -708,7 +708,7 @@ Gain          : 1047x plus rapide
 
 ---
 
-## 📚 Ressources
+## Ressources
 
 - [Guide complet du cache](optimisation-cache.md) - Documentation technique complète
 - [Guide rapide](../../OPTIMISATIONS_CACHE_APPLIQUEES.md) - Référence rapide

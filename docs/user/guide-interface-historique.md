@@ -1,10 +1,10 @@
-# 📜 Guide de l'Interface d'Historique Personnel
+# Guide de l'Interface d'Historique Personnel
 
 ## Vue d'ensemble
 
 La nouvelle interface d'historique a été intégrée dans la fiche personnel (DetailOperateurDialog) sous forme d'un onglet "Historique" complet et professionnel.
 
-## 🎯 Caractéristiques principales
+## Caractéristiques principales
 
 ### 1. **Affichage en tableau avec code couleur**
 
@@ -19,9 +19,9 @@ Le tableau principal affiche toutes les actions concernant l'opérateur avec :
 
 #### Code couleur par type d'action :
 
-- **✚ INSERT** (Vert `#10b981`) : Ajout de nouvelle compétence
-- **✎ UPDATE** (Bleu `#3b82f6`) : Modification de compétence ou dates
-- **✕ DELETE** (Rouge `#ef4444`) : Suppression de compétence
+- ** INSERT** (Vert `#10b981`) : Ajout de nouvelle compétence
+- ** UPDATE** (Bleu `#3b82f6`) : Modification de compétence ou dates
+- ** DELETE** (Rouge `#ef4444`) : Suppression de compétence
 - **⚠ ERROR** (Orange `#f59e0b`) : Erreur système
 
 ### 2. **Système de filtres avancés**
@@ -63,25 +63,25 @@ En bas de l'interface, une zone affiche automatiquement les détails de la ligne
 
 **Pour un INSERT :**
 ```
-👤 Opérateur : Nom Prénom
-📍 Poste : 0515
+ Opérateur : Nom Prénom
+ Poste : 0515
 ⭐ Niveau attribué : Niveau 3
-📅 Date évaluation : 12/01/2025
-📅 Prochaine évaluation : 12/01/2035
+ Date évaluation : 12/01/2025
+ Prochaine évaluation : 12/01/2035
 ```
 
 **Pour un UPDATE (niveau) :**
 ```
-👤 Opérateur : Nom Prénom
-📍 Poste : 0515
+ Opérateur : Nom Prénom
+ Poste : 0515
 ⭐ Changement niveau : [N2] → [N4]
   (avec code couleur : ancien en rouge, nouveau en vert)
 ```
 
 **Pour un DELETE :**
 ```
-👤 Opérateur : Nom Prénom
-📍 Poste : 0515
+ Opérateur : Nom Prénom
+ Poste : 0515
 ⭐ Niveau supprimé : Niveau 3
 ```
 
@@ -97,10 +97,10 @@ En bas de l'interface, une zone affiche automatiquement les détails de la ligne
 
 ### 5. **Statistiques en bas de page**
 
-- **Compteur dynamique** : "📊 X action(s) affichée(s) sur Y au total"
+- **Compteur dynamique** : " X action(s) affichée(s) sur Y au total"
 - **Légende des couleurs** : rappel visuel des codes couleur
 
-## 🗄️ Structure des données stockées
+## Structure des données stockées
 
 ### Format JSON dans la colonne `description` de la table `historique`
 
@@ -149,7 +149,7 @@ En bas de l'interface, une zone affiche automatiquement les détails de la ligne
 }
 ```
 
-## 📝 Génération automatique de résumés lisibles
+## Génération automatique de résumés lisibles
 
 L'interface transforme automatiquement les données JSON en phrases compréhensibles :
 
@@ -160,7 +160,7 @@ L'interface transforme automatiquement les données JSON en phrases compréhensi
 | UPDATE (dates) | `{changes: {date_evaluation: {...}}}` | "Modification date d'évaluation sur 0515" |
 | DELETE | `{niveau: 3, poste: "0515"}` | "Suppression : Niveau 3 sur 0515" |
 
-## 🎨 Design et ergonomie
+## Design et ergonomie
 
 ### Éléments visuels :
 
@@ -182,7 +182,7 @@ L'interface transforme automatiquement les données JSON en phrases compréhensi
 - ✅ **Filtres** : mise à jour instantanée du tableau
 - ✅ **Recherche** : résultats en temps réel
 
-## 🔧 Utilisation dans le code
+## Utilisation dans le code
 
 ### Intégration dans la fiche personnel :
 
@@ -211,14 +211,14 @@ history_widget = HistoriquePersonnelTab(
 history_widget.show()
 ```
 
-## 📊 Performance
+## Performance
 
 - **Chargement initial** : toutes les actions de l'opérateur
 - **Filtrage** : en mémoire, instantané
 - **Tri** : natif PyQt5, très rapide
 - **Pagination** : pas nécessaire grâce au scroll optimisé
 
-## 🚀 Fonctionnalités futures possibles
+## Fonctionnalités futures possibles
 
 ### Extensions envisageables :
 
@@ -231,7 +231,7 @@ history_widget.show()
 7. **Fusion d'actions** similaires
 8. **Tags personnalisés** pour catégoriser
 
-## 🔍 Débogage
+## Débogage
 
 ### Vérifier les données :
 
@@ -255,7 +255,7 @@ Les erreurs de chargement affichent un QMessageBox avec :
 - Message d'erreur détaillé
 - Exception Python complète
 
-## 📚 Fichiers concernés
+## Fichiers concernés
 
 | Fichier | Rôle |
 |---------|------|
@@ -277,7 +277,7 @@ Les erreurs de chargement affichent un QMessageBox avec :
 9. ✅ Réinitialiser les filtres
 10. ✅ Redimensionner le splitter
 
-## 🎓 Conseils d'utilisation
+## Conseils d'utilisation
 
 ### Pour les administrateurs :
 

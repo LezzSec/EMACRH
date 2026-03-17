@@ -5,7 +5,7 @@
 
 ---
 
-## 📋 Résumé
+## Résumé
 
 Migration des fichiers UI pour utiliser les versions refactorisées des services RH avec :
 - ✅ Logging automatique
@@ -51,7 +51,7 @@ Migration des fichiers UI pour utiliser les versions refactorisées des services
 
 ---
 
-## 🧪 Tests de régression recommandés
+## Tests de régression recommandés
 
 Après la migration, tester dans `gestion_rh.py` :
 
@@ -100,7 +100,7 @@ Après la migration, tester dans `gestion_rh.py` :
 
 ---
 
-## 📊 Gains apportés
+## Gains apportés
 
 ### Avant (ancien rh_service)
 ```python
@@ -136,7 +136,7 @@ def create_contrat(operateur_id, data):
 
 ---
 
-## 🔍 Vérification du logging automatique
+## Vérification du logging automatique
 
 Après avoir utilisé l'UI, vérifier la table `historique` :
 
@@ -163,7 +163,7 @@ LIMIT 20;
 
 ---
 
-## 🚀 Prochaines étapes
+## Prochaines étapes
 
 ### Phase 1 : Tests de régression (1-2 heures)
 - ✅ Exécuter tous les tests ci-dessus
@@ -198,7 +198,7 @@ Fonctions à refactoriser dans une prochaine itération :
 
 ---
 
-## 📝 Notes de migration
+## Notes de migration
 
 ### Compatibilité
 - ✅ **100% compatible** : Les signatures de fonctions n'ont pas changé

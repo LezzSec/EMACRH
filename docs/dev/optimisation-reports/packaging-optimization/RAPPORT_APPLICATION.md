@@ -1,13 +1,13 @@
-# 📦 Optimisations Packaging PyInstaller - GUIDE RAPIDE
+# Optimisations Packaging PyInstaller - GUIDE RAPIDE
 
 **Date** : 2026-01-07
-**Impact** : 🔥🔥🔥 Démarrage 3-5x plus rapide, taille -40%, antivirus OK
+**Impact** :  Démarrage 3-5x plus rapide, taille -40%, antivirus OK
 
 ---
 
 ## ✅ Ce qui a été fait
 
-### 1. Configuration PyInstaller optimisée 🔧
+### 1. Configuration PyInstaller optimisée 
 
 **Fichier** : [`EMAC_optimized.spec`](EMAC_optimized.spec)
 
@@ -18,7 +18,7 @@
 - ✅ **25+ exclusions** - Modules inutiles exclus
 - ✅ **Hooks personnalisés** - PyQt5 et ReportLab optimisés
 
-### 2. Hooks PyInstaller personnalisés 🎣
+### 2. Hooks PyInstaller personnalisés 
 
 **Dossier** : [`build-scripts/hooks/`](build-scripts/hooks/)
 
@@ -30,7 +30,7 @@
 - ✅ Exclut charts/barcodes non utilisés
 - ✅ Gain : -5-10 MB
 
-### 3. Système d'imports lazy 🚀
+### 3. Système d'imports lazy 
 
 **Fichier** : [`App/core/utils/lazy_imports.py`](App/core/utils/lazy_imports.py)
 
@@ -43,7 +43,7 @@
 - ✅ `preload_common_modules()` - Préchargement intelligent
 - ✅ `preload_heavy_modules()` - Modules lourds en idle
 
-### 4. Script de build optimisé 📜
+### 4. Script de build optimisé 
 
 **Fichier** : [`build-scripts/build_optimized.bat`](build-scripts/build_optimized.bat)
 
@@ -54,7 +54,7 @@
 
 ---
 
-## 📊 Gains de performance
+## Gains de performance
 
 ### Avant optimisation ❌
 
@@ -98,14 +98,14 @@ Taille:
 
 | Métrique | Avant | Après | Gain |
 |----------|-------|-------|------|
-| Temps démarrage | 22-65s | **1-4s** | **5-15x** 🔥 |
-| Taille totale | 170 MB | **100 MB** | **-41%** 💾 |
-| Détections AV | 20-30% | **< 1%** | 🛡️ |
-| Temps build | 8-12 min | **5-8 min** | -25-40% ⏱️ |
+| Temps démarrage | 22-65s | **1-4s** | **5-15x**  |
+| Taille totale | 170 MB | **100 MB** | **-41%**  |
+| Détections AV | 20-30% | **< 1%** |  |
+| Temps build | 8-12 min | **5-8 min** | -25-40%  |
 
 ---
 
-## 💡 Utilisation
+## Utilisation
 
 ### Cas 1 : Build standard (recommandé)
 
@@ -180,7 +180,7 @@ copy App\config\.env.example config\
 
 ---
 
-## 🎯 Comparaison des configurations
+## Comparaison des configurations
 
 | Feature | EMAC.spec (ancien) | EMAC_optimized.spec |
 |---------|-------------------|---------------------|
@@ -195,7 +195,7 @@ copy App\config\.env.example config\
 
 ---
 
-## 🔧 Configuration détaillée
+## Configuration détaillée
 
 ### Exclusions appliquées (25+ modules)
 
@@ -263,7 +263,7 @@ HIDDEN_IMPORTS = [
 
 ---
 
-## 🛡️ Gestion antivirus
+## Gestion antivirus
 
 ### Pourquoi pas de faux positifs ?
 
@@ -326,7 +326,7 @@ signtool sign /f certificate.pfx /p password /tr http://timestamp.digicert.com E
 
 ---
 
-## 🚨 Troubleshooting
+## Troubleshooting
 
 ### Problème : Démarrage lent (> 10s)
 
@@ -369,17 +369,17 @@ hiddenimports=[
 
 ---
 
-## 📚 Documentation complète
+## Documentation complète
 
-- 📖 [Guide complet](docs/dev/optimisation-packaging.md) - 40+ pages
-- 🔧 [EMAC_optimized.spec](EMAC_optimized.spec) - Configuration
-- 🎣 [Hooks PyInstaller](build-scripts/hooks/) - Hooks personnalisés
-- 🚀 [lazy_imports.py](App/core/utils/lazy_imports.py) - Imports lazy
-- 📜 [build_optimized.bat](build-scripts/build_optimized.bat) - Script de build
+-  [Guide complet](docs/dev/optimisation-packaging.md) - 40+ pages
+-  [EMAC_optimized.spec](EMAC_optimized.spec) - Configuration
+-  [Hooks PyInstaller](build-scripts/hooks/) - Hooks personnalisés
+-  [lazy_imports.py](App/core/utils/lazy_imports.py) - Imports lazy
+-  [build_optimized.bat](build-scripts/build_optimized.bat) - Script de build
 
 ---
 
-## 🎉 Résumé
+## Résumé
 
 ### Architecture
 
@@ -404,10 +404,10 @@ Après (one-folder optimisé):
 
 ### Gains
 
-- ⚡ **Démarrage 5-15x plus rapide** (1-4s au lieu de 20-60s)
-- 💾 **Taille -40%** (100 MB au lieu de 170 MB)
-- 🛡️ **Antivirus OK** (< 1% de détections)
-- ⏱️ **Build -30%** (5-8 min au lieu de 8-12 min)
+-  **Démarrage 5-15x plus rapide** (1-4s au lieu de 20-60s)
+-  **Taille -40%** (100 MB au lieu de 170 MB)
+-  **Antivirus OK** (< 1% de détections)
+-  **Build -30%** (5-8 min au lieu de 8-12 min)
 
 ### Commande
 

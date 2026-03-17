@@ -1,11 +1,11 @@
-# 📝 Optimisation des Logs et I/O Disque - Guide Complet
+# Optimisation des Logs et I/O Disque - Guide Complet
 
 **Date** : 2026-01-07
 **Impact** : ⚠️⚠️ Évite micro-lenteurs, gains 10-100x sur logs fréquents
 
 ---
 
-## 📑 Table des matières
+## Table des matières
 
 1. [Problématiques des logs](#problématiques-des-logs)
 2. [Système de logging optimisé](#système-de-logging-optimisé)
@@ -28,9 +28,9 @@ for i in range(1000):
     process_item(i)
 
 # Impact:
-# - 1000 écritures disque (flush à chaque print)
-# - Latence cumulée: 50-500ms selon le disque
-# - Ralentissement visible pour l'utilisateur
+# 1000 écritures disque (flush à chaque print)
+# Latence cumulée: 50-500ms selon le disque
+# Ralentissement visible pour l'utilisateur
 ```
 
 **Pourquoi c'est lent** :
@@ -49,10 +49,10 @@ for poste in postes:  # 100 postes
     update_poste(poste)
 
 # Impact:
-# - 100 INSERT dans la table historique
-# - 100 requêtes réseau → DB
-# - Latence cumulée: 100-500ms
-# - DB surchargée
+# 100 INSERT dans la table historique
+# 100 requêtes réseau → DB
+# Latence cumulée: 100-500ms
+# DB surchargée
 ```
 
 **Pourquoi c'est lent** :
@@ -72,10 +72,10 @@ logger.debug("Données chargées")  # Redondant !
 logger.info("Fin de la fonction")  # Trop verbeux !
 
 # Impact en production:
-# - Logs inutiles → fichiers volumineux (GB)
-# - I/O disque excessif
-# - Performance dégradée
-# - Logs utiles noyés dans le bruit
+# Logs inutiles → fichiers volumineux (GB)
+# I/O disque excessif
+# Performance dégradée
+# Logs utiles noyés dans le bruit
 ```
 
 ### ❌ Problème 4 : Écritures fichiers multiples
@@ -87,9 +87,9 @@ for user in users:
         f.write(f"{user['nom']},{user['prenom']}\\n")
 
 # Impact:
-# - 1000 users = 1000 open() + 1000 close()
-# - Chaque open() = syscall + locks
-# - Latence cumulée: 100-1000ms
+# 1000 users = 1000 open() + 1000 close()
+# Chaque open() = syscall + locks
+# Latence cumulée: 100-1000ms
 ```
 
 ---
@@ -145,13 +145,13 @@ for i in range(1000):
     # Aucune latence I/O dans cette boucle !
 ```
 
-### 📊 Gain de performance
+### Gain de performance
 
 | Opération | Avant (print/log direct) | Après (buffered/async) | Gain |
 |-----------|--------------------------|------------------------|------|
-| **1000 logs** | 100-1000ms (I/O disque) | **1-10ms** (buffer mémoire) | **10-100x** ⚡ |
-| **Latence** | 0.1-1ms par log | **0.001-0.01ms par log** | **10-100x** ⚡ |
-| **Taille fichiers** | Non contrôlée | **10 MB max** (rotation) | ♻️ |
+| **1000 logs** | 100-1000ms (I/O disque) | **1-10ms** (buffer mémoire) | **10-100x**  |
+| **Latence** | 0.1-1ms par log | **0.001-0.01ms par log** | **10-100x**  |
+| **Taille fichiers** | Non contrôlée | **10 MB max** (rotation) |  |
 
 ---
 
@@ -199,13 +199,13 @@ for poste in postes:
 # 100 postes = 2-3 INSERT au lieu de 100 !
 ```
 
-### 📊 Gain de performance
+### Gain de performance
 
 | Métrique | log_hist() (sync) | log_hist_async() (buffered) | Gain |
 |----------|-------------------|------------------------------|------|
-| **100 logs** | 100 INSERT = 50-200ms | **2-3 INSERT = 2-10ms** | **10-50x** ⚡ |
-| **Latence** | 0.5-2ms par log | **0.01-0.1ms par log** | **10-50x** ⚡ |
-| **Charge DB** | 100 requêtes | **2-3 requêtes** | **30-50x moins** 📉 |
+| **100 logs** | 100 INSERT = 50-200ms | **2-3 INSERT = 2-10ms** | **10-50x**  |
+| **Latence** | 0.5-2ms par log | **0.01-0.1ms par log** | **10-50x**  |
+| **Charge DB** | 100 requêtes | **2-3 requêtes** | **30-50x moins**  |
 
 ### ✅ Décorateur auto-log
 
@@ -255,7 +255,7 @@ for i in range(1000):
     logger.info(f"Item {i}")  # Non-bloquant, structuré
 ```
 
-### 📊 Comparaison
+### Comparaison
 
 | Méthode | Latence (1000 logs) | Avantages | Inconvénients |
 |---------|---------------------|-----------|---------------|
@@ -353,7 +353,7 @@ for poste in postes:
 
 ## Migration du code existant
 
-### 🔍 Étape 1 : Détecter les problèmes
+### Étape 1 : Détecter les problèmes
 
 ```bash
 cd App\scripts
@@ -362,25 +362,25 @@ python migrate_to_optimized_logging.py --analyze
 
 **Output** :
 ```
-📊 RAPPORT D'ANALYSE
+ RAPPORT D'ANALYSE
 ====================
-🔴 47 problèmes détectés
+ 47 problèmes détectés
 
   • print_in_loop: 23 occurrences
   • multiple_prints: 15 occurrences
   • log_hist_in_loop: 9 occurrences
 
-📄 App/core/gui/liste_et_grilles.py
+ App/core/gui/liste_et_grilles.py
 ----------------------------------------
   Ligne 145: print() dans boucle for
     → for poste in postes: print(f"Poste: {poste}")...
 
-💡 SUGGESTIONS
+ SUGGESTIONS
 ===============
 Remplacer par oprint() ou get_logger()
 ```
 
-### 🔧 Étape 2 : Remplacer manuellement
+### Étape 2 : Remplacer manuellement
 
 #### Migration print() → oprint()
 
@@ -438,7 +438,7 @@ for poste in postes:
 
 ## Configuration production vs développement
 
-### 🏭 Mode Production (WARNING+)
+### Mode Production (WARNING+)
 
 ```python
 from core.utils.optimized_logger import set_production_mode
@@ -447,10 +447,10 @@ from core.utils.optimized_logger import set_production_mode
 set_production_mode()
 
 # Résultat:
-# - Niveau: WARNING (pas de DEBUG/INFO)
-# - Buffer: 200 logs
-# - Flush: 10 secondes
-# - Fichiers: 10 MB max, rotation
+# Niveau: WARNING (pas de DEBUG/INFO)
+# Buffer: 200 logs
+# Flush: 10 secondes
+# Fichiers: 10 MB max, rotation
 ```
 
 **Avantages** :
@@ -458,7 +458,7 @@ set_production_mode()
 - ✅ Performance maximale (moins d'I/O)
 - ✅ Logs utiles seulement (WARNING/ERROR/CRITICAL)
 
-### 🔧 Mode Développement (INFO+)
+### Mode Développement (INFO+)
 
 ```python
 from core.utils.optimized_logger import set_development_mode
@@ -467,10 +467,10 @@ from core.utils.optimized_logger import set_development_mode
 set_development_mode()
 
 # Résultat:
-# - Niveau: INFO (DEBUG exclu, INFO inclus)
-# - Buffer: 50 logs
-# - Flush: 2 secondes
-# - Fichiers: 10 MB max, rotation
+# Niveau: INFO (DEBUG exclu, INFO inclus)
+# Buffer: 50 logs
+# Flush: 2 secondes
+# Fichiers: 10 MB max, rotation
 ```
 
 **Avantages** :
@@ -478,7 +478,7 @@ set_development_mode()
 - ✅ Flush rapide (voir les logs immédiatement)
 - ✅ Toujours optimisé (buffered/async)
 
-### 🎯 Configuration dans main_qt.py
+### Configuration dans main_qt.py
 
 ```python
 # Dans main_qt.py
@@ -502,17 +502,17 @@ if __name__ == '__main__':
 
 ---
 
-## 📊 Résumé des gains
+## Résumé des gains
 
 | Optimisation | Gain | Impact |
 |--------------|------|--------|
-| **print() → oprint()** | **10-100x** sur boucles | ⚡⚡ |
-| **print() → logger** | **10-100x** + structuré | ⚡⚡⚡ |
-| **log_hist() → log_hist_async()** | **10-50x**, 30-50x moins de requêtes DB | ⚡⚡⚡ |
-| **Écriture fichier par batch** | **10-100x** sur exports | ⚡⚡ |
-| **Niveau WARNING en prod** | Fichiers 5-10x plus petits | 💾 |
+| **print() → oprint()** | **10-100x** sur boucles |  |
+| **print() → logger** | **10-100x** + structuré |  |
+| **log_hist() → log_hist_async()** | **10-50x**, 30-50x moins de requêtes DB |  |
+| **Écriture fichier par batch** | **10-100x** sur exports |  |
+| **Niveau WARNING en prod** | Fichiers 5-10x plus petits |  |
 
-### 🎯 Exemple concret
+### Exemple concret
 
 **Cas** : Export de 1000 lignes dans un CSV
 

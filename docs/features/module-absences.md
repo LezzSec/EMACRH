@@ -1,10 +1,10 @@
-# 🏖️ MODULE GESTION DES ABSENCES ET CONGÉS - EMAC
+# MODULE GESTION DES ABSENCES ET CONGÉS - EMAC
 
 ## ✅ Module complètement installé et fonctionnel !
 
 ---
 
-## 📋 CE QUI A ÉTÉ CRÉÉ
+## CE QUI A ÉTÉ CRÉÉ
 
 ### 1. **Structure de base de données** ✅
 **Fichier:** `App/Version BDD/schema_absences_conges.sql`
@@ -47,14 +47,14 @@
 
 **5 onglets fonctionnels:**
 
-#### 📂 Onglet 1: **Mes Demandes**
+#### Onglet 1: **Mes Demandes**
 - Liste de toutes les demandes du personnel
 - Filtres par année et statut (En attente, Validées, Refusées)
 - Visualisation: dates, nombre de jours, motif, statut, validateur
 - **Action:** Annuler une demande en attente
 - Code couleur: vert (validée), rouge (refusée)
 
-#### ➕ Onglet 2: **Nouvelle Demande**
+#### Onglet 2: **Nouvelle Demande**
 - Formulaire complet de demande
 - Sélection du type d'absence (dropdown)
 - Date de début/fin avec calendrier popup
@@ -63,15 +63,15 @@
 - Motif (optionnel)
 - Bouton "Soumettre" vert avec confirmation
 
-#### 📅 Onglet 3: **Calendrier**
+#### Onglet 3: **Calendrier**
 - Calendrier visuel mensuel
 - Clic sur un jour → affiche les absences de l'équipe
 - Liste des absents du jour sélectionné
 
-#### 💰 Onglet 4: **Mes Soldes**
+#### Onglet 4: **Mes Soldes**
 - **2 grandes cards colorées:**
-  - 🟢 Congés Payés (vert) - affichage du solde restant
-  - 🔵 RTT (bleu) - affichage du solde restant
+  -  Congés Payés (vert) - affichage du solde restant
+  -  RTT (bleu) - affichage du solde restant
 - Détails complets:
   - CP acquis / reportés N-1 / pris / restant
   - RTT acquis / pris / restant
@@ -81,13 +81,13 @@
 - Liste des demandes EN_ATTENTE de toute l'équipe
 - Affichage: personnel, type, dates, nombre de jours, motif
 - **Boutons d'action:**
-  - 🟢 Valider (vert)
-  - 🔴 Refuser (rouge)
+  -  Valider (vert)
+  -  Refuser (rouge)
 - Mise à jour automatique des soldes après validation
 
 ---
 
-## 🚀 UTILISATION
+## UTILISATION
 
 ### Lancer le module directement (test)
 ```bash
@@ -114,7 +114,7 @@ def ouvrir_gestion_absences(self):
 
 ---
 
-## 📊 WORKFLOW COMPLET
+## WORKFLOW COMPLET
 
 ### 1. **Demande d'absence (employé)**
 ```
@@ -158,7 +158,7 @@ Employé → Mes Soldes
 
 ---
 
-## 🎨 FONCTIONNALITÉS AVANCÉES
+## FONCTIONNALITÉS AVANCÉES
 
 ### ✅ Calcul intelligent des jours ouvrés
 - Exclut automatiquement les weekends (samedi/dimanche)
@@ -198,7 +198,7 @@ Employé → Mes Soldes
 
 ---
 
-## 🔧 CONFIGURATION ET PERSONNALISATION
+## CONFIGURATION ET PERSONNALISATION
 
 ### Modifier les soldes par défaut
 ```python
@@ -224,7 +224,7 @@ INSERT INTO jours_feries (date_ferie, libelle, fixe) VALUES
 
 ---
 
-## 📈 STATISTIQUES DISPONIBLES
+## STATISTIQUES DISPONIBLES
 
 ### Vue `v_stats_absences`
 ```sql
@@ -241,7 +241,7 @@ Affiche par personnel:
 
 ---
 
-## 🔐 SÉCURITÉ ET PERMISSIONS
+## SÉCURITÉ ET PERMISSIONS
 
 ### Permissions recommandées (à implémenter):
 - **Employé** : Voir ses demandes, créer demande, annuler EN_ATTENTE, voir ses soldes
@@ -250,7 +250,7 @@ Affiche par personnel:
 
 ---
 
-## 📝 TODO / AMÉLIORATIONS FUTURES
+## TODO / AMÉLIORATIONS FUTURES
 
 ### Priorité HAUTE ⭐⭐⭐
 - [ ] Système d'authentification (récupérer personnel_id connecté)
@@ -273,7 +273,7 @@ Affiche par personnel:
 
 ---
 
-## 🎯 TESTS À FAIRE
+## TESTS À FAIRE
 
 ### Test 1: Création de demande
 ```
@@ -308,7 +308,7 @@ Affiche par personnel:
 
 ---
 
-## 📞 SUPPORT
+## SUPPORT
 
 Pour toute question ou problème:
 1. Vérifier que les tables sont créées: `py install_absences_module.py`
@@ -326,7 +326,7 @@ Pour toute question ou problème:
 
 ---
 
-## 🎉 CONCLUSION
+## CONCLUSION
 
 Le module de **Gestion des Absences et Congés** est maintenant **100% fonctionnel** !
 
@@ -347,4 +347,4 @@ Le module de **Gestion des Absences et Congés** est maintenant **100% fonctionn
 3. Configurer les équipes/services
 4. Former les utilisateurs
 
-**Bravo ! 🎊** Vous avez maintenant un vrai SIRH pour les RH !
+**Bravo ! ** Vous avez maintenant un vrai SIRH pour les RH !

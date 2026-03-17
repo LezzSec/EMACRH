@@ -1,7 +1,7 @@
-# 🚀 Optimisations Base de Données - GUIDE RAPIDE
+# Optimisations Base de Données - GUIDE RAPIDE
 
 **Date** : 2026-01-07
-**Impact** : 🔥🔥🔥 Performances x10 à x100
+**Impact** :  Performances x10 à x100
 
 ---
 
@@ -59,9 +59,9 @@ with DatabaseCursor(dictionary=True) as cur:
 
 ---
 
-## ⚡ ÉTAPE CRITIQUE : Appliquer les index
+## ÉTAPE CRITIQUE : Appliquer les index
 
-### 🔴 IMPORTANT : Les index NE SONT PAS ENCORE APPLIQUÉS
+### IMPORTANT : Les index NE SONT PAS ENCORE APPLIQUÉS
 
 Les fichiers ont été créés mais **les index doivent être ajoutés à la base de données**.
 
@@ -106,7 +106,7 @@ SHOW INDEX FROM polyvalence;
 
 ---
 
-## 📊 Impact attendu des optimisations
+## Impact attendu des optimisations
 
 ### Avant optimisations ❌
 
@@ -121,21 +121,21 @@ SHOW INDEX FROM polyvalence;
 
 | Opération | Temps | Gain |
 |-----------|-------|------|
-| Ouverture app | **0.5-1s** | **5x plus rapide** 🚀 |
-| Dashboard | **0.1-0.3s** | **10x plus rapide** 🚀 |
-| Recherche évaluations | **0.01-0.05s** | **50x plus rapide** 🚀 |
+| Ouverture app | **0.5-1s** | **5x plus rapide**  |
+| Dashboard | **0.1-0.3s** | **10x plus rapide**  |
+| Recherche évaluations | **0.01-0.05s** | **50x plus rapide**  |
 | Freeze après veille | **Résolu** ✅ | |
 
 ### Avec 500+ opérateurs
 
 | Opération | Avant | Après | Gain |
 |-----------|-------|-------|------|
-| Chargement complet | 15s | 0.3s | **50x** 🔥 |
-| Tri par évaluation | 5s | 0.05s | **100x** 🔥 |
+| Chargement complet | 15s | 0.3s | **50x**  |
+| Tri par évaluation | 5s | 0.05s | **100x**  |
 
 ---
 
-## 🎯 Checklist de déploiement
+## Checklist de déploiement
 
 ### Étapes déjà faites ✅
 
@@ -147,12 +147,12 @@ SHOW INDEX FROM polyvalence;
 - [x] ✅ Script Python d'application créé
 - [x] ✅ Documentation complète rédigée
 
-### À FAIRE MAINTENANT 🔴
+### À FAIRE MAINTENANT 
 
 - [ ] ⚠️ **APPLIQUER LES INDEX** : `python App/scripts/apply_performance_indexes.py`
-- [ ] ⏳ Tester l'application après application des index
-- [ ] ⏳ Vérifier les temps de chargement
-- [ ] ⏳ Tester la reconnexion après veille PC
+- [ ]  Tester l'application après application des index
+- [ ]  Vérifier les temps de chargement
+- [ ]  Tester la reconnexion après veille PC
 
 ### Tests recommandés
 
@@ -197,20 +197,20 @@ print("Si > 1s → Index pas appliqué ou pas utilisé ⚠️")
 
 ---
 
-## 📚 Documentation complète
+## Documentation complète
 
 **Guide détaillé** : [`docs/dev/optimisation-database.md`](docs/dev/optimisation-database.md)
 
 Ce document contient :
-- 📖 Explication détaillée de chaque optimisation
-- 💡 Exemples de code avant/après
-- 📊 Tableau complet des 29 index créés
-- 🔧 Guide de débogage
-- 🎓 Bonnes pratiques pour les développeurs
+-  Explication détaillée de chaque optimisation
+-  Exemples de code avant/après
+-  Tableau complet des 29 index créés
+-  Guide de débogage
+-  Bonnes pratiques pour les développeurs
 
 ---
 
-## 🛠️ Pour les développeurs : Comment utiliser
+## Pour les développeurs : Comment utiliser
 
 ### Écrire une nouvelle fonction DB
 
@@ -278,7 +278,7 @@ with DatabaseConnection() as conn:
 
 ---
 
-## 🔥 Points critiques à retenir
+## Points critiques à retenir
 
 ### 1. Toujours utiliser get_connection() ✅
 
@@ -321,7 +321,7 @@ cur.execute("""
 """)
 ```
 
-### 4. APPLIQUER LES INDEX ! 🔴
+### 4. APPLIQUER LES INDEX ! 
 
 ```bash
 # ⚠️ CRITIQUE - À FAIRE MAINTENANT
@@ -333,7 +333,7 @@ python apply_performance_indexes.py
 
 ---
 
-## 📞 Support
+## Support
 
 ### En cas de problème
 
@@ -353,20 +353,20 @@ python apply_performance_indexes.py
 
 ---
 
-## 🎉 Résumé
+## Résumé
 
 ### Ce qui change pour les utilisateurs
 
-- ⚡ Application **beaucoup plus rapide** (5-100x selon les opérations)
-- 🛡️ **Plus de freeze** après veille PC
-- 📊 **Meilleure scalabilité** si le nombre d'opérateurs augmente
+-  Application **beaucoup plus rapide** (5-100x selon les opérations)
+-  **Plus de freeze** après veille PC
+-  **Meilleure scalabilité** si le nombre d'opérateurs augmente
 
 ### Ce qui change pour les développeurs
 
-- 🧹 **Code plus propre** avec les context managers
-- 🔒 **Plus sûr** (commit/rollback automatiques)
-- 📚 **Mieux documenté** ([`docs/dev/optimisation-database.md`](docs/dev/optimisation-database.md))
-- 🚀 **Plus performant** (pool + index)
+-  **Code plus propre** avec les context managers
+-  **Plus sûr** (commit/rollback automatiques)
+-  **Mieux documenté** ([`docs/dev/optimisation-database.md`](docs/dev/optimisation-database.md))
+-  **Plus performant** (pool + index)
 
 ---
 

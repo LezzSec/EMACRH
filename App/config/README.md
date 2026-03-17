@@ -1,4 +1,4 @@
-# 🚀 Guide de démarrage rapide - EMAC
+# Guide de démarrage rapide - EMAC
 
 ## Installation et configuration en 3 étapes
 
@@ -31,7 +31,7 @@ Ou double-cliquer sur `run_emac.vbs`
 
 ---
 
-## 📝 Configuration avancée
+## Configuration avancée
 
 Pour plus de détails sur la configuration sécurisée, voir :
 - [docs/security/database-credentials.md](../../docs/security/database-credentials.md) - Guide complet de configuration MySQL
@@ -60,7 +60,7 @@ mysql -u root -p emac_db < database/schema/bddemac.sql
 
 ---
 
-## 🔐 Sécurité
+## Sécurité
 
 Le fichier `.env` contient des informations sensibles (mot de passe) :
 - ✅ Il est dans `.gitignore` et ne sera jamais commité
@@ -69,6 +69,6 @@ Le fichier `.env` contient des informations sensibles (mot de passe) :
 
 ---
 
-## 📞 Support
+## Support
 
 Pour des questions ou problèmes, consulter la documentation complète dans [../CLAUDE.md](../CLAUDE.md)

@@ -1,4 +1,4 @@
-# 📝 Optimisations Logs et I/O - GUIDE RAPIDE
+# Optimisations Logs et I/O - GUIDE RAPIDE
 
 **Date** : 2026-01-07
 **Impact** : ⚠️⚠️ Évite micro-lenteurs, gains 10-100x
@@ -7,7 +7,7 @@
 
 ## ✅ Ce qui a été fait
 
-### 1. Système de logging optimisé 🚀
+### 1. Système de logging optimisé 
 
 **Fichier** : [`App/core/utils/optimized_logger.py`](App/core/utils/optimized_logger.py)
 
@@ -17,7 +17,7 @@
 - ✅ **Niveaux configurables** - WARNING en prod, INFO en dev
 - ✅ **oprint()** - Remplacement optimisé de print()
 
-### 2. Logger DB optimisé 💾
+### 2. Logger DB optimisé 
 
 **Fichier** : [`App/core/services/optimized_db_logger.py`](App/core/services/optimized_db_logger.py)
 
@@ -26,7 +26,7 @@
 - ✅ **Auto-flush 10s** - Flush automatique périodique
 - ✅ **Décorateur @auto_log_db** - Log automatique après fonction
 
-### 3. Script de migration 🔧
+### 3. Script de migration 
 
 **Fichier** : [`App/scripts/migrate_to_optimized_logging.py`](App/scripts/migrate_to_optimized_logging.py)
 
@@ -34,7 +34,7 @@
 - ✅ Détecte log_hist() dans des boucles
 - ✅ Génère rapport + suggestions
 
-### 4. Documentation complète 📚
+### 4. Documentation complète 
 
 **Fichier** : [`docs/dev/optimisation-logs-io.md`](docs/dev/optimisation-logs-io.md)
 
@@ -44,7 +44,7 @@
 
 ---
 
-## 📊 Gains de performance
+## Gains de performance
 
 ### Avant optimisation ❌
 
@@ -82,14 +82,14 @@ for poste in postes:  # 100 postes
 
 | Opération | Avant | Après | Gain |
 |-----------|-------|-------|------|
-| **1000 print()** | 100-1000ms | **10-50ms** | **10-100x** ⚡ |
-| **100 log_hist()** | 50-200ms | **2-10ms** | **10-50x** ⚡ |
-| **Fichiers logs** | Non contrôlé | **10 MB max** | ♻️ |
-| **Requêtes DB** | N requêtes | **N/50 requêtes** | **30-50x moins** 📉 |
+| **1000 print()** | 100-1000ms | **10-50ms** | **10-100x**  |
+| **100 log_hist()** | 50-200ms | **2-10ms** | **10-50x**  |
+| **Fichiers logs** | Non contrôlé | **10 MB max** |  |
+| **Requêtes DB** | N requêtes | **N/50 requêtes** | **30-50x moins**  |
 
 ---
 
-## 💡 Utilisation
+## Utilisation
 
 ### Cas 1 : Remplacer print() dans une boucle
 
@@ -201,7 +201,7 @@ with open('export.csv', 'w') as f:
 
 ---
 
-## 🔧 Migration du code existant
+## Migration du code existant
 
 ### Étape 1 : Détecter les problèmes
 
@@ -212,15 +212,15 @@ python migrate_to_optimized_logging.py --analyze
 
 **Output exemple** :
 ```
-📊 RAPPORT D'ANALYSE
+ RAPPORT D'ANALYSE
 ====================
-🔴 47 problèmes détectés
+ 47 problèmes détectés
 
   • print_in_loop: 23 occurrences
   • multiple_prints: 15 occurrences
   • log_hist_in_loop: 9 occurrences
 
-💡 SUGGESTIONS
+ SUGGESTIONS
 ===============
 1. Remplacer print() par oprint() ou logger
 2. Remplacer log_hist() par log_hist_async()
@@ -233,7 +233,7 @@ Suivre les suggestions du script et appliquer les patterns ci-dessus.
 
 ---
 
-## 🎯 Patterns de remplacement
+## Patterns de remplacement
 
 ### Print simple → Logger
 
@@ -280,7 +280,7 @@ log_hist_async('INSERT', 'postes', 123, 'Création')
 
 ---
 
-## ⚙️ Configuration
+## Configuration
 
 ### Niveaux de log
 
@@ -307,7 +307,7 @@ log_hist_async('INSERT', 'postes', 123, 'Création')
 
 ---
 
-## 📈 Exemple concret
+## Exemple concret
 
 ### Export CSV de 1000 lignes
 
@@ -368,7 +368,7 @@ with open('export.csv', 'w') as f:  # 1 seul open/close
 
 ---
 
-## 🚨 Points d'attention
+## Points d'attention
 
 ### ⚠️ Flush avant quitter
 
@@ -400,23 +400,23 @@ log_hist_async(...)  # Queue pleine → fallback sur log_hist()
 
 ---
 
-## 📚 Documentation
+## Documentation
 
-- 📖 [Guide complet](docs/dev/optimisation-logs-io.md) - 40+ pages
-- 🐍 [optimized_logger.py](App/core/utils/optimized_logger.py) - Logs fichiers
-- 💾 [optimized_db_logger.py](App/core/services/optimized_db_logger.py) - Logs DB
-- 🔧 [migrate_to_optimized_logging.py](App/scripts/migrate_to_optimized_logging.py) - Script analyse
+-  [Guide complet](docs/dev/optimisation-logs-io.md) - 40+ pages
+-  [optimized_logger.py](App/core/utils/optimized_logger.py) - Logs fichiers
+-  [optimized_db_logger.py](App/core/services/optimized_db_logger.py) - Logs DB
+-  [migrate_to_optimized_logging.py](App/scripts/migrate_to_optimized_logging.py) - Script analyse
 
 ---
 
-## 🎉 Résumé
+## Résumé
 
 ### Gains
 
-- ⚡ **10-100x plus rapide** sur logs fréquents
-- 💾 **30-50x moins de requêtes DB** (INSERT par batch)
-- ♻️ **Rotation automatique** (fichiers < 10 MB)
-- 🎯 **Niveaux configurables** (WARNING en prod)
+-  **10-100x plus rapide** sur logs fréquents
+-  **30-50x moins de requêtes DB** (INSERT par batch)
+-  **Rotation automatique** (fichiers < 10 MB)
+-  **Niveaux configurables** (WARNING en prod)
 
 ### API
 

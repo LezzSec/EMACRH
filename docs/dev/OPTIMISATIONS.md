@@ -1,24 +1,24 @@
 # Guide des Optimisations EMAC
 
-## 📊 Vue d'Ensemble
+## Vue d'Ensemble
 
 Ce document décrit toutes les optimisations appliquées au projet EMAC pour maximiser les performances en production.
 
 ---
 
-## 🎯 Objectifs d'Optimisation
+## Objectifs d'Optimisation
 
 | Métrique | Avant | Après | Amélioration |
 |----------|-------|-------|--------------|
-| **Démarrage app** | 8-12s | **<2s** | ⚡ 80% plus rapide |
-| **Requêtes dashboard** | 800-1200ms | **<200ms** | ⚡ 75% plus rapide |
-| **Export Excel (1000 lignes)** | 5-7s | **<2s** | ⚡ 70% plus rapide |
-| **Recherche personnel** | 300-500ms | **<50ms** | ⚡ 85% plus rapide |
-| **Taille .exe** | 220 MB | **~150 MB** | 📦 32% plus léger |
+| **Démarrage app** | 8-12s | **<2s** |  80% plus rapide |
+| **Requêtes dashboard** | 800-1200ms | **<200ms** |  75% plus rapide |
+| **Export Excel (1000 lignes)** | 5-7s | **<2s** |  70% plus rapide |
+| **Recherche personnel** | 300-500ms | **<50ms** |  85% plus rapide |
+| **Taille .exe** | 220 MB | **~150 MB** |  32% plus léger |
 
 ---
 
-## 🚀 Optimisations Appliquées
+## Optimisations Appliquées
 
 ### 1. Architecture & Code Python
 
@@ -257,7 +257,7 @@ queue_export(
 
 ---
 
-## 📦 Installation des Optimisations
+## Installation des Optimisations
 
 ### Étape 1 : Base de Données
 
@@ -297,7 +297,7 @@ from core.services.personnel_optimized import get_all_personnel_actif
 
 ---
 
-## 🧪 Tests de Performance
+## Tests de Performance
 
 ### Mesurer les Performances
 
@@ -330,7 +330,7 @@ mysql> EXPLAIN SELECT ...;  # Vérifier utilisation index
 
 ---
 
-## 💡 Bonnes Pratiques
+## Bonnes Pratiques
 
 ### 1. Utiliser le Cache
 
@@ -389,7 +389,7 @@ def open_documents():
 
 ---
 
-## 🔍 Diagnostic de Performance
+## Diagnostic de Performance
 
 ### Identifier les Bottlenecks
 
@@ -424,7 +424,7 @@ def ma_fonction():
 
 ---
 
-## 📈 Métriques de Succès
+## Métriques de Succès
 
 ### KPIs à Surveiller
 
@@ -454,7 +454,7 @@ if duration > 0.5:
 
 ---
 
-## 🚨 Avertissements
+## Avertissements
 
 ### Cache
 
@@ -488,7 +488,7 @@ def update_personnel(data):
 
 ---
 
-## 📚 Ressources
+## Ressources
 
 ### Documentation
 
@@ -506,7 +506,7 @@ def update_personnel(data):
 
 ---
 
-## 🎯 Roadmap Future
+## Roadmap Future
 
 ### Optimisations Potentielles
 

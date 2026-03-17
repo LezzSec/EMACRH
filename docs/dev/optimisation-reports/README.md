@@ -2,7 +2,7 @@
 
 Ce dossier contient la documentation complète des optimisations de performance appliquées au projet EMAC entre le 6 et 8 janvier 2026.
 
-## 📊 Vue d'Ensemble
+## Vue d'Ensemble
 
 Les optimisations ont permis d'atteindre des gains de performance spectaculaires:
 
@@ -12,11 +12,11 @@ Les optimisations ont permis d'atteindre des gains de performance spectaculaires
 - **Taille exécutable:** 180 MB → **95 MB** (47% de réduction)
 - **Temps de build:** 120 secondes → **45 secondes** (62% plus rapide)
 
-## 🗂️ Organisation de la Documentation
+## Organisation de la Documentation
 
 ### Rapports par Catégorie
 
-#### 📁 [db-optimization/](db-optimization/)
+#### [db-optimization/](db-optimization/)
 Optimisations de la base de données MySQL:
 - **[CHANGELOG.md](db-optimization/CHANGELOG.md)** - Historique des changements DB
 - **[RAPPORT_APPLICATION.md](db-optimization/RAPPORT_APPLICATION.md)** - Détails d'implémentation
@@ -28,7 +28,7 @@ Optimisations de la base de données MySQL:
 - 29 index de performance sur 9 tables
 - Requêtes optimisées (JOINs, pas de N+1)
 
-#### 📁 [ui-optimization/](ui-optimization/)
+#### [ui-optimization/](ui-optimization/)
 Optimisations de l'interface PyQt5:
 - **[RAPPORT_APPLICATION.md](ui-optimization/RAPPORT_APPLICATION.md)** - Détails UI/threading
 
@@ -38,7 +38,7 @@ Optimisations de l'interface PyQt5:
 - Loading components réutilisables
 - Lazy loading des widgets lourds
 
-#### 📁 [cache-optimization/](cache-optimization/)
+#### [cache-optimization/](cache-optimization/)
 Système de cache intelligent:
 - **[RAPPORT_APPLICATION.md](cache-optimization/RAPPORT_APPLICATION.md)** - Implémentation cache
 
@@ -48,7 +48,7 @@ Système de cache intelligent:
 - Compression des grandes valeurs
 - Statistiques de performance
 
-#### 📁 [packaging-optimization/](packaging-optimization/)
+#### [packaging-optimization/](packaging-optimization/)
 Optimisation du packaging PyInstaller:
 - **[RAPPORT_APPLICATION.md](packaging-optimization/RAPPORT_APPLICATION.md)** - Détails build
 
@@ -58,7 +58,7 @@ Optimisation du packaging PyInstaller:
 - Compilation en bytecode (.pyc)
 - Hooks personnalisés
 
-#### 📁 [logs-optimization/](logs-optimization/)
+#### [logs-optimization/](logs-optimization/)
 Optimisation du système de logging:
 - **[RAPPORT_APPLICATION.md](logs-optimization/RAPPORT_APPLICATION.md)** - Implémentation logging
 
@@ -68,7 +68,7 @@ Optimisation du système de logging:
 - Niveaux configurables par module
 - Flush intelligent (buffer 100 lignes ou 5 secondes)
 
-#### 📁 [performance-monitoring/](performance-monitoring/)
+#### [performance-monitoring/](performance-monitoring/)
 Monitoring de performance en production:
 - **[RAPPORT_APPLICATION.md](performance-monitoring/RAPPORT_APPLICATION.md)** - Système de monitoring
 
@@ -78,7 +78,7 @@ Monitoring de performance en production:
 - Détection d'anomalies automatique
 - Rapports périodiques
 
-#### 📁 [changelog/](changelog/)
+#### [changelog/](changelog/)
 Historique complet des optimisations:
 - **[CHANGELOG_OPTIMISATIONS.md](changelog/CHANGELOG_OPTIMISATIONS.md)** - Changelog complet
 
@@ -91,7 +91,7 @@ Historique complet des optimisations:
 | **[INTEGRATIONS_COMPLETEES.md](INTEGRATIONS_COMPLETEES.md)** | Statut d'intégration des optimisations |
 | **[RESUME_OPTIMISATIONS.txt](RESUME_OPTIMISATIONS.txt)** | Notes de travail (format texte) |
 
-## 📈 Timeline des Optimisations
+## Timeline des Optimisations
 
 ### Phase 1: Database (2026-01-06)
 - ✅ Connection pooling MySQL
@@ -129,7 +129,7 @@ Historique complet des optimisations:
 - ✅ Documentation complète
 - ✅ Réorganisation du projet
 
-## 🎯 Objectifs Atteints
+## Objectifs Atteints
 
 | Métrique | Avant | Après | Gain |
 |----------|-------|-------|------|
@@ -140,7 +140,7 @@ Historique complet des optimisations:
 | **Temps build** | 120s | 45s | **62%** |
 | **Utilisation RAM** | 250 MB | 180 MB | **28%** |
 
-## 🔧 Technologies Utilisées
+## Technologies Utilisées
 
 - **Database:** MySQL 8.0 + connection pooling
 - **UI:** PyQt5 + QThreadPool
@@ -149,7 +149,7 @@ Historique complet des optimisations:
 - **Monitoring:** Decorators + métriques temps réel
 - **Logging:** Async logging + rotation
 
-## 📚 Documentation Technique
+## Documentation Technique
 
 Pour plus de détails techniques, consultez:
 
@@ -160,7 +160,7 @@ Pour plus de détails techniques, consultez:
 - [optimisation-logs-io.md](../optimisation-logs-io.md) - Guide logs
 - [monitoring-performance.md](../monitoring-performance.md) - Guide monitoring
 
-## 🚀 Prochaines Étapes
+## Prochaines Étapes
 
 ### Optimisations Futures Possibles
 

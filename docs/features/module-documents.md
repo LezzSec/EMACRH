@@ -6,7 +6,7 @@ Le module de **Gestion Documentaire RH** permet de centraliser et organiser tous
 
 ---
 
-## 🎯 Fonctionnalités principales
+## Fonctionnalités principales
 
 ### ✅ Gestion des documents
 - **Ajout de documents** : Téléversement de fichiers (PDF, Word, Excel, images, etc.)
@@ -15,7 +15,7 @@ Le module de **Gestion Documentaire RH** permet de centraliser et organiser tous
 - **Téléchargement** : Export des documents vers un emplacement de votre choix
 - **Suppression sécurisée** : Confirmation obligatoire avant toute suppression
 
-### 📊 Organisation et recherche
+### Organisation et recherche
 - **Filtrage par employé** : Voir tous les documents d'un employé spécifique
 - **Filtrage par catégorie** : Afficher uniquement les documents d'une catégorie
 - **Filtrage par statut** : Actif, Expiré, Archivé
@@ -26,14 +26,14 @@ Le module de **Gestion Documentaire RH** permet de centraliser et organiser tous
 - **Notifications préventives** : Alertes 30 jours avant expiration
 - **Gestion du statut** : Mise à jour automatique du statut (actif/expiré)
 
-### 📈 Statistiques
+### Statistiques
 - **Nombre total de documents**
 - **Taille totale de stockage**
 - **Nombre de documents expirés**
 
 ---
 
-## 📦 Installation
+## Installation
 
 ### Prérequis
 - MySQL 8.0+
@@ -61,7 +61,7 @@ Lancez l'application EMAC et vérifiez que le menu "Gestion Documentaire RH" est
 
 ---
 
-## 🗄️ Structure de la base de données
+## Structure de la base de données
 
 ### Table : `categories_documents`
 
@@ -113,7 +113,7 @@ Documents qui expirent dans les 60 prochains jours.
 
 ---
 
-## 📁 Organisation des fichiers
+## Organisation des fichiers
 
 Les documents sont stockés physiquement dans le dossier `documents/` avec la structure suivante :
 
@@ -138,18 +138,18 @@ documents/
 
 ---
 
-## 🖥️ Guide d'utilisation
+## Guide d'utilisation
 
 ### Accéder au module
 
 1. Ouvrez l'application EMAC
-2. Cliquez sur le bouton **☰** (menu hamburger) en haut à droite
+2. Cliquez sur le bouton **** (menu hamburger) en haut à droite
 3. Sélectionnez **"Gestion Documentaire RH"**
 
 ### Ajouter un document
 
 1. Sélectionnez un employé dans la liste déroulante
-2. Cliquez sur **"➕ Ajouter un document"**
+2. Cliquez sur **" Ajouter un document"**
 3. Remplissez le formulaire :
    - **Fichier** : Sélectionnez le fichier à ajouter
    - **Catégorie** : Choisissez la catégorie appropriée
@@ -162,19 +162,19 @@ documents/
 ### Visualiser un document
 
 - **Double-clic** sur une ligne du tableau
-- Ou cliquez sur le bouton **📂** dans la colonne "Actions"
+- Ou cliquez sur le bouton **** dans la colonne "Actions"
 
 Le document s'ouvrira avec l'application par défaut de votre système (ex: Adobe Reader pour les PDF).
 
 ### Télécharger un document
 
-- Cliquez sur le bouton **💾** dans la colonne "Actions"
+- Cliquez sur le bouton **** dans la colonne "Actions"
 - Choisissez l'emplacement de sauvegarde
 - Le fichier sera copié à l'emplacement choisi
 
 ### Supprimer un document
 
-- Cliquez sur le bouton **🗑️** dans la colonne "Actions"
+- Cliquez sur le bouton **** dans la colonne "Actions"
 - Confirmez la suppression (⚠️ action irréversible)
 
 ### Filtrer les documents
@@ -186,7 +186,7 @@ Le document s'ouvrira avec l'application par défaut de votre système (ex: Adob
 
 ---
 
-## 🔧 Architecture technique
+## Architecture technique
 
 ### Structure des modules
 
@@ -231,7 +231,7 @@ Deux classes principales :
 
 ---
 
-## 🔐 Sécurité et bonnes pratiques
+## Sécurité et bonnes pratiques
 
 ### Protection des données
 
@@ -254,22 +254,22 @@ Deux classes principales :
 
 ---
 
-## 📝 Catégories par défaut
+## Catégories par défaut
 
 | Catégorie | Couleur | Expiration obligatoire | Description |
 |-----------|---------|------------------------|-------------|
-| **Contrats de travail** | 🟢 Vert | ✅ Oui | Contrats CDI, CDD, avenants |
-| **Certificats médicaux** | 🔴 Rouge | ✅ Oui | Visites médicales, aptitudes, RQTH |
-| **Diplômes et formations** | 🟣 Violet | ❌ Non | Diplômes, certificats, habilitations |
-| **Autorisations de travail** | 🟠 Orange | ✅ Oui | Titres de séjour, autorisations |
-| **Pièces d'identité** | 🔵 Cyan | ✅ Oui | CNI, passeport, permis |
-| **Attestations diverses** | 🟣 Indigo | ❌ Non | Attestations employeur, certificats |
-| **Documents administratifs** | ⚫ Gris | ❌ Non | Fiches de paie, relevés |
-| **Autres** | ⚪ Gris clair | ❌ Non | Documents non classés |
+| **Contrats de travail** |  Vert | ✅ Oui | Contrats CDI, CDD, avenants |
+| **Certificats médicaux** |  Rouge | ✅ Oui | Visites médicales, aptitudes, RQTH |
+| **Diplômes et formations** |  Violet | ❌ Non | Diplômes, certificats, habilitations |
+| **Autorisations de travail** |  Orange | ✅ Oui | Titres de séjour, autorisations |
+| **Pièces d'identité** |  Cyan | ✅ Oui | CNI, passeport, permis |
+| **Attestations diverses** |  Indigo | ❌ Non | Attestations employeur, certificats |
+| **Documents administratifs** |  Gris | ❌ Non | Fiches de paie, relevés |
+| **Autres** |  Gris clair | ❌ Non | Documents non classés |
 
 ---
 
-## 🚀 Améliorations futures possibles
+## Améliorations futures possibles
 
 ### Fonctionnalités avancées
 
@@ -346,7 +346,7 @@ Deux classes principales :
 
 ---
 
-## 🐛 Dépannage
+## Dépannage
 
 ### Problème : "Fichier introuvable sur le disque"
 
@@ -393,7 +393,7 @@ Deux classes principales :
 
 ---
 
-## 📞 Support
+## Support
 
 Pour toute question ou problème :
 
@@ -403,7 +403,7 @@ Pour toute question ou problème :
 
 ---
 
-## 📚 Références
+## Références
 
 - [Guide d'utilisation des absences](GUIDE_UTILISATION_ABSENCES.md)
 - [Module absences - README](MODULE_ABSENCES_README.md)
@@ -413,7 +413,7 @@ Pour toute question ou problème :
 
 ---
 
-## 📄 Licence
+## Licence
 
 Ce module fait partie de l'application EMAC - Gestion du Personnel.
 

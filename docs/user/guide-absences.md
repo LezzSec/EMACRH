@@ -1,6 +1,6 @@
-# 🏖️ GUIDE D'UTILISATION - MODULE ABSENCES ET CONGÉS
+# GUIDE D'UTILISATION - MODULE ABSENCES ET CONGÉS
 
-## 🚀 ACCÈS AU MODULE
+## ACCÈS AU MODULE
 
 ### Depuis l'application EMAC :
 1. Lancez l'application : `py -m core.gui.main_qt`
@@ -9,7 +9,7 @@
 
 ---
 
-## 📋 LES 5 ONGLETS
+## LES 5 ONGLETS
 
 ### 1️⃣ **MES DEMANDES** - Voir toutes mes demandes
 
@@ -18,17 +18,17 @@
 - Pour chaque demande : Type, Dates, Nb jours, Motif, Statut, Validateur
 
 **Filtres disponibles :**
-- 📅 **Année** : 2023, 2024, 2025, 2026...
-- 🔍 **Statut** : Tous / En attente / Validées / Refusées
+-  **Année** : 2023, 2024, 2025, 2026...
+-  **Statut** : Tous / En attente / Validées / Refusées
 
 **Actions possibles :**
 - ❌ **Annuler** : Annule une demande EN_ATTENTE
-- 🔄 **Actualiser** : Rafraîchit la liste
+-  **Actualiser** : Rafraîchit la liste
 
 **Codes couleur :**
-- 🟢 **Vert** = Demande validée
-- 🔴 **Rouge** = Demande refusée
-- ⚪ **Blanc** = En attente ou annulée
+-  **Vert** = Demande validée
+-  **Rouge** = Demande refusée
+-  **Blanc** = En attente ou annulée
 
 ---
 
@@ -48,11 +48,11 @@
    - Autre
 
 2. **Choisir la date de début :**
-   - Cliquez sur le calendrier 📅
+   - Cliquez sur le calendrier 
    - Sélectionnez : **Journée** / **Matin** / **Après-midi**
 
 3. **Choisir la date de fin :**
-   - Cliquez sur le calendrier 📅
+   - Cliquez sur le calendrier 
    - Sélectionnez : **Journée** / **Matin** / **Après-midi**
 
 4. **Vérifier le calcul automatique :**
@@ -83,7 +83,7 @@ Du 24/12 au 26/12 (avec férié 25/12) = 2 jours
 ### 3️⃣ **CALENDRIER** - Voir les absences de l'équipe
 
 **Fonctionnalités :**
-- 📅 **Calendrier visuel** mensuel
+-  **Calendrier visuel** mensuel
 - Cliquez sur un jour → affiche les absents de la journée
 - Liste détaillée :
   - Nom du personnel
@@ -101,7 +101,7 @@ Du 24/12 au 26/12 (avec férié 25/12) = 2 jours
 
 **Affichage :**
 
-🟢 **Grande card verte - CONGÉS PAYÉS**
+ **Grande card verte - CONGÉS PAYÉS**
 - Affiche le **nombre de jours restants** en gros
 - Détails :
   - CP acquis : 25 jours
@@ -109,7 +109,7 @@ Du 24/12 au 26/12 (avec férié 25/12) = 2 jours
   - CP pris : X jours
   - **CP restants** : X jours
 
-🔵 **Grande card bleue - RTT**
+ **Grande card bleue - RTT**
 - Affiche le **nombre de jours restants** en gros
 - Détails :
   - RTT acquis : 10 jours
@@ -129,12 +129,12 @@ Du 24/12 au 26/12 (avec férié 25/12) = 2 jours
 - Colonnes : Personnel, Type, Du, Au, Nb jours, Motif
 
 **Actions :**
-- 🟢 **Valider** : Approuve la demande
+-  **Valider** : Approuve la demande
   - Statut → VALIDEE
   - Solde CP/RTT décompté automatiquement
   - Date et validateur enregistrés
 
-- 🔴 **Refuser** : Refuse la demande
+-  **Refuser** : Refuse la demande
   - Statut → REFUSEE
   - Solde non décompté
   - Possibilité d'ajouter un commentaire
@@ -148,7 +148,7 @@ Du 24/12 au 26/12 (avec férié 25/12) = 2 jours
 
 ---
 
-## 💡 CAS D'USAGE FRÉQUENTS
+## CAS D'USAGE FRÉQUENTS
 
 ### ✅ Je veux poser une semaine de congés
 ```
@@ -209,7 +209,7 @@ Note : Ne décompte PAS le solde CP/RTT
 
 ---
 
-## ⚙️ RÈGLES DE GESTION
+## RÈGLES DE GESTION
 
 ### Jours ouvrés
 - **Comptés** : Lundi, Mardi, Mercredi, Jeudi, Vendredi
@@ -249,7 +249,7 @@ REFUSEE → Solde non décompté
 
 ---
 
-## ❓ FAQ
+## FAQ
 
 **Q : Je ne vois pas mes soldes, ils sont à 0**
 R : Les soldes doivent être initialisés pour l'année. Demandez à l'administrateur d'exécuter :
@@ -305,11 +305,11 @@ INSERT INTO jours_feries (date_ferie, libelle, fixe) VALUES
 
 ---
 
-## 📞 CONTACT SUPPORT
+## CONTACT SUPPORT
 
 Pour toute question :
 1. Consultez le fichier `MODULE_ABSENCES_README.md`
 2. Vérifiez la base de données
 3. Consultez les logs d'erreur
 
-**Bon courage ! 🎉**
+**Bon courage ! **

@@ -1,4 +1,4 @@
-# 📊 Monitoring des Performances - GUIDE RAPIDE
+# Monitoring des Performances - GUIDE RAPIDE
 
 **Date** : 2026-01-07
 **Impact** : ✅ Détection proactive des régressions
@@ -7,7 +7,7 @@
 
 ## ✅ Ce qui a été fait
 
-### Système de monitoring complet 📊
+### Système de monitoring complet 
 
 **Fichier** : [`App/core/utils/performance_monitor.py`](App/core/utils/performance_monitor.py)
 
@@ -20,7 +20,7 @@
 - ✅ **Rapports** - print_performance_report()
 - ✅ **Export CSV** - export_performance_stats()
 
-### Script de démonstration 🎯
+### Script de démonstration 
 
 **Fichier** : [`App/scripts/demo_performance_monitoring.py`](App/scripts/demo_performance_monitoring.py)
 
@@ -28,7 +28,7 @@
 - ✅ Tests avec alertes
 - ✅ Rapport et export
 
-### Documentation complète 📚
+### Documentation complète 
 
 **Fichier** : [`docs/dev/monitoring-performance.md`](docs/dev/monitoring-performance.md)
 
@@ -38,7 +38,7 @@
 
 ---
 
-## 📈 Catégories et seuils
+## Catégories et seuils
 
 | Catégorie | Seuil | Usage |
 |-----------|-------|-------|
@@ -51,7 +51,7 @@
 
 ---
 
-## 💡 Utilisation
+## Utilisation
 
 ### Cas 1 : Monitorer le login
 
@@ -130,7 +130,7 @@ print_performance_report()
 **Output** :
 ```
 ================================================================================
-📊 RAPPORT DE PERFORMANCE EMAC
+ RAPPORT DE PERFORMANCE EMAC
 ================================================================================
 Total opérations      : 127
 Opérations lentes     : 8
@@ -159,7 +159,7 @@ export_performance_stats('perf_2026_01_07.csv')
 
 ---
 
-## 🎯 Intégration dans EMAC
+## Intégration dans EMAC
 
 ### 1. Authentification
 
@@ -229,7 +229,7 @@ class MainWindow(QMainWindow):
 
 ---
 
-## 🔧 Configuration
+## Configuration
 
 ### Modifier les seuils
 
@@ -257,7 +257,7 @@ enable_monitoring()
 
 ---
 
-## 📊 Exemple complet
+## Exemple complet
 
 ### Scénario : Monitorer le chargement du dashboard
 
@@ -319,7 +319,7 @@ class MainWindow(QMainWindow):
 
 ---
 
-## 🚀 Tests
+## Tests
 
 ### Tester le monitoring
 
@@ -330,7 +330,7 @@ python demo_performance_monitoring.py
 
 **Output attendu** :
 ```
-🔍 DÉMONSTRATION DU MONITORING DE PERFORMANCE
+ DÉMONSTRATION DU MONITORING DE PERFORMANCE
 ================================================================================
 
 1️⃣ Test Login (threshold: 500ms)
@@ -345,7 +345,7 @@ python demo_performance_monitoring.py
 
 ⚠️ SLOW QUERY: Slow Query took 250ms (threshold: 100ms)
 
-📊 RAPPORT DE PERFORMANCE EMAC
+ RAPPORT DE PERFORMANCE EMAC
 ================================================================================
 ...
 ```
@@ -407,15 +407,15 @@ python demo_performance_monitoring.py
 
 ---
 
-## 📚 Documentation
+## Documentation
 
-- 📖 [Guide complet](docs/dev/monitoring-performance.md) - 30+ pages
-- 🐍 [performance_monitor.py](App/core/utils/performance_monitor.py) - Code source
-- 🎯 [demo_performance_monitoring.py](App/scripts/demo_performance_monitoring.py) - Démo
+-  [Guide complet](docs/dev/monitoring-performance.md) - 30+ pages
+-  [performance_monitor.py](App/core/utils/performance_monitor.py) - Code source
+-  [demo_performance_monitoring.py](App/scripts/demo_performance_monitoring.py) - Démo
 
 ---
 
-## 🎯 Résumé
+## Résumé
 
 ### API
 

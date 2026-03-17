@@ -1,17 +1,17 @@
 # Guide Rapide - Upload de Documents Existants
 
-## 📋 Vue d'ensemble
+## Vue d'ensemble
 
 Le module de **Gestion Documentaire RH** vous permet d'importer et de centraliser tous les documents administratifs de vos employés (certificats médicaux, diplômes, pièces d'identité, etc.).
 
 ---
 
-## 🚀 Comment uploader un document existant
+## Comment uploader un document existant
 
 ### Étape 1 : Accéder au module
 
 1. Ouvrez l'application EMAC
-2. Cliquez sur le bouton **☰** (menu hamburger) en haut à droite
+2. Cliquez sur le bouton **** (menu hamburger) en haut à droite
 3. Sélectionnez **"Documents RH"**
 
 ![Accès au module](../assets/screenshots/menu-documents.png)
@@ -24,18 +24,18 @@ Dans la fenêtre "Gestion Documentaire RH" :
 
 1. Utilisez la liste déroulante **"Employé"** en haut de la fenêtre
 2. Sélectionnez l'employé pour lequel vous souhaitez ajouter un document
-3. Le bouton **"➕ Ajouter un document"** devient actif
+3. Le bouton **" Ajouter un document"** devient actif
 
 ---
 
 ### Étape 3 : Ajouter le document
 
-1. Cliquez sur **"➕ Ajouter un document"**
+1. Cliquez sur **" Ajouter un document"**
 2. Une nouvelle fenêtre s'ouvre : **"Ajouter un document"**
 
 #### 3.1 Sélectionner le fichier
 
-1. Cliquez sur **"📁 Sélectionner un fichier..."**
+1. Cliquez sur **" Sélectionner un fichier..."**
 2. Parcourez votre ordinateur et sélectionnez le document à importer
 3. **Formats acceptés** : PDF, Word (.doc, .docx), Excel, images (PNG, JPG), etc.
 4. Le nom du fichier s'affiche en vert une fois sélectionné
@@ -61,7 +61,7 @@ Dans la fenêtre "Gestion Documentaire RH" :
 
 ---
 
-## 📊 Visualiser les documents
+## Visualiser les documents
 
 ### Tableau des documents
 
@@ -79,27 +79,27 @@ Une fois qu'un employé est sélectionné, tous ses documents s'affichent dans l
 
 ### Codes couleur des statuts
 
-- 🟢 **Actif** : Document valide et à jour
-- 🔴 **Expiré** : Document dont la date d'expiration est dépassée
-- 🟡 **Expire bientôt** : Document qui expire dans les 30 jours
+-  **Actif** : Document valide et à jour
+-  **Expiré** : Document dont la date d'expiration est dépassée
+-  **Expire bientôt** : Document qui expire dans les 30 jours
 
 ---
 
-## 🔧 Actions sur les documents
+## Actions sur les documents
 
 ### Ouvrir un document
 
 **3 façons d'ouvrir un document** :
 
 1. **Double-clic** sur une ligne du tableau
-2. Cliquer sur le bouton **📂** dans la colonne "Actions"
-3. Clic droit → **"📂 Ouvrir"**
+2. Cliquer sur le bouton **** dans la colonne "Actions"
+3. Clic droit → **" Ouvrir"**
 
 Le document s'ouvrira avec l'application par défaut de votre ordinateur (ex: Adobe Reader pour les PDF).
 
 ### Télécharger (exporter) un document
 
-1. Cliquez sur le bouton **💾** dans la colonne "Actions"
+1. Cliquez sur le bouton **** dans la colonne "Actions"
 2. Choisissez l'emplacement de sauvegarde
 3. Le fichier est copié à l'emplacement choisi
 
@@ -107,14 +107,14 @@ Le document s'ouvrira avec l'application par défaut de votre ordinateur (ex: Ad
 
 ### Supprimer un document
 
-1. Cliquez sur le bouton **🗑️** dans la colonne "Actions"
+1. Cliquez sur le bouton **** dans la colonne "Actions"
 2. Confirmez la suppression
 
 > ⚠️ **Attention** : La suppression est **irréversible**. Le fichier sera supprimé de la base de données ET du disque.
 
 ---
 
-## 🔍 Filtrer les documents
+## Filtrer les documents
 
 Le module offre plusieurs options de filtrage pour retrouver rapidement un document :
 
@@ -135,7 +135,7 @@ Le module offre plusieurs options de filtrage pour retrouver rapidement un docum
 
 ---
 
-## 📈 Statistiques
+## Statistiques
 
 En haut de la fenêtre, 4 indicateurs affichent les statistiques de l'employé sélectionné :
 
@@ -148,7 +148,7 @@ En haut de la fenêtre, 4 indicateurs affichent les statistiques de l'employé s
 
 ---
 
-## 💡 Conseils et bonnes pratiques
+## Conseils et bonnes pratiques
 
 ### Organisation des fichiers
 
@@ -170,7 +170,7 @@ En haut de la fenêtre, 4 indicateurs affichent les statistiques de l'employé s
 
 ---
 
-## 🐛 Dépannage
+## Dépannage
 
 ### Problème : "Fichier introuvable sur le disque"
 
@@ -178,7 +178,7 @@ En haut de la fenêtre, 4 indicateurs affichent les statistiques de l'employé s
 
 **Solution** :
 1. Restaurez le fichier depuis une sauvegarde
-2. Ou supprimez l'entrée en base de données (bouton 🗑️)
+2. Ou supprimez l'entrée en base de données (bouton )
 
 ### Problème : "Impossible d'ouvrir le document"
 
@@ -186,7 +186,7 @@ En haut de la fenêtre, 4 indicateurs affichent les statistiques de l'employé s
 
 **Solution** :
 1. Installez l'application appropriée (ex: Adobe Reader pour les PDF)
-2. Ou téléchargez le document (💾) et ouvrez-le manuellement
+2. Ou téléchargez le document () et ouvrez-le manuellement
 
 ### Problème : "Module non installé"
 
@@ -200,7 +200,7 @@ python install_gestion_documentaire.py
 
 ---
 
-## 📞 Aide et support
+## Aide et support
 
 Pour plus d'informations :
 
@@ -212,9 +212,9 @@ Pour plus d'informations :
 
 ## ✅ Récapitulatif rapide
 
-1. **Ouvrir** : Menu ☰ → "Documents RH"
+1. **Ouvrir** : Menu  → "Documents RH"
 2. **Sélectionner** : Choisir un employé dans la liste
-3. **Ajouter** : Cliquer sur "➕ Ajouter un document"
+3. **Ajouter** : Cliquer sur " Ajouter un document"
 4. **Importer** : Parcourir et sélectionner le fichier existant
 5. **Renseigner** : Catégorie, nom, dates (optionnel)
 6. **Enregistrer** : Cliquer sur "Enregistrer"

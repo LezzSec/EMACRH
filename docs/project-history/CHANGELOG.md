@@ -6,61 +6,61 @@ Toutes les modifications notables de ce projet seront documentées dans ce fichi
 
 ## [1.1.0] - 2025-12-17
 
-### ✨ Ajouté - Système de Gestion des Utilisateurs
+### Ajouté - Système de Gestion des Utilisateurs
 
 #### Authentification
-- 🔐 Écran de connexion au démarrage de l'application
-- 🔑 Hachage sécurisé des mots de passe avec bcrypt (facteur 12)
-- 👤 Session utilisateur avec informations de l'utilisateur connecté
-- 🚪 Fonctionnalité de déconnexion avec confirmation
+-  Écran de connexion au démarrage de l'application
+-  Hachage sécurisé des mots de passe avec bcrypt (facteur 12)
+-  Session utilisateur avec informations de l'utilisateur connecté
+-  Fonctionnalité de déconnexion avec confirmation
 
 #### Rôles et permissions
-- 👑 **Rôle Admin** : Accès complet à toutes les fonctionnalités
-- 🏭 **Rôle Gestion Production** :
+-  **Rôle Admin** : Accès complet à toutes les fonctionnalités
+-  **Rôle Gestion Production** :
   - Accès complet : personnel, évaluations, polyvalence, postes, grilles
   - Lecture seule : contrats, planning/absences, historique
   - Pas d'accès : documents RH, gestion utilisateurs
 
-- 📋 **Rôle Gestion RH** :
+-  **Rôle Gestion RH** :
   - Accès complet : contrats, documents RH
   - Lecture seule : personnel, polyvalence, postes, historique, grilles
   - Pas d'accès : évaluations, planning, gestion utilisateurs
 
 #### Interface
-- 🎨 Écran de connexion stylisé avec le thème EMAC
-- 👥 Interface de gestion des utilisateurs (admin uniquement)
+-  Écran de connexion stylisé avec le thème EMAC
+-  Interface de gestion des utilisateurs (admin uniquement)
   - Création de nouveaux utilisateurs
   - Activation/désactivation de comptes
   - Changement de mot de passe
   - Liste avec statut et dernière connexion
 
-- 🧭 Menu drawer adaptatif selon les permissions
-- 📊 Affichage de l'utilisateur connecté et son rôle dans l'en-tête
+-  Menu drawer adaptatif selon les permissions
+-  Affichage de l'utilisateur connecté et son rôle dans l'en-tête
 
 #### Base de données
-- 📦 Tables ajoutées :
+-  Tables ajoutées :
   - `roles` : Définition des rôles
   - `utilisateurs` : Comptes utilisateurs
   - `permissions` : Permissions granulaires par module
   - `logs_connexion` : Audit des connexions/déconnexions
 
-- 🔧 Migration automatisée avec script Python
+-  Migration automatisée avec script Python
 
 #### Sécurité
-- 🛡️ Contrôle d'accès basé sur les permissions
-- 📝 Logs d'audit pour toutes les actions sensibles
-- 🔐 Mots de passe jamais stockés en clair
+-  Contrôle d'accès basé sur les permissions
+-  Logs d'audit pour toutes les actions sensibles
+-  Mots de passe jamais stockés en clair
 - ⚠️ Validation des entrées utilisateur
 
 #### Documentation
-- 📚 Guide utilisateur complet ([`docs/user/guide-gestion-utilisateurs.md`](docs/user/guide-gestion-utilisateurs.md))
-- 👨‍💻 Documentation technique pour développeurs ([`docs/dev/authentication-system.md`](docs/dev/authentication-system.md))
-- 📖 README du système ([`SYSTEME_UTILISATEURS_README.md`](SYSTEME_UTILISATEURS_README.md))
+-  Guide utilisateur complet ([`docs/user/guide-gestion-utilisateurs.md`](docs/user/guide-gestion-utilisateurs.md))
+- ‍ Documentation technique pour développeurs ([`docs/dev/authentication-system.md`](docs/dev/authentication-system.md))
+-  README du système ([`SYSTEME_UTILISATEURS_README.md`](SYSTEME_UTILISATEURS_README.md))
 
 #### Scripts et outils
-- ⚙️ Script de migration : `apply_user_management_migration.py`
-- 🧪 Script de test : `test_auth_system.py`
-- 🛠️ Helper de permissions : `permission_helper.py`
+-  Script de migration : `apply_user_management_migration.py`
+-  Script de test : `test_auth_system.py`
+-  Helper de permissions : `permission_helper.py`
 
 #### Fichiers créés
 ```
@@ -98,11 +98,11 @@ CHANGELOG.md                                     # Ce fichier
   - Menu filtré par permissions
   - Bouton de déconnexion
 
-### 🔧 Dépendances ajoutées
+### Dépendances ajoutées
 - `bcrypt==4.1.2` - Hachage sécurisé des mots de passe
 - `python-dotenv==1.0.0` - Gestion des variables d'environnement
 
-### 📋 Installation
+### Installation
 
 Pour mettre à jour vers cette version :
 
@@ -128,7 +128,7 @@ py scripts/apply_user_management_migration.py
 - Les utilisateurs existants doivent être créés via l'interface admin
 - Le module `bcrypt` est obligatoire
 
-### 🐛 Corrections
+### Corrections
 - Aucune dans cette version (nouvelle fonctionnalité)
 
 ---

@@ -6,7 +6,7 @@
 
 ---
 
-## 📊 Résumé des changements
+## Résumé des changements
 
 | Métrique | Avant | Après | Gain |
 |----------|-------|-------|------|
@@ -18,7 +18,7 @@
 
 ---
 
-## 🎯 Priorité de refactoring
+## Priorité de refactoring
 
 **HIGHEST PRIORITY** selon l'analyse du projet (2026-02-09)
 
@@ -30,7 +30,7 @@
 
 ---
 
-## 🔍 Comparaison détaillée
+## Comparaison détaillée
 
 ### 1. Fonction `create_contrat()`
 
@@ -550,7 +550,7 @@ def _update_adresse(operateur_id, adresse_data):
 
 ---
 
-## 📈 Métriques de qualité
+## Métriques de qualité
 
 ### Complexité cyclomatique
 
@@ -607,7 +607,7 @@ def _update_adresse(operateur_id, adresse_data):
 
 ---
 
-## 🚀 Migration recommandée
+## Migration recommandée
 
 ### Option 1 : Remplacement progressif (recommandé)
 
@@ -645,7 +645,7 @@ mv App/core/services/rh_service_refactored.py App/core/services/rh_service.py
 
 ---
 
-## 🧪 Tests recommandés
+## Tests recommandés
 
 Avant de migrer, tester :
 
@@ -689,7 +689,7 @@ print(f"Recherche: {len(results)} résultats")
 
 ---
 
-## 💡 Impact sur le reste du projet
+## Impact sur le reste du projet
 
 Ce refactoring de `rh_service.py` débloque la refactorisation de :
 
@@ -708,7 +708,7 @@ Ce refactoring de `rh_service.py` débloque la refactorisation de :
 
 ---
 
-## 📚 Prochaines étapes
+## Prochaines étapes
 
 Après migration de `rh_service.py`, refactoriser (par ordre de priorité) :
 
@@ -722,7 +722,7 @@ Après migration de `rh_service.py`, refactoriser (par ordre de priorité) :
 
 ---
 
-## 🎯 Conclusion
+## Conclusion
 
 Le refactoring de `rh_service.py` est le **plus impactant du projet** :
 

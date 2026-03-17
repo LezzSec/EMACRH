@@ -7,7 +7,7 @@ Le système d'historique de polyvalence EMAC permet de :
 - **Importer manuellement** des données historiques pour lesquelles vous n'aviez pas de traçabilité
 - **Visualiser** l'historique complet avec filtres avancés et détails
 
-## 🎯 Fonctionnalités principales
+## Fonctionnalités principales
 
 ### 1. Traçabilité automatique
 Toutes les actions sur les polyvalences sont automatiquement enregistrées avec :
@@ -31,7 +31,7 @@ Pour ajouter des actions passées sans traçabilité automatique :
 - Double-clic pour voir les détails complets
 - Badge "[Détaillé]" pour les données importées manuellement
 
-## 📊 Architecture du système
+## Architecture du système
 
 ### Tables de base de données
 
@@ -75,7 +75,7 @@ La table historique générale continue d'exister. Un **trigger automatique** sy
 - Chaque insertion dans `historique_polyvalence` crée automatiquement une entrée dans `historique`
 - Permet de conserver la compatibilité avec l'ancien système
 
-## 🚀 Utilisation
+## Utilisation
 
 ### Pour l'utilisateur final
 
@@ -111,7 +111,7 @@ Cliquez sur **"Réinitialiser"** pour réinitialiser tous les filtres.
 
 #### 4. Importer des données historiques
 
-1. Dans l'onglet "Historique", cliquez sur **"📥 Import manuel"**
+1. Dans l'onglet "Historique", cliquez sur **" Import manuel"**
 2. Remplissez le formulaire :
    - Date de l'action
    - Type d'action (AJOUT, MODIFICATION, SUPPRESSION)
@@ -119,9 +119,9 @@ Cliquez sur **"Réinitialiser"** pour réinitialiser tous les filtres.
    - Niveaux (ancien et/ou nouveau selon le type)
    - Dates d'évaluation
    - Commentaire explicatif (recommandé !)
-3. Cliquez sur **"➕ Ajouter à la liste"**
+3. Cliquez sur **" Ajouter à la liste"**
 4. Répétez pour toutes les actions à ajouter
-5. Cliquez sur **"💾 Enregistrer toutes les actions"**
+5. Cliquez sur **" Enregistrer toutes les actions"**
 
 **Astuce** : Ajoutez toujours un commentaire pour expliquer le contexte de l'action historique !
 
@@ -196,7 +196,7 @@ log_polyvalence_action(
 )
 ```
 
-## 🔧 Administration
+## Administration
 
 ### Scripts utiles
 
@@ -265,7 +265,7 @@ DELETE FROM historique_polyvalence
 WHERE source LIKE '%TEST%' OR import_batch_id LIKE 'TEST%';
 ```
 
-## 📋 Bonnes pratiques
+## Bonnes pratiques
 
 ### Pour les imports manuels
 
@@ -303,7 +303,7 @@ WHERE source LIKE '%TEST%' OR import_batch_id LIKE 'TEST%';
 
 4. **Documenter le code** : Commentez pourquoi vous loggez telle action
 
-## 🐛 Dépannage
+## Dépannage
 
 ### Problème : Les données ne s'affichent pas
 
@@ -325,7 +325,7 @@ Si vous voyez des doublons dans l'historique :
 - Les données de `historique_polyvalence` ont le badge "[Détaillé]"
 - C'est voulu pour avoir le maximum d'informations
 
-## 📞 Support
+## Support
 
 Pour toute question :
 1. Consulter cette documentation

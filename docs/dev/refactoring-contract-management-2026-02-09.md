@@ -6,7 +6,7 @@
 
 ---
 
-## 📊 Résumé des changements
+## Résumé des changements
 
 | Métrique | Avant | Après | Gain |
 |----------|-------|-------|------|
@@ -18,7 +18,7 @@
 
 ---
 
-## 🔍 Comparaison détaillée
+## Comparaison détaillée
 
 ### 1. Structure de la classe
 
@@ -323,7 +323,7 @@ def save_to_db(self):
 
 ---
 
-## 📈 Métriques de qualité
+## Métriques de qualité
 
 ### Complexité cyclomatique
 
@@ -368,7 +368,7 @@ def save_to_db(self):
 
 ---
 
-## 🚀 Migration du fichier original
+## Migration du fichier original
 
 ### Option 1 : Remplacement complet (recommandé)
 
@@ -389,7 +389,7 @@ mv App/core/gui/contract_management_refactored.py App/core/gui/contract_manageme
 
 ---
 
-## 🧪 Tests recommandés
+## Tests recommandés
 
 Avant de migrer, tester :
 
@@ -402,7 +402,7 @@ Avant de migrer, tester :
 
 ---
 
-## 💡 Prochaines étapes
+## Prochaines étapes
 
 Après migration de `contract_management.py`, refactoriser :
 

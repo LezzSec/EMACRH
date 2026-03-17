@@ -26,7 +26,7 @@ The application uses MySQL 8.0 with the following connection details:
 - Charset: `utf8mb4`
 - Configuration file: [App/core/db/configbd.py](App/core/db/configbd.py)
 
-### 🔐 Security: Password Configuration
+### Security: Password Configuration
 
 The database password is **NO LONGER hardcoded** in the source code. It is loaded from:
 
@@ -55,7 +55,7 @@ For security changelog, see [docs/security/security-changelog.md](docs/security/
 
 Database schema is located in [App/database/schema/bddemac.sql](App/database/schema/bddemac.sql).
 
-### ⚡ Database Performance Optimizations (2026-01-07)
+### Database Performance Optimizations (2026-01-07)
 
 **IMPORTANT**: Major database optimizations have been implemented for 10-100x performance gains:
 
@@ -93,7 +93,7 @@ Database schema is located in [App/database/schema/bddemac.sql](App/database/sch
 
 **Full documentation**: [docs/dev/optimisation-database.md](docs/dev/optimisation-database.md)
 
-### 🔧 Refactoring Patterns - Code Duplication Elimination (2026-02-09)
+### Refactoring Patterns - Code Duplication Elimination (2026-02-09)
 
 **IMPORTANT**: Nouveaux patterns pour éliminer le code dupliqué (-650 lignes) et améliorer la maintenabilité.
 
@@ -123,8 +123,8 @@ exists = QueryExecutor.exists('personnel', {'id': 1})
 
 # ❌ ÉVITER: Code boilerplate avec try/finally
 # with DatabaseCursor() as cur:
-#     cur.execute(...)
-#     result = cur.fetchall()
+# cur.execute(...)
+# result = cur.fetchall()
 ```
 
 **Méthodes disponibles**: `fetch_all()`, `fetch_one()`, `fetch_scalar()`, `execute_write()`, `execute_many()`, `exists()`, `count()`
@@ -156,9 +156,9 @@ formations = FormationServiceCRUD.get_by_operateur(operateur_id=1)
 
 # ❌ ÉVITER: SQL manuel avec logging manuel
 # with DatabaseConnection() as conn:
-#     cur = conn.cursor()
-#     cur.execute("INSERT INTO personnel ...")
-#     log_hist("CREATION_PERSONNEL", ...)
+# cur = conn.cursor()
+# cur.execute("INSERT INTO personnel ...")
+# log_hist("CREATION_PERSONNEL", ...)
 ```
 
 **Services disponibles**:
@@ -196,11 +196,11 @@ class MyFormDialog(EmacFormDialog):
 
 # ❌ ÉVITER: Dupliquer le code boilerplate de QDialog
 # class MyDialog(QDialog):
-#     def __init__(self):
-#         super().__init__()
-#         self.setWindowTitle(...)
-#         layout = QVBoxLayout(self)
-#         scroll = QScrollArea()  # ... 50+ lignes de setup
+# def __init__(self):
+# super().__init__()
+# self.setWindowTitle(...)
+# layout = QVBoxLayout(self)
+# scroll = QScrollArea()  # ... 50+ lignes de setup
 ```
 
 **Classes disponibles**:
@@ -223,12 +223,12 @@ class MonNouveauService(CRUDService):
     ALLOWED_FIELDS = ['champ1', 'champ2', 'champ3']
 
 # Méthodes disponibles automatiquement:
-# - create(), update(), delete()
-# - get_by_id(), get_all(), exists(), count()
-# - Logging automatique dans historique
+# create(), update(), delete()
+# get_by_id(), get_all(), exists(), count()
+# Logging automatique dans historique
 ```
 
-#### 📚 Documentation complète
+#### Documentation complète
 
 - **Guide de refactoring**: [docs/dev/refactoring-guide-2026-02-09.md](docs/dev/refactoring-guide-2026-02-09.md)
 - **Script de test**: `py -m scripts.test_new_patterns`
@@ -241,7 +241,7 @@ class MonNouveauService(CRUDService):
 4. ✅ **TOUJOURS** utiliser les services existants (PersonnelService, FormationServiceCRUD, etc.)
 5. ❌ **INTERDIT dans `core/gui/`** : importer ou utiliser directement `DatabaseCursor`, `DatabaseConnection`, `QueryExecutor`, `get_connection()` ou tout autre accès DB direct. La couche GUI ne communique **QU'AVEC** `core/services/` ou `core/repositories/`.
 
-#### 🚫 Séparation stricte GUI / Service (Architecture)
+#### Séparation stricte GUI / Service (Architecture)
 
 ```
 ❌ INTERDIT dans core/gui/*.py :
@@ -260,7 +260,7 @@ class MonNouveauService(CRUDService):
 **Fichier de référence officiel RH** : `rh_service_refactored.py` (1 109 lignes, QueryExecutor)
 ❌ `rh_service.py` a été **supprimé** le 2026-02-18 — ne pas recréer.
 
-### ⚡ UI / Threads Optimizations (2026-01-07)
+### UI / Threads Optimizations (2026-01-07)
 
 **IMPORTANT**: UI responsiveness optimizations to prevent freezes:
 
@@ -309,7 +309,7 @@ class MonNouveauService(CRUDService):
 
 **Full documentation**: [docs/dev/optimisation-ui-threads.md](docs/dev/optimisation-ui-threads.md)
 
-### ⚡ Lazy Loading & Pagination (2026-01-26)
+### Lazy Loading & Pagination (2026-01-26)
 
 **IMPORTANT**: Startup and list performance optimizations:
 
@@ -363,7 +363,7 @@ class MonNouveauService(CRUDService):
    - ✅ Use specific columns: `SELECT id, nom, prenom FROM personnel`
    - Repositories now use `cls.COLUMNS` for explicit column lists
 
-### 📝 Logging System (2026-01-27)
+### Logging System (2026-01-27)
 
 **IMPORTANT**: Centralized logging configuration for production-ready logs:
 
@@ -411,7 +411,7 @@ class MonNouveauService(CRUDService):
    setup_logging(production_mode=os.getenv('EMAC_ENV') == 'production')
    ```
 
-### 🔐 Permission System "Features" (2026-01-27)
+### Permission System "Features" (2026-01-27)
 
 **IMPORTANT**: New granular permission system based on "features":
 
@@ -462,7 +462,7 @@ class MonNouveauService(CRUDService):
 
 5. **UI Components**
    - **FeaturePuzzleWidget**: Grid by modules with OUI/NON/AUTO toggles
-   - Access via: Gestion Utilisateurs → "🔐 Gérer les Features"
+   - Access via: Gestion Utilisateurs → " Gérer les Features"
    - File: [feature_puzzle.py](App/core/gui/feature_puzzle.py)
 
 6. **Security: Service-level checks** (Race Condition TOCTOU Protection)
@@ -486,7 +486,7 @@ class MonNouveauService(CRUDService):
 
 **Full list of features**: See [010_add_features_system.sql](App/database/migrations/010_add_features_system.sql)
 
-### 🔐 Session Timeout (2026-02-04)
+### Session Timeout (2026-02-04)
 
 **IMPORTANT**: Automatic logout after inactivity period:
 
@@ -536,10 +536,10 @@ class MonNouveauService(CRUDService):
 
 ```
 EMAC/
-├── 📄 README.md                    # Main project documentation
-├── 📄 CLAUDE.md                    # Instructions for Claude Code
+├──  README.md                    # Main project documentation
+├──  CLAUDE.md                    # Instructions for Claude Code
 │
-├── 📁 docs/                        # Documentation
+├──  docs/                        # Documentation
 │   ├── dev/                        # Developer documentation
 │   │   ├── architecture.md         # System architecture
 │   │   ├── tests-report.md         # Test reports
@@ -556,7 +556,7 @@ EMAC/
 │       ├── database-credentials.md # Credential management
 │       └── security-changelog.md   # Security audit log
 │
-├── 📁 App/
+├──  App/
 │   ├── core/                               # Core application code
 │   │   ├── db/                             # Database layer
 │   │   │   ├── configbd.py                 # MySQL connection setup
@@ -625,7 +625,7 @@ EMAC/
 │   ├── run/                       # Runtime files
 │   └── run_emac.vbs               # Windows launcher
 │
-└── 📁 Deploy/                     # Deployment files
+└──  Deploy/                     # Deployment files
 ```
 
 ### UI Theme System
@@ -728,7 +728,7 @@ Install with: `pip install -r requirements.txt`
 - Date formatting: Use `strftime('%d/%m/%Y')` for display (DD/MM/YYYY French format)
 - All user-facing text is in French
 
-## 🔒 Security Patterns (2026-02-02)
+## Security Patterns (2026-02-02)
 
 **IMPORTANT**: Follow these security patterns to prevent vulnerabilities.
 

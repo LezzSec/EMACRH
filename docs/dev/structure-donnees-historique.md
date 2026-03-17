@@ -1,10 +1,10 @@
-# 🗄️ Structure des Données d'Historique - Guide Technique
+# Structure des Données d'Historique - Guide Technique
 
 ## Vue d'ensemble
 
 Ce document décrit la structure de stockage des données d'historique dans EMAC, permettant de conserver et d'afficher les anciennes valeurs lors de modifications.
 
-## 📋 Table `historique`
+## Table `historique`
 
 ### Schéma SQL
 
@@ -35,7 +35,7 @@ CREATE TABLE historique (
 | `poste_id` | INT (nullable) | ID du poste concerné |
 | `description` | TEXT (nullable) | Données JSON avec détails complets |
 
-## 🎯 Format JSON de la colonne `description`
+## Format JSON de la colonne `description`
 
 ### Principes de base
 
@@ -204,7 +204,7 @@ log_hist(
 }
 ```
 
-## 🔄 Bonnes pratiques de logging
+## Bonnes pratiques de logging
 
 ### 1. Toujours utiliser la fonction `log_hist()`
 
@@ -289,7 +289,7 @@ finally:
     conn.close()
 ```
 
-## 📊 Requêtes SQL utiles
+## Requêtes SQL utiles
 
 ### Historique complet d'un opérateur
 
@@ -352,7 +352,7 @@ JOIN historique h ON h.poste_id = latest.poste_id
 JOIN postes p ON p.id = h.poste_id;
 ```
 
-## 🔍 Validation des données
+## Validation des données
 
 ### Script de vérification JSON
 
@@ -387,7 +387,7 @@ else:
     print("✅ Tous les JSON sont valides")
 ```
 
-## 🧹 Maintenance
+## Maintenance
 
 ### Archivage des anciennes données
 
@@ -415,7 +415,7 @@ EXPLAIN SELECT * FROM historique WHERE operateur_id = 123 ORDER BY date_time DES
 CREATE INDEX idx_operateur_date ON historique(operateur_id, date_time DESC);
 ```
 
-## 📈 Migration de données existantes
+## Migration de données existantes
 
 ### Script de migration pour anciennes données sans JSON
 
@@ -464,7 +464,7 @@ conn.commit()
 print("✅ Migration terminée")
 ```
 
-## 🎓 Exemples d'utilisation avancée
+## Exemples d'utilisation avancée
 
 ### Comparer deux états d'un opérateur
 

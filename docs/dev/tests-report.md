@@ -1,6 +1,6 @@
 # Rapport de Tests EMAC - Suite de Tests Puissante
 
-## 📊 Résumé Exécutif
+## Résumé Exécutif
 
 Une suite de tests complète et puissante a été créée pour l'application EMAC. Cette suite couvre tous les aspects critiques du système avec plus de **150+ tests** répartis en 6 suites principales.
 
@@ -12,7 +12,7 @@ Une suite de tests complète et puissante a été créée pour l'application EMA
 - **Couverture:** Système d'évaluation, Contrats, Audit, Personnel, Base de données, Intégration
 - **Temps d'exécution total:** 1-2 minutes pour toute la suite
 
-## 🎯 Tests Créés
+## Tests Créés
 
 ### 1. **test_evaluation_system_advanced.py** (NOUVEAU)
 
@@ -105,7 +105,7 @@ Tests d'intégrité de la base de données.
 
 ---
 
-## 🚀 Runner de Tests Maître
+## Runner de Tests Maître
 
 ### **run_all_tests.py** (NOUVEAU)
 
@@ -141,7 +141,7 @@ py tests/run_all_tests.py --export
 
 ---
 
-## 📋 Documentation
+## Documentation
 
 ### **README_TESTS.md** (NOUVEAU)
 
@@ -155,7 +155,7 @@ Documentation complète de 500+ lignes couvrant:
 
 ---
 
-## 🎨 Caractéristiques Techniques
+## Caractéristiques Techniques
 
 ### Architecture des Tests
 
@@ -213,7 +213,7 @@ App/tests/
 
 ---
 
-## 🔬 Types de Tests
+## Types de Tests
 
 ### 1. Tests Fonctionnels
 - ✅ CRUD complet
@@ -248,7 +248,7 @@ App/tests/
 
 ---
 
-## 📈 Résultats Actuels
+## Résultats Actuels
 
 ### Suite Evaluation (test_evaluation_system_advanced.py)
 
@@ -286,7 +286,7 @@ Durée: ~0.35s
 
 ---
 
-## 💡 Bénéfices
+## Bénéfices
 
 ### 1. Détection Précoce des Bugs
 Les tests ont déjà détecté un problème de tri dans le système d'évaluation.
@@ -305,7 +305,7 @@ Tous les aspects critiques sont testés: CRUD, métier, performance, edge cases.
 
 ---
 
-## 🔧 Utilisation Pratique
+## Utilisation Pratique
 
 ### Développement Quotidien
 
@@ -343,7 +343,7 @@ py tests/run_all_tests.py --export
 
 ---
 
-## 📊 Métriques de Qualité
+## Métriques de Qualité
 
 ### Couverture du Code
 - **Système d'évaluation:** ~90%
@@ -363,7 +363,7 @@ py tests/run_all_tests.py --export
 
 ---
 
-## 🚀 Prochaines Étapes Recommandées
+## Prochaines Étapes Recommandées
 
 1. **Corriger le bug détecté**
    - Fixer le tri par urgence dans le système d'évaluation
@@ -388,7 +388,7 @@ py tests/run_all_tests.py --export
 
 ---
 
-## 📝 Conclusion
+## Conclusion
 
 Une suite de tests **puissante, complète et professionnelle** a été créée pour EMAC:
 
@@ -404,7 +404,7 @@ Une suite de tests **puissante, complète et professionnelle** a été créée p
 
 ---
 
-## 📞 Support
+## Support
 
 Pour toute question sur les tests:
 1. Consulter [README_TESTS.md](App/tests/README_TESTS.md)

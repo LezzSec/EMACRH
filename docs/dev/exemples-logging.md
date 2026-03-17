@@ -1,10 +1,10 @@
-# 💡 Exemples Pratiques de Logging d'Historique
+# Exemples Pratiques de Logging d'Historique
 
 ## Introduction
 
 Ce document fournit des exemples concrets et prêts à l'emploi pour logger correctement les actions dans l'historique EMAC.
 
-## 📚 Table des matières
+## Table des matières
 
 1. [Ajout de compétence (INSERT)](#1-ajout-de-compétence)
 2. [Modification de niveau (UPDATE)](#2-modification-de-niveau)
@@ -512,7 +512,7 @@ except Exception as e:
 
 ---
 
-## 🎯 Patterns avancés
+## Patterns avancés
 
 ### Pattern 1 : Modification multiple
 
@@ -641,7 +641,7 @@ def create_audit_trail(table_name, record_id, action, user_id=None):
 
 ---
 
-## 🧪 Tests unitaires
+## Tests unitaires
 
 ```python
 import unittest

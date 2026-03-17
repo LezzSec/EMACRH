@@ -1,10 +1,10 @@
-# 📚 Documentation Complète - Système d'Historique EMAC
+# Documentation Complète - Système d'Historique EMAC
 
 ## Vue d'ensemble
 
 Le système d'historique EMAC permet de tracer toutes les actions effectuées sur les données du personnel, avec conservation des anciennes valeurs et affichage dans une interface moderne et intuitive.
 
-## 🎯 Fonctionnalités principales
+## Fonctionnalités principales
 
 ### ✅ Ce que le système fait :
 
@@ -15,7 +15,7 @@ Le système d'historique EMAC permet de tracer toutes les actions effectuées su
 5. **Visualisation claire** : Code couleur, icônes, résumés lisibles
 6. **Double-clic pour détails** : Dialogue modal avec toutes les informations
 
-## 📖 Documentation disponible
+## Documentation disponible
 
 ### 1. [GUIDE_INTERFACE_HISTORIQUE.md](GUIDE_INTERFACE_HISTORIQUE.md)
 **Pour les utilisateurs finaux**
@@ -42,7 +42,7 @@ Le système d'historique EMAC permet de tracer toutes les actions effectuées su
 - Patterns avancés
 - Tests unitaires
 
-## 🚀 Démarrage rapide
+## Démarrage rapide
 
 ### Pour utiliser l'interface
 
@@ -74,36 +74,36 @@ log_hist(
 )
 ```
 
-## 🎨 Captures d'écran (descriptions)
+## Captures d'écran (descriptions)
 
 ### Interface principale
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ 📜 Historique complet                                   │
+│  Historique complet                                   │
 │ Toutes les actions concernant Jean Dupont              │
 ├─────────────────────────────────────────────────────────┤
 │ Filtres: [Type ▼] [Poste ▼] [Du: __/__/__] [Au: __/__/__]│
-│          [🔍 Rechercher...             ] [🔄 Réinitialiser]│
+│          [ Rechercher...             ] [ Réinitialiser]│
 ├─────────────────────────────────────────────────────────┤
 │ Date/Heure     │ Type  │ Poste │ Résumé                │
 ├────────────────┼───────┼───────┼───────────────────────┤
-│ 01/12/25 14:30 │ ✎ UPD │ 0515  │ Modif niveau: 2 → 4   │
-│ 15/11/25 09:15 │ ✚ INS │ 0830  │ Ajout compétence: N3  │
-│ 10/10/25 16:45 │ ✕ DEL │ 0620  │ Suppression: N2       │
+│ 01/12/25 14:30 │  UPD │ 0515  │ Modif niveau: 2 → 4   │
+│ 15/11/25 09:15 │  INS │ 0830  │ Ajout compétence: N3  │
+│ 10/10/25 16:45 │  DEL │ 0620  │ Suppression: N2       │
 ├─────────────────────────────────────────────────────────┤
-│ 📋 Détails de l'action sélectionnée                     │
+│  Détails de l'action sélectionnée                     │
 │ ┌─────────────────────────────────────────────────────┐ │
-│ │ 👤 Opérateur : Jean Dupont                          │ │
-│ │ 📍 Poste : 0515                                     │ │
+│ │  Opérateur : Jean Dupont                          │ │
+│ │  Poste : 0515                                     │ │
 │ │ ⭐ Changement niveau : [N2] → [N4]                  │ │
 │ └─────────────────────────────────────────────────────┘ │
 ├─────────────────────────────────────────────────────────┤
-│ 📊 3 action(s) affichée(s) sur 15 au total              │
+│  3 action(s) affichée(s) sur 15 au total              │
 │ Légende: ■ Ajout ■ Modification ■ Suppression ■ Erreur │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## 🗂️ Architecture du code
+## Architecture du code
 
 ### Fichiers créés/modifiés
 
@@ -152,7 +152,7 @@ def format_action_resume(action, data, poste)
 def format_details_html(action, data, poste)
 ```
 
-## 🔄 Flux de données
+## Flux de données
 
 ```
 ┌──────────────────┐
@@ -194,16 +194,16 @@ def format_details_html(action, data, poste)
 └─────────────────────────────┘
 ```
 
-## 📊 Types d'actions supportés
+## Types d'actions supportés
 
 | Type | Couleur | Icône | Usage |
 |------|---------|-------|-------|
-| INSERT | 🟢 Vert | ✚ | Ajout de compétence, import |
-| UPDATE | 🔵 Bleu | ✎ | Modification niveau, dates |
-| DELETE | 🔴 Rouge | ✕ | Suppression compétence |
-| ERROR | 🟠 Orange | ⚠ | Erreurs système |
+| INSERT |  Vert |  | Ajout de compétence, import |
+| UPDATE |  Bleu |  | Modification niveau, dates |
+| DELETE |  Rouge |  | Suppression compétence |
+| ERROR |  Orange | ⚠ | Erreurs système |
 
-## 🔧 Configuration
+## Configuration
 
 ### Paramètres par défaut
 
@@ -229,7 +229,7 @@ ACTION_COLORS = {
 }
 ```
 
-## 🧪 Tests
+## Tests
 
 ### Test manuel rapide
 
@@ -257,7 +257,7 @@ def test_json_parsing():
     pass
 ```
 
-## 🐛 Résolution de problèmes
+## Résolution de problèmes
 
 ### Problème : Aucune donnée n'apparaît
 
@@ -272,7 +272,7 @@ def test_json_parsing():
 SELECT * FROM historique WHERE operateur_id = 123;
 
 # Réinitialiser les filtres
-# Cliquer sur "🔄 Réinitialiser"
+# Cliquer sur " Réinitialiser"
 ```
 
 ### Problème : JSON invalide dans description
@@ -315,7 +315,7 @@ log_hist(..., description=json.dumps({
 }))
 ```
 
-## 📈 Performances
+## Performances
 
 ### Optimisations appliquées
 
@@ -342,7 +342,7 @@ DELETE FROM historique
 WHERE date_time < DATE_SUB(NOW(), INTERVAL 2 YEAR);
 ```
 
-## 🚀 Évolutions futures
+## Évolutions futures
 
 ### Priorité haute
 - [ ] Export Excel/PDF de l'historique filtré
@@ -359,7 +359,7 @@ WHERE date_time < DATE_SUB(NOW(), INTERVAL 2 YEAR);
 - [ ] Notifications temps réel
 - [ ] Statistiques avancées
 
-## 📞 Support
+## Support
 
 ### Questions fréquentes
 
@@ -382,7 +382,7 @@ Pour toute question ou problème :
 - Vérifier les logs d'erreur Python
 - Vérifier les données SQL directement
 
-## 📝 Changelog
+## Changelog
 
 ### Version 1.0 (Décembre 2025)
 - ✅ Création du widget `HistoriquePersonnelTab`

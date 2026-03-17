@@ -1,4 +1,4 @@
-# 🔐 Guide de sécurité - Configuration Base de Données
+# Guide de sécurité - Configuration Base de Données
 
 ## Configuration du mot de passe MySQL
 
@@ -6,7 +6,7 @@ Le mot de passe MySQL n'est plus hardcodé dans le code source. Vous avez **3 m�
 
 ---
 
-## 📝 Méthode 1 : Fichier .env (Recommandée)
+## Méthode 1 : Fichier .env (Recommandée)
 
 ### Étape 1 : Créer le fichier `.env`
 
@@ -31,7 +31,7 @@ Le mot de passe MySQL n'est plus hardcodé dans le code source. Vous avez **3 m�
 
 ---
 
-## 🖥️ Méthode 2 : Variables d'environnement Windows
+## Méthode 2 : Variables d'environnement Windows
 
 ### Définir pour la session actuelle (temporaire)
 ```cmd
@@ -62,7 +62,7 @@ set EMAC_DB_NAME=emac_db
 
 ---
 
-## 🔧 Méthode 3 : Valeur par défaut (Développement local uniquement)
+## Méthode 3 : Valeur par défaut (Développement local uniquement)
 
 Si aucune configuration n'est trouvée, l'application utilisera la valeur par défaut `emacViodos$13` avec un avertissement dans la console.
 
@@ -73,7 +73,7 @@ Cette méthode est **uniquement pour le développement local**. Pour la producti
 
 ---
 
-## 🔒 Sécurité Git
+## Sécurité Git
 
 Le fichier `.env` est déjà dans `.gitignore` et ne sera **jamais** commité.
 
@@ -93,7 +93,7 @@ git filter-branch --force --index-filter \
 
 ---
 
-## 🧪 Vérification de la configuration
+## Vérification de la configuration
 
 Pour vérifier que la configuration fonctionne :
 
@@ -111,7 +111,7 @@ Si le mot de passe n'est pas configuré, vous verrez :
 
 ---
 
-## 📦 Déploiement sur une autre machine
+## Déploiement sur une autre machine
 
 1. Cloner le dépôt
 2. Créer le fichier `.env` avec les valeurs locales :
@@ -123,7 +123,7 @@ Si le mot de passe n'est pas configuré, vous verrez :
 
 ---
 
-## 🔐 Bonnes pratiques
+## Bonnes pratiques
 
 ### ✅ À FAIRE
 - Utiliser un fichier `.env` local pour chaque machine

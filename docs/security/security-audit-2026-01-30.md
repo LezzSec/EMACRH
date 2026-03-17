@@ -1,4 +1,4 @@
-# 🔒 RAPPORT D'AUDIT DE SÉCURITÉ MASSIF - EMAC
+# RAPPORT D'AUDIT DE SÉCURITÉ MASSIF - EMAC
 
 **Date:** 2026-01-30
 **Version Application:** 2.x
@@ -7,7 +7,7 @@
 
 ---
 
-## 📊 RÉSUMÉ EXÉCUTIF
+## RÉSUMÉ EXÉCUTIF
 
 | Catégorie | Critique | Haute | Moyenne | Basse | Total |
 |-----------|----------|-------|---------|-------|-------|
@@ -23,7 +23,7 @@
 
 ---
 
-## 🚨 VULNÉRABILITÉS CRITIQUES (13)
+## VULNÉRABILITÉS CRITIQUES (13)
 
 ### C1. Injection SQL Dynamique
 **Fichier:** [rh_service.py:633-642](App/core/services/rh_service.py#L633-L642)
@@ -134,7 +134,7 @@ cur.execute("DELETE FROM historique WHERE date_time >= %s AND date_time <= %s", 
 
 ---
 
-## 🔴 VULNÉRABILITÉS HAUTES (17)
+## VULNÉRABILITÉS HAUTES (17)
 
 ### H1-H4. Colonnes Dynamiques dans UPDATE
 **Fichiers Affectés:**
@@ -218,7 +218,7 @@ Le champ `ip_address` existe dans `logs_connexion` mais n'est jamais peuplé.
 
 ---
 
-## 🟠 VULNÉRABILITÉS MOYENNES (22)
+## VULNÉRABILITÉS MOYENNES (22)
 
 ### M1-M5. Validation d'Entrées Manquante
 
@@ -290,7 +290,7 @@ desc_json = json.dumps(description_data, ensure_ascii=False)  # Input non valid�
 
 ---
 
-## 🟡 VULNÉRABILITÉS BASSES (9)
+## VULNÉRABILITÉS BASSES (9)
 
 | # | Description | Fichier |
 |---|-------------|---------|
@@ -319,7 +319,7 @@ desc_json = json.dumps(description_data, ensure_ascii=False)  # Input non valid�
 
 ---
 
-## 📋 PLAN DE REMÉDIATION
+## PLAN DE REMÉDIATION
 
 ### Phase 1 - Critique (Semaine 1)
 
@@ -364,7 +364,7 @@ desc_json = json.dumps(description_data, ensure_ascii=False)  # Input non valid�
 
 ---
 
-## 🔧 EXEMPLES DE CORRECTIFS
+## EXEMPLES DE CORRECTIFS
 
 ### Correctif C1 - Injection SQL Dynamique
 
@@ -458,7 +458,7 @@ def validate_upload(file_path: str) -> tuple[bool, str]:
 
 ---
 
-## 📊 MÉTRIQUES DE SUIVI
+## MÉTRIQUES DE SUIVI
 
 ### KPIs Sécurité à Implémenter
 
@@ -472,7 +472,7 @@ def validate_upload(file_path: str) -> tuple[bool, str]:
 
 ---
 
-## 📚 ANNEXES
+## ANNEXES
 
 ### A. Outils de Test Recommandés
 

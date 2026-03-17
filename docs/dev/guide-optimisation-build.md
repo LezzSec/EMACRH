@@ -1,12 +1,12 @@
 # Guide d'Optimisation du Build EMAC
 
-## 📋 Vue d'ensemble
+## Vue d'ensemble
 
 Ce guide explique comment créer un exécutable EMAC optimisé avec PyInstaller, en réduisant la taille de **50-60%** et en améliorant les performances de démarrage.
 
 ---
 
-## 🎯 Objectifs d'optimisation
+## Objectifs d'optimisation
 
 | Métrique | Non optimisé | Optimisé | Gain |
 |----------|--------------|----------|------|
@@ -17,7 +17,7 @@ Ce guide explique comment créer un exécutable EMAC optimisé avec PyInstaller,
 
 ---
 
-## 🚀 Démarrage rapide
+## Démarrage rapide
 
 ### Étape 1: Installer UPX (optionnel mais recommandé)
 
@@ -47,18 +47,18 @@ build_optimized.bat
 ```
 
 Le script va:
-1. ✓ Vérifier Python et PyInstaller
-2. ✓ Vérifier UPX (optionnel)
-3. ✓ Nettoyer les anciens builds
-4. ✓ Analyser les dépendances
-5. ✓ Build avec `EMAC_optimized.spec`
-6. ✓ Créer la structure de dossiers
-7. ✓ Calculer la taille finale
-8. ✓ Proposer un test
+1.  Vérifier Python et PyInstaller
+2.  Vérifier UPX (optionnel)
+3.  Nettoyer les anciens builds
+4.  Analyser les dépendances
+5.  Build avec `EMAC_optimized.spec`
+6.  Créer la structure de dossiers
+7.  Calculer la taille finale
+8.  Proposer un test
 
 ---
 
-## 📁 Structure de sortie
+## Structure de sortie
 
 ```
 dist/EMAC/
@@ -79,7 +79,7 @@ dist/EMAC/
 
 ---
 
-## 🔧 Fichiers d'optimisation
+## Fichiers d'optimisation
 
 ### 1. `EMAC_optimized.spec`
 
@@ -135,7 +135,7 @@ Outil d'analyse statique qui:
 
 ---
 
-## 📊 Stratégies d'optimisation
+## Stratégies d'optimisation
 
 ### 1. Exclusion des modules inutilisés
 
@@ -188,7 +188,7 @@ Gain: ~5-10%
 
 ---
 
-## 🧪 Tests et validation
+## Tests et validation
 
 ### Après le build, testez:
 
@@ -199,13 +199,13 @@ Gain: ~5-10%
    ```
 
 2. **Fonctionnalités critiques**:
-   - ✓ Connexion base de données
-   - ✓ Chargement des données personnel
-   - ✓ Gestion des évaluations
-   - ✓ Export Excel
-   - ✓ Export PDF
-   - ✓ Gestion des absences
-   - ✓ Historique
+   -  Connexion base de données
+   -  Chargement des données personnel
+   -  Gestion des évaluations
+   -  Export Excel
+   -  Export PDF
+   -  Gestion des absences
+   -  Historique
 
 3. **Vérifier les logs**:
    ```bash
@@ -248,7 +248,7 @@ Gain: ~5-10%
 
 ---
 
-## 🎯 Optimisations avancées
+## Optimisations avancées
 
 ### 1. Remplacer Pandas par SQL pur
 
@@ -293,7 +293,7 @@ pyi-archive_viewer dist\EMAC\EMAC.exe
 
 ---
 
-## 📈 Benchmarks
+## Benchmarks
 
 Tests effectués sur Windows 10, i5-8250U, 8GB RAM:
 
@@ -305,7 +305,7 @@ Tests effectués sur Windows 10, i5-8250U, 8GB RAM:
 
 ---
 
-## 🔄 Workflow de build recommandé
+## Workflow de build recommandé
 
 ### Pour le développement:
 
@@ -346,7 +346,7 @@ EMAC.exe
 
 ---
 
-## 📦 Déploiement
+## Déploiement
 
 ### Option 1: Dossier zippé (simple)
 
@@ -385,7 +385,7 @@ Compilez avec Inno Setup Compiler.
 
 ---
 
-## 🛠️ Maintenance
+## Maintenance
 
 ### Mise à jour de l'application
 
@@ -430,7 +430,7 @@ Avant de distribuer:
 
 ---
 
-## 📚 Ressources
+## Ressources
 
 - **PyInstaller docs**: https://pyinstaller.org/
 - **UPX**: https://upx.github.io/

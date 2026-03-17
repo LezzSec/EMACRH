@@ -6,7 +6,7 @@
 
 ---
 
-## 🎯 Résumé en 30 secondes
+## Résumé en 30 secondes
 
 ✅ **Pool MySQL centralisé** → Réutilisation des connexions + timeouts
 ✅ **Context managers** → Code plus propre, plus sûr
@@ -18,7 +18,7 @@
 
 ---
 
-## 📦 Fichiers créés
+## Fichiers créés
 
 ### Scripts et migrations
 - `App/database/migrations/001_add_performance_indexes.sql` - 29 index SQL
@@ -33,7 +33,7 @@
 
 ---
 
-## 🔧 Fichiers modifiés
+## Fichiers modifiés
 
 ### Core database layer
 - ✅ `App/core/db/configbd.py`
@@ -56,7 +56,7 @@
 
 ---
 
-## 🚀 Changements en détail
+## Changements en détail
 
 ### 1. Pool de connexions MySQL
 
@@ -182,15 +182,15 @@ def _ensure_connection_alive(conn):
 
 ---
 
-## 📊 Impact global
+## Impact global
 
 ### Temps de chargement
 
 | Opération | Avant | Après | Gain |
 |-----------|-------|-------|------|
-| Ouverture app | 2-5s | 0.5-1s | **5x** 🚀 |
-| Dashboard | 1-3s | 0.1-0.3s | **10x** 🚀 |
-| Recherche évaluations | 0.5-2s | 0.01-0.05s | **50x** 🚀 |
+| Ouverture app | 2-5s | 0.5-1s | **5x**  |
+| Dashboard | 1-3s | 0.1-0.3s | **10x**  |
+| Recherche évaluations | 0.5-2s | 0.01-0.05s | **50x**  |
 | Freeze après veille | Fréquent | Résolu | ✅ |
 
 ### Scalabilité
@@ -216,7 +216,7 @@ def _ensure_connection_alive(conn):
 - [x] Documentation complète
 - [x] Tests automatisés créés
 
-### À FAIRE 🔴
+### À FAIRE 
 - [ ] **Appliquer les index** : `python App/scripts/apply_performance_indexes.py`
 - [ ] Tester l'application
 - [ ] Mesurer les temps de réponse
@@ -224,7 +224,7 @@ def _ensure_connection_alive(conn):
 
 ---
 
-## 🧪 Tests
+## Tests
 
 ### Test rapide
 ```bash
@@ -243,21 +243,21 @@ python test_db_optimizations.py
 
 ---
 
-## 📚 Documentation
+## Documentation
 
 ### Guides complets
-- 📖 [docs/dev/optimisation-database.md](docs/dev/optimisation-database.md) - Guide détaillé
-- ⚡ [OPTIMISATIONS_DB_APPLIQUEES.md](OPTIMISATIONS_DB_APPLIQUEES.md) - Guide rapide
-- 🗂️ [App/database/migrations/README.md](App/database/migrations/README.md) - Migrations
+-  [docs/dev/optimisation-database.md](docs/dev/optimisation-database.md) - Guide détaillé
+-  [OPTIMISATIONS_DB_APPLIQUEES.md](OPTIMISATIONS_DB_APPLIQUEES.md) - Guide rapide
+-  [App/database/migrations/README.md](App/database/migrations/README.md) - Migrations
 
 ### Fichiers SQL et scripts
-- 📄 [App/database/migrations/001_add_performance_indexes.sql](App/database/migrations/001_add_performance_indexes.sql)
-- 🐍 [App/scripts/apply_performance_indexes.py](App/scripts/apply_performance_indexes.py)
-- 🧪 [App/scripts/test_db_optimizations.py](App/scripts/test_db_optimizations.py)
+-  [App/database/migrations/001_add_performance_indexes.sql](App/database/migrations/001_add_performance_indexes.sql)
+-  [App/scripts/apply_performance_indexes.py](App/scripts/apply_performance_indexes.py)
+-  [App/scripts/test_db_optimizations.py](App/scripts/test_db_optimizations.py)
 
 ---
 
-## 💡 Pour les développeurs
+## Pour les développeurs
 
 ### Nouvelle façon d'écrire du code DB
 
@@ -286,7 +286,7 @@ conn = mysql.connector.connect(...)  # ❌ NE PLUS FAIRE
 
 ---
 
-## 🔧 Rollback (si nécessaire)
+## Rollback (si nécessaire)
 
 ### Annuler les index (déconseillé)
 
@@ -314,19 +314,19 @@ git checkout HEAD~1 App/core/services/auth_service.py
 
 ---
 
-## 🎉 Conclusion
+## Conclusion
 
 ### Gains obtenus
-- ⚡ **10-100x plus rapide** sur les opérations courantes
-- 🛡️ **Plus robuste** (pas de freeze après veille)
-- 🧹 **Code plus propre** (context managers)
-- 📈 **Meilleure scalabilité** (supporte plus d'utilisateurs)
+-  **10-100x plus rapide** sur les opérations courantes
+-  **Plus robuste** (pas de freeze après veille)
+-  **Code plus propre** (context managers)
+-  **Meilleure scalabilité** (supporte plus d'utilisateurs)
 
 ### Prochaines étapes
-1. 🔴 **Appliquer les index** (requis pour les gains)
+1.  **Appliquer les index** (requis pour les gains)
 2. ✅ Tester en condition réelle
-3. 📊 Monitorer les performances
-4. 🎓 Former l'équipe aux nouveaux patterns
+3.  Monitorer les performances
+4.  Former l'équipe aux nouveaux patterns
 
 ---
 

@@ -109,11 +109,11 @@ Accès aux fonctionnalités de gestion de la production et des évaluations.
 - ✅ Gestion du personnel (lecture, écriture, suppression)
 - ✅ Gestion des évaluations (lecture, écriture, suppression)
 - ✅ Gestion de la polyvalence (lecture, écriture, suppression)
-- 👁️ Gestion des contrats (**LECTURE SEULE** - peut consulter mais pas créer/modifier)
+-  Gestion des contrats (**LECTURE SEULE** - peut consulter mais pas créer/modifier)
 - ❌ Documents RH (pas d'accès)
-- 👁️ Planning et absences (**LECTURE SEULE** - peut consulter mais pas modifier les absences)
+-  Planning et absences (**LECTURE SEULE** - peut consulter mais pas modifier les absences)
 - ✅ Gestion des postes (lecture, écriture, suppression)
-- 👁️ Historique (lecture seule)
+-  Historique (lecture seule)
 - ✅ Grilles de compétences (lecture, écriture, suppression)
 - ❌ Gestion des utilisateurs (pas d'accès)
 
@@ -135,15 +135,15 @@ Accès aux fonctionnalités de gestion de la production et des évaluations.
 Accès aux fonctionnalités administratives et de gestion des ressources humaines.
 
 **Permissions** :
-- 👁️ Gestion du personnel (**LECTURE SEULE** - peut consulter les employés)
+-  Gestion du personnel (**LECTURE SEULE** - peut consulter les employés)
 - ❌ Gestion des évaluations (pas d'accès)
-- 👁️ Gestion de la polyvalence (**LECTURE SEULE** - peut consulter mais pas modifier)
+-  Gestion de la polyvalence (**LECTURE SEULE** - peut consulter mais pas modifier)
 - ✅ Gestion des contrats (lecture, écriture, suppression)
 - ✅ Documents RH (lecture, écriture, suppression)
 - ❌ Planning et absences (pas d'accès)
-- 👁️ Gestion des postes (lecture seule)
-- 👁️ Historique (lecture seule)
-- 👁️ Grilles de compétences (lecture seule)
+-  Gestion des postes (lecture seule)
+-  Historique (lecture seule)
+-  Grilles de compétences (lecture seule)
 - ❌ Gestion des utilisateurs (pas d'accès)
 
 **Menu disponible** :
@@ -162,12 +162,12 @@ Accès aux fonctionnalités administratives et de gestion des ressources humaine
 
 ### Accéder à la gestion des utilisateurs
 
-1. Cliquez sur le bouton menu (☰) en haut à droite
+1. Cliquez sur le bouton menu () en haut à droite
 2. Cliquez sur "Gestion des Utilisateurs"
 
 ### Créer un nouvel utilisateur
 
-1. Cliquez sur "➕ Nouvel Utilisateur"
+1. Cliquez sur " Nouvel Utilisateur"
 2. Remplissez le formulaire :
    - **Nom d'utilisateur** : Identifiant unique (ex: jdupont)
    - **Mot de passe** : Minimum 6 caractères
@@ -223,8 +223,8 @@ Actuellement, les utilisateurs non-administrateurs doivent demander à un admini
 
 Pour se déconnecter de l'application :
 
-1. Cliquez sur le bouton menu (☰)
-2. Cliquez sur "🚪 Déconnexion"
+1. Cliquez sur le bouton menu ()
+2. Cliquez sur " Déconnexion"
 3. Confirmez la déconnexion
 
 L'écran de connexion s'affichera à nouveau.
@@ -298,20 +298,20 @@ Si vous remarquez des connexions suspectes ou des actions non autorisées :
 
 | Fonctionnalité | Admin | Gestion Production | Gestion RH |
 |----------------|-------|-------------------|------------|
-| Ajouter/Modifier personnel | ✅ | ✅ | 👁️ Lecture |
+| Ajouter/Modifier personnel | ✅ | ✅ |  Lecture |
 | Gérer évaluations | ✅ | ✅ | ❌ |
-| Gérer polyvalence | ✅ | ✅ | 👁️ Lecture |
-| Gérer contrats | ✅ | 👁️ Lecture | ✅ |
+| Gérer polyvalence | ✅ | ✅ |  Lecture |
+| Gérer contrats | ✅ |  Lecture | ✅ |
 | Documents RH | ✅ | ❌ | ✅ |
-| Planning (absences) | ✅ | 👁️ Lecture | ❌ |
-| Créer/Supprimer postes | ✅ | ✅ | 👁️ Lecture |
-| Consulter historique | ✅ | 👁️ Lecture | 👁️ Lecture |
-| Grilles de compétences | ✅ | ✅ | 👁️ Lecture |
+| Planning (absences) | ✅ |  Lecture | ❌ |
+| Créer/Supprimer postes | ✅ | ✅ |  Lecture |
+| Consulter historique | ✅ |  Lecture |  Lecture |
+| Grilles de compétences | ✅ | ✅ |  Lecture |
 | **Gérer utilisateurs** | ✅ | ❌ | ❌ |
 
 **Légende** :
 - ✅ : Accès complet (lecture, écriture, suppression)
-- 👁️ : Lecture seule (consultation uniquement)
+-  : Lecture seule (consultation uniquement)
 - ❌ : Pas d'accès
 
 ---

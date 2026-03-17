@@ -1,6 +1,6 @@
 # Résolution des problèmes de lenteur EMAC
 
-## 🐌 Symptômes
+## Symptômes
 
 - **Démarrage très lent** : 30 secondes à plusieurs minutes
 - **Freezes pendant la saisie** : L'interface se bloque pendant que vous tapez
@@ -8,7 +8,7 @@
 
 ---
 
-## 🔍 Diagnostic : D'où vient la lenteur ?
+## Diagnostic : D'où vient la lenteur ?
 
 ### Cause #1 : Lancement depuis le réseau (99% des cas)
 
@@ -120,12 +120,12 @@ Le fichier `Lancer_EMAC.bat` doit vous être fourni par votre service IT.
   EMAC - Gestion Personnel et Polyvalence
 ================================================
 
- ⏳ Première installation...
- 📂 Copie depuis le réseau vers le disque local
+  Première installation...
+  Copie depuis le réseau vers le disque local
     (Cela peut prendre 30-60 secondes)
 
  ✅ Copie terminée
- 🚀 Lancement d'EMAC...
+  Lancement d'EMAC...
 
  ✅ Application lancée avec succès
 ```
@@ -141,17 +141,17 @@ L'application est copiée dans : `C:\Users\VotreNom\AppData\Local\EMAC_Cache`
 ================================================
 
  ✅ Version locale à jour
- 📁 Lancement depuis : C:\Users\...\EMAC_Cache
- 🚀 Lancement d'EMAC...
+  Lancement depuis : C:\Users\...\EMAC_Cache
+  Lancement d'EMAC...
 
  ✅ Application lancée avec succès
 ```
 
-**Pas de copie** → Démarrage ultra-rapide ⚡
+**Pas de copie** → Démarrage ultra-rapide 
 
 ---
 
-## 🔧 Solutions complémentaires
+## Solutions complémentaires
 
 ### Si le lanceur ne résout pas tout
 
@@ -214,18 +214,18 @@ ping serveur-mysql.entreprise.local -n 10
 
 ---
 
-## 📊 Tableau récapitulatif
+## Tableau récapitulatif
 
 | Problème | Symptôme | Solution | Gain |
 |----------|----------|----------|------|
-| **Lancement depuis réseau** | Démarrage 2-5 min | Utiliser `Lancer_EMAC.bat` | **⚡ 99%** |
+| **Lancement depuis réseau** | Démarrage 2-5 min | Utiliser `Lancer_EMAC.bat` | ** 99%** |
 | **Antivirus** | Freeze 5-10s au démarrage | Exclusion `EMAC_Cache` | **30-50%** |
 | **MySQL lent** | Lag pendant utilisation | Optimiser/rapprocher serveur | **20-40%** |
 | **Trop de modules** | Lent même en local | Recompiler (dev) | **10-20%** |
 
 ---
 
-## 🎯 Checklist de résolution
+## Checklist de résolution
 
 Pour résoudre 99% des problèmes de lenteur :
 
@@ -271,7 +271,7 @@ Pour résoudre 99% des problèmes de lenteur :
 
 ---
 
-## 📞 Support
+## Support
 
 **Problème persiste** après avoir appliqué toutes les solutions ?
 

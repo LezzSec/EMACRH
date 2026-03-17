@@ -2,11 +2,11 @@
 
 **Date** : 2026-01-07
 **Version** : 1.0
-**Impact** : 🔥🔥 MAJEUR (réactivité perçue x5-10)
+**Impact** :  MAJEUR (réactivité perçue x5-10)
 
 ---
 
-## 📋 Table des matières
+## Table des matières
 
 1. [Vue d'ensemble](#vue-densemble)
 2. [Principe : Zéro DB dans le thread principal](#principe--zéro-db-dans-le-thread-principal)
@@ -70,7 +70,7 @@ class MyDialog(QDialog):
         super().__init__()
 
         # ✅ Affichage immédiat avec placeholder
-        self.list.addItem("⏳ Chargement...")
+        self.list.addItem(" Chargement...")
 
         # ✅ Lancer le chargement en background
         worker = DbWorker(self._fetch_personnel)
@@ -219,7 +219,7 @@ Affichage quand il n'y a pas de données.
 from core.gui.loading_components import EmptyStatePlaceholder
 
 empty = EmptyStatePlaceholder(
-    icon="📭",
+    icon="",
     title="Aucune évaluation en retard",
     subtitle="Toutes les évaluations sont à jour !"
 )
@@ -253,7 +253,7 @@ Temps 0ms ──────────► Fenêtre affichée (INSTANTANÉ)
               │
 Temps 100-300ms ──► Chargement données en background
               │
-              │ ⏳ Requêtes DB exécutées
+              │  Requêtes DB exécutées
               │
 Temps 300-800ms ──► Mise à jour UI avec vraies données
               │
@@ -279,9 +279,9 @@ class MainWindow(QMainWindow):
     def setup_ui_skeleton(self):
         """Construit l'interface minimale SANS requêtes DB"""
         # Widgets vides avec placeholders
-        self.user_label = QLabel("👤 ...")
+        self.user_label = QLabel(" ...")
         self.retard_list = QListWidget()
-        self.retard_list.addItem("⏳ Chargement...")
+        self.retard_list.addItem(" Chargement...")
 
     def bootstrap_async(self):
         """Charge les données en background"""
@@ -303,7 +303,7 @@ class MainWindow(QMainWindow):
     def _on_user_loaded(self, user):
         """Appelé dans le thread principal"""
         if user:
-            self.user_label.setText(f"👤 {user['nom']} {user['prenom']}")
+            self.user_label.setText(f" {user['nom']} {user['prenom']}")
 ```
 
 **Chronologie** :
@@ -493,7 +493,7 @@ class SearchDialog(QDialog):
         layout.addWidget(self.list)
 
         self.empty = EmptyStatePlaceholder(
-            icon="🔍",
+            icon="",
             title="Aucun résultat",
             subtitle="Essayez un autre terme"
         )
@@ -628,10 +628,10 @@ Avant de merger du code UI, vérifier :
 | Sauvegarde | **0ms** (async) | 100-500ms | Réactif ✅ |
 
 **Gains perçus** :
-- ⚡ **5-10x plus rapide** perçu (affichage instantané)
-- 🎯 **0 freeze** (UI toujours réactive)
-- 📊 **Feedback visuel** (placeholders partout)
-- 🚀 **Sensation de fluidité** (chargement en background)
+-  **5-10x plus rapide** perçu (affichage instantané)
+-  **0 freeze** (UI toujours réactive)
+-  **Feedback visuel** (placeholders partout)
+-  **Sensation de fluidité** (chargement en background)
 
 ---
 
@@ -652,19 +652,19 @@ Avant de merger du code UI, vérifier :
 ## Prochaines étapes
 
 ### Court terme
-1. 🔄 Appliquer DbWorker à tous les dialogs existants
-2. 🔄 Remplacer les QListWidget par des LoadingLabel au démarrage
-3. 🔄 Ajouter des ProgressWidget pour les imports
+1.  Appliquer DbWorker à tous les dialogs existants
+2.  Remplacer les QListWidget par des LoadingLabel au démarrage
+3.  Ajouter des ProgressWidget pour les imports
 
 ### Moyen terme
-1. 🔄 Cache en mémoire pour données fréquentes (permissions, postes)
-2. 🔄 Préchargement des écrans probables (ex: après login, précharger dashboard)
-3. 🔄 Lazy loading des listes longues (charger par paquets de 50)
+1.  Cache en mémoire pour données fréquentes (permissions, postes)
+2.  Préchargement des écrans probables (ex: après login, précharger dashboard)
+3.  Lazy loading des listes longues (charger par paquets de 50)
 
 ### Long terme
-1. 🔄 WebSockets pour notifications temps réel
-2. 🔄 Service worker pour opérations en arrière-plan
-3. 🔄 Architecture client-serveur (API REST)
+1.  WebSockets pour notifications temps réel
+2.  Service worker pour opérations en arrière-plan
+3.  Architecture client-serveur (API REST)
 
 ---
 

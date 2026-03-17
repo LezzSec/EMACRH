@@ -131,7 +131,7 @@ exe = EXE(
 
 ---
 
-## 🎯 Recommandation finale
+## Recommandation finale
 
 | Méthode | Temps démarrage | Complexité | Recommandé |
 |---------|-----------------|------------|------------|
