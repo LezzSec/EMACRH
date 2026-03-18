@@ -8,7 +8,6 @@ import json
 import logging
 from datetime import datetime
 
-from core.db.configbd import DatabaseConnection
 from core.db.query_executor import QueryExecutor
 
 logger = logging.getLogger(__name__)

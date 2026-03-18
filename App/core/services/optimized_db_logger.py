@@ -18,7 +18,6 @@ import threading
 import time
 from queue import Queue, Empty
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 
 
 import logging

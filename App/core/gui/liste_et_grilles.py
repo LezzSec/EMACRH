@@ -1,18 +1,16 @@
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget, QTableWidgetItem,
     QLabel, QMessageBox, QInputDialog, QDialogButtonBox, QListWidget, QListWidgetItem,
-    QLineEdit, QFileDialog, QAbstractItemView, QComboBox, QWidget, QHeaderView
+    QLineEdit, QFileDialog, QAbstractItemView, QWidget
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QColor, QFont
+from PyQt5.QtGui import QColor
 import sys
 
 # ✅ OPTIMISATION : Import paresseux de pandas (uniquement si export Excel nécessaire)
 # import pandas as pd  # Déplacé dans les fonctions qui l'utilisent
-from datetime import datetime, timedelta
-from core.gui.historique import HistoriqueDialog
+from datetime import datetime
 from .besoin_poste_dialog import BesoinPosteDialog
-from core.services.optimized_db_logger import log_hist
 from core.services.grilles_service import GrillesService
 from core.utils.logging_config import get_logger
 from core.utils.date_format import format_date
@@ -566,8 +564,7 @@ class GrillesDialog(QDialog):
             pass
 
         try:
-            import json
-            from datetime import datetime, timedelta
+            from datetime import datetime
 
             n_ops = len(self.operateurs)
 
@@ -1147,7 +1144,6 @@ class GrillesDialog(QDialog):
             from openpyxl import Workbook
             from openpyxl.styles import Alignment, Font, Border, Side
             from openpyxl.utils import get_column_letter
-            from openpyxl.utils.dataframe import dataframe_to_rows
 
             # Récupère l'état visible (ou complet) de la grille -> DataFrame
             data = []
@@ -1254,9 +1250,9 @@ class GrillesDialog(QDialog):
         """Export PDF ultra-compact sur une seule page avec résumé par opérateur"""
         try:
             from datetime import datetime
-            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+            from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
             from reportlab.lib import colors
-            from reportlab.lib.pagesizes import A4, landscape
+            from reportlab.lib.pagesizes import A4
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib.units import mm
             from reportlab.platypus import Flowable

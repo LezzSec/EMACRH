@@ -3,7 +3,6 @@ Interface de gestion documentaire pour les opérateurs
 Widget intégrable dans la fiche opérateur
 """
 
-import os
 import sys
 from pathlib import Path
 from datetime import datetime, date
@@ -15,7 +14,7 @@ from PyQt5.QtWidgets import (
     QAbstractItemView, QGroupBox
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
-from PyQt5.QtGui import QColor, QIcon, QDesktopServices, QUrl
+from PyQt5.QtGui import QColor, QDesktopServices, QUrl
 
 # Import du service documentaire
 from core.services.document_service import DocumentService

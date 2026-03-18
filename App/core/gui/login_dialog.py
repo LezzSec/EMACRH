@@ -4,12 +4,12 @@
 """
 
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QMessageBox, QFrame
+    QDialog, QVBoxLayout, QLabel, QLineEdit,
+    QMessageBox
 )
 from PyQt5.QtCore import Qt
-from PyQt5.QtGui import QFont, QIcon
-from core.gui.ui_theme import EmacTheme, EmacButton, EmacCard
+from PyQt5.QtGui import QFont
+from core.gui.ui_theme import EmacButton, EmacCard
 from core.services.auth_service import authenticate_user
 
 

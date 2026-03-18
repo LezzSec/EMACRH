@@ -7,11 +7,10 @@ Affiche l'historique complet des actions concernant un opérateur spécifique
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTableWidget, QTableWidgetItem,
     QHeaderView, QComboBox, QLabel, QPushButton, QFrame, QTextEdit,
-    QSplitter, QDateEdit, QLineEdit, QMessageBox, QDialog, QAbstractItemView,
-    QGroupBox
+    QDialog, QAbstractItemView
 )
-from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QFont, QColor, QBrush
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QFont, QColor
 
 from core.repositories.polyvalence_repo import PolyvalenceRepository
 from core.gui.emac_ui_kit import show_error_message

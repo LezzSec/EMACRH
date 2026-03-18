@@ -12,19 +12,14 @@ COMPARAISON:
 - APRÈS: ~450 lignes, code plus lisible, logging automatique
 """
 
-from datetime import datetime, date
 from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
 from PyQt5.QtWidgets import (
-    QVBoxLayout, QHBoxLayout, QPushButton, QTableWidget,
-    QTableWidgetItem, QLabel, QMessageBox, QHeaderView, QComboBox, QWidget,
-    QDateEdit, QLineEdit, QDoubleSpinBox, QTextEdit, QFormLayout, QGroupBox,
-    QTabWidget, QFileDialog, QAbstractItemView
+    QMessageBox, QComboBox, QDateEdit, QLineEdit, QDoubleSpinBox, QFormLayout, QGroupBox
 )
-from PyQt5.QtCore import Qt, QDate, pyqtSignal
-from PyQt5.QtGui import QColor, QFont
+from PyQt5.QtCore import QDate
 
 # ✅ NOUVEAUX IMPORTS - Patterns refactorisés
 from core.gui.emac_dialog import EmacFormDialog
@@ -37,7 +32,6 @@ get_categories = _ContratServiceCRUD.get_categories
 
 # UI
 try:
-    from core.gui.ui_theme import EmacCard, EmacButton, EmacStatusCard
     from core.gui.emac_ui_kit import show_error_message
     THEME_AVAILABLE = True
 except ImportError:
@@ -46,7 +40,6 @@ except ImportError:
 
 # Documents
 try:
-    from core.services.document_service import DocumentService
     DOCUMENTS_AVAILABLE = True
 except ImportError:
     DOCUMENTS_AVAILABLE = False

@@ -1,5 +1,4 @@
 import json
-import datetime
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox,
@@ -8,7 +7,6 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 
-from core.gui.historique import HistoriqueDialog
 from core.repositories.personnel_repo import PersonnelRepository
 from core.repositories.poste_repo import PosteRepository
 from core.repositories.polyvalence_repo import PolyvalenceRepository

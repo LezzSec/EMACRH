@@ -373,7 +373,6 @@ class ImprimerDocumentsDialog(QDialog):
 
     def _preview_selected(self):
         """Génère et ouvre les documents cochés pour visualisation (sans impression)."""
-        import sys
         from core.services.template_service import open_template_file
 
         selected, _ = self._collect_selected_docs()

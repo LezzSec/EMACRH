@@ -9,7 +9,6 @@ import os
 import sys
 import logging
 from pathlib import Path
-from typing import Optional
 
 import mysql.connector
 from mysql.connector import pooling, Error as MySQLError

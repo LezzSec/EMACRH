@@ -26,7 +26,7 @@ from typing import Callable, Optional, List, Dict, Any, Tuple
 from PyQt5.QtWidgets import (
     QTabWidget, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QTableWidget, QTableWidgetItem, QPushButton, QHeaderView,
-    QAbstractItemView, QFrame, QSpinBox, QComboBox, QSizePolicy
+    QAbstractItemView, QFrame, QComboBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 

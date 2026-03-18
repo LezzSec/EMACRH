@@ -24,7 +24,7 @@ from core.db.configbd import get_connection
 
 # ✅ OPTIMISATIONS : Monitoring + Cache + Logs optimisés
 from core.utils.performance_monitor import monitor_login_time, monitor_query
-from core.utils.emac_cache import get_cached_roles, invalidate_user_cache
+from core.utils.emac_cache import get_cached_roles
 from core.services.optimized_db_logger import log_hist_async
 
 

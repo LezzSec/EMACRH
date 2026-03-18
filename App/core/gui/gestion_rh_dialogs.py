@@ -10,7 +10,6 @@ from PyQt5.QtWidgets import (
     QDoubleSpinBox, QCheckBox, QGroupBox, QFileDialog
 )
 from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QFont
 
 from core.gui.ui_theme import EmacButton
 from core.gui.emac_dialog import EmacFormDialog

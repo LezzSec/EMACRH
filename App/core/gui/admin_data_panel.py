@@ -16,16 +16,15 @@ Usage (depuis main_qt.py) :
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QLabel,
-    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+    QTableWidget, QTableWidgetItem, QAbstractItemView,
     QMessageBox, QLineEdit, QTextEdit, QCheckBox, QSpinBox, QDoubleSpinBox,
     QFormLayout, QDialogButtonBox, QComboBox, QFrame, QDateEdit,
-    QColorDialog, QPushButton, QListWidget, QListWidgetItem, QStackedWidget,
-    QSplitter
+    QColorDialog, QPushButton, QListWidget, QListWidgetItem, QStackedWidget
 )
 from PyQt5.QtCore import Qt, QDate, QTimer
 from PyQt5.QtGui import QColor, QFont
 
-from core.gui.ui_theme import EmacTheme, EmacButton
+from core.gui.ui_theme import EmacButton
 from core.gui.db_worker import DbWorker, DbThreadPool
 from core.utils.logging_config import get_logger
 from core.utils.date_format import format_date, format_datetime

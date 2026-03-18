@@ -21,7 +21,7 @@ Usage:
 
 import json
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 
 from core.db.query_executor import QueryExecutor

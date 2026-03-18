@@ -26,10 +26,9 @@ Date: 2026-02-04
 
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
 
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal, Qt, QEvent
-from PyQt5.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
+from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayout
 
 logger = logging.getLogger(__name__)
 

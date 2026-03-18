@@ -7,12 +7,11 @@ Utilise les services existants (formation_service, absence_service, medical_serv
 pour les opérations unitaires, et ajoute le tracking batch.
 """
 
-from datetime import date, datetime
 from typing import List, Dict, Tuple, Optional, Callable, Any
 
 from core.db.query_executor import QueryExecutor
 from core.services.optimized_db_logger import log_hist
-from core.services.permission_manager import require, can
+from core.services.permission_manager import require
 from core.services.document_service import DocumentService
 from core.utils.logging_config import get_logger
 

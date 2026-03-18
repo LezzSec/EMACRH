@@ -10,13 +10,12 @@ Architecture:
 
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel,
-    QCheckBox, QFrame, QScrollArea, QPushButton, QComboBox,
-    QMessageBox, QDialog, QGroupBox, QSpacerItem, QSizePolicy
+    QFrame, QScrollArea, QPushButton, QComboBox,
+    QMessageBox, QDialog, QGroupBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
-from core.gui.ui_theme import EmacTheme, EmacCard, EmacButton
 from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)

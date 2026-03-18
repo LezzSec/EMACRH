@@ -32,7 +32,6 @@ Usage:
 """
 
 from typing import Any, Dict, List, Optional, Tuple
-from datetime import datetime
 from core.db.query_executor import QueryExecutor
 from core.services.optimized_db_logger import log_hist
 from core.utils.logging_config import get_logger

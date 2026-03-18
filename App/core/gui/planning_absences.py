@@ -8,11 +8,11 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QWidget, QDateEdit, QComboBox,
     QTextEdit, QMessageBox, QHeaderView, QRadioButton, QButtonGroup,
-    QGroupBox, QCalendarWidget, QSplitter, QFrame
+    QGroupBox, QCalendarWidget, QSplitter
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QBrush
-from datetime import datetime, date, timedelta
+from datetime import datetime, timedelta
 
 from core.services.absence_service_crud import AbsenceServiceCRUD, calculer_jours_ouvres
 from core.services.planning_service import get_evaluations_mois

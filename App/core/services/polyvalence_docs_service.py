@@ -14,7 +14,6 @@ from typing import Optional, List, Dict, Tuple
 logger = logging.getLogger(__name__)
 
 from core.db.query_executor import QueryExecutor
-from core.db.configbd import DatabaseConnection
 from core.services.optimized_db_logger import log_hist
 
 

@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import (
 from .besoin_poste_dialog import BesoinPosteDialog
 from core.repositories.poste_repo import PosteRepository
 from core.services.optimized_db_logger import log_hist
-from core.gui.historique import HistoriqueDialog
 
 
 class CreationModificationPosteDialog(QDialog):

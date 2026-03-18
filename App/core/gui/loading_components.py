@@ -5,10 +5,9 @@ Fournit des placeholders, spinners, et indicateurs de progression.
 """
 
 from PyQt5.QtWidgets import (
-    QWidget, QLabel, QVBoxLayout, QHBoxLayout, QFrame, QProgressBar
+    QWidget, QLabel, QVBoxLayout, QFrame, QProgressBar
 )
-from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QRect
-from PyQt5.QtGui import QPainter, QColor, QPen
+from PyQt5.QtCore import Qt, QTimer
 
 
 # ===========================

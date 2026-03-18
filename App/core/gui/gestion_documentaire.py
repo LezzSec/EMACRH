@@ -4,20 +4,18 @@ Interface de gestion documentaire RH
 Permet d'ajouter, visualiser, télécharger et supprimer des documents RH
 """
 
-import os
 import sys
-import logging
 from datetime import datetime, date
 from pathlib import Path
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
-    QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QFileDialog,
-    QMessageBox, QWidget, QTabWidget, QTextEdit, QDateEdit, QGroupBox,
-    QAbstractItemView, QMenu, QCheckBox, QGridLayout
+    QTableWidgetItem, QLineEdit, QComboBox, QFileDialog,
+    QMessageBox, QWidget, QTextEdit, QDateEdit, QGroupBox,
+    QAbstractItemView, QMenu, QCheckBox
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal, QUrl
-from PyQt5.QtGui import QFont, QColor, QIcon, QDesktopServices
+from PyQt5.QtGui import QFont, QColor, QDesktopServices
 
 from core.services.document_service import DocumentService
 from core.repositories.personnel_repo import PersonnelRepository

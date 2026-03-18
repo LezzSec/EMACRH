@@ -6,14 +6,13 @@ Interface de gestion des utilisateurs (Administrateur uniquement)
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QTableWidget,
     QTableWidgetItem, QPushButton, QMessageBox, QLineEdit,
-    QComboBox, QHeaderView, QCheckBox, QFrame, QWidget
+    QComboBox, QHeaderView, QWidget
 )
 from PyQt5.QtCore import Qt
-from core.gui.ui_theme import EmacTheme, EmacButton, EmacCard
+from core.gui.ui_theme import EmacButton, EmacCard
 from core.services.auth_service import (
     get_all_users, create_user, update_user_status,
-    change_password, get_roles, is_admin, count_active_admins, is_user_admin,
-    delete_user, get_current_user, validate_password, get_password_requirements
+    change_password, get_roles, is_admin, count_active_admins, delete_user, get_current_user, validate_password, get_password_requirements
 )
 
 

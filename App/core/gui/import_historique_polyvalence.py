@@ -6,17 +6,16 @@ Permet d'ajouter des anciennes actions pour lesquelles il n'y avait pas de traç
 
 import csv
 import uuid
-import logging
 from datetime import datetime
 from core.utils.date_format import format_timestamp
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QDateEdit, QComboBox, QSpinBox, QTextEdit,
-    QMessageBox, QGroupBox, QFormLayout, QFileDialog, QAbstractItemView, QWidget
+    QMessageBox, QGroupBox, QFormLayout, QFileDialog, QAbstractItemView
 )
 from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QFont, QColor
+from PyQt5.QtGui import QFont
 
 from core.repositories.personnel_repo import PersonnelRepository
 from core.repositories.poste_repo import PosteRepository

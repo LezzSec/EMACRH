@@ -24,10 +24,8 @@ Fichier de log: logs/emac.log (rotation à 10 MB, 5 backups)
 """
 
 import logging
-import os
 import sys
 import threading
-from datetime import datetime
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
 from typing import Optional

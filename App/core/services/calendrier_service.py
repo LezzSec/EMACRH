@@ -3,7 +3,7 @@ Service de calcul de dates pour les evaluations
 Calcule les prochaines dates d'evaluation en fonction du niveau de competence
 """
 
-from datetime import datetime, date, timedelta
+from datetime import date, timedelta
 from typing import Optional
 
 

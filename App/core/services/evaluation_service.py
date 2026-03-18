@@ -8,7 +8,7 @@ Fournit les fonctions pour recuperer les evaluations en retard et a venir
 - DTOs typés pour robustesse (EvaluationResume, Polyvalence)
 """
 
-from datetime import datetime, date, timedelta
+from datetime import date, timedelta
 from typing import List, Dict, Optional
 
 from core.db.query_executor import QueryExecutor
@@ -18,13 +18,12 @@ logger = get_logger(__name__)
 
 # ✅ OPTIMISATIONS : Monitoring + Logs optimisés
 from core.utils.performance_monitor import monitor_query
-from core.services.optimized_db_logger import log_hist_async
 
 # ✅ Permissions
-from core.services.permission_manager import require, PermissionError
+from core.services.permission_manager import require
 
 # ✅ DTOs typés pour robustesse
-from core.models import EvaluationResume, Polyvalence, StatistiquesEvaluations
+from core.models import EvaluationResume, StatistiquesEvaluations
 
 
 @monitor_query('Get Evaluations En Retard')

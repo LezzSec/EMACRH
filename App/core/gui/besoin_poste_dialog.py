@@ -1,4 +1,4 @@
-from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5 import QtWidgets, QtGui
 
 class BesoinPosteDialog(QtWidgets.QDialog):
     def __init__(self, parent=None, titre_poste: str = ""):

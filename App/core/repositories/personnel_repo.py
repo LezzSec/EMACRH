@@ -20,11 +20,10 @@ Usage:
 
 import logging
 from typing import List, Dict, Any, Optional, Tuple
-from datetime import date
 
 from core.db.configbd import DatabaseCursor, DatabaseConnection
 from core.models import Personnel, PersonnelResume
-from core.repositories.base import BaseRepository, SafeQueryBuilder
+from core.repositories.base import BaseRepository
 from core.utils.performance_monitor import monitor_query
 
 logger = logging.getLogger(__name__)

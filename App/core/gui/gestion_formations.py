@@ -6,15 +6,13 @@ Permet de visualiser, ajouter, modifier et supprimer des formations
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
-    QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QMessageBox,
+    QTableWidgetItem, QLineEdit, QComboBox, QMessageBox,
     QWidget, QTextEdit, QDateEdit, QGroupBox, QAbstractItemView, QMenu,
-    QCheckBox, QGridLayout, QDoubleSpinBox, QFormLayout, QSpacerItem,
-    QSizePolicy
+    QCheckBox, QDoubleSpinBox, QFormLayout
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
-from datetime import datetime, date
 
 from core.services.formation_service_crud import FormationServiceCRUD as formation_service
 from core.services.document_service import DocumentService as _DocumentService

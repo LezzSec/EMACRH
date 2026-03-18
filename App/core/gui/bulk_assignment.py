@@ -4,21 +4,20 @@ Module de gestion des opérations en masse.
 Permet d'assigner des formations, absences, visites médicales à plusieurs employés.
 """
 
-from datetime import date, datetime
 from typing import List, Dict, Optional, Callable
 
 from PyQt5.QtWidgets import (
     QDialog, QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-    QLabel, QLineEdit, QComboBox, QDateEdit, QSpinBox, QDoubleSpinBox,
+    QLabel, QLineEdit, QComboBox, QDateEdit, QDoubleSpinBox,
     QCheckBox, QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
-    QTabWidget, QGroupBox, QTextEdit, QProgressBar, QMessageBox,
-    QAbstractItemView, QSizePolicy, QFrame, QScrollArea, QFileDialog
+    QTabWidget, QGroupBox, QTextEdit, QMessageBox,
+    QAbstractItemView, QFrame, QFileDialog
 )
-from PyQt5.QtCore import Qt, QDate, pyqtSignal, QTimer
-from PyQt5.QtGui import QColor, QFont
+from PyQt5.QtCore import Qt, QDate, pyqtSignal
+from PyQt5.QtGui import QColor
 
 from core.gui.db_worker import DbWorker, DbThreadPool
-from core.gui.loading_components import LoadingPlaceholder, ProgressWidget
+from core.gui.loading_components import ProgressWidget
 from core.repositories.personnel_repo import PersonnelRepository
 from core.services.absence_service_crud import AbsenceServiceCRUD
 from core.services.formation_service_crud import FormationServiceCRUD

@@ -31,7 +31,6 @@ from core.db.query_executor import QueryExecutor
 from core.services.personnel_service import PersonnelService
 from core.services.contrat_service_crud import ContratServiceCRUD
 from core.services.formation_service_crud import FormationServiceCRUD
-from core.services.absence_service_crud import AbsenceServiceCRUD
 
 # Imports existants
 from core.services.permission_manager import require

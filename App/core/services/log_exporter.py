@@ -1,7 +1,7 @@
 # core/services/log_exporter.py
 # Export des logs 'historique' sur une journée en CSV (+ ZIP optionnel)
 
-import os, csv, json, datetime as dt, zipfile
+import os, csv, datetime as dt, zipfile
 from typing import Dict
 from core.db.configbd import get_connection as get_db_connection
 from core.utils.app_paths import get_logs_dir

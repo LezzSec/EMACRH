@@ -25,7 +25,7 @@ Usage:
     categories = ContratServiceCRUD.get_categories()
 """
 
-from datetime import date, timedelta
+from datetime import date
 from typing import Dict, List, Optional, Tuple
 
 from core.db.query_executor import QueryExecutor

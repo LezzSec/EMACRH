@@ -5,10 +5,9 @@ logger = get_logger(__name__)
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
-    QTableWidgetItem, QHeaderView, QLineEdit, QComboBox, QGroupBox,
+    QTableWidgetItem, QHeaderView, QLineEdit, QGroupBox,
     QMessageBox, QAbstractItemView, QWidget, QTabWidget, QCheckBox,
-    QButtonGroup, QRadioButton, QDateEdit, QScrollArea, QFrame, QGridLayout,
-    QSizePolicy
+    QRadioButton, QDateEdit, QScrollArea, QFrame, QGridLayout
 )
 from PyQt5.QtCore import Qt, QDate, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
@@ -26,7 +25,7 @@ from core.services.auth_service import get_current_user
 from core.services.permission_manager import require
 
 import datetime as dt
-from core.utils.date_format import format_date, format_datetime
+from core.utils.date_format import format_date
 
 
 class DetailOperateurDialog(QDialog):
@@ -743,7 +742,7 @@ class DetailOperateurDialog(QDialog):
             from reportlab.lib import colors
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.platypus import (
-                SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer, KeepTogether
+                SimpleDocTemplate, Paragraph, Table, TableStyle, Spacer
             )
             from reportlab.lib.units import cm
             from reportlab.pdfgen.canvas import Canvas

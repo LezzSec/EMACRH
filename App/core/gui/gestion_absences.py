@@ -9,11 +9,11 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QTabWidget, QWidget,
     QDateEdit, QComboBox, QTextEdit, QMessageBox, QHeaderView,
     QRadioButton, QButtonGroup, QGroupBox, QCalendarWidget,
-    QScrollArea, QFrame
+    QFrame
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
-from datetime import datetime, date
+from datetime import datetime
 
 from core.services.absence_service_crud import AbsenceServiceCRUD, calculer_jours_ouvres
 from core.repositories.personnel_repo import PersonnelRepository

@@ -19,7 +19,7 @@ Permet de stocker en mémoire des données fréquemment utilisées avec TTL.
 import time
 from typing import Any, Optional, Callable, Dict
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from threading import RLock
 
 

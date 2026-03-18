@@ -12,7 +12,6 @@ Les anciens templates sur filesystem (legacy) restent accessibles via fichier_so
 import os
 import sys
 import json
-import shutil
 import tempfile
 import mimetypes
 from datetime import datetime

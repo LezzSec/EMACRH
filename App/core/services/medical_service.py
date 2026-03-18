@@ -14,7 +14,6 @@ Source: Tableau SIRH.xlsx - Feuille "Medical"
 Refactorisé: Utilise QueryExecutor au lieu de DatabaseCursor/DatabaseConnection.
 """
 
-from datetime import date, datetime
 from typing import List, Dict, Optional, Tuple, Any
 from decimal import Decimal
 

@@ -12,7 +12,7 @@ from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import Qt, QRectF
 from PyQt5.QtGui import QFont, QColor, QPalette, QPainterPath
 from PyQt5.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton, QFrame,
+    QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton, QFrame,
     QToolButton
 )
 

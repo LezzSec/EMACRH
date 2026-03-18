@@ -14,7 +14,7 @@ contrairement à la polyvalence qui est liée aux postes de travail.
 Refactorisé: Utilise QueryExecutor au lieu de DatabaseCursor/DatabaseConnection.
 """
 
-from datetime import date, datetime, timedelta
+from datetime import date
 from typing import List, Dict, Optional, Tuple, Any
 
 from core.db.query_executor import QueryExecutor

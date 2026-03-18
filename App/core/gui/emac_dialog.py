@@ -30,9 +30,8 @@ Usage:
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget,
-    QScrollArea, QPushButton
+    QScrollArea
 )
-from PyQt5.QtCore import Qt
 from core.gui.ui_theme import EmacButton
 from core.gui.emac_ui_kit import add_custom_title_bar
 from core.utils.logging_config import get_logger

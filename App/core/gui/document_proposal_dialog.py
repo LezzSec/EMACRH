@@ -30,11 +30,10 @@ from PyQt5.QtWidgets import (
     QSizePolicy
 )
 from PyQt5.QtCore import Qt, pyqtSignal
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtGui import QFont
 
 from core.services.document_trigger_service import (
-    DocumentTriggerService,
-    PendingDocument
+    DocumentTriggerService
 )
 from core.services.template_service import open_template_file
 

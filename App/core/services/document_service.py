@@ -7,12 +7,11 @@ Stockage : Les fichiers sont stockes en BLOB dans la base de donnees MySQL.
 Les anciens documents sur filesystem (legacy) restent accessibles via chemin_fichier.
 """
 
-import os
 import tempfile
 import logging
 
 logger = logging.getLogger(__name__)
-from datetime import datetime, date
+from datetime import date
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import mimetypes

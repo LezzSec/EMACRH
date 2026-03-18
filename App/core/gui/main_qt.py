@@ -1,5 +1,4 @@
 import sys, os, datetime as dt, time, traceback
-from dataclasses import dataclass
 
 # Configuration centralisée du logging (doit être en premier)
 from core.utils.logging_config import setup_logging, get_logger, set_log_context, clear_log_context, get_logs_dir
@@ -45,8 +44,7 @@ except Exception:
 # Import du système de workers optimisé
 try:
     from core.gui.db_worker import (
-        DbWorker, DbThreadPool, run_in_background,
-        show_loading_placeholder, show_error_placeholder
+        DbWorker, DbThreadPool
     )
     # Initialiser le pool avec la bonne configuration
     _thread_pool = DbThreadPool.get_pool()

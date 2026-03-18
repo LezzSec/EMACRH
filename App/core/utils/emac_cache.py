@@ -5,7 +5,7 @@ Fournit des fonctions de cache pour les cas d'usage courants.
 """
 
 from typing import Optional, List, Dict, Any
-from core.utils.cache import CacheManager, CacheTTL, cached, invalidate_on_change
+from core.utils.cache import CacheManager, CacheTTL, cached
 
 
 # ===========================

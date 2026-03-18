@@ -1,10 +1,10 @@
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QScrollArea, QWidget, QFrame, QDateEdit, QMessageBox, QComboBox, QSizePolicy,
-    QTextEdit, QGraphicsDropShadowEffect
+    QGraphicsDropShadowEffect
 )
 from PyQt5.QtCore import Qt, QDate
-from PyQt5.QtGui import QFont, QColor, QPalette, QCursor
+from PyQt5.QtGui import QFont, QColor, QCursor
 
 from core.services.historique_service import fetch_historique_paginated, delete_historique_range, MODULE_TABLES
 from core.services.log_exporter import export_day
