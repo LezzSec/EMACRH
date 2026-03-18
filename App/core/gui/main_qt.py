@@ -43,7 +43,7 @@ except Exception:
 
 # Import du système de workers optimisé
 try:
-    from core.gui.db_worker import (
+    from core.gui.workers.db_worker import (
         DbWorker, DbThreadPool
     )
     # Initialiser le pool avec la bonne configuration
@@ -77,13 +77,13 @@ except ImportError:
 
 # Import de show_error_message
 try:
-    from core.gui.emac_ui_kit import show_error_message
+    from core.gui.components.emac_ui_kit import show_error_message
 except ImportError:
     show_error_message = None
 
 # Import du gestionnaire de timeout de session
 try:
-    from core.gui.session_timeout import SessionTimeoutManager
+    from core.gui.workers.session_timeout import SessionTimeoutManager
 except ImportError:
     SessionTimeoutManager = None
     logger.warning("SessionTimeoutManager non disponible")
@@ -97,7 +97,7 @@ def _lazy_auth():
     return auth_service
 
 def _lazy_theme():
-    from core.gui import ui_theme
+    from core.gui.components import ui_theme
     return ui_theme
 
 # Cache pour éviter de réimporter à chaque appel
@@ -472,7 +472,7 @@ class MainWindow(QMainWindow):
             from core.services.document_trigger_service import DocumentTriggerService
 
             if DocumentTriggerService.has_pending_documents(operateur_id):
-                from core.gui.document_proposal_dialog import DocumentProposalDialog
+                from core.gui.dialogs.document_proposal_dialog import DocumentProposalDialog
                 dialog = DocumentProposalDialog(
                     operateur_id=operateur_id,
                     operateur_nom=nom,
@@ -682,13 +682,13 @@ class MainWindow(QMainWindow):
     # ---------------------------
 
     def show_liste_personnel(self):
-        from core.gui.gestion_personnel import GestionPersonnelDialog
+        from core.gui.dialogs.gestion_personnel import GestionPersonnelDialog
         dialog = GestionPersonnelDialog(self)
         dialog.data_changed.connect(self.load_evaluations_async)
         dialog.exec_()
 
     def show_manage_operator(self):
-        from core.gui.manage_operateur import ManageOperatorsDialog
+        from core.gui.dialogs.manage_operateur import ManageOperatorsDialog
         dialog = ManageOperatorsDialog()
         dialog.data_changed.connect(lambda _: self.load_evaluations_async())
         dialog.exec_()
@@ -696,7 +696,7 @@ class MainWindow(QMainWindow):
     def show_gestion_evaluations(self):
         """Ouvre le dialogue de gestion des évaluations"""
         try:
-            from core.gui.gestion_evaluation import GestionEvaluationDialog
+            from core.gui.dialogs.gestion_evaluation import GestionEvaluationDialog
             dialog = GestionEvaluationDialog()
             dialog.exec_()
         except Exception as e:
@@ -710,7 +710,7 @@ class MainWindow(QMainWindow):
 
     def ouvrir_gestion_evaluations(self, filtre_statut):
         try:
-            from core.gui.gestion_evaluation import GestionEvaluationDialog
+            from core.gui.dialogs.gestion_evaluation import GestionEvaluationDialog
             dialog = GestionEvaluationDialog()
             if hasattr(dialog, 'status_filter'):
                 index = dialog.status_filter.findText(filtre_statut)
@@ -726,18 +726,18 @@ class MainWindow(QMainWindow):
                 QMessageBox.critical(self, "Erreur", "Impossible d'ouvrir la gestion des évaluations. Contactez l'administrateur.")
 
     def show_listes_grilles_dialog(self):
-        from core.gui.liste_et_grilles import GrillesDialog
+        from core.gui.dialogs.liste_et_grilles import GrillesDialog
         GrillesDialog().exec_()
 
     def show_poste_form(self):
-        from core.gui.creation_modification_poste import CreationModificationPosteDialog
+        from core.gui.dialogs.creation_modification_poste import CreationModificationPosteDialog
         CreationModificationPosteDialog().exec_()
         self._postes_cache = None
         self._postes_cache_time = None
         self.populate_filters_async()
 
     def show_historique(self):
-        from core.gui.historique import HistoriqueDialog
+        from core.gui.dialogs.historique import HistoriqueDialog
         HistoriqueDialog().exec_()
 
     def show_regularisation(self):
@@ -755,13 +755,13 @@ class MainWindow(QMainWindow):
         if not personnel_id:
             QMessageBox.warning(self, "Erreur", "Aucun personnel actif trouvé")
             return
-        from core.gui.planning_absences import PlanningAbsencesDialog
+        from core.gui.dialogs.planning_absences import PlanningAbsencesDialog
         dialog = PlanningAbsencesDialog(personnel_id=personnel_id, parent=self)
         dialog.data_changed.connect(self.load_evaluations_async)
         dialog.exec_()
 
     def show_contract_management(self):
-        from core.gui.gestion_rh import GestionRHDialog
+        from core.gui.dialogs.gestion_rh import GestionRHDialog
         dialog = GestionRHDialog(self)
         dialog.data_changed.connect(self.load_evaluations_async)
         dialog.data_changed.connect(self.load_alertes_rh_async)
@@ -769,13 +769,13 @@ class MainWindow(QMainWindow):
 
     def show_alertes_rh(self):
         """Ouvre le dialog de gestion des alertes RH."""
-        from core.gui.gestion_alertes_rh import GestionAlertesRHDialog
+        from core.gui.dialogs.gestion_alertes_rh import GestionAlertesRHDialog
         dialog = GestionAlertesRHDialog(self)
         dialog.data_changed.connect(self.load_alertes_rh_async)
         dialog.exec_()
 
     def show_gestion_documentaire(self):
-        from core.gui.gestion_documentaire import GestionDocumentaireDialog
+        from core.gui.dialogs.gestion_documentaire import GestionDocumentaireDialog
         dialog = GestionDocumentaireDialog(self)
         dialog.document_added.connect(self.load_evaluations_async)
         dialog.document_added.connect(self.load_alertes_rh_async)
@@ -783,7 +783,7 @@ class MainWindow(QMainWindow):
 
 
     def show_gestion_templates(self):
-        from core.gui.gestion_templates import GestionTemplatesDialog
+        from core.gui.dialogs.gestion_templates import GestionTemplatesDialog
         GestionTemplatesDialog(parent=self).exec_()
 
     # ---------------------------
@@ -1097,7 +1097,7 @@ class MainWindow(QMainWindow):
         )
 
         # Afficher le dialog de login
-        from core.gui.login_dialog import LoginDialog
+        from core.gui.dialogs.login_dialog import LoginDialog
         login_dialog = LoginDialog()
         if login_dialog.exec_() == QDialog.Accepted:
             try:
@@ -1124,7 +1124,7 @@ class MainWindow(QMainWindow):
             clear_log_context()  # Réinitialiser le contexte de logging
             self.close()
 
-            from core.gui.login_dialog import LoginDialog
+            from core.gui.dialogs.login_dialog import LoginDialog
             login_dialog = LoginDialog()
             if login_dialog.exec_() == QDialog.Accepted:
                 # Définir le nouveau contexte de logging
@@ -1142,7 +1142,7 @@ class MainWindow(QMainWindow):
         if not auth.is_admin():
             QMessageBox.warning(self, "Accès refusé", "Seuls les administrateurs peuvent gérer les utilisateurs.")
             return
-        from core.gui.user_management import UserManagementDialog
+        from core.gui.dialogs.user_management import UserManagementDialog
         UserManagementDialog(self).exec_()
 
     def show_admin_data_panel(self):
@@ -1150,7 +1150,7 @@ class MainWindow(QMainWindow):
         if not auth.is_admin():
             QMessageBox.warning(self, "Accès refusé", "Seuls les administrateurs peuvent accéder à la configuration.")
             return
-        from core.gui.admin_data_panel import AdminDataPanelDialog
+        from core.gui.dialogs.admin_data_panel import AdminDataPanelDialog
         AdminDataPanelDialog(self).exec_()
 
     def closeEvent(self, event):
@@ -1187,7 +1187,7 @@ if __name__ == "__main__":
     EmacTheme.apply(app)
 
     # ✅ Login (lazy)
-    from core.gui.login_dialog import LoginDialog
+    from core.gui.dialogs.login_dialog import LoginDialog
     login_dialog = LoginDialog()
 
     if login_dialog.exec_() == LoginDialog.Accepted:
