@@ -22,7 +22,6 @@ logger = logging.getLogger(__name__)
 from typing import Optional, Dict, List, Tuple
 from core.db.configbd import get_connection
 
-# ✅ OPTIMISATIONS : Monitoring + Cache + Logs optimisés
 from core.utils.performance_monitor import monitor_login_time, monitor_query
 from core.utils.emac_cache import get_cached_roles
 from core.services.optimized_db_logger import log_hist_async
@@ -63,7 +62,7 @@ def _log_failed_attempt(username: str, reason: str) -> None:
 
 
 # =============================================================================
-# 🔒 VALIDATION MOT DE PASSE
+# VALIDATION MOT DE PASSE
 # =============================================================================
 
 def validate_password(password: str) -> Tuple[bool, str]:
@@ -230,8 +229,7 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
 
     cur = conn.cursor(dictionary=True)
     try:
-        # ✅ OPTIMISATION : Récupérer utilisateur + rôle + permissions + overrides en UNE SEULE requête
-        # Inclut les overrides utilisateur (système puzzle) avec COALESCE pour fusionner
+        # Récupère utilisateur + rôle + permissions + overrides avec COALESCE pour fusionner
         cur.execute("""
             SELECT
                 u.id, u.username, u.password_hash, u.nom, u.prenom,
@@ -262,7 +260,7 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
         if not verify_password(password, user['password_hash']):
             return False, "Nom d'utilisateur ou mot de passe incorrect"
 
-        # ✅ Construire le dictionnaire des permissions effectives (rôle + overrides)
+        # Construire le dictionnaire des permissions effectives (rôle + overrides)
         # (Ancien système conservé pour compatibilité)
         permissions = {}
         for row in rows:
@@ -303,7 +301,6 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
 
         UserSession.set_user(user_data, permissions, session_id)
 
-        # ✅ NOUVEAU: Charger les features dans le PermissionManager
         try:
             from core.services.permission_manager import load_user_permissions
             load_user_permissions(user['id'], user['role_id'])
@@ -375,7 +372,6 @@ def logout_user():
         # Effacer la session
         UserSession.clear()
 
-        # ✅ NOUVEAU: Reset le PermissionManager
         try:
             from core.services.permission_manager import PermissionManager
             PermissionManager.reset()
@@ -398,7 +394,7 @@ def has_permission(module: str, action: str = 'lecture') -> bool:
     if not session.is_authenticated():
         return False
 
-    # ✅ NOUVEAU: Essayer d'abord le système features
+    # Essayer d'abord le système features
     try:
         from core.services.permission_manager import perm
         if perm.is_loaded():
@@ -487,7 +483,7 @@ def is_admin() -> bool:
     if user['role_nom'] == 'admin':
         return True
 
-    # ✅ NOUVEAU: Vérification par feature
+    # Vérification par feature
     try:
         from core.services.permission_manager import perm
         if perm.is_loaded() and perm.can('admin.permissions'):

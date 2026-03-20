@@ -371,7 +371,6 @@ class AddUserDialog(QDialog):
             QMessageBox.warning(self, "Champs requis", "Tous les champs sont obligatoires.")
             return
 
-        # 🔒 Validation renforcée du mot de passe
         is_valid, error_msg = validate_password(password)
         if not is_valid:
             QMessageBox.warning(self, "Mot de passe invalide", error_msg)
@@ -478,7 +477,6 @@ class ChangePasswordDialog(QDialog):
             QMessageBox.warning(self, "Champ requis", "Veuillez saisir un mot de passe.")
             return
 
-        # 🔒 Validation renforcée du mot de passe
         is_valid, error_msg = validate_password(password)
         if not is_valid:
             QMessageBox.warning(self, "Mot de passe invalide", error_msg)

@@ -124,7 +124,6 @@ _THEME_LIGHT = {
     "PRI_H": "#0b1220",
     "ACC_BG": "#e8eefc",
     "ACC_TXT": "#111827",
-    # ✅ Couleurs sémantiques
     "SUCCESS": "#10b981",
     "SUCCESS_BG": "#d1fae5",
     "WARNING": "#f59e0b",
@@ -149,7 +148,6 @@ _THEME_DARK = {
     "PRI_H": "#4338ca",
     "ACC_BG": "#374151",
     "ACC_TXT": "#e0e0e0",
-    # ✅ Couleurs sémantiques
     "SUCCESS": "#10b981",
     "SUCCESS_BG": "#064e3b",
     "WARNING": "#f59e0b",

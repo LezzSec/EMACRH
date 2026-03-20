@@ -31,17 +31,15 @@ from PyQt5.QtCore import (
 )
 from PyQt5.QtGui import QDesktopServices
 
-# ✅ Import optionnel
 try:
     from core.services.log_exporter import export_day
 except Exception:
     export_day = None
 
 # ===========================
-#  Workers (ThreadPool) - ✅ Utilisation du nouveau module db_worker
+#  Workers (ThreadPool)
 # ===========================
 
-# Import du système de workers optimisé
 try:
     from core.gui.workers.db_worker import (
         DbWorker, DbThreadPool
@@ -71,7 +69,6 @@ except ImportError:
                 self.signals.error.emit(traceback.format_exc())
 
     _thread_pool = QThreadPool.globalInstance()
-    # Limiter à 4 threads par défaut
     _thread_pool.setMaxThreadCount(4)
 
 
@@ -100,7 +97,6 @@ def _lazy_theme():
     from core.gui.components import ui_theme
     return ui_theme
 
-# Cache pour éviter de réimporter à chaque appel
 _theme_cache = None
 
 def get_theme_components():
@@ -134,9 +130,8 @@ class MainWindow(QMainWindow):
         self.drawer = None
         self.is_drawer_open = False
         self.installEventFilter(self)
-        self._last_notification_summary = None  # Cache pour le badge drawer
+        self._last_notification_summary = None
 
-        # Cache postes
         self._postes_cache = None
         self._postes_cache_time = None
 
@@ -148,7 +143,6 @@ class MainWindow(QMainWindow):
             # Démarrer la surveillance après l'affichage de la fenêtre
             QTimer.singleShot(1000, self._start_timeout_monitoring)
 
-        # ✅ Charger les composants du thème
         theme = get_theme_components()
         EmacStatusCard = theme['EmacStatusCard']
         EmacButton = theme['EmacButton']
@@ -238,9 +232,8 @@ class MainWindow(QMainWindow):
         h1.setProperty('class', 'h1')
         title_layout.addWidget(h1)
 
-        # ✅ IMPORTANT: ne pas appeler get_current_user() ici (peut toucher DB/session)
-        # On met un placeholder et on remplira après (async)
-        self.user_info = QLabel("👤 ...")
+        # Ne pas appeler get_current_user() ici (peut toucher DB/session) - placeholder rempli en async
+        self.user_info = QLabel("...")
         self.user_info.setStyleSheet("color: #666; font-size: 12px;")
         title_layout.addWidget(self.user_info)
 
@@ -286,8 +279,7 @@ class MainWindow(QMainWindow):
         title.setProperty('class', 'h2')
         self.actions_wrap.body.addWidget(title)
 
-        # ✅ IMPORTANT: ne pas appeler has_permission() ici (peut toucher DB)
-        # On construit un layout minimal et on l’enrichit après (async).
+        # Ne pas appeler has_permission() ici (peut toucher DB) - layout enrichi en async
         self.rows = QVBoxLayout()
         self.rows.setSpacing(8)
 
@@ -308,12 +300,7 @@ class MainWindow(QMainWindow):
 
         root.addLayout(right, 0, 1)
 
-        # ✅ Lancement ultra rapide : on affiche, puis on charge le reste en background
         QTimer.singleShot(0, self.bootstrap_async)
-
-    # ---------------------------
-    # Bootstrap async
-    # ---------------------------
 
     def bootstrap_async(self):
         """Charge user + permissions + filtres sans bloquer l'UI."""
@@ -333,7 +320,6 @@ class MainWindow(QMainWindow):
         auth = _lazy_auth()
         current_user = auth.get_current_user()
 
-        # ✅ Nouveau système de permissions par features
         from core.services.permission_manager import can
         perms = {
             "grilles_lecture": can('production.grilles.view'),
@@ -355,14 +341,12 @@ class MainWindow(QMainWindow):
         user = payload.get("user")
         perms = payload.get("perms", {})
 
-        # User label
         if user:
             user_text = f"👤 {user.get('prenom','')} {user.get('nom','')} - {user.get('role_nom','')}"
             self.user_info.setText(user_text)
         else:
             self.user_info.setText("👤 Non connecté")
 
-        # Charger EmacButton
         theme = get_theme_components()
         EmacButton = theme['EmacButton']
 
@@ -542,7 +526,6 @@ class MainWindow(QMainWindow):
         drawer_layout.addWidget(title)
         drawer_layout.addSpacing(15)
 
-        # ✅ Permissions depuis cache si dispo, sinon fallback lazy (sans bloquer)
         perms = getattr(self, "_perms_cache", None)
         if perms is None:
             # fallback minimal (si jamais)
@@ -667,7 +650,7 @@ class MainWindow(QMainWindow):
         self.animation.start()
 
     # ---------------------------
-    # UI helpers
+    # UI helpers & Dialogs (lazy imports)
     # ---------------------------
 
     def create_scrollable_list(self):
@@ -676,10 +659,6 @@ class MainWindow(QMainWindow):
         lw = QListWidget()
         sc.setWidget(lw)
         return sc, lw
-
-    # ---------------------------
-    # Dialogs (lazy imports)
-    # ---------------------------
 
     def show_liste_personnel(self):
         from core.gui.dialogs.gestion_personnel import GestionPersonnelDialog
@@ -741,7 +720,7 @@ class MainWindow(QMainWindow):
         HistoriqueDialog().exec_()
 
     def show_regularisation(self):
-        # ⚠️ DB => on passe en background, puis on ouvre le dialog sur le thread UI
+        # DB => on passe en background, puis on ouvre le dialog sur le thread UI
         w = DbWorker(self._fetch_one_actif_personnel_id)
         w.signals.result.connect(self._open_regularisation)
         w.signals.error.connect(self._on_bg_error)
@@ -1181,12 +1160,10 @@ if __name__ == "__main__":
 
     app = QApplication(sys.argv)
 
-    # ✅ Charger et appliquer le thème (lazy)
     theme = get_theme_components()
     EmacTheme = theme['EmacTheme']
     EmacTheme.apply(app)
 
-    # ✅ Login (lazy)
     from core.gui.dialogs.login_dialog import LoginDialog
     login_dialog = LoginDialog()
 

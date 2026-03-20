@@ -607,6 +607,9 @@ class _GestionRHMixin:
             naissance_parts.append(f"({donnees['pays_naissance']})")
         lieu_naissance = ' '.join(naissance_parts) if naissance_parts else '-'
 
+        cat_map = {'O': 'O - Ouvrier', 'E': 'E - Employé', 'T': 'T - Technicien', 'C': 'C - Cadre'}
+        categorie_display = cat_map.get(donnees.get('categorie', ''), val('categorie'))
+
         infos = [
             ("Nom", val('nom')),
             ("Prénom", val('prenom')),
@@ -614,6 +617,8 @@ class _GestionRHMixin:
             ("Statut", val('statut')),
             ("Sexe", "Homme" if donnees.get('sexe') == 'M' else "Femme" if donnees.get('sexe') == 'F' else '-'),
             ("Nationalité", val('nationalite')),
+            ("Catégorie", categorie_display),
+            ("Service / Poste", val('numposte')),
             ("N° Sécurité Sociale", val('numero_ss')),
             ("Date de naissance", self._format_date(donnees.get('date_naissance'))),
             ("Lieu de naissance", lieu_naissance),

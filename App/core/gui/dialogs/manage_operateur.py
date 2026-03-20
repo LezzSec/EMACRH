@@ -45,12 +45,10 @@ class EvaluationDateDialog(QDialog):
 
         form = QFormLayout()
 
-        # Poste (seulement visibles)
         self.poste_combo = QComboBox(self)
         form.addRow("Poste :", self.poste_combo)
         self._charger_postes()
 
-        # Niveau de compétence
         self.niveau_combo = QComboBox(self)
         self.niveau_combo.addItem("Niveau 1 - Débutant (réévaluation dans 1 mois)", 1)
         self.niveau_combo.addItem("Niveau 2 - Intermédiaire (réévaluation dans 1 mois)", 2)
@@ -143,13 +141,11 @@ class ManageOperatorsDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
-        # Titre
         title = QLabel("Gestion du personnel")
         title.setAlignment(Qt.AlignCenter)
         title.setFont(QFont("Arial", 14, QFont.Bold))
         layout.addWidget(title)
 
-        # Section saisie
         section = QLabel("Ajouter du personnel")
         section.setFont(QFont("Arial", 11))
         layout.addWidget(section)
@@ -162,7 +158,6 @@ class ManageOperatorsDialog(QDialog):
         self.add_prenom_input.setPlaceholderText("Prénom")
         layout.addWidget(self.add_prenom_input)
 
-        # Date d'entrée
         date_layout = QHBoxLayout()
         date_label = QLabel("Date d'entrée :")
         date_label.setFont(QFont("Arial", 10))
@@ -384,10 +379,6 @@ class ManageOperatorsDialog(QDialog):
             logger.exception(f"Erreur enregistrement: {e}")
             show_error_message(self, "Erreur", "Échec de l'enregistrement", e)
 
-
-    # NOTE: L'ancienne méthode _proposer_documents_nouvel_operateur a été supprimée.
-    # Le déclenchement des documents est maintenant géré automatiquement via EventBus
-    # et le service DocumentTriggerService.
 
 
 if __name__ == "__main__":

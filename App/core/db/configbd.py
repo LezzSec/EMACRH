@@ -161,7 +161,7 @@ def _get_pool() -> pooling.MySQLConnectionPool:
         charset=cfg["charset"],
         use_unicode=True,
         autocommit=False,
-        # ✅ Timeouts pour éviter les blocages réseau
+        # Timeouts pour éviter les blocages réseau
         connection_timeout=5,  # Max 5 secondes pour établir la connexion
         # mysql-connector-python ne prend pas toujours collation ici selon versions,
         # mais on la garde en option (et tu peux aussi la SET après connexion si besoin).

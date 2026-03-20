@@ -7,7 +7,6 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 import sys
 
-# ✅ OPTIMISATION : Import paresseux de pandas (uniquement si export Excel nécessaire)
 # import pandas as pd  # Déplacé dans les fonctions qui l'utilisent
 from datetime import datetime
 from .besoin_poste_dialog import BesoinPosteDialog
@@ -47,16 +46,13 @@ class GrillesDialog(QDialog):
 
         self._setup_theme_colors()
 
-        # Layout principal avec marges nulles
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Barre de titre personnalisée
         title_bar = add_custom_title_bar(self, "Grilles de Polyvalence")
         main_layout.addWidget(title_bar)
 
-        # Widget de contenu
         content_widget = QWidget()
         self.layout = QVBoxLayout(content_widget)
         self.layout.setContentsMargins(12, 12, 12, 12)
@@ -72,10 +68,8 @@ class GrillesDialog(QDialog):
             header.setStyleSheet("font-size: 18px; font-weight: bold;")
             self.layout.addWidget(header)
 
-        # Barre d'outils unifiée (tout en une ligne)
         self.add_unified_toolbar()
 
-        # Table principale (sans carte pour économiser l'espace)
         self.main_table = QTableWidget()
         self.main_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.main_table.cellChanged.connect(self.on_cell_changed)
@@ -88,7 +82,6 @@ class GrillesDialog(QDialog):
         self.sort_column = None
         self.sort_order = Qt.AscendingOrder
 
-        # Infos niveaux compactes en bas
         self.add_compact_level_info()
 
         # Ajouter le widget de contenu au layout principal
@@ -583,7 +576,6 @@ class GrillesDialog(QDialog):
                 return
 
             try:
-                # ✅ Toute la logique SQL est déléguée au service
                 action, old_niveau, new_niveau_int = GrillesService.update_polyvalence_from_grille(
                     operateur_id=operateur_id,
                     poste_id=poste_id,
@@ -700,10 +692,9 @@ class GrillesDialog(QDialog):
     def load_data(self):
         """Charge opérateurs/postes + prépare 7 lignes de synthèse en bas + remplit la ligne Besoins.
 
-        ✅ OPTIMISÉ : Utilise 3 requêtes séparées au lieu d'un CROSS JOIN massif
+        Utilise 3 requêtes séparées au lieu d'un CROSS JOIN massif.
         """
         try:
-            # ✅ Délégation au service - plus aucun SQL dans la GUI
             grille = GrillesService.get_grille_data()
 
             self.postes = grille['postes']
@@ -743,8 +734,7 @@ class GrillesDialog(QDialog):
                 sorted(operateurs_dict.keys()) + self.SUMMARY_ROWS
             )
 
-            # ✅ CORRECTION BUG DÉCALAGE: Construire self.operateurs dans l'ordre TRIÉ
-            # pour que les index correspondent aux lignes du tableau
+            # Construire self.operateurs dans l'ordre trié pour que les index correspondent aux lignes du tableau
             sorted_operateurs = sorted(operateurs_dict.items())  # Trié par nom_complet
             self.operateurs = [(data['id'], nom_complet) for nom_complet, data in sorted_operateurs]
 
@@ -756,7 +746,7 @@ class GrillesDialog(QDialog):
                     item.setTextAlignment(Qt.AlignCenter)
                     self.main_table.setItem(row_idx, col_idx, item)
 
-            # 💥 Style : 6 premières lignes de synthèse non éditables (avec couleurs thème)
+            # Style : 6 premières lignes de synthèse non éditables (avec couleurs thème)
             start_row = n_ops  # première ligne de synthèse
             for r in range(start_row, start_row + len(self.SUMMARY_ROWS) - 1):
                 for c in range(self.main_table.columnCount()):
@@ -765,11 +755,10 @@ class GrillesDialog(QDialog):
                         it = QTableWidgetItem("")
                         self.main_table.setItem(r, c, it)
                     it.setFlags(it.flags() & ~Qt.ItemIsEditable)
-                    # 💥 Couleurs adaptées au thème
                     it.setBackground(self.color_synthesis_bg)
                     it.setForeground(self.color_synthesis_text)
 
-            # 💥 Ligne "Besoins par poste" éditable (avec couleurs thème)
+            # Ligne "Besoins par poste" éditable (avec couleurs thème)
             besoins_row = start_row + len(self.SUMMARY_ROWS) - 1
             for c in range(self.main_table.columnCount()):
                 it = self.main_table.item(besoins_row, c)
@@ -777,7 +766,6 @@ class GrillesDialog(QDialog):
                     it = QTableWidgetItem("")
                     self.main_table.setItem(besoins_row, c, it)
                 it.setFlags((it.flags() | Qt.ItemIsEditable))
-                # 💥 Couleurs adaptées au thème pour la ligne éditable
                 it.setBackground(self.color_besoins_bg)
                 it.setForeground(self.color_besoins_text)
                 it.setTextAlignment(Qt.AlignCenter)
@@ -855,7 +843,6 @@ class GrillesDialog(QDialog):
                     continue
                 modifications.append((operateur_id, poste_id, new_niveau, operateur_nom, poste_code))
 
-            # ✅ Délégation au service
             modifications_count = GrillesService.save_polyvalence_batch(modifications)
             self.modified_cells.clear()
 

@@ -244,7 +244,7 @@ class OptimizedDBLogger:
                         entry.get('description')
                     ))
 
-                # ✅ INSERT multiple (1 requête pour N logs)
+                # INSERT multiple (1 requête pour N logs)
                 placeholders = ', '.join(['(NOW(), %s, %s, %s, %s, %s)'] * len(values))
                 flat_values = [item for row in values for item in row]
 

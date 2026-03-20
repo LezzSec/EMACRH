@@ -16,13 +16,8 @@ from core.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# ✅ OPTIMISATIONS : Monitoring + Logs optimisés
 from core.utils.performance_monitor import monitor_query
-
-# ✅ Permissions
 from core.services.permission_manager import require
-
-# ✅ DTOs typés pour robustesse
 from core.models import EvaluationResume, StatistiquesEvaluations
 
 
@@ -241,7 +236,7 @@ def get_statistiques_evaluations() -> Dict:
 
 
 # ===========================
-# ✅ MÉTHODES TYPÉES (DTOs)
+# MÉTHODES TYPÉES (DTOs)
 # ===========================
 # Ces méthodes retournent des dataclasses au lieu de dicts bruts
 # Avantages : typage fort, autocomplétion IDE, validation
@@ -323,7 +318,7 @@ def get_statistiques_evaluations_typed() -> StatistiquesEvaluations:
 
 
 # ===========================
-# ✅ MÉTHODES POUR DetailOperateurDialog
+# MÉTHODES POUR DetailOperateurDialog
 # ===========================
 
 def get_operateurs_avec_stats_polyvalences() -> List[tuple]:
@@ -638,4 +633,66 @@ def update_date_champ_polyvalence(poly_id: int, field: str, new_date) -> bool:
 
     except Exception as e:
         logger.exception(f"Erreur update champ {field} polyvalence {poly_id}: {e}")
+        return False
+
+
+def supprimer_polyvalence_par_id(poly_id: int) -> bool:
+    """
+    Supprime une polyvalence par son ID et enregistre l'action dans les historiques.
+    Équivalent à ce que fait la grille de polyvalence quand la cellule est vidée.
+    """
+    import json
+
+    # Récupérer les infos avant suppression pour les logs
+    poly_info = QueryExecutor.fetch_one(
+        """SELECT pv.id, pv.personnel_id, pv.poste_id, pv.niveau,
+                  pv.date_evaluation, pv.prochaine_evaluation,
+                  p.nom, p.prenom, po.poste_code
+           FROM polyvalence pv
+           JOIN personnel p ON p.id = pv.personnel_id
+           JOIN postes po ON po.id = pv.poste_id
+           WHERE pv.id = %s""",
+        (poly_id,),
+        dictionary=True
+    )
+    if not poly_info:
+        logger.warning(f"supprimer_polyvalence_par_id: polyvalence {poly_id} introuvable")
+        return False
+
+    try:
+        QueryExecutor.execute_write("DELETE FROM polyvalence WHERE id = %s", (poly_id,))
+
+        from core.services.optimized_db_logger import log_hist
+        log_hist(
+            action="DELETE",
+            table_name="polyvalence",
+            record_id=poly_id,
+            operateur_id=poly_info['personnel_id'],
+            poste_id=poly_info['poste_id'],
+            description=json.dumps({
+                "operateur": f"{poly_info['prenom']} {poly_info['nom']}",
+                "poste": poly_info['poste_code'],
+                "niveau": poly_info['niveau'],
+                "type": "suppression_polyvalence"
+            }, ensure_ascii=False),
+            source="service/evaluation_service"
+        )
+
+        try:
+            from core.services.polyvalence_logger import log_polyvalence_action
+            log_polyvalence_action(
+                action_type='SUPPRESSION',
+                operateur_id=poly_info['personnel_id'],
+                poste_id=poly_info['poste_id'],
+                ancien_niveau=poly_info['niveau'],
+                ancienne_date_evaluation=poly_info['date_evaluation'],
+                source='GUI',
+            )
+        except Exception as _e:
+            logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
+
+        return True
+
+    except Exception as e:
+        logger.exception(f"Erreur suppression polyvalence {poly_id}: {e}")
         return False

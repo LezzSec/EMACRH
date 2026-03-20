@@ -96,7 +96,6 @@ class CRUDService:
             record_id = QueryExecutor.execute_write(query, values, return_lastrowid=True)
 
             # Logging dans historique
-            # ✅ Extraire operateur_id ou personnel_id si présent
             operateur_id = kwargs.get('operateur_id') or kwargs.get('personnel_id')
 
             log_hist(
@@ -105,7 +104,7 @@ class CRUDService:
                 record_id=record_id,
                 description=f"Enregistrement créé dans {cls.TABLE_NAME}",
                 details=kwargs,
-                operateur_id=operateur_id  # ✅ Ajouté
+                operateur_id=operateur_id
             )
 
             logger.info(f"{cls.TABLE_NAME}: création réussie, ID={record_id}")
@@ -165,10 +164,9 @@ class CRUDService:
             QueryExecutor.execute_write(query, tuple(values), return_lastrowid=False)
 
             # Logging dans historique
-            # ✅ Extraire operateur_id ou personnel_id si présent dans les données modifiées
             operateur_id = kwargs.get('operateur_id') or kwargs.get('personnel_id')
 
-            # ✅ Si pas dans kwargs, essayer de le récupérer de la table
+            # Si pas dans kwargs, essayer de le récupérer de la table
             if not operateur_id and cls.TABLE_NAME in ('contrat', 'formation', 'polyvalence'):
                 try:
                     id_col = 'personnel_id' if cls.TABLE_NAME == 'contrat' else 'operateur_id'
@@ -188,7 +186,7 @@ class CRUDService:
                 record_id=record_id,
                 description=f"Enregistrement {record_id} modifié",
                 details=kwargs,
-                operateur_id=operateur_id  # ✅ Ajouté
+                operateur_id=operateur_id
             )
 
             logger.info(f"{cls.TABLE_NAME}: mise à jour réussie, ID={record_id}")
@@ -230,7 +228,7 @@ class CRUDService:
         cls._validate_config()
 
         try:
-            # ✅ Récupérer operateur_id AVANT suppression si la table en a un
+            # Récupérer operateur_id avant suppression si la table en a un
             operateur_id = None
             if cls.TABLE_NAME in ('contrat', 'formation', 'polyvalence'):
                 try:
@@ -265,7 +263,7 @@ class CRUDService:
                 table_name=cls.TABLE_NAME,
                 record_id=record_id,
                 description=description,
-                operateur_id=operateur_id  # ✅ Ajouté
+                operateur_id=operateur_id
             )
 
             logger.info(f"{cls.TABLE_NAME}: suppression réussie, ID={record_id}")

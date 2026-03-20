@@ -19,6 +19,7 @@ from core.services.evaluation_service import (
     get_historique_polyvalence_operateur,
     mettre_a_jour_evaluation, update_date_evaluation_polyvalence,
     update_date_champ_polyvalence, get_operateurs_avec_stats_polyvalences,
+    supprimer_polyvalence_par_id,
 )
 from core.utils.logging_config import get_logger
 from core.utils.date_format import format_date, format_datetime
@@ -51,7 +52,6 @@ class DetailOperateurDialog(QDialog):
         layout = QVBoxLayout(self)
         layout.setSpacing(15)
 
-        # En-tête avec nom de l'opérateur
         header_frame = QWidget()
         header_frame.setStyleSheet("""
             QWidget {
@@ -70,7 +70,6 @@ class DetailOperateurDialog(QDialog):
 
         layout.addWidget(header_frame)
 
-        # Tabs
         self.tabs = QTabWidget()
         self.tabs.setStyleSheet("""
             QTabWidget::pane {
@@ -98,19 +97,16 @@ class DetailOperateurDialog(QDialog):
             }
         """)
 
-        # Onglet 1 : Résumé
         self.tab_resume = QWidget()
         self._init_tab_resume()
         self.tabs.addTab(self.tab_resume, "📊 Résumé")
 
-        # Onglet 2 : Historique
         self.tab_anciennes = QWidget()
         self._init_tab_anciennes()
         self.tabs.addTab(self.tab_anciennes, "📜 Historique")
 
         layout.addWidget(self.tabs, 1)
 
-        # Bouton Fermer
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
@@ -133,7 +129,6 @@ class DetailOperateurDialog(QDialog):
 
         layout.addLayout(btn_layout)
 
-        # Charger les données
         self._load_data()
 
     def _init_tab_resume(self):
@@ -142,7 +137,6 @@ class DetailOperateurDialog(QDialog):
         layout.setSpacing(15)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        # Statistiques générales
         stats_group = QGroupBox("📈 Statistiques")
         stats_layout = QVBoxLayout(stats_group)
         self.stats_label = QLabel("Chargement...")
@@ -151,7 +145,6 @@ class DetailOperateurDialog(QDialog):
         stats_layout.addWidget(self.stats_label)
         layout.addWidget(stats_group)
 
-        # Tableau des polyvalences actuelles
         poly_group = QGroupBox("🎯 Polyvalences actuelles")
         poly_layout = QVBoxLayout(poly_group)
 
@@ -254,24 +247,19 @@ class DetailOperateurDialog(QDialog):
             self.poly_table.setRowCount(len(polyvalences))
 
             for row_idx, poly in enumerate(polyvalences):
-                # Colonne 0 : Poste (non éditable)
                 poste_item = QTableWidgetItem(poly['poste_code'])
                 poste_item.setFlags(poste_item.flags() & ~Qt.ItemIsEditable)
                 self.poly_table.setItem(row_idx, 0, poste_item)
-                # Colonne 1 : Niveau (éditable - seulement les chiffres 1-4)
                 niveau_item = QTableWidgetItem(str(poly['niveau']))
                 niveau_item.setTextAlignment(Qt.AlignCenter)
                 self.poly_table.setItem(row_idx, 1, niveau_item)
-                # Colonne 2 : Date évaluation (éditable)
                 date_eval = format_date(poly['date_evaluation']) if poly['date_evaluation'] else "N/A"
                 date_eval_item = QTableWidgetItem(date_eval)
                 self.poly_table.setItem(row_idx, 2, date_eval_item)
-                # Colonne 3 : Prochaine évaluation (NON éditable - calculée automatiquement)
                 date_next = format_date(poly['prochaine_evaluation']) if poly['prochaine_evaluation'] else "N/A"
                 date_next_item = QTableWidgetItem(date_next)
                 date_next_item.setFlags(date_next_item.flags() & ~Qt.ItemIsEditable)
                 self.poly_table.setItem(row_idx, 3, date_next_item)
-                # Colonne 4 : Statut (non éditable)
                 if poly['prochaine_evaluation']:
                     from datetime import date as dt_date
                     today = dt_date.today()
@@ -286,7 +274,6 @@ class DetailOperateurDialog(QDialog):
                 statut_item = QTableWidgetItem(statut)
                 statut_item.setFlags(statut_item.flags() & ~Qt.ItemIsEditable)
                 self.poly_table.setItem(row_idx, 4, statut_item)
-                # Colonne 5 : ID (caché)
                 self.poly_table.setItem(row_idx, 5, QTableWidgetItem(str(poly['id'])))
 
             # Réactiver les signaux
@@ -380,6 +367,29 @@ class DetailOperateurDialog(QDialog):
 
         # === GESTION DU NIVEAU (colonne 1) ===
         if col == 1:
+            # Cellule vidée → suppression de la polyvalence (comme la grille)
+            if new_value == "":
+                poste_item = self.poly_table.item(row, 0)
+                poste_code = poste_item.text() if poste_item else "?"
+                reply = QMessageBox.question(
+                    self, "Supprimer la polyvalence",
+                    f"Voulez-vous supprimer la polyvalence pour le poste {poste_code} ?\n"
+                    "Cette action est irréversible.",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No
+                )
+                if reply != QMessageBox.Yes:
+                    self._load_data()
+                    return
+                if supprimer_polyvalence_par_id(poly_id):
+                    self._load_data()
+                    QMessageBox.information(self, "Supprimé",
+                        f"Polyvalence pour le poste {poste_code} supprimée.")
+                else:
+                    QMessageBox.critical(self, "Erreur", "Impossible de supprimer la polyvalence.")
+                    self._load_data()
+                return
+
             # Valider que c'est un niveau valide (1-4)
             try:
                 new_niveau = int(new_value)
@@ -577,10 +587,6 @@ class DetailOperateurDialog(QDialog):
                 else:
                     QMessageBox.critical(self, "Erreur", "Impossible de mettre à jour la date. Contactez l'administrateur.")
                 self._load_data()
-
-    # NOTE: L'ancienne méthode _proposer_documents_niveau_3 a été supprimée.
-    # Le déclenchement des documents est maintenant géré automatiquement via EventBus
-    # et le service DocumentTriggerService.
 
 
 # --- Délégué pour empêcher l'édition ---

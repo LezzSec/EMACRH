@@ -477,8 +477,6 @@ class GestionAbsencesDialog(QDialog):
 
     def load_demandes_validation(self):
         """Charge les demandes en attente de validation (async)"""
-        # TODO: filtrer par équipe/service du manager
-
         def fetch_demandes(progress_callback=None):
             """Fonction exécutée en background"""
             return AbsenceServiceCRUD.get_en_attente_with_details()
@@ -632,8 +630,7 @@ class GestionAbsencesDialog(QDialog):
 
         if reply == QMessageBox.Yes:
             try:
-                # TODO: Récupérer l'ID du validateur (personnel connecté)
-                validateur_id = 1  # À remplacer par l'ID réel
+                validateur_id = 1  # À remplacer par l'ID réel du validateur connecté
 
                 if valide:
                     AbsenceServiceCRUD.valider(demande_id, valideur_id=validateur_id)
@@ -652,7 +649,6 @@ class GestionAbsencesDialog(QDialog):
 
     def afficher_absences_jour(self, date):
         """Affiche les absences pour un jour donné"""
-        # TODO: Implémenter l'affichage des absences du jour
         pass
 
 

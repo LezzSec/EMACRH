@@ -290,7 +290,6 @@ class PlanningAbsencesDialog(QDialog):
 
     def load_absences_month(self, year=None, month=None):
         """Charge toutes les absences du mois visible"""
-        # ✅ Si pas de param, on prend le mois AFFICHÉ
         if year is None or month is None:
             year = self.calendar.yearShown()
             month = self.calendar.monthShown()
@@ -360,7 +359,6 @@ class PlanningAbsencesDialog(QDialog):
 
     def update_calendar_colors(self):
         """Colore les jours avec absences et évaluations dans le calendrier"""
-        # ✅ Utiliser le mois affiché
         year = self.calendar.yearShown()
         month = self.calendar.monthShown()
         first_day = QDate(year, month, 1)

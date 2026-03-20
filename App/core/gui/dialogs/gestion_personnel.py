@@ -59,7 +59,6 @@ class DetailOperateurDialog(QDialog):
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(12)
 
-        # === Header avec infos opérateur ===
         header_content = QVBoxLayout()
         header = QLabel(f"{nom} {prenom}")
         header.setFont(QFont("Segoe UI", 18, QFont.Bold))
@@ -76,10 +75,8 @@ class DetailOperateurDialog(QDialog):
 
         layout.addLayout(header_content)
         
-        # === Onglets ===
         tabs = QTabWidget()
         
-        # Onglet 1 : Polyvalences
         poly_tab = QWidget()
         poly_layout = QVBoxLayout(poly_tab)
         
@@ -96,7 +93,6 @@ class DetailOperateurDialog(QDialog):
         self.poly_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         poly_layout.addWidget(self.poly_table)
         
-        # Stats des niveaux
         stats_box = QHBoxLayout()
         self.stat_n1 = self._create_mini_stat("N1", "0", "#ef4444")
         self.stat_n2 = self._create_mini_stat("N2", "0", "#f59e0b")
@@ -121,7 +117,6 @@ class DetailOperateurDialog(QDialog):
         infos_layout.setSpacing(0)
         infos_layout.setContentsMargins(0, 0, 0, 0)
 
-        # Scroll area pour les cartes
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
@@ -145,7 +140,6 @@ class DetailOperateurDialog(QDialog):
             }
         """)
 
-        # Container pour les cartes
         self.infos_container = QWidget()
         self.infos_container.setStyleSheet("background-color: #f8fafc;")
         self.infos_cards_layout = QVBoxLayout(self.infos_container)
@@ -171,7 +165,6 @@ class DetailOperateurDialog(QDialog):
         self.tabs_widget = tabs
         layout.addWidget(tabs)
         
-        # === Boutons d'action ===
         actions = QHBoxLayout()
         
         self.toggle_status_btn = QPushButton()
@@ -194,7 +187,6 @@ class DetailOperateurDialog(QDialog):
         # Ajouter le widget de contenu au layout principal
         main_layout.addWidget(content_widget)
 
-        # Charger les données
         self.load_data()
     
     def update_status_button(self):
@@ -275,7 +267,6 @@ class DetailOperateurDialog(QDialog):
             # Stocker les données pour l'export
             self._infos_data = []
 
-            # -------- Carte Informations personnelles --------
             _pi = PersonnelRepository.get_personnel_infos(self.operateur_id)
             row_data = [_pi] if _pi else []
 
@@ -306,7 +297,6 @@ class DetailOperateurDialog(QDialog):
                 icon="👤"
             )
 
-            # -------- Carte Contrat actuel --------
             contr = ContratServiceCRUD.get_by_operateur(self.operateur_id, actif_only=True)[:1]
 
             contract_items = []
@@ -336,7 +326,6 @@ class DetailOperateurDialog(QDialog):
                 on_click=self._open_contract_management if contr else None
             )
 
-            # -------- Carte Formations --------
             formations = FormationServiceCRUD.get_by_operateur(self.operateur_id)[:5]
 
             formation_items = []
@@ -358,7 +347,6 @@ class DetailOperateurDialog(QDialog):
                 on_click=self._open_formation_rh if formations else None
             )
 
-            # -------- Carte Validités --------
             validites = medical_service.get_validites_operateur(self.operateur_id)
 
             validite_items = []

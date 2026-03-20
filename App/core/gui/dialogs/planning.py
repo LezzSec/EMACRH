@@ -594,7 +594,7 @@ class RegularisationDialog(QDialog):
     def load_eval_calendar_markings(self):
         """Marque les jours avec des évaluations prévues dans le calendrier."""
         try:
-            # ✅ Utiliser le mois AFFICHÉ, pas la date sélectionnée
+            # Utiliser le mois affiché, pas la date sélectionnée
             year = self.eval_calendar.yearShown()
             month = self.eval_calendar.monthShown()
             first_day = date(year, month, 1)
@@ -649,7 +649,6 @@ class RegularisationDialog(QDialog):
     def refresh_calendar_display(self):
         """Rafraîchit l'affichage du calendrier pour corriger le bug de scroll."""
         try:
-            # ✅ Utiliser le mois affiché
             year = self.eval_calendar.yearShown()
             month = self.eval_calendar.monthShown()
             first_day = date(year, month, 1)

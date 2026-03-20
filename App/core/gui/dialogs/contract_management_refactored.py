@@ -21,7 +21,6 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import QDate
 
-# ✅ NOUVEAUX IMPORTS - Patterns refactorisés
 from core.gui.components.emac_dialog import EmacFormDialog
 from core.repositories.personnel_repo import PersonnelRepository
 from core.services.contrat_service_crud import ContratServiceCRUD
@@ -63,7 +62,6 @@ class ContractFormDialog(EmacFormDialog):
         self.contract_id = contract_id
         self.is_edit_mode = contract_id is not None
 
-        # ✅ EmacFormDialog gère automatiquement: scroll, layout, boutons
         super().__init__(
             title="Modifier le contrat" if self.is_edit_mode else "Nouveau contrat",
             min_width=700,
@@ -237,12 +235,8 @@ class ContractFormDialog(EmacFormDialog):
 
     def load_contract_data(self):
         """
-        ✅ REFACTORISÉ: Utilise ContratServiceCRUD.get_by_id().
-
-        AVANT: Appel à get_contract_by_id() de l'ancien service
-        APRÈS: Utilise le nouveau service CRUD
+        Utilise ContratServiceCRUD.get_by_id().
         """
-        # ✅ Utiliser le nouveau service CRUD
         contract = ContratServiceCRUD.get_by_id(self.contract_id)
 
         if not contract:
@@ -363,13 +357,11 @@ class ContractFormDialog(EmacFormDialog):
             raise ValueError("Données invalides")
 
         if self.is_edit_mode:
-            # ✅ Utiliser ContratServiceCRUD.update()
             success, message = ContratServiceCRUD.update(
                 record_id=self.contract_id,
                 **data
             )
         else:
-            # ✅ Utiliser ContratServiceCRUD.create()
             success, message, contract_id = ContratServiceCRUD.create(**data)
 
         if not success:
@@ -431,7 +423,7 @@ class ContractFormDialog(EmacFormDialog):
 
 
 # ===============================
-# ✅ BONUS: Exemple d'utilisation
+# Exemple d'utilisation
 # ===============================
 
 if __name__ == "__main__":

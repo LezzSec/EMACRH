@@ -206,7 +206,7 @@ def get_historique_operateur(operateur_id, limit=None):
         WHERE personnel_id = %s
         ORDER BY date_action DESC
     """
-    # ✅ SÉCURITÉ: Validation stricte de LIMIT (MySQL ne supporte pas les paramètres pour LIMIT)
+    # Sécurité: validation stricte de LIMIT (MySQL ne supporte pas les paramètres pour LIMIT)
     if limit:
         try:
             limit_val = int(limit)
@@ -236,7 +236,7 @@ def get_historique_poste(operateur_id, poste_id, limit=None):
         WHERE personnel_id = %s AND poste_id = %s
         ORDER BY date_action DESC
     """
-    # ✅ SÉCURITÉ: Validation stricte de LIMIT
+    # Sécurité: validation stricte de LIMIT (MySQL ne supporte pas les paramètres pour LIMIT)
     if limit:
         try:
             limit_val = int(limit)
