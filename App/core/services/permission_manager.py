@@ -166,10 +166,10 @@ class PermissionManager:
                 logger.info(f"Permissions chargées: {len(self._allowed_features)} features autorisées")
 
         except Exception as e:
-            logger.warning(f"Système features non disponible (tables absentes?): {e}")
-            # En cas d'erreur, on NE charge PAS les features → fallback vers ancien système
+            logger.error(f"Impossible de charger les permissions (user_id={user_id}, role_id={role_id}): {e}")
+            # En cas d'erreur, refuser tous les accès par défaut (fail-secure)
             self._allowed_features.clear()
-            self._loaded = False  # Important: permet le fallback vers l'ancien système
+            self._loaded = False
             self._cache_timestamp = 0.0
 
     def reload(self) -> None:
@@ -547,7 +547,7 @@ def save_role_features(role_id: int, feature_keys: Set[str]) -> tuple[bool, Opti
     except Exception as e:
         logger.error(f"Erreur save_role_features: {e}")
         conn.rollback()
-        return False, str(e)
+        return False, "Une erreur est survenue lors de la sauvegarde des features"
     finally:
         cur.close()
         conn.close()
@@ -620,7 +620,7 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
     except Exception as e:
         logger.error(f"Erreur save_user_feature_overrides: {e}")
         conn.rollback()
-        return False, str(e)
+        return False, "Une erreur est survenue lors de la sauvegarde des overrides"
     finally:
         cur.close()
         conn.close()
@@ -662,7 +662,7 @@ def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
     except Exception as e:
         logger.error(f"Erreur reset_user_feature_overrides: {e}")
         conn.rollback()
-        return False, str(e)
+        return False, "Une erreur est survenue lors de la réinitialisation des overrides"
     finally:
         cur.close()
         conn.close()

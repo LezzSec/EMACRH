@@ -5,7 +5,7 @@ from PyQt5.QtWidgets import (
 
 from .besoin_poste_dialog import BesoinPosteDialog
 from core.repositories.poste_repo import PosteRepository
-from core.services.optimized_db_logger import log_hist
+
 
 
 class CreationModificationPosteDialog(QDialog):
@@ -95,19 +95,6 @@ class CreationModificationPosteDialog(QDialog):
             # Mettre à jour le besoin (le poste a déjà été créé)
             if new_id and besoin_val is not None:
                 PosteRepository.set_besoin(new_id, besoin_val)
-
-            import json
-            log_hist(
-                action="INSERT",
-                table_name="postes",
-                record_id=None,
-                description=json.dumps({
-                    "poste_code": post_name,
-                    "besoins_postes": besoin_val if besoin_val is not None else 0,
-                    "type": "creation_poste",
-                }, ensure_ascii=False),
-                source="GUI/creation_modification_poste",
-            )
 
             QMessageBox.information(self, "Succès", f"Le poste '{post_name}' a été créé avec succès.")
             self.add_input.clear()

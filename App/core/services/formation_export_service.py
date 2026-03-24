@@ -122,9 +122,9 @@ def _build_demande(wb: "openpyxl.Workbook", data: Dict):
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
-    # Hauteurs de lignes
+    # Hauteurs de lignes par défaut
     for r in range(1, 50):
-        ws.row_dimensions[r].height = 18
+        ws.row_dimensions[r].height = 16
 
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
     left = Alignment(horizontal="left", vertical="center", wrap_text=True)
@@ -143,7 +143,7 @@ def _build_demande(wb: "openpyxl.Workbook", data: Dict):
     ws.row_dimensions[2].height = 20
 
     # --- Ligne vide ---
-    ws.row_dimensions[3].height = 8
+    ws.row_dimensions[3].height = 6
 
     # --- Salarié ---
     ws.merge_cells("C4:Q4")
@@ -177,7 +177,7 @@ def _build_demande(wb: "openpyxl.Workbook", data: Dict):
     ws.row_dimensions[5].height = 22
 
     # --- Formation ---
-    ws.row_dimensions[6].height = 8
+    ws.row_dimensions[6].height = 6
 
     ws.merge_cells("C7:Q7")
     _set_cell(ws, "C7", "INFORMATIONS FORMATION",
@@ -275,7 +275,7 @@ def _build_demande(wb: "openpyxl.Workbook", data: Dict):
     ws.row_dimensions[15].height = 22
 
     # --- Signatures ---
-    ws.row_dimensions[16].height = 8
+    ws.row_dimensions[16].height = 6
     ws.merge_cells("C17:Q17")
     _set_cell(ws, "C17", "SIGNATURES",
               font=_header_font(11), fill=_header_fill(), alignment=center)
@@ -299,7 +299,7 @@ def _build_demande(wb: "openpyxl.Workbook", data: Dict):
     for r in [19, 20, 21]:
         ws.row_dimensions[r].height = 22
 
-    ws.row_dimensions[22].height = 8
+    ws.row_dimensions[22].height = 6
     ws.merge_cells("C23:F23")
     _set_cell(ws, "C23", "Le demandeur",
               font=_label_font(), alignment=center)
@@ -308,7 +308,7 @@ def _build_demande(wb: "openpyxl.Workbook", data: Dict):
               font=_label_font(), alignment=center)
 
     # Note bas de page
-    ws.row_dimensions[24].height = 8
+    ws.row_dimensions[24].height = 6
     ws.merge_cells("B25:Q25")
     _set_cell(ws, "B25",
               "Cette demande devra être présentée au responsable hiérarchique "
@@ -466,189 +466,246 @@ def _build_emargement(wb: "openpyxl.Workbook", data: Dict):
 def _build_suivi(wb: "openpyxl.Workbook", data: Dict):
     ws = wb.create_sheet("Fiche de suivi (EQ 07 02 01)")
 
-    col_widths = [2, 4, 22, 16, 16, 14, 14, 14, 14, 2]
+    # A=marge, B=marge, C..H=contenu, I=OUI, J=NON, K=marge
+    col_widths = [2, 4, 30, 12, 12, 12, 12, 12, 8, 8, 2]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
     left = Alignment(horizontal="left", vertical="center", wrap_text=True)
+    left_top = Alignment(horizontal="left", vertical="top", wrap_text=True)
     border = _thin_border()
+    bot_border = Border(bottom=Side(style='thin', color="000000"))
 
     # --- Titre ---
-    ws.merge_cells("C1:I2")
+    ws.merge_cells("C1:H1")
     _set_cell(ws, "C1", "FICHE DE SUIVI DE FORMATION",
-              font=_title_font(16), alignment=center)
-    ws.merge_cells("C3:I3")
-    _set_cell(ws, "C3", "EQ 07 02 01 rev.6",
+              font=_title_font(14), alignment=center)
+    ws.merge_cells("I1:K1")
+    _set_cell(ws, "I1", "EQ 07 02 01 rev.6",
               font=_value_font(),
               alignment=Alignment(horizontal="right", vertical="center"))
     ws.row_dimensions[1].height = 28
+    ws.row_dimensions[2].height = 6
 
-    # --- Infos ---
-    ws.row_dimensions[4].height = 8
-
-    ws.merge_cells("C5:D5")
-    _set_cell(ws, "C5", "Formation réalisée du :",
+    # --- Dates / Durée ---
+    ws.merge_cells("C3:D3")
+    _set_cell(ws, "C3", "Formation réalisée du :",
               font=_label_font(), fill=_label_fill(), alignment=left, border=border)
-    ws.merge_cells("E5:F5")
-    _set_cell(ws, "E5", _fmt_date(data.get('date_debut')),
+    ws.merge_cells("E3:F3")
+    _set_cell(ws, "E3", _fmt_date(data.get('date_debut')),
               font=_value_font(), alignment=center, border=border)
-    _set_cell(ws, "G5", "au",
-              font=_label_font(), alignment=center, border=border)
-    ws.merge_cells("H5:I5")
-    _set_cell(ws, "H5", _fmt_date(data.get('date_fin')),
+    _set_cell(ws, "G3", "au", font=_label_font(), alignment=center)
+    ws.merge_cells("H3:K3")
+    _set_cell(ws, "H3", _fmt_date(data.get('date_fin')),
               font=_value_font(), alignment=center, border=border)
-    ws.row_dimensions[5].height = 22
+    ws.row_dimensions[3].height = 20
 
-    ws.merge_cells("C6:D6")
-    _set_cell(ws, "C6", "Durée de la formation :",
+    ws.merge_cells("C4:D4")
+    _set_cell(ws, "C4", "Durée de la formation :",
               font=_label_font(), fill=_label_fill(), alignment=left, border=border)
-    ws.merge_cells("E6:I6")
-    _set_cell(ws, "E6", _fmt_duree(data.get('duree_heures')),
+    ws.merge_cells("E4:K4")
+    _set_cell(ws, "E4", _fmt_duree(data.get('duree_heures')),
               font=_value_font(), alignment=left, border=border)
-    ws.row_dimensions[6].height = 22
+    ws.row_dimensions[4].height = 20
+    ws.row_dimensions[5].height = 6
 
     # --- Stagiaire / Organisme ---
-    ws.row_dimensions[7].height = 8
+    ws.merge_cells("C6:E6")
+    _set_cell(ws, "C6", "Stagiaire :",
+              font=Font(name="Calibri", bold=True, size=10, color="FFFFFF"),
+              fill=_header_fill(), alignment=left)
+    ws.merge_cells("F6:K6")
+    _set_cell(ws, "F6", "Organisme de formation :",
+              font=Font(name="Calibri", bold=True, size=10, color="FFFFFF"),
+              fill=_header_fill(), alignment=left)
+    ws.row_dimensions[6].height = 18
+
+    ws.merge_cells("C7:D7")
+    _set_cell(ws, "C7", "Nom :", font=_label_font(), fill=_label_fill(),
+              alignment=left, border=border)
+    _set_cell(ws, "E7", data.get('nom', '').upper(),
+              font=Font(name="Calibri", bold=True, size=11),
+              alignment=left, border=border)
+    ws.merge_cells("F7:G7")
+    _set_cell(ws, "F7", "Raison sociale :", font=_label_font(), fill=_label_fill(),
+              alignment=left, border=border)
+    ws.merge_cells("H7:K7")
+    _set_cell(ws, "H7", data.get('organisme', ''),
+              font=_value_font(), alignment=left, border=border)
+    ws.row_dimensions[7].height = 20
 
     ws.merge_cells("C8:D8")
-    _set_cell(ws, "C8", "STAGIAIRE",
-              font=_header_font(11), fill=_header_fill(), alignment=center)
-    ws.merge_cells("F8:I8")
-    _set_cell(ws, "F8", "ORGANISME DE FORMATION",
-              font=_header_font(11), fill=_header_fill(), alignment=center)
-
-    ws.merge_cells("C9:D9")
-    _set_cell(ws, "C9", "Nom :", font=_label_font(), fill=_label_fill(),
+    _set_cell(ws, "C8", "Prénom :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
-    _set_cell(ws, "E9", data.get('nom', '').upper(),
+    _set_cell(ws, "E8", data.get('prenom', ''),
               font=Font(name="Calibri", bold=True, size=11),
               alignment=left, border=border)
-    ws.merge_cells("F9:G9")
-    _set_cell(ws, "F9", "Raison sociale :", font=_label_font(), fill=_label_fill(),
+    ws.merge_cells("F8:G8")
+    _set_cell(ws, "F8", "Intitulé de la formation :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
-    ws.merge_cells("H9:I9")
-    _set_cell(ws, "H9", data.get('organisme', ''),
-              font=_value_font(), alignment=left, border=border)
-    ws.row_dimensions[9].height = 22
-
-    ws.merge_cells("C10:D10")
-    _set_cell(ws, "C10", "Prénom :", font=_label_font(), fill=_label_fill(),
-              alignment=left, border=border)
-    _set_cell(ws, "E10", data.get('prenom', ''),
-              font=Font(name="Calibri", bold=True, size=11),
-              alignment=left, border=border)
-    ws.merge_cells("F10:G10")
-    _set_cell(ws, "F10", "Intitulé :", font=_label_font(), fill=_label_fill(),
-              alignment=left, border=border)
-    ws.merge_cells("H10:I10")
-    _set_cell(ws, "H10", data.get('intitule', ''),
+    ws.merge_cells("H8:K8")
+    _set_cell(ws, "H8", data.get('intitule', ''),
               font=_value_font(),
               alignment=Alignment(horizontal="left", vertical="center", wrap_text=True),
               border=border)
-    ws.row_dimensions[10].height = 36
+    ws.row_dimensions[8].height = 36
 
-    ws.merge_cells("F11:G11")
-    _set_cell(ws, "F11", "Lieu :", font=_label_font(), fill=_label_fill(),
-              alignment=left, border=border)
-    ws.merge_cells("H11:I11")
-    _set_cell(ws, "H11", data.get('lieu', ''),
-              font=_value_font(), alignment=left, border=border)
-    ws.row_dimensions[11].height = 22
-
-    # --- Questionnaire satisfaction ---
-    ws.row_dimensions[12].height = 8
-
-    ws.merge_cells("C13:I13")
-    _set_cell(ws, "C13",
+    # Texte description
+    ws.merge_cells("C9:K9")
+    _set_cell(ws, "C9",
               "Ce document permet d'évaluer la satisfaction du stagiaire en fin de formation "
               "ainsi que l'atteinte des objectifs pédagogiques.",
               font=Font(name="Calibri", size=9, italic=True),
               alignment=Alignment(horizontal="left", vertical="center", wrap_text=True))
-    ws.row_dimensions[13].height = 28
+    ws.row_dimensions[9].height = 26
 
-    # En-têtes questionnaire
-    ws.merge_cells("C14:G14")
-    _set_cell(ws, "C14", "ÉVALUATION DE LA FORMATION",
-              font=_header_font(10), fill=_header_fill(), alignment=center)
-    _set_cell(ws, "H14", "OUI", font=_header_font(10), fill=_header_fill(), alignment=center)
-    _set_cell(ws, "I14", "NON", font=_header_font(10), fill=_header_fill(), alignment=center)
+    # --- Section : Pour quel(s) raison(s) ---
+    ws.merge_cells("C10:H10")
+    _set_cell(ws, "C10",
+              "Pour quel(s) raison(s) avez-vous suivi cette formation ?",
+              font=Font(name="Calibri", bold=True, italic=True, size=10),
+              alignment=left)
+    _set_cell(ws, "I10", "OUI", font=_header_font(10), fill=_header_fill(),
+              alignment=center, border=border)
+    _set_cell(ws, "J10", "NON", font=_header_font(10), fill=_header_fill(),
+              alignment=center, border=border)
+    ws.row_dimensions[10].height = 20
+
+    raisons = [
+        "La formation est prévue par votre entreprise",
+        "Utile pour renforcer vos compétences dans votre poste actuel",
+        "Utile pour votre évaluation professionnelle",
+    ]
+    for i, r in enumerate(raisons):
+        row = 11 + i
+        ws.merge_cells(f"C{row}:H{row}")
+        _set_cell(ws, f"C{row}", r, font=_value_font(), alignment=left, border=border)
+        _set_cell(ws, f"I{row}", "", font=_value_font(), alignment=center, border=border)
+        _set_cell(ws, f"J{row}", "", font=_value_font(), alignment=center, border=border)
+        ws.row_dimensions[row].height = 18
+
+    # --- Section : Votre évaluation ---
+    ws.merge_cells("C14:H14")
+    _set_cell(ws, "C14", "Votre évaluation de la formation",
+              font=Font(name="Calibri", bold=True, italic=True, size=10),
+              alignment=left)
+    _set_cell(ws, "I14", "OUI", font=_header_font(10), fill=_header_fill(),
+              alignment=center, border=border)
+    _set_cell(ws, "J14", "NON", font=_header_font(10), fill=_header_fill(),
+              alignment=center, border=border)
     ws.row_dimensions[14].height = 20
+
+    ws.merge_cells("C15:K15")
+    _set_cell(ws, "C15",
+              "Cochez une case en fonction de votre appréciation de l'organisation et du contenu de la formation.",
+              font=Font(name="Calibri", size=9, italic=True),
+              alignment=Alignment(horizontal="left", vertical="center", wrap_text=True))
+    ws.row_dimensions[15].height = 18
 
     questions = [
         "1. Organisation et déroulement de la formation",
         "2. Le contenu est clair et adapté",
         "3. Conformité du contenu au programme",
-        "4. Animation de la formation (aptitude, motivation, compétence)",
+        "4. Animation de la formation par le ou les intervenants\n( aptitude, motivation, compétence et disponibilité)",
         "5. Qualité des supports pédagogiques",
         "6. Qualité du matériel audiovisuel",
         "7. Progression de la formation (durée, rythme)",
         "8. Organisation matérielle : convocation, lieu, pauses",
-        "9. L'objectif de la formation est atteint ?",
-        "10. La composition du groupe est satisfaisante ?",
+        "9. L'objectif de la formation est atteint?",
+        "10. La composition du groupe est satisfaisante (nombre de participants,\nniveaux homogènes)",
     ]
 
     for i, q in enumerate(questions):
-        row = 15 + i
-        ws.merge_cells(f"C{row}:G{row}")
+        row = 16 + i
+        ws.merge_cells(f"C{row}:H{row}")
         _set_cell(ws, f"C{row}", q,
-                  font=_value_font(), alignment=left, border=border)
-        _set_cell(ws, f"H{row}", "",
-                  font=_value_font(), alignment=center, border=border)
-        _set_cell(ws, f"I{row}", "",
-                  font=_value_font(), alignment=center, border=border)
+                  font=_value_font(),
+                  alignment=Alignment(horizontal="left", vertical="center", wrap_text=True),
+                  border=border)
+        _set_cell(ws, f"I{row}", "", font=_value_font(), alignment=center, border=border)
+        _set_cell(ws, f"J{row}", "", font=_value_font(), alignment=center, border=border)
         ws.row_dimensions[row].height = 18
+    ws.row_dimensions[19].height = 30  # Q4 : deux lignes
+    ws.row_dimensions[25].height = 30  # Q10 : deux lignes
 
-    note_row = 25
-    ws.merge_cells(f"C{note_row}:G{note_row}")
-    _set_cell(ws, f"C{note_row}", "Note globale :",
+    # Note + Commentaires (row 26)
+    note_row = 26
+    ws.merge_cells(f"C{note_row}:H{note_row}")
+    _set_cell(ws, f"C{note_row}", "Note",
               font=_label_font(), fill=_label_fill(), alignment=left, border=border)
-    ws.merge_cells(f"H{note_row}:I{note_row}")
-    _set_cell(ws, f"H{note_row}", "... / 10",
+    ws.merge_cells(f"I{note_row}:J{note_row}")
+    _set_cell(ws, f"I{note_row}", "0 / 10",
               font=_value_font(), alignment=center, border=border)
-    ws.row_dimensions[note_row].height = 22
+    ws.row_dimensions[note_row].height = 20
 
-    # Commentaires
-    ws.row_dimensions[26].height = 8
-    ws.merge_cells("C27:I27")
-    _set_cell(ws, "C27", "COMMENTAIRES LIBRES",
-              font=_header_font(10), fill=_header_fill(), alignment=center)
+    ws.merge_cells("C27:K27")
+    _set_cell(ws, "C27", "Commentaires : ___________________________________________________________",
+              font=_value_font(), alignment=left)
+    ws.row_dimensions[27].height = 18
 
-    ws.merge_cells("C28:I30")
-    _set_cell(ws, "C28", "",
-              font=_value_font(), border=border,
-              alignment=Alignment(horizontal="left", vertical="top"))
-    for r in [28, 29, 30]:
-        ws.row_dimensions[r].height = 22
+    # --- Section : Votre satisfaction ---
+    ws.row_dimensions[28].height = 6
 
-    # Signatures
-    ws.row_dimensions[31].height = 8
-    ws.merge_cells("C32:E32")
-    _set_cell(ws, "C32", "Visa Responsable hiérarchique :",
+    ws.merge_cells("C29:H29")
+    _set_cell(ws, "C29", "Votre satisfaction :",
+              font=Font(name="Calibri", bold=True, italic=True, size=10),
+              alignment=left)
+    _set_cell(ws, "I29", "OUI", font=_header_font(10), fill=_header_fill(),
+              alignment=center, border=border)
+    _set_cell(ws, "J29", "NON", font=_header_font(10), fill=_header_fill(),
+              alignment=center, border=border)
+    ws.row_dimensions[29].height = 20
+
+    satisfactions = [
+        "La formation a-t-elle répondu à vos attentes?",
+        "Estimez-vous que la formation était en adéquation avec le métier ou\nles réalités du secteur?",
+        "Recommanderiez-vous ce stage à une personne exerçant le même métier que\nvous?",
+    ]
+    for i, s in enumerate(satisfactions):
+        row = 30 + i
+        ws.merge_cells(f"C{row}:H{row}")
+        _set_cell(ws, f"C{row}", s,
+                  font=_value_font(),
+                  alignment=Alignment(horizontal="left", vertical="center", wrap_text=True),
+                  border=border)
+        _set_cell(ws, f"I{row}", "", font=_value_font(), alignment=center, border=border)
+        _set_cell(ws, f"J{row}", "", font=_value_font(), alignment=center, border=border)
+        ws.row_dimensions[row].height = 26
+
+    # --- Section : Atteinte des objectifs ---
+    ws.row_dimensions[33].height = 6
+
+    ws.merge_cells("C34:K34")
+    _set_cell(ws, "C34",
+              "Evaluation de l'atteinte des objectifs fixés "
+              "( à réaliser lors de l'entretien annuel d'appréciation et de progrès EG 07 61 01)",
+              font=Font(name="Calibri", bold=True, italic=True, underline="single", size=10),
+              alignment=Alignment(horizontal="left", vertical="center", wrap_text=True))
+    ws.row_dimensions[34].height = 28
+
+    for r in [35, 36, 37]:
+        ws.merge_cells(f"C{r}:K{r}")
+        _set_cell(ws, f"C{r}", "", border=bot_border)
+        ws.row_dimensions[r].height = 20
+
+    # --- Signatures ---
+    ws.row_dimensions[38].height = 6
+
+    ws.merge_cells("C39:G39")
+    _set_cell(ws, "C39", "Visa du Responsable hiérarchique (demandeur)",
               font=_label_font(), fill=_label_fill(), alignment=left, border=border)
-    ws.merge_cells("F32:G32")
-    _set_cell(ws, "F32", "Date :", font=_label_font(), fill=_label_fill(),
-              alignment=left, border=border)
-    ws.merge_cells("H32:I32")
-    _set_cell(ws, "H32", "", font=_value_font(), border=border, alignment=center)
-    ws.row_dimensions[32].height = 22
+    ws.merge_cells("H39:I39")
+    _set_cell(ws, "H39", "A                              le",
+              font=_value_font(), alignment=left, border=border)
+    ws.merge_cells("J39:K39")
+    _set_cell(ws, "J39", "", font=_value_font(), border=border)
+    ws.row_dimensions[39].height = 20
 
-    ws.merge_cells("C33:I34")
-    _set_cell(ws, "C33", "",
-              font=_value_font(), border=border,
-              alignment=Alignment(horizontal="left", vertical="top"))
-    ws.row_dimensions[33].height = 30
-    ws.row_dimensions[34].height = 30
-
-    ws.row_dimensions[35].height = 8
-    ws.merge_cells("C36:G36")
-    _set_cell(ws, "C36", "Signature du stagiaire :",
+    ws.merge_cells("C40:K40")
+    _set_cell(ws, "C40", "Signature du stagiaire :",
               font=_label_font(), fill=_label_fill(), alignment=left, border=border)
-    ws.merge_cells("C37:I38")
-    _set_cell(ws, "C37", "", font=_value_font(), border=border,
-              alignment=Alignment(horizontal="center", vertical="center"))
-    ws.row_dimensions[37].height = 30
-    ws.row_dimensions[38].height = 30
+    ws.row_dimensions[40].height = 36
 
 
 # ========================  POINT D'ENTRÉE PUBLIC  ========================

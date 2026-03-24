@@ -556,7 +556,7 @@ def create_formation(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional
     try:
         # ✅ Utiliser FormationServiceCRUD.create()
         return FormationServiceCRUD.create(
-            operateur_id=operateur_id,
+            personnel_id=operateur_id,
             **data
         )
 

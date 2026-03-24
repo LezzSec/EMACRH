@@ -2,6 +2,16 @@
 # EMAC Project - Git Ignore Configuration
 # ============================================================================
 
+# Dossiers et fichiers exclus du repo (garder uniquement App/, README.md, .gitignore)
+docs/
+build-scripts/
+build/
+dist/
+_archive/
+.claude/
+*.zip
+CLAUDE.md
+
 # Python - Cache et bytecode (pattern global récursif)
 **/__pycache__/
 **/*.pyc

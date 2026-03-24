@@ -23,30 +23,15 @@ from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import QApplication as _QApp
 from PyQt5.QtGui import QFont
 
-from core.gui.workers.db_worker import DbWorker, DbThreadPool
 from core.gui.components.loading_components import LoadingLabel
 from core.gui.components.ui_theme import EmacCard, EmacButton
 from core.gui.components.emac_ui_kit import EmacAlert, EmacChip, add_custom_title_bar
-from core.services.rh_service import (
-    rechercher_operateurs,
-    get_operateur_by_id,
-    get_donnees_domaine,
+from core.services.permission_manager import can
+from core.gui.view_models.gestion_rh_view_model import (
+    GestionRHViewModel,
     DomaineRH,
-    delete_formation,
-    delete_declaration,
-    get_documents_domaine,
-    get_documents_archives_operateur,
     get_domaines_rh,
 )
-from core.services import competences_service as _competences_service
-delete_competence_personnel = _competences_service.remove_assignment
-from core.services.medical_service import delete_visite, delete_accident
-from core.services.vie_salarie_service import (
-    delete_sanction,
-    delete_entretien,
-)
-from core.services.mutuelle_service import delete_mutuelle
-from core.services.permission_manager import can, require
 from core.utils.date_format import format_date
 from core.gui.dialogs.gestion_rh_dialogs import (
     EditInfosGeneralesDialog, EditContratDialog, EditDeclarationDialog,
@@ -66,84 +51,20 @@ class _GestionRHMixin:
     def _executer_recherche(self):
         """Exécute la recherche d'opérateurs (async)."""
         recherche = self.search_input.text().strip()
-
         self.liste_operateurs.clear()
         self.liste_operateurs.addItem("Recherche en cours…")
         self.compteur_resultats.setText("…")
-
-        def fetch(progress_callback=None):
-            return rechercher_operateurs(recherche=recherche if recherche else None)
-
-        def on_result(resultats):
-            self.liste_operateurs.clear()
-            for op in resultats:
-                item = QListWidgetItem()
-                item.setData(Qt.UserRole, op['id'])
-                nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
-                matricule = op.get('matricule', '-')
-                statut = op.get('statut', 'ACTIF')
-                item.setText(f"{nom_complet}\n{matricule}")
-                item.setToolTip(f"ID: {op['id']} | Statut: {statut}")
-                self.liste_operateurs.addItem(item)
-            self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
-
-        def on_error(err):
-            self.liste_operateurs.clear()
-            self.compteur_resultats.setText("Erreur")
-            logger.error(f"Erreur recherche opérateurs: {err}")
-
-        worker = DbWorker(fetch)
-        worker.signals.result.connect(on_result)
-        worker.signals.error.connect(on_error)
-        DbThreadPool.start(worker)
+        self._vm.rechercher(recherche if recherche else None)
 
     def _charger_contenu_domaine(self):
         """Charge le contenu du domaine RH actif (async)."""
         if not self.operateur_selectionne:
             return
-
-        # Annuler le chargement précédent s'il est encore en cours
-        if self._loading_worker:
-            self._loading_worker.cancel()
-            self._loading_worker = None
-
-        operateur_id = self.operateur_selectionne['id']
-        domaine = self.domaine_actif  # Capturer pour éviter la race condition
-
-        # Vider les zones et afficher un indicateur de chargement
         self._vider_layout(self.layout_resume)
         self._vider_layout(self.layout_documents)
         loading = LoadingLabel("Chargement")
         self.layout_resume.addWidget(loading)
-
-        def fetch(progress_callback=None):
-            donnees   = get_donnees_domaine(operateur_id, domaine)
-            documents = get_documents_domaine(operateur_id, domaine, include_archives=True)
-            return donnees, documents, domaine
-
-        def on_result(result):
-            donnees, documents, fetched_domaine = result
-            # Ignorer si le domaine actif a changé pendant le chargement
-            if self.domaine_actif != fetched_domaine:
-                return
-            self._vider_layout(self.layout_resume)
-            self._vider_layout(self.layout_documents)
-            widget_resume = self._creer_widget_resume(donnees, documents)
-            if widget_resume:
-                self.layout_resume.addWidget(widget_resume)
-            if fetched_domaine != DomaineRH.CONTRAT and self._domaine_a_contenu(donnees, fetched_domaine):
-                widget_documents = self._creer_widget_documents(documents)
-                self.layout_resume.addWidget(widget_documents)
-            self.data_changed.emit()
-
-        def on_error(err):
-            self._vider_layout(self.layout_resume)
-            logger.error(f"Erreur chargement domaine RH: {err}")
-
-        self._loading_worker = DbWorker(fetch)
-        self._loading_worker.signals.result.connect(on_result)
-        self._loading_worker.signals.error.connect(on_error)
-        DbThreadPool.start(self._loading_worker)
+        self._vm.charger_domaine(self.domaine_actif)
 
     def _creer_widget_resume(self, donnees: dict, documents: list = None) -> QWidget:
         """Crée le widget de résumé selon le domaine actif."""
@@ -267,25 +188,11 @@ class _GestionRHMixin:
 
     def _on_operateur_selectionne(self, item: QListWidgetItem):
         """Appelé quand un opérateur est sélectionné dans la liste."""
-        operateur_id = item.data(Qt.UserRole)
-        self.operateur_selectionne = get_operateur_by_id(operateur_id)
-
-        if self.operateur_selectionne:
-            self._afficher_details_operateur()
+        self._vm.selectionner_operateur(item.data(Qt.UserRole))
 
     def _selectionner_operateur_par_id(self, operateur_id: int):
         """Sélectionne automatiquement un opérateur par son ID."""
-        self.operateur_selectionne = get_operateur_by_id(operateur_id)
-
-        if self.operateur_selectionne:
-            self._afficher_details_operateur()
-
-            # Sélectionner dans la liste si présent
-            for i in range(self.liste_operateurs.count()):
-                item = self.liste_operateurs.item(i)
-                if item.data(Qt.UserRole) == operateur_id:
-                    self.liste_operateurs.setCurrentItem(item)
-                    break
+        self._vm.selectionner_operateur(operateur_id)
 
     # =========================================================================
     # ZONE DROITE - Détails RH
@@ -488,18 +395,8 @@ class _GestionRHMixin:
         return nav
 
     def _update_archives_tab(self):
-        """Met à jour la visibilité et le compteur de l'onglet Archives."""
-        if not self.operateur_selectionne:
-            if hasattr(self, 'btn_archives'):
-                self.btn_archives.setVisible(False)
-            return
-
-        archives = get_documents_archives_operateur(self.operateur_selectionne['id'])
-        if archives:
-            self.btn_archives.setText(f"📦 Archives ({len(archives)})")
-            self.btn_archives.setVisible(True)
-        else:
-            self.btn_archives.setVisible(False)
+        """Déclenche le chargement des archives (réponse via _on_archives_loaded)."""
+        self._vm.charger_archives()
 
     def _on_archives_click(self):
         """Appelé quand l'utilisateur clique sur l'onglet Archives."""
@@ -819,7 +716,6 @@ class _GestionRHMixin:
 
     def _proposer_generation_documents(self, formation_id: int):
         """Propose de générer les documents officiels de formation pré-remplis."""
-        from PyQt5.QtWidgets import QMessageBox
         reply = QMessageBox.question(
             self, "Générer les documents",
             "Voulez-vous générer les documents de formation pré-remplis ?\n"
@@ -827,68 +723,28 @@ class _GestionRHMixin:
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes
         )
-        if reply != QMessageBox.Yes:
-            return
-        try:
-            from core.services.formation_export_service import FormationExportService
-            from core.services.formation_service_crud import FormationServiceCRUD
-            data = FormationServiceCRUD.get_formation_by_id(formation_id)
-            if not data:
-                QMessageBox.warning(self, "Erreur", "Formation introuvable.")
-                return
-            success, msg, path = FormationExportService.generate_dossier_formation(data)
-            if success and path:
-                reply2 = QMessageBox.information(
-                    self, "Documents générés",
-                    f"Dossier de formation généré :\n{path}\n\nOuvrir le fichier ?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.Yes
-                )
-                if reply2 == QMessageBox.Yes:
-                    FormationExportService.open_file(path)
-            else:
-                QMessageBox.warning(self, "Génération échouée", msg)
-        except Exception as e:
-            logger.exception(f"Erreur génération documents formation: {e}")
-            QMessageBox.critical(self, "Erreur", f"Impossible de générer les documents : {e}")
+        if reply == QMessageBox.Yes:
+            self._vm.generer_dossier_formation(formation_id)
 
     def _delete_declaration(self, declaration: dict):
         """Supprime une déclaration après confirmation."""
-        try:
-            require('rh.declarations.edit')
-        except PermissionError as e:
-            QMessageBox.warning(self, "Accès refusé", str(e))
-            return
         reply = QMessageBox.question(
             self, "Confirmation",
             f"Voulez-vous vraiment supprimer cette déclaration ?\n{declaration.get('type_declaration')} du {self._format_date(declaration.get('date_debut'))}",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            success, message = delete_declaration(declaration['id'])
-            if success:
-                self._charger_contenu_domaine()
-            else:
-                QMessageBox.critical(self, "Erreur", message)
+            self._vm.supprimer_declaration(declaration['id'])
 
     def _delete_formation(self, formation: dict):
         """Supprime une formation après confirmation."""
-        try:
-            require('rh.formations.delete')
-        except PermissionError as e:
-            QMessageBox.warning(self, "Accès refusé", str(e))
-            return
         reply = QMessageBox.question(
             self, "Confirmation",
             f"Voulez-vous vraiment supprimer cette formation ?\n{formation.get('intitule', 'N/A')}",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            success, message = delete_formation(formation['id'])
-            if success:
-                self._charger_contenu_domaine()
-            else:
-                QMessageBox.critical(self, "Erreur", message)
+            self._vm.supprimer_formation(formation['id'])
 
     def _creer_resume_declaration(self, donnees: dict) -> QWidget:
         """Crée le résumé des déclarations."""
@@ -1100,11 +956,6 @@ class _GestionRHMixin:
 
     def _delete_competence(self, competence: dict):
         """Retire une compétence après confirmation."""
-        try:
-            require('rh.competences.delete')
-        except PermissionError as e:
-            QMessageBox.warning(self, "Accès refusé", str(e))
-            return
         libelle = competence.get('libelle', 'cette compétence')
         reply = QMessageBox.question(
             self,
@@ -1114,12 +965,7 @@ class _GestionRHMixin:
             QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            success, message = delete_competence_personnel(competence['assignment_id'])
-            if success:
-                QMessageBox.information(self, "Succès", message)
-                self._charger_contenu_domaine()
-            else:
-                QMessageBox.critical(self, "Erreur", message)
+            self._vm.supprimer_competence(competence['assignment_id'])
 
     def _creer_resume_formation(self, donnees: dict) -> QWidget:
         """Crée le résumé des formations."""
@@ -1816,18 +1662,7 @@ class _GestionRHMixin:
 
     def _ouvrir_doc_formation(self, doc_id: int):
         """Ouvre un dossier de formation polyvalence."""
-        import os
-        from core.services.polyvalence_docs_service import extraire_vers_fichier_temp
-        temp_path = extraire_vers_fichier_temp(doc_id)
-        if temp_path and temp_path.exists():
-            if os.name == 'nt':
-                os.startfile(str(temp_path))
-            else:
-                import subprocess
-                subprocess.run(['xdg-open', str(temp_path)])
-        else:
-            QMessageBox.warning(self, "Fichier introuvable",
-                                "Le dossier de formation n'a pas pu être ouvert.")
+        self._vm.extraire_doc_formation(doc_id)
 
     def _ouvrir_gestion_docs_formation(self):
         """Ouvre le dialog d'administration des dossiers de formation."""
@@ -1859,22 +1694,13 @@ class _GestionRHMixin:
 
     def _delete_visite(self, visite: dict):
         """Supprime une visite médicale."""
-        try:
-            require('rh.medical.delete')
-        except PermissionError as e:
-            QMessageBox.warning(self, "Accès refusé", str(e))
-            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer la visite du {self._format_date(visite.get('date_visite'))} ?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            success, msg = delete_visite(visite['id'])
-            if success:
-                self._charger_contenu_domaine()
-            else:
-                QMessageBox.warning(self, "Erreur", msg)
+            self._vm.supprimer_visite(visite['id'])
 
     def _add_accident(self):
         """Ajoute un nouvel accident du travail."""
@@ -1894,22 +1720,13 @@ class _GestionRHMixin:
 
     def _delete_accident(self, accident: dict):
         """Supprime un accident du travail."""
-        try:
-            require('rh.medical.delete')
-        except PermissionError as e:
-            QMessageBox.warning(self, "Accès refusé", str(e))
-            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer l'accident du {self._format_date(accident.get('date_accident'))} ?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            success, msg = delete_accident(accident['id'])
-            if success:
-                self._charger_contenu_domaine()
-            else:
-                QMessageBox.warning(self, "Erreur", msg)
+            self._vm.supprimer_accident(accident['id'])
 
     # =========================================================================
     # HANDLERS VIE DU SALARIÉ
@@ -1933,22 +1750,13 @@ class _GestionRHMixin:
 
     def _delete_sanction(self, sanction: dict):
         """Supprime une sanction."""
-        try:
-            require('rh.vie_salarie.edit')
-        except PermissionError as e:
-            QMessageBox.warning(self, "Accès refusé", str(e))
-            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer la sanction du {self._format_date(sanction.get('date_sanction'))} ?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            success, msg = delete_sanction(sanction['id'])
-            if success:
-                self._charger_contenu_domaine()
-            else:
-                QMessageBox.warning(self, "Erreur", msg)
+            self._vm.supprimer_sanction(sanction['id'])
 
     def _add_controle_alcool(self):
         """Ajoute un contrôle d'alcoolémie."""
@@ -1984,22 +1792,13 @@ class _GestionRHMixin:
 
     def _delete_entretien(self, entretien: dict):
         """Supprime un entretien professionnel."""
-        try:
-            require('rh.vie_salarie.edit')
-        except PermissionError as e:
-            QMessageBox.warning(self, "Accès refusé", str(e))
-            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             f"Voulez-vous vraiment supprimer l'entretien du {self._format_date(entretien.get('date_entretien'))} ?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if reply == QMessageBox.Yes:
-            success, msg = delete_entretien(entretien['id'])
-            if success:
-                self._charger_contenu_domaine()
-            else:
-                QMessageBox.warning(self, "Erreur", msg)
+            self._vm.supprimer_entretien(entretien['id'])
 
     # =========================================================================
     # MUTUELLE
@@ -2148,22 +1947,13 @@ class _GestionRHMixin:
 
     def _delete_mutuelle(self, mutuelle: dict):
         """Supprime un enregistrement mutuelle après confirmation."""
-        try:
-            require('rh.mutuelle.edit')
-        except PermissionError as e:
-            QMessageBox.warning(self, "Accès refusé", str(e))
-            return
         reply = QMessageBox.question(
             self, "Confirmer la suppression",
             "Voulez-vous vraiment supprimer cet enregistrement mutuelle ?",
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
         )
         if reply == QMessageBox.Yes:
-            success, msg = delete_mutuelle(mutuelle['id'])
-            if success:
-                self._charger_contenu_domaine()
-            else:
-                QMessageBox.warning(self, "Erreur", msg)
+            self._vm.supprimer_mutuelle(mutuelle['id'])
 
     # =========================================================================
     # DOCUMENTS
@@ -2273,8 +2063,6 @@ class _GestionRHMixin:
 
     def _restaurer_document_par_id(self, doc_id: int):
         """Restaure un document archivé."""
-        from core.services.document_service import DocumentService
-
         reply = QMessageBox.question(
             self,
             "Confirmer la restauration",
@@ -2282,42 +2070,15 @@ class _GestionRHMixin:
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes
         )
-
         if reply == QMessageBox.Yes:
-            try:
-                doc_service = DocumentService()
-                success, message = doc_service.restore_document(doc_id)
-
-                if success:
-                    QMessageBox.information(self, "Succès", "Document restauré avec succès")
-                    self._charger_contenu_domaine()
-                    self._update_archives_tab()
-                else:
-                    QMessageBox.warning(self, "Erreur", message)
-            except Exception as e:
-                logger.exception(f"Erreur restauration document: {e}")
-                QMessageBox.critical(self, "Erreur", "Impossible de restaurer le document")
+            self._vm.restaurer_document(doc_id)
 
     def _ouvrir_document_par_id(self, doc_id: int):
         """Ouvre un document par son ID."""
-        from core.services.document_service import DocumentService
-        doc_service = DocumentService()
-        doc_path = doc_service.get_document_path(doc_id)
-
-        if doc_path and doc_path.exists():
-            import os
-            if os.name == 'nt':
-                os.startfile(str(doc_path))
-            else:
-                import subprocess
-                subprocess.run(['xdg-open', str(doc_path)])
-        else:
-            QMessageBox.warning(self, "Erreur", "Le fichier n'a pas été trouvé sur le disque")
+        self._vm.ouvrir_document(doc_id)
 
     def _archiver_document_par_id(self, doc_id: int):
         """Archive un document après confirmation."""
-        from core.services.document_service import DocumentService
-
         reply = QMessageBox.question(
             self,
             "Confirmer l'archivage",
@@ -2325,32 +2086,19 @@ class _GestionRHMixin:
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
-
         if reply == QMessageBox.Yes:
-            try:
-                doc_service = DocumentService()
-                success, message = doc_service.archive_document(doc_id)
-
-                if success:
-                    QMessageBox.information(self, "Succès", "Document archivé avec succès")
-                    self._charger_contenu_domaine()
-                    self._update_archives_tab()
-                else:
-                    QMessageBox.warning(self, "Erreur", message)
-            except Exception as e:
-                logger.exception(f"Erreur archivage document: {e}")
+            self._vm.archiver_document(doc_id)
 
     def _charger_contenu_archives(self):
-        """Charge et affiche les documents archivés."""
+        """Déclenche le chargement et l'affichage des documents archivés."""
         if not self.operateur_selectionne:
             return
-
-        operateur_id = self.operateur_selectionne['id']
-
         self._vider_layout(self.layout_resume)
         self._vider_layout(self.layout_documents)
+        self._vm.charger_archives()
 
-        archives = get_documents_archives_operateur(operateur_id)
+    def _afficher_archives(self, archives: list):
+        """Affiche les documents archivés (appelé depuis _on_archives_loaded)."""
 
         card = EmacCard(f"📦 Documents archivés ({len(archives)})")
 
@@ -2462,20 +2210,105 @@ class _GestionRHMixin:
             return
 
         doc_id = int(self.documents_table.item(current_row, 0).text())
+        self._vm.ouvrir_document(doc_id)
 
-        from core.services.document_service import DocumentService
-        doc_service = DocumentService()
-        doc_path = doc_service.get_document_path(doc_id)
+    # =========================================================================
+    # VIEWMODEL — connexion et handlers de signaux
+    # =========================================================================
 
-        if doc_path and doc_path.exists():
-            import os
-            import subprocess
-            if os.name == 'nt':
-                os.startfile(str(doc_path))
-            elif os.name == 'posix':
-                subprocess.run(['xdg-open', str(doc_path)])
+    def _connect_viewmodel(self):
+        """Connecte les signaux du ViewModel aux handlers de la View."""
+        self._vm.resultats_loaded.connect(self._on_resultats_loaded)
+        self._vm.operateur_loaded.connect(self._on_operateur_loaded)
+        self._vm.domaine_loaded.connect(self._on_domaine_loaded)
+        self._vm.archives_loaded.connect(self._on_archives_loaded)
+        self._vm.document_path_ready.connect(self._on_document_path_ready)
+        self._vm.dossier_formation_ready.connect(self._on_dossier_formation_ready)
+        self._vm.action_succeeded.connect(self._on_action_succeeded)
+        self._vm.error_occurred.connect(self._on_error_occurred)
+        self._vm.permission_denied.connect(self._on_permission_denied)
+
+    def _on_resultats_loaded(self, resultats: list):
+        """Affiche les résultats de recherche dans la liste."""
+        self.liste_operateurs.clear()
+        for op in resultats:
+            item = QListWidgetItem()
+            item.setData(Qt.UserRole, op['id'])
+            nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
+            item.setText(f"{nom_complet}\n{op.get('matricule', '-')}")
+            item.setToolTip(f"ID: {op['id']} | Statut: {op.get('statut', 'ACTIF')}")
+            self.liste_operateurs.addItem(item)
+        self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
+
+    def _on_operateur_loaded(self, operateur: dict):
+        """Appelé quand un opérateur est chargé par le ViewModel."""
+        self.operateur_selectionne = operateur
+        operateur_id = operateur['id']
+        for i in range(self.liste_operateurs.count()):
+            item = self.liste_operateurs.item(i)
+            if item.data(Qt.UserRole) == operateur_id:
+                self.liste_operateurs.setCurrentItem(item)
+                break
+        self._afficher_details_operateur()
+
+    def _on_domaine_loaded(self, donnees, documents: list, domaine):
+        """Rend le résumé du domaine RH après chargement."""
+        self._vider_layout(self.layout_resume)
+        self._vider_layout(self.layout_documents)
+        widget_resume = self._creer_widget_resume(donnees, documents)
+        if widget_resume:
+            self.layout_resume.addWidget(widget_resume)
+        if domaine != DomaineRH.CONTRAT and self._domaine_a_contenu(donnees, domaine):
+            widget_documents = self._creer_widget_documents(documents)
+            self.layout_resume.addWidget(widget_documents)
+        self.data_changed.emit()
+
+    def _on_archives_loaded(self, archives: list):
+        """Met à jour le bouton Archives; affiche le contenu si l'onglet est actif."""
+        if archives:
+            self.btn_archives.setText(f"📦 Archives ({len(archives)})")
+            self.btn_archives.setVisible(True)
         else:
-            QMessageBox.warning(self, "Erreur", "Le fichier n'a pas été trouvé sur le disque")
+            self.btn_archives.setVisible(False)
+        if hasattr(self, 'btn_archives') and self.btn_archives.isChecked():
+            self._vider_layout(self.layout_resume)
+            self._vider_layout(self.layout_documents)
+            self._afficher_archives(archives)
+
+    def _on_document_path_ready(self, path: str):
+        """Ouvre le fichier dont le chemin a été résolu par le ViewModel."""
+        import os
+        import subprocess
+        if os.name == 'nt':
+            os.startfile(path)
+        else:
+            subprocess.run(['xdg-open', path])
+
+    def _on_dossier_formation_ready(self, success: bool, msg: str, path: str):
+        """Affiche le résultat de la génération du dossier de formation."""
+        if success and path:
+            reply = QMessageBox.information(
+                self, "Documents générés",
+                f"Dossier de formation généré :\n{path}\n\nOuvrir le fichier ?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes:
+                self._on_document_path_ready(path)
+        else:
+            QMessageBox.warning(self, "Génération échouée", msg)
+
+    def _on_action_succeeded(self, msg: str):
+        """Affiche un message de succès."""
+        QMessageBox.information(self, "Succès", msg)
+
+    def _on_error_occurred(self, msg: str):
+        """Affiche un message d'erreur."""
+        QMessageBox.critical(self, "Erreur", msg)
+
+    def _on_permission_denied(self, msg: str):
+        """Affiche un message d'accès refusé."""
+        QMessageBox.warning(self, "Accès refusé", msg)
 
     # =========================================================================
     # UTILITAIRES
@@ -2544,9 +2377,10 @@ class GestionRHDialog(_GestionRHMixin, QDialog):
         self._search_timer = QTimer()
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._executer_recherche)
-        self._loading_worker = None
 
+        self._vm = GestionRHViewModel(parent=self)
         self._setup_ui()
+        self._connect_viewmodel()
 
     def _setup_ui(self):
         """Construit l'interface utilisateur."""

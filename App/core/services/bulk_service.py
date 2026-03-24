@@ -216,7 +216,7 @@ def add_formation_batch(
             # Insérer la formation
             formation_id = QueryExecutor.execute_write("""
                 INSERT INTO formation (
-                    operateur_id, intitule, organisme, date_debut, date_fin,
+                    personnel_id, intitule, organisme, date_debut, date_fin,
                     duree_heures, statut, certificat_obtenu, cout, commentaire
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """, (
@@ -518,7 +518,7 @@ def add_visite_batch(
         try:
             visite_id = QueryExecutor.execute_write("""
                 INSERT INTO medical_visite (
-                    operateur_id, date_visite, type_visite, resultat,
+                    personnel_id, date_visite, type_visite, resultat,
                     restrictions, medecin, commentaire, prochaine_visite
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """, (

@@ -721,7 +721,7 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
             d = self.formation['date_fin']
             self.date_fin.setDate(QDate(d.year, d.month, d.day))
         else:
-            self.date_fin.setDate(QDate(1900, 1, 1))
+            self.date_fin.setDate(QDate.currentDate())
         form.addRow("Date de fin:", self.date_fin)
 
         self.duree = QDoubleSpinBox()

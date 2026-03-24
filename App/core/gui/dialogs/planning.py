@@ -21,19 +21,7 @@ from core.utils.logging_config import get_logger
 logger = get_logger(__name__)
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.utils.date_format import format_date
-from core.services.optimized_db_logger import log_hist
 
-# Fonctions de logging legacy redirigées vers log_hist
-def log_action(action, table_name="", description="", details=None, connection=None, cursor=None):
-    """Fallback legacy - redirige vers log_hist."""
-    try:
-        log_hist(action, description=description, table_name=table_name)
-    except Exception:
-        pass
-
-def log_insert(table_name, description="", record_id=None, details=None, connection=None, cursor=None):
-    """Fallback legacy - redirige vers log_hist."""
-    log_action("INSERT", table_name, description)
 
 
 class RegularisationDialog(QDialog):

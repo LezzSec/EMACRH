@@ -349,7 +349,7 @@ def mock_permission_manager():
 @pytest.fixture
 def mock_log_hist():
     """Mock de la fonction log_hist"""
-    with patch('core.services.logger.log_hist') as mock:
+    with patch('core.services.optimized_db_logger.log_hist') as mock:
         yield mock
 
 
