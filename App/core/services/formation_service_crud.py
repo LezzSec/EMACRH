@@ -38,9 +38,9 @@ class FormationServiceCRUD(CRUDService):
     ACTION_PREFIX = "FORMATION_"
 
     ALLOWED_FIELDS = [
-        'personnel_id', 'intitule', 'organisme', 'date_debut', 'date_fin',
-        'duree_heures', 'statut', 'certificat_obtenu', 'cout', 'commentaire',
-        'document_id',
+        'personnel_id', 'intitule', 'organisme', 'lieu', 'objectif', 'formateur',
+        'date_debut', 'date_fin', 'duree_heures', 'statut', 'certificat_obtenu',
+        'cout', 'commentaire', 'document_id',
     ]
 
     # ========================= QUERIES ENRICHIES (JOIN) =========================
@@ -60,11 +60,13 @@ class FormationServiceCRUD(CRUDService):
             sql = """
                 SELECT
                     f.id, f.personnel_id, f.intitule, f.organisme,
+                    f.lieu, f.objectif, f.formateur,
                     f.date_debut, f.date_fin, f.duree_heures, f.statut,
                     f.certificat_obtenu, f.cout, f.commentaire, f.document_id,
                     f.date_creation, f.date_modification,
+                    p.nom, p.prenom,
                     CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                    p.matricule,
+                    p.matricule, p.numposte as service,
                     d.nom_fichier as attestation_nom
                 FROM formation f
                 JOIN personnel p ON f.personnel_id = p.id
@@ -103,11 +105,13 @@ class FormationServiceCRUD(CRUDService):
             formation = QueryExecutor.fetch_one("""
                 SELECT
                     f.id, f.personnel_id, f.intitule, f.organisme,
+                    f.lieu, f.objectif, f.formateur,
                     f.date_debut, f.date_fin, f.duree_heures, f.statut,
                     f.certificat_obtenu, f.cout, f.commentaire, f.document_id,
                     f.date_creation, f.date_modification,
+                    p.nom, p.prenom,
                     CONCAT(p.prenom, ' ', p.nom) as nom_complet,
-                    p.matricule,
+                    p.matricule, p.numposte as service,
                     d.nom_fichier as attestation_nom
                 FROM formation f
                 JOIN personnel p ON f.personnel_id = p.id
@@ -134,6 +138,9 @@ class FormationServiceCRUD(CRUDService):
         date_debut: date,
         date_fin: date = None,
         organisme: str = None,
+        lieu: str = None,
+        objectif: str = None,
+        formateur: str = None,
         duree_heures: float = None,
         statut: str = "Planifiée",
         certificat_obtenu: bool = False,
@@ -148,6 +155,9 @@ class FormationServiceCRUD(CRUDService):
             date_debut=date_debut,
             date_fin=date_fin,
             organisme=organisme,
+            lieu=lieu,
+            objectif=objectif,
+            formateur=formateur,
             duree_heures=duree_heures,
             statut=statut,
             certificat_obtenu=certificat_obtenu,

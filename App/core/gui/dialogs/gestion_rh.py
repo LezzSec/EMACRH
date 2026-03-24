@@ -45,6 +45,7 @@ from core.services.vie_salarie_service import (
     delete_sanction,
     delete_entretien,
 )
+from core.services.mutuelle_service import delete_mutuelle
 from core.services.permission_manager import can, require
 from core.utils.date_format import format_date
 from core.gui.dialogs.gestion_rh_dialogs import (
@@ -52,6 +53,7 @@ from core.gui.dialogs.gestion_rh_dialogs import (
     EditCompetenceDialog, EditFormationDialog, EditVisiteDialog,
     EditAccidentDialog, EditSanctionDialog, EditControleAlcoolDialog,
     EditTestSalivaireDialog, EditEntretienDialog, AjouterDocumentDialog,
+    EditMutuelleDialog,
 )
 
 
@@ -161,6 +163,8 @@ class _GestionRHMixin:
             return self._creer_resume_vie_salarie(donnees)
         elif self.domaine_actif == DomaineRH.POLYVALENCE:
             return self._creer_resume_polyvalence(donnees)
+        elif self.domaine_actif == DomaineRH.MUTUELLE:
+            return self._creer_resume_mutuelle(donnees)
         return None
 
     # =========================================================================
@@ -792,6 +796,16 @@ class _GestionRHMixin:
         dialog = EditFormationDialog(self.operateur_selectionne['id'], parent=self)
         if dialog.exec_() == QDialog.Accepted:
             self._charger_contenu_domaine()
+            if getattr(dialog, '_justificatif_manquant', False):
+                QMessageBox.information(
+                    self, "Rappel — Document justificatif",
+                    "La formation a été enregistrée.\n\n"
+                    "N'oubliez pas d'ajouter le document justificatif "
+                    "(attestation, certificat…) dès qu'il sera disponible, "
+                    "via l'onglet Documents du profil salarié."
+                )
+            if getattr(dialog, '_saved_id', None):
+                self._proposer_generation_documents(dialog._saved_id)
 
     def _edit_formation(self, formation: dict):
         """Ouvre le formulaire d'édition de formation."""
@@ -800,6 +814,43 @@ class _GestionRHMixin:
         dialog = EditFormationDialog(self.operateur_selectionne['id'], formation, self)
         if dialog.exec_() == QDialog.Accepted:
             self._charger_contenu_domaine()
+            if getattr(dialog, '_saved_id', None):
+                self._proposer_generation_documents(dialog._saved_id)
+
+    def _proposer_generation_documents(self, formation_id: int):
+        """Propose de générer les documents officiels de formation pré-remplis."""
+        from PyQt5.QtWidgets import QMessageBox
+        reply = QMessageBox.question(
+            self, "Générer les documents",
+            "Voulez-vous générer les documents de formation pré-remplis ?\n"
+            "(Demande, Feuille d'émargement, Fiche de suivi)",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        if reply != QMessageBox.Yes:
+            return
+        try:
+            from core.services.formation_export_service import FormationExportService
+            from core.services.formation_service_crud import FormationServiceCRUD
+            data = FormationServiceCRUD.get_formation_by_id(formation_id)
+            if not data:
+                QMessageBox.warning(self, "Erreur", "Formation introuvable.")
+                return
+            success, msg, path = FormationExportService.generate_dossier_formation(data)
+            if success and path:
+                reply2 = QMessageBox.information(
+                    self, "Documents générés",
+                    f"Dossier de formation généré :\n{path}\n\nOuvrir le fichier ?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                if reply2 == QMessageBox.Yes:
+                    FormationExportService.open_file(path)
+            else:
+                QMessageBox.warning(self, "Génération échouée", msg)
+        except Exception as e:
+            logger.exception(f"Erreur génération documents formation: {e}")
+            QMessageBox.critical(self, "Erreur", f"Impossible de générer les documents : {e}")
 
     def _delete_declaration(self, declaration: dict):
         """Supprime une déclaration après confirmation."""
@@ -1945,6 +1996,170 @@ class _GestionRHMixin:
         )
         if reply == QMessageBox.Yes:
             success, msg = delete_entretien(entretien['id'])
+            if success:
+                self._charger_contenu_domaine()
+            else:
+                QMessageBox.warning(self, "Erreur", msg)
+
+    # =========================================================================
+    # MUTUELLE
+    # =========================================================================
+
+    def _creer_resume_mutuelle(self, donnees: dict) -> QWidget:
+        """Crée le résumé de la mutuelle / complémentaire santé."""
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
+
+        if donnees.get('error'):
+            error_card = EmacCard("Erreur")
+            error_card.body.addWidget(QLabel(f"Erreur: {donnees['error']}"))
+            layout.addWidget(error_card)
+            return container
+
+        mutuelle = donnees.get('mutuelle') or {}
+        historique = donnees.get('historique') or []
+
+        self._donnees_mutuelle = donnees
+
+        STATUT_LABELS = {
+            'ADHERENT': 'Adhérent',
+            'DISPENSE': 'Dispensé',
+            'NON_COUVERT': 'Non couvert',
+        }
+        STATUT_COLORS = {
+            'ADHERENT': '#16a34a',
+            'DISPENSE': '#d97706',
+            'NON_COUVERT': '#6b7280',
+        }
+        REGIME_LABELS = {
+            'INDIVIDUEL': 'Individuel',
+            'FAMILLE': 'Famille',
+            'ISOLE_ENFANT': 'Isolé + enfant(s)',
+        }
+
+        card = EmacCard("Mutuelle / Complémentaire santé")
+
+        btn_bar = QHBoxLayout()
+        btn_bar.setContentsMargins(0, 0, 0, 8)
+        if mutuelle:
+            btn_edit = EmacButton("Modifier", variant="outline")
+            btn_edit.setVisible(can("rh.mutuelle.edit"))
+            btn_edit.clicked.connect(lambda: self._edit_mutuelle(mutuelle))
+            btn_bar.addWidget(btn_edit)
+            btn_del = EmacButton("Supprimer", variant="danger")
+            btn_del.setVisible(can("rh.mutuelle.edit"))
+            btn_del.clicked.connect(lambda: self._delete_mutuelle(mutuelle))
+            btn_bar.addWidget(btn_del)
+        else:
+            btn_add = EmacButton("+ Déclarer la mutuelle", variant="primary")
+            btn_add.setVisible(can("rh.mutuelle.edit"))
+            btn_add.clicked.connect(self._add_mutuelle)
+            btn_bar.addWidget(btn_add)
+        btn_bar.addStretch()
+        card.body.addLayout(btn_bar)
+
+        if mutuelle:
+            statut = mutuelle.get('statut_adhesion', 'NON_COUVERT')
+            color = STATUT_COLORS.get(statut, '#6b7280')
+            label_statut = STATUT_LABELS.get(statut, statut)
+
+            statut_lbl = QLabel(f"<b>Statut :</b> <span style='color:{color};font-weight:600'>{label_statut}</span>")
+            card.body.addWidget(statut_lbl)
+
+            grid = QGridLayout()
+            grid.setSpacing(12)
+            infos = []
+            if statut == 'DISPENSE' and mutuelle.get('type_dispense'):
+                infos.append(("Motif de dispense", mutuelle['type_dispense']))
+            if statut == 'ADHERENT':
+                if mutuelle.get('organisme'):
+                    infos.append(("Organisme", mutuelle['organisme']))
+                if mutuelle.get('numero_adherent'):
+                    infos.append(("N° adhérent", mutuelle['numero_adherent']))
+                if mutuelle.get('regime'):
+                    infos.append(("Régime", REGIME_LABELS.get(mutuelle['regime'], mutuelle['regime'])))
+            if mutuelle.get('date_adhesion'):
+                infos.append(("Date d'adhésion", self._format_date(mutuelle['date_adhesion'])))
+            if mutuelle.get('date_fin'):
+                infos.append(("Date de fin", self._format_date(mutuelle['date_fin'])))
+            if mutuelle.get('commentaire'):
+                infos.append(("Commentaire", mutuelle['commentaire']))
+
+            for i, (lbl_txt, val) in enumerate(infos):
+                r, c = divmod(i, 2)
+                lbl = QLabel(f"<b>{lbl_txt}</b><br/>{val}")
+                lbl.setStyleSheet("padding: 8px 12px; background: #f0f4f8; border: 1px solid #cbd5e1; border-radius: 6px;")
+                lbl.setWordWrap(True)
+                grid.addWidget(lbl, r, c)
+            if infos:
+                card.body.addLayout(grid)
+        else:
+            no_data = QLabel("Aucune information mutuelle enregistrée.")
+            no_data.setStyleSheet("color: #9ca3af; padding: 12px 0;")
+            card.body.addWidget(no_data)
+
+        layout.addWidget(card)
+
+        if len(historique) > 1:
+            card_hist = EmacCard(f"Historique ({len(historique)} enregistrements)")
+            table = QTableWidget()
+            table.setColumnCount(5)
+            table.setHorizontalHeaderLabels(["Statut", "Organisme", "Régime", "Début", "Fin"])
+            table.setRowCount(len(historique))
+            hh = table.horizontalHeader()
+            hh.setSectionResizeMode(0, QHeaderView.Fixed); table.setColumnWidth(0, 110)
+            hh.setSectionResizeMode(1, QHeaderView.Stretch)
+            hh.setSectionResizeMode(2, QHeaderView.Fixed); table.setColumnWidth(2, 120)
+            hh.setSectionResizeMode(3, QHeaderView.Fixed); table.setColumnWidth(3, 90)
+            hh.setSectionResizeMode(4, QHeaderView.Fixed); table.setColumnWidth(4, 90)
+            table.setAlternatingRowColors(True)
+            table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+            table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            for row_idx, rec in enumerate(historique):
+                statut = rec.get('statut_adhesion', '-')
+                table.setItem(row_idx, 0, QTableWidgetItem(STATUT_LABELS.get(statut, statut)))
+                table.setItem(row_idx, 1, QTableWidgetItem(rec.get('organisme') or '-'))
+                regime = rec.get('regime') or ''
+                table.setItem(row_idx, 2, QTableWidgetItem(REGIME_LABELS.get(regime, regime) or '-'))
+                table.setItem(row_idx, 3, QTableWidgetItem(self._format_date(rec.get('date_adhesion'))))
+                table.setItem(row_idx, 4, QTableWidgetItem(self._format_date(rec.get('date_fin'))))
+            card_hist.body.addWidget(table)
+            layout.addWidget(card_hist)
+
+        return container
+
+    def _add_mutuelle(self):
+        """Ouvre le formulaire de création mutuelle."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditMutuelleDialog(self.operateur_selectionne['id'], None, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _edit_mutuelle(self, mutuelle: dict):
+        """Ouvre le formulaire de modification mutuelle."""
+        if not self.operateur_selectionne:
+            return
+        dialog = EditMutuelleDialog(self.operateur_selectionne['id'], mutuelle, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self._charger_contenu_domaine()
+
+    def _delete_mutuelle(self, mutuelle: dict):
+        """Supprime un enregistrement mutuelle après confirmation."""
+        try:
+            require('rh.mutuelle.edit')
+        except PermissionError as e:
+            QMessageBox.warning(self, "Accès refusé", str(e))
+            return
+        reply = QMessageBox.question(
+            self, "Confirmer la suppression",
+            "Voulez-vous vraiment supprimer cet enregistrement mutuelle ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No,
+        )
+        if reply == QMessageBox.Yes:
+            success, msg = delete_mutuelle(mutuelle['id'])
             if success:
                 self._charger_contenu_domaine()
             else:

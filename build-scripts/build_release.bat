@@ -60,18 +60,44 @@ echo       OK - Verifications terminees
 echo.
 
 REM -----------------------------------------------------------------------
-REM [2/6] Nettoyage
+REM [2/6] Chiffrement du .env pour distribution multi-machines
 REM -----------------------------------------------------------------------
-echo [2/6] Nettoyage des anciens builds...
+echo [2/6] Chiffrement des credentials DB...
+
+if exist "App\.env" (
+    py -c "import sys; sys.path.insert(0, 'App'); from core.utils.config_crypter import encrypt_env_file_dist; encrypt_env_file_dist('App/.env', 'App/.env.encrypted')"
+    if errorlevel 1 (
+        echo [ERREUR] Echec du chiffrement de App\.env
+        pause
+        exit /b 1
+    )
+    echo       OK - App\.env.encrypted genere ^(cle embarquee, fonctionne sur toutes les machines^)
+) else (
+    echo [AVERTISSEMENT] App\.env introuvable - les credentials DB ne seront pas embarques.
+    echo                 Creez App\.env avec EMAC_DB_PASSWORD=votre_mot_de_passe
+    echo                 puis relancez le build.
+    if not exist "App\.env.encrypted" (
+        echo [ERREUR] Ni App\.env ni App\.env.encrypted present - build annule.
+        pause
+        exit /b 1
+    )
+    echo       INFO - App\.env.encrypted existant conserve.
+)
+echo.
+
+REM -----------------------------------------------------------------------
+REM [3/7] Nettoyage
+REM -----------------------------------------------------------------------
+echo [3/7] Nettoyage des anciens builds...
 if exist "build"  rmdir /S /Q "build"
 if exist "dist"   rmdir /S /Q "dist"
 echo       OK
 echo.
 
 REM -----------------------------------------------------------------------
-REM [3/6] Compilation PyInstaller
+REM [4/7] Compilation PyInstaller
 REM -----------------------------------------------------------------------
-echo [3/6] Compilation PyInstaller (mode release, sans console)...
+echo [4/7] Compilation PyInstaller (mode release, sans console)...
 echo       Duree estimee : 3-5 minutes
 echo.
 
@@ -91,9 +117,9 @@ echo       OK - Compilation terminee
 echo.
 
 REM -----------------------------------------------------------------------
-REM [4/6] Verification de l'executable
+REM [5/7] Verification de l'executable
 REM -----------------------------------------------------------------------
-echo [4/6] Verification de l'executable...
+echo [5/7] Verification de l'executable...
 if not exist "dist\EMAC\EMAC.exe" (
     echo [ERREUR] dist\EMAC\EMAC.exe introuvable apres compilation.
     pause
@@ -106,20 +132,17 @@ for %%A in ("dist\EMAC\EMAC.exe") do (
 echo.
 
 REM -----------------------------------------------------------------------
-REM [5/6] Copie des fichiers de configuration
+REM [6/7] Copie des fichiers de configuration
 REM -----------------------------------------------------------------------
-echo [5/6] Copie des fichiers de configuration...
+echo [6/7] Copie des fichiers de configuration...
 
-REM Le .env.encrypted est inclus automatiquement par le spec PyInstaller.
+REM Le .env.encrypted est inclus automatiquement par le spec PyInstaller (etape 2).
+REM Il est chiffre avec la cle embarquee et fonctionne sur toutes les machines cibles.
 REM Le .env en clair n'est JAMAIS copie dans le build (securite).
-REM Sur chaque machine cible, les credentials DB doivent etre configures via :
-REM   - Variables d'environnement Windows (EMAC_DB_PASSWORD, etc.)
-REM   - OU fichier .env place dans %%APPDATA%%\EMAC\  (invisible dans dist\)
 if exist "App\.env.encrypted" (
-    echo       OK - .env.encrypted present ^(inclus via le spec^)
+    echo       OK - .env.encrypted embarque ^(chiffre, fonctionne sur toutes les machines^)
 ) else (
-    echo [INFO] Pas de .env.encrypted - les credentials DB devront etre
-    echo        configures via variables d'environnement ou %%APPDATA%%\EMAC\.env
+    echo [AVERTISSEMENT] .env.encrypted absent - les credentials ne seront pas embarques
 )
 
 if not exist "dist\EMAC\logs" mkdir "dist\EMAC\logs"
@@ -127,9 +150,9 @@ echo       OK - Dossier logs\ cree
 echo.
 
 REM -----------------------------------------------------------------------
-REM [6/6] Resume final
+REM [7/7] Resume final
 REM -----------------------------------------------------------------------
-echo [6/6] Calcul de la taille totale...
+echo [7/7] Calcul de la taille totale...
 set TOTAL_SIZE=0
 for /r "dist\EMAC" %%F in (*) do set /a TOTAL_SIZE+=%%~zF
 set /a SIZE_MB=%TOTAL_SIZE% / 1048576

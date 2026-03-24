@@ -365,6 +365,10 @@ class GestionFormationsDialog(QDialog):
             btn_edit.clicked.connect(self.edit_formation)
             btn_layout.addWidget(btn_edit)
 
+            btn_docs = EmacButton("Generer documents", 'secondary')
+            btn_docs.clicked.connect(self.generate_documents)
+            btn_layout.addWidget(btn_docs)
+
             btn_delete = EmacButton("Supprimer", 'ghost')
             btn_delete.setStyleSheet("""
                 QPushButton {
@@ -387,6 +391,20 @@ class GestionFormationsDialog(QDialog):
             btn_edit = QPushButton("Modifier")
             btn_edit.clicked.connect(self.edit_formation)
             btn_layout.addWidget(btn_edit)
+
+            btn_docs = QPushButton("Generer documents")
+            btn_docs.setStyleSheet("""
+                QPushButton {
+                    background-color: #10b981;
+                    color: white;
+                    font-weight: bold;
+                    padding: 6px 14px;
+                    border-radius: 4px;
+                }
+                QPushButton:hover { background-color: #059669; }
+            """)
+            btn_docs.clicked.connect(self.generate_documents)
+            btn_layout.addWidget(btn_docs)
 
             btn_delete = QPushButton("Supprimer")
             btn_delete.setStyleSheet("color: #dc2626;")
@@ -547,6 +565,9 @@ class GestionFormationsDialog(QDialog):
         if self.table.selectedItems():
             menu = QMenu()
             menu.addAction("Modifier", self.edit_formation)
+            menu.addSeparator()
+            menu.addAction("Generer les documents", self.generate_documents)
+            menu.addSeparator()
             menu.addAction("Supprimer", self.delete_formation)
             menu.exec_(self.table.viewport().mapToGlobal(position))
 
@@ -580,6 +601,36 @@ class GestionFormationsDialog(QDialog):
             if dialog.exec_() == QDialog.Accepted:
                 self.load_data()
                 self.data_changed.emit()
+
+    def generate_documents(self):
+        """Genere les documents officiels pré-remplis pour la formation selectionnee"""
+        formation_id = self.get_selected_formation_id()
+        if not formation_id:
+            QMessageBox.warning(self, "Selection", "Veuillez selectionner une formation.")
+            return
+
+        try:
+            from core.services.formation_export_service import FormationExportService
+            data = formation_service.get_formation_by_id(formation_id)
+            if not data:
+                QMessageBox.warning(self, "Erreur", "Formation introuvable.")
+                return
+
+            success, msg, path = FormationExportService.generate_dossier_formation(data)
+            if success and path:
+                reply = QMessageBox.information(
+                    self, "Documents generés",
+                    f"Dossier de formation généré :\n{path}\n\nOuvrir le fichier ?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                if reply == QMessageBox.Yes:
+                    FormationExportService.open_file(path)
+            else:
+                QMessageBox.warning(self, "Generation echouee", msg)
+        except Exception as e:
+            logger.exception(f"Erreur génération documents: {e}")
+            show_error_message(self, "Erreur", "Impossible de générer les documents", e)
 
     def delete_formation(self):
         """Supprime la formation selectionnee"""
@@ -615,7 +666,7 @@ class AddEditFormationDialog(QDialog):
         self.document_id = formation.get('document_id') if formation else None
 
         self.setWindowTitle("Modifier la formation" if self.is_edit else "Nouvelle formation")
-        self.setFixedSize(600, 650)
+        self.setFixedSize(640, 820)
 
         self.init_ui()
 
@@ -653,6 +704,22 @@ class AddEditFormationDialog(QDialog):
         self.organisme_input = QLineEdit()
         self.organisme_input.setPlaceholderText("Ex: AFPA, CNAM...")
         form_layout.addRow("Organisme:", self.organisme_input)
+
+        # Lieu
+        self.lieu_input = QLineEdit()
+        self.lieu_input.setPlaceholderText("Ex: Salle de formation Bat A, site externe...")
+        form_layout.addRow("Lieu:", self.lieu_input)
+
+        # Formateur
+        self.formateur_input = QLineEdit()
+        self.formateur_input.setPlaceholderText("Nom du formateur / intervenant")
+        form_layout.addRow("Formateur:", self.formateur_input)
+
+        # Objectif
+        self.objectif_text = QTextEdit()
+        self.objectif_text.setMaximumHeight(65)
+        self.objectif_text.setPlaceholderText("Objectif pédagogique de la formation...")
+        form_layout.addRow("Objectif:", self.objectif_text)
 
         # Dates
         dates_layout = QHBoxLayout()
@@ -802,6 +869,15 @@ class AddEditFormationDialog(QDialog):
         # Organisme
         self.organisme_input.setText(self.formation.get('organisme') or '')
 
+        # Lieu
+        self.lieu_input.setText(self.formation.get('lieu') or '')
+
+        # Formateur
+        self.formateur_input.setText(self.formation.get('formateur') or '')
+
+        # Objectif
+        self.objectif_text.setPlainText(self.formation.get('objectif') or '')
+
         # Dates
         date_debut = self.formation.get('date_debut')
         if date_debut:
@@ -947,6 +1023,9 @@ class AddEditFormationDialog(QDialog):
 
         # Recuperer les valeurs
         organisme = self.organisme_input.text().strip() or None
+        lieu = self.lieu_input.text().strip() or None
+        formateur = self.formateur_input.text().strip() or None
+        objectif = self.objectif_text.toPlainText().strip() or None
         date_debut = self.date_debut.date().toPyDate()
         date_fin = self.date_fin.date().toPyDate()
 
@@ -970,13 +1049,17 @@ class AddEditFormationDialog(QDialog):
         cout = self.cout_spin.value() if self.cout_spin.value() > 0 else None
         commentaire = self.commentaire_text.toPlainText().strip() or None
 
+        saved_formation_id = None
+
         if self.is_edit:
-            # Mise a jour
             success, message = formation_service.update_formation(
                 self.formation['id'],
                 operateur_id=operateur_id,
                 intitule=intitule,
                 organisme=organisme,
+                lieu=lieu,
+                objectif=objectif,
+                formateur=formateur,
                 date_debut=date_debut,
                 date_fin=date_fin,
                 duree_heures=duree_heures,
@@ -986,12 +1069,16 @@ class AddEditFormationDialog(QDialog):
                 commentaire=commentaire,
                 document_id=self.document_id
             )
+            if success:
+                saved_formation_id = self.formation['id']
         else:
-            # Creation
             success, message, formation_id = formation_service.add_formation(
                 operateur_id=operateur_id,
                 intitule=intitule,
                 organisme=organisme,
+                lieu=lieu,
+                objectif=objectif,
+                formateur=formateur,
                 date_debut=date_debut,
                 date_fin=date_fin,
                 duree_heures=duree_heures,
@@ -1000,12 +1087,45 @@ class AddEditFormationDialog(QDialog):
                 cout=cout,
                 commentaire=commentaire
             )
-            # Si document joint et création réussie, lier le document
-            if success and self.document_id and formation_id:
-                formation_service.update_formation(formation_id, document_id=self.document_id)
+            if success:
+                saved_formation_id = formation_id
+                if self.document_id and formation_id:
+                    formation_service.update_formation(formation_id, document_id=self.document_id)
 
         if success:
-            QMessageBox.information(self, "Succes", message)
+            reply = QMessageBox.question(
+                self, "Formation enregistree",
+                f"{message}\n\nVoulez-vous générer les documents de formation pré-remplis ?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes and saved_formation_id:
+                self._generate_documents(saved_formation_id)
             self.accept()
         else:
             QMessageBox.critical(self, "Erreur", message)
+
+    def _generate_documents(self, formation_id: int):
+        """Génère les documents officiels de formation pré-remplis."""
+        try:
+            from core.services.formation_export_service import FormationExportService
+            data = formation_service.get_formation_by_id(formation_id)
+            if not data:
+                QMessageBox.warning(self, "Erreur", "Formation introuvable pour la génération.")
+                return
+
+            success, msg, path = FormationExportService.generate_dossier_formation(data)
+            if success and path:
+                reply = QMessageBox.information(
+                    self, "Documents générés",
+                    f"Dossier de formation généré :\n{path}\n\nOuvrir le fichier ?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.Yes
+                )
+                if reply == QMessageBox.Yes:
+                    FormationExportService.open_file(path)
+            else:
+                QMessageBox.warning(self, "Génération échouée", msg)
+        except Exception as e:
+            logger.exception(f"Erreur génération documents formation: {e}")
+            show_error_message(self, "Erreur", "Impossible de générer les documents", e)

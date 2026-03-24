@@ -20,6 +20,7 @@ from core.services.evaluation_service import (
     mettre_a_jour_evaluation, update_date_evaluation_polyvalence,
     update_date_champ_polyvalence, get_operateurs_avec_stats_polyvalences,
     supprimer_polyvalence_par_id,
+    compter_polyvalences_operateur,
 )
 from core.utils.logging_config import get_logger
 from core.utils.date_format import format_date, format_datetime
@@ -371,6 +372,17 @@ class DetailOperateurDialog(QDialog):
             if new_value == "":
                 poste_item = self.poly_table.item(row, 0)
                 poste_code = poste_item.text() if poste_item else "?"
+
+                if compter_polyvalences_operateur(self.operateur_id) <= 1:
+                    QMessageBox.warning(
+                        self, "Suppression impossible",
+                        "Impossible de supprimer la dernière polyvalence de cet opérateur.\n"
+                        "Il disparaîtrait de la grille de compétences et ne pourrait plus être modifié.\n\n"
+                        "Utilisez 'Masquer' depuis la grille pour retirer l'opérateur."
+                    )
+                    self._load_data()
+                    return
+
                 reply = QMessageBox.question(
                     self, "Supprimer la polyvalence",
                     f"Voulez-vous supprimer la polyvalence pour le poste {poste_code} ?\n"

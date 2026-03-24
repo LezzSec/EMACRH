@@ -51,6 +51,7 @@ class DomaineRH(Enum):
     MEDICAL = "medical"
     VIE_SALARIE = "vie_salarie"
     POLYVALENCE = "polyvalence"
+    MUTUELLE = "mutuelle"
 
 
 # Mapping catégories de documents → domaines RH
@@ -77,6 +78,8 @@ CATEGORIE_TO_DOMAINE = {
     "Entretiens professionnels": DomaineRH.VIE_SALARIE,
     # POLYVALENCE
     "Documents de polyvalence": DomaineRH.POLYVALENCE,
+    # MUTUELLE
+    "Documents mutuelle": DomaineRH.MUTUELLE,
 }
 
 
@@ -218,6 +221,8 @@ def get_donnees_domaine(
             return _get_donnees_vie_salarie(operateur_id)
         elif domaine == DomaineRH.POLYVALENCE:
             return _get_donnees_polyvalence(operateur_id)
+        elif domaine == DomaineRH.MUTUELLE:
+            return _get_donnees_mutuelle(operateur_id)
         else:
             return {}
 
@@ -434,6 +439,18 @@ def _get_donnees_vie_salarie(operateur_id: int) -> Dict:
         return {'error': str(e), 'sanctions': [], 'entretiens': [], 'alcoolemie': [],
                 'sanctions_liste': [], 'entretiens_liste': [], 'controles_alcool_liste': [],
                 'tests_salivaires': [], 'tests_salivaires_liste': [], 'alertes': []}
+
+
+def _get_donnees_mutuelle(operateur_id: int) -> Dict:
+    """Retourne les données mutuelle pour la GUI."""
+    try:
+        from core.services import mutuelle_service
+        mutuelle = mutuelle_service.get_mutuelle(operateur_id)
+        historique = mutuelle_service.get_historique_mutuelle(operateur_id)
+        return {'mutuelle': mutuelle or {}, 'historique': historique}
+    except Exception as e:
+        logger.exception(f"Erreur _get_donnees_mutuelle: {e}")
+        return {'error': str(e), 'mutuelle': {}, 'historique': []}
 
 
 def _get_donnees_polyvalence(operateur_id: int) -> Dict:
@@ -1071,6 +1088,12 @@ def get_domaines_rh() -> List[Dict]:
             "nom": "Polyvalence",
             "description": "Niveaux de polyvalence et dossiers de formation par poste",
             "icone": "layer-group"
+        },
+        {
+            "code": DomaineRH.MUTUELLE.value,
+            "nom": "Mutuelle",
+            "description": "Complémentaire santé, adhésion et dispenses",
+            "icone": "shield-alt"
         },
     ]
 

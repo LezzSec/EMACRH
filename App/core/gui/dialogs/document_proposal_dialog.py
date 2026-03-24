@@ -31,11 +31,12 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
+from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 
 from core.services.document_trigger_service import (
     DocumentTriggerService
 )
-from core.services.template_service import open_template_file
+from core.services.template_service import open_template_file, print_template_file
 
 
 class DocumentProposalDialog(QDialog):
@@ -162,6 +163,11 @@ class DocumentProposalDialog(QDialog):
         btn_ignore.clicked.connect(self._ignore_all)
         btn_layout.addWidget(btn_ignore)
 
+        btn_print = QPushButton("Imprimer")
+        btn_print.setObjectName("printButton")
+        btn_print.clicked.connect(self._print_selected)
+        btn_layout.addWidget(btn_print)
+
         btn_generate = QPushButton("Générer les sélectionnés")
         btn_generate.setObjectName("primaryButton")
         btn_generate.clicked.connect(self._generate_selected)
@@ -272,6 +278,61 @@ class DocumentProposalDialog(QDialog):
         DocumentTriggerService.clear_pending(self.operateur_id)
         self.reject()
 
+    def _print_selected(self):
+        """Génère les documents sélectionnés et lance l'impression directement."""
+        selected = [
+            cb.property('pending_doc')
+            for cb in self.checkboxes
+            if cb.isChecked()
+        ]
+
+        if not selected:
+            QMessageBox.information(
+                self,
+                "Aucune sélection",
+                "Veuillez sélectionner au moins un document à imprimer."
+            )
+            return
+
+        generated_paths = []
+        errors = []
+
+        for doc in selected:
+            success, msg, path = DocumentTriggerService.generate_pending(doc)
+            if success and path:
+                generated_paths.append(path)
+            else:
+                errors.append(f"{doc.template_nom}: {msg}")
+
+        if errors:
+            QMessageBox.warning(
+                self,
+                "Erreurs de génération",
+                "Certains documents n'ont pas pu être générés:\n\n" + "\n".join(errors)
+            )
+
+        if generated_paths:
+            printer = QPrinter(QPrinter.HighResolution)
+            dlg = QPrintDialog(printer, self)
+            dlg.setWindowTitle("Impression — Choisir une imprimante")
+
+            if dlg.exec_() == QPrintDialog.Accepted:
+                printer_name = printer.printerName()
+                print_errors = []
+                for path in generated_paths:
+                    ok, msg = print_template_file(path, printer_name)
+                    if not ok:
+                        print_errors.append(msg)
+                if print_errors:
+                    QMessageBox.warning(
+                        self, "Erreurs d'impression",
+                        "Certains documents n'ont pas pu être imprimés:\n\n"
+                        + "\n".join(f"- {e}" for e in print_errors)
+                    )
+
+            self.documents_generated.emit(generated_paths)
+            self.accept()
+
     def _generate_selected(self):
         """Génère les documents sélectionnés."""
         selected = [
@@ -366,6 +427,19 @@ class DocumentProposalDialog(QDialog):
             }
             QPushButton#dangerButton:hover {
                 background-color: #fee2e2;
+            }
+
+            QPushButton#printButton {
+                background-color: #f0fdf4;
+                color: #16a34a;
+                font-weight: bold;
+                padding: 8px 16px;
+                border: 1px solid #bbf7d0;
+                border-radius: 6px;
+                min-width: 100px;
+            }
+            QPushButton#printButton:hover {
+                background-color: #dcfce7;
             }
 
             QScrollArea {

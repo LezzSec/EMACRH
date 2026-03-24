@@ -31,6 +31,7 @@ from core.services.medical_service import (
     create_visite, update_visite,
     create_accident, update_accident,
 )
+from core.services.mutuelle_service import create_mutuelle, update_mutuelle
 from core.services.vie_salarie_service import (
     create_sanction, update_sanction,
     create_controle_alcool, create_test_salivaire,
@@ -672,9 +673,10 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
         self.operateur_id = operateur_id
         self.formation = formation
         self.is_edit = formation is not None
+        self._saved_id = None
         title = "Modifier la formation" if self.is_edit else "Nouvelle formation"
-        min_h = 450 if self.is_edit else 590
-        super().__init__(title=title, min_width=450, min_height=min_h, add_title_bar=False, parent=parent)
+        min_h = 560 if self.is_edit else 700
+        super().__init__(title=title, min_width=480, min_height=min_h, add_title_bar=False, parent=parent)
 
     def init_ui(self):
         form = QFormLayout()
@@ -685,6 +687,21 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
 
         self.organisme = QLineEdit(self.formation.get('organisme', '') if self.formation else '')
         form.addRow("Organisme:", self.organisme)
+
+        self.lieu = QLineEdit(self.formation.get('lieu', '') if self.formation else '')
+        self.lieu.setPlaceholderText("Ex: Salle A, site externe...")
+        form.addRow("Lieu:", self.lieu)
+
+        self.formateur = QLineEdit(self.formation.get('formateur', '') if self.formation else '')
+        self.formateur.setPlaceholderText("Nom du formateur / intervenant")
+        form.addRow("Formateur:", self.formateur)
+
+        self.objectif = QTextEdit()
+        self.objectif.setMaximumHeight(65)
+        self.objectif.setPlaceholderText("Objectif pédagogique de la formation...")
+        if self.formation and self.formation.get('objectif'):
+            self.objectif.setText(self.formation['objectif'])
+        form.addRow("Objectif:", self.objectif)
 
         self.date_debut = QDateEdit()
         self.date_debut.setCalendarPopup(True)
@@ -736,15 +753,61 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
         self.content_layout.addLayout(form)
 
         if not self.is_edit:
-            self._ajouter_section_justificatif("Diplômes et formations")
+            self._ajouter_section_justificatif_facultatif("Diplômes et formations")
+
+    def _ajouter_section_justificatif_facultatif(self, categorie_nom_hint: str = ""):
+        """Section justificatif facultative — peut être ajouté ultérieurement."""
+        from PyQt5.QtWidgets import QGroupBox, QVBoxLayout, QHBoxLayout
+        self._justificatif_path = None
+        self._justificatif_categorie_nom = categorie_nom_hint
+
+        group = QGroupBox("Document justificatif (facultatif)")
+        group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #cbd5e1;
+                border-radius: 6px;
+                margin-top: 10px;
+                padding: 10px 8px 8px 8px;
+                font-weight: bold;
+                color: #475569;
+                background: #f8fafc;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 4px;
+            }
+        """)
+        group_layout = QVBoxLayout(group)
+        group_layout.setSpacing(6)
+
+        note = QLabel(
+            "Vous pouvez joindre dès maintenant l'attestation ou le certificat. "
+            "Si le document n'est pas encore disponible, il pourra être ajouté "
+            "ultérieurement via l'onglet Documents du profil salarié."
+        )
+        note.setStyleSheet("color: #64748b; font-size: 11px; font-style: italic;")
+        note.setWordWrap(True)
+        group_layout.addWidget(note)
+
+        file_row = QHBoxLayout()
+        self._justificatif_label = QLineEdit()
+        self._justificatif_label.setReadOnly(True)
+        self._justificatif_label.setPlaceholderText("Aucun fichier sélectionné (facultatif)…")
+        self._justificatif_label.setStyleSheet("background: white;")
+        file_row.addWidget(self._justificatif_label)
+
+        btn = EmacButton("Parcourir…", variant="ghost")
+        btn.setFixedWidth(100)
+        btn.clicked.connect(self._parcourir_justificatif)
+        file_row.addWidget(btn)
+        group_layout.addLayout(file_row)
+
+        self.content_layout.addWidget(group)
 
     def validate(self):
         if not self.intitule.text().strip():
             return False, "L'intitulé est obligatoire"
-        if not self.is_edit:
-            ok, msg = self._valider_justificatif()
-            if not ok:
-                return False, msg
         return True, ""
 
     def save_to_db(self):
@@ -752,6 +815,9 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
         data = {
             'intitule': self.intitule.text().strip(),
             'organisme': self.organisme.text().strip() or None,
+            'lieu': self.lieu.text().strip() or None,
+            'formateur': self.formateur.text().strip() or None,
+            'objectif': self.objectif.toPlainText().strip() or None,
             'date_debut': self.date_debut.date().toPyDate(),
             'date_fin': date_fin.toPyDate() if date_fin.year() > 1900 else None,
             'duree_heures': self.duree.value() if self.duree.value() > 0 else None,
@@ -762,10 +828,16 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
 
         if self.is_edit:
             success, message = update_formation(self.formation['id'], data)
-        else:
-            success, message, _ = create_formation(self.operateur_id, data)
             if success:
-                self._sauvegarder_justificatif(self.operateur_id)
+                self._saved_id = self.formation['id']
+        else:
+            success, message, new_id = create_formation(self.operateur_id, data)
+            if success:
+                self._saved_id = new_id
+                if getattr(self, '_justificatif_path', None):
+                    self._sauvegarder_justificatif(self.operateur_id)
+                else:
+                    self._justificatif_manquant = True
 
         if not success:
             raise Exception(message)
@@ -1335,10 +1407,8 @@ class AjouterDocumentDialog(EmacFormDialog):
         for cat in cats_domaine:
             self.categorie_combo.addItem(cat['nom'], cat['id'])
 
-        # Si une seule catégorie disponible : pré-sélectionner et verrouiller
         if self.categorie_combo.count() == 1:
             self.categorie_combo.setCurrentIndex(0)
-            self.categorie_combo.setEnabled(False)
 
     def _parcourir_fichier(self):
         """Ouvre le dialogue de sélection de fichier."""
@@ -1735,3 +1805,149 @@ class AjouterDocFormationDialog:
             self._dialog.accept()
         else:
             QMessageBox.critical(self._dialog, "Erreur", message)
+
+
+# ============================================================
+# MUTUELLE
+# ============================================================
+
+class EditMutuelleDialog(EmacFormDialog):
+    """Formulaire pour ajouter ou modifier un enregistrement mutuelle."""
+
+    STATUTS = ['NON_COUVERT', 'ADHERENT', 'DISPENSE']
+    STATUTS_LABELS = {
+        'NON_COUVERT': 'Non couvert',
+        'ADHERENT': 'Adhérent',
+        'DISPENSE': 'Dispensé',
+    }
+    TYPES_DISPENSE = [
+        '',
+        'CDD',
+        'Temps partiel',
+        'Ayant droit',
+        'Couverture personnelle',
+        'Autre',
+    ]
+    REGIMES = ['', 'INDIVIDUEL', 'FAMILLE', 'ISOLE_ENFANT']
+    REGIMES_LABELS = {
+        '': '-',
+        'INDIVIDUEL': 'Individuel',
+        'FAMILLE': 'Famille',
+        'ISOLE_ENFANT': 'Isolé + enfant(s)',
+    }
+
+    def __init__(self, operateur_id: int, mutuelle: dict = None, parent=None):
+        self.operateur_id = operateur_id
+        self.mutuelle = mutuelle or {}
+        self.is_edit = bool(mutuelle)
+        title = "Modifier la mutuelle" if self.is_edit else "Nouvelle mutuelle"
+        super().__init__(title=title, min_width=460, min_height=400, add_title_bar=False, parent=parent)
+
+    def init_ui(self):
+        form = QFormLayout()
+        form.setSpacing(10)
+
+        self.statut_combo = QComboBox()
+        for val in self.STATUTS:
+            self.statut_combo.addItem(self.STATUTS_LABELS[val], val)
+        statut_actuel = self.mutuelle.get('statut_adhesion', 'NON_COUVERT')
+        idx = self.statut_combo.findData(statut_actuel)
+        if idx >= 0:
+            self.statut_combo.setCurrentIndex(idx)
+        self.statut_combo.currentIndexChanged.connect(self._on_statut_changed)
+        form.addRow("Statut d'adhésion:", self.statut_combo)
+
+        self.dispense_combo = QComboBox()
+        for t in self.TYPES_DISPENSE:
+            self.dispense_combo.addItem(t if t else '-', t)
+        dispense_actuelle = self.mutuelle.get('type_dispense') or ''
+        idx_d = self.dispense_combo.findData(dispense_actuelle)
+        if idx_d >= 0:
+            self.dispense_combo.setCurrentIndex(idx_d)
+        form.addRow("Type de dispense:", self.dispense_combo)
+
+        self.organisme = QLineEdit()
+        self.organisme.setPlaceholderText("Ex: Harmonie Mutuelle, AG2R...")
+        self.organisme.setText(self.mutuelle.get('organisme') or '')
+        form.addRow("Organisme:", self.organisme)
+
+        self.numero_adherent = QLineEdit()
+        self.numero_adherent.setPlaceholderText("Numéro d'adhérent")
+        self.numero_adherent.setText(self.mutuelle.get('numero_adherent') or '')
+        form.addRow("N° adhérent:", self.numero_adherent)
+
+        self.regime_combo = QComboBox()
+        for val in self.REGIMES:
+            self.regime_combo.addItem(self.REGIMES_LABELS[val], val)
+        regime_actuel = self.mutuelle.get('regime') or ''
+        idx_r = self.regime_combo.findData(regime_actuel)
+        if idx_r >= 0:
+            self.regime_combo.setCurrentIndex(idx_r)
+        form.addRow("Régime:", self.regime_combo)
+
+        self.date_adhesion = QDateEdit()
+        self.date_adhesion.setCalendarPopup(True)
+        self.date_adhesion.setDisplayFormat("dd/MM/yyyy")
+        self.date_adhesion.setSpecialValueText("Non définie")
+        d_adh = self.mutuelle.get('date_adhesion')
+        if d_adh:
+            self.date_adhesion.setDate(QDate(d_adh.year, d_adh.month, d_adh.day))
+        form.addRow("Date d'adhésion:", self.date_adhesion)
+
+        self.date_fin = QDateEdit()
+        self.date_fin.setCalendarPopup(True)
+        self.date_fin.setDisplayFormat("dd/MM/yyyy")
+        self.date_fin.setSpecialValueText("Non définie")
+        d_fin = self.mutuelle.get('date_fin')
+        if d_fin:
+            self.date_fin.setDate(QDate(d_fin.year, d_fin.month, d_fin.day))
+        form.addRow("Date de fin:", self.date_fin)
+
+        self.commentaire = QTextEdit()
+        self.commentaire.setMaximumHeight(70)
+        self.commentaire.setPlaceholderText("Commentaire libre")
+        self.commentaire.setText(self.mutuelle.get('commentaire') or '')
+        form.addRow("Commentaire:", self.commentaire)
+
+        self.content_layout.addLayout(form)
+        self._on_statut_changed()
+
+    def _on_statut_changed(self):
+        statut = self.statut_combo.currentData()
+        is_dispense = statut == 'DISPENSE'
+        is_adherent = statut == 'ADHERENT'
+        self.dispense_combo.setEnabled(is_dispense)
+        self.organisme.setEnabled(is_adherent)
+        self.numero_adherent.setEnabled(is_adherent)
+        self.regime_combo.setEnabled(is_adherent)
+        self.date_adhesion.setEnabled(is_adherent or is_dispense)
+        self.date_fin.setEnabled(is_adherent or is_dispense)
+
+    def validate(self):
+        statut = self.statut_combo.currentData()
+        if statut == 'ADHERENT' and not self.organisme.text().strip():
+            return False, "L'organisme est obligatoire pour un adhérent."
+        return True, ""
+
+    def save_to_db(self):
+        statut = self.statut_combo.currentData()
+        d_adh = self.date_adhesion.date()
+        d_fin = self.date_fin.date()
+        data = {
+            'statut_adhesion': statut,
+            'type_dispense': self.dispense_combo.currentData() if statut == 'DISPENSE' else None,
+            'organisme': self.organisme.text().strip() or None,
+            'numero_adherent': self.numero_adherent.text().strip() or None,
+            'regime': self.regime_combo.currentData() or None,
+            'date_adhesion': d_adh.toPyDate() if d_adh.year() > 1900 else None,
+            'date_fin': d_fin.toPyDate() if d_fin.year() > 1900 else None,
+            'commentaire': self.commentaire.toPlainText().strip() or None,
+        }
+
+        if self.is_edit:
+            success, message = update_mutuelle(self.mutuelle['id'], data)
+        else:
+            success, message, _ = create_mutuelle(self.operateur_id, data)
+
+        if not success:
+            raise Exception(message)

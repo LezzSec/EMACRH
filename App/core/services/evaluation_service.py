@@ -636,6 +636,14 @@ def update_date_champ_polyvalence(poly_id: int, field: str, new_date) -> bool:
         return False
 
 
+def compter_polyvalences_operateur(operateur_id: int) -> int:
+    """Retourne le nombre de polyvalences actives d'un opérateur."""
+    return QueryExecutor.fetch_scalar(
+        "SELECT COUNT(*) FROM polyvalence WHERE personnel_id = %s",
+        (operateur_id,)
+    ) or 0
+
+
 def supprimer_polyvalence_par_id(poly_id: int) -> bool:
     """
     Supprime une polyvalence par son ID et enregistre l'action dans les historiques.

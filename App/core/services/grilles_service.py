@@ -67,14 +67,11 @@ class GrillesService:
         """, dictionary=True)
 
         polyvalences_rows = QueryExecutor.fetch_all("""
-            SELECT personnel_id, poste_id, niveau
-            FROM polyvalence
-            WHERE personnel_id IN (
-                SELECT DISTINCT p.id FROM personnel p
-                INNER JOIN polyvalence pv ON pv.personnel_id = p.id
-                WHERE p.statut = 'ACTIF'
-            )
-            AND poste_id IN (
+            SELECT pv.personnel_id, pv.poste_id, pv.niveau
+            FROM polyvalence pv
+            INNER JOIN personnel p ON p.id = pv.personnel_id
+            WHERE p.statut = 'ACTIF'
+              AND pv.poste_id IN (
                 SELECT id FROM postes WHERE visible = 1
             )
         """, dictionary=True)
