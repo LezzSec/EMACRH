@@ -118,13 +118,13 @@ def _build_demande(wb: "openpyxl.Workbook", data: Dict):
     ws = wb.create_sheet("Demande de formation (EQ 07 30)")
 
     # Largeurs de colonnes
-    col_widths = [2, 2, 22, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 14]
+    col_widths = [1, 1, 18, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 11]
     for i, w in enumerate(col_widths, 1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
     # Hauteurs de lignes par défaut
     for r in range(1, 50):
-        ws.row_dimensions[r].height = 16
+        ws.row_dimensions[r].height = 13
 
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
     left = Alignment(horizontal="left", vertical="center", wrap_text=True)
@@ -139,11 +139,11 @@ def _build_demande(wb: "openpyxl.Workbook", data: Dict):
     ws.merge_cells("O1:Q2")
     _set_cell(ws, "O1", "EQ 07 30 rev1",
               font=_value_font(), alignment=right_al)
-    ws.row_dimensions[1].height = 30
-    ws.row_dimensions[2].height = 20
+    ws.row_dimensions[1].height = 22
+    ws.row_dimensions[2].height = 4
 
     # --- Ligne vide ---
-    ws.row_dimensions[3].height = 6
+    ws.row_dimensions[3].height = 2
 
     # --- Salarié ---
     ws.merge_cells("C4:Q4")
@@ -174,23 +174,36 @@ def _build_demande(wb: "openpyxl.Workbook", data: Dict):
     _set_cell(ws, "O5", data.get('service', ''),
               font=_value_font(), alignment=left, border=border)
 
-    ws.row_dimensions[5].height = 22
+    ws.row_dimensions[5].height = 18
 
     # --- Formation ---
-    ws.row_dimensions[6].height = 6
+    ws.row_dimensions[6].height = 2
 
     ws.merge_cells("C7:Q7")
     _set_cell(ws, "C7", "INFORMATIONS FORMATION",
               font=_header_font(11), fill=_header_fill(), alignment=center)
 
-    # Intitulé
+    # Intitulé + Type
     ws.merge_cells("C8:D8")
     _set_cell(ws, "C8", "Intitulé :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
-    ws.merge_cells("E8:Q8")
+    ws.merge_cells("E8:L8")
     _set_cell(ws, "E8", data.get('intitule', ''),
               font=_value_font(), alignment=left, border=border)
-    ws.row_dimensions[8].height = 22
+    ws.merge_cells("M8:N8")
+    _set_cell(ws, "M8", "Type :", font=_label_font(), fill=_label_fill(),
+              alignment=left, border=border)
+    type_str = data.get('type_formation', '')
+    code = data.get('code_formation')
+    libelle_tranche = data.get('libelle_tranche', '')
+    if code and libelle_tranche:
+        type_str = f"{code} – {libelle_tranche}"
+    elif code:
+        type_str = str(code)
+    ws.merge_cells("O8:Q8")
+    _set_cell(ws, "O8", type_str,
+              font=_value_font(), alignment=left, border=border)
+    ws.row_dimensions[8].height = 18
 
     # Objectif
     ws.merge_cells("C9:D10")
@@ -200,10 +213,10 @@ def _build_demande(wb: "openpyxl.Workbook", data: Dict):
     _set_cell(ws, "E9", data.get('objectif', ''),
               font=_value_font(),
               alignment=Alignment(horizontal="left", vertical="top", wrap_text=True))
-    ws.row_dimensions[9].height = 22
-    ws.row_dimensions[10].height = 22
+    ws.row_dimensions[9].height = 16
+    ws.row_dimensions[10].height = 16
 
-    # Organisme
+    # Organisme + Lieu  (ligne 11)
     ws.merge_cells("C11:D11")
     _set_cell(ws, "C11", "Organisme :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
@@ -211,110 +224,139 @@ def _build_demande(wb: "openpyxl.Workbook", data: Dict):
     _set_cell(ws, "E11", data.get('organisme', ''),
               font=_value_font(), alignment=left, border=border)
 
-    # Lieu
     ws.merge_cells("I11:J11")
     _set_cell(ws, "I11", "Lieu :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
-    ws.merge_cells("K11:N11")
+    ws.merge_cells("K11:Q11")
     _set_cell(ws, "K11", data.get('lieu', ''),
               font=_value_font(), alignment=left, border=border)
 
-    # Coût
-    ws.merge_cells("O11:P11")
-    _set_cell(ws, "O11", "Coût :", font=_label_font(), fill=_label_fill(),
+    ws.row_dimensions[11].height = 18
+
+    # Coûts (ligne 12) : pédagogique + salarial calculé depuis le taux horaire
+    ws.merge_cells("C12:D12")
+    _set_cell(ws, "C12", "Coût péda. :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
     cout = data.get('cout')
-    _set_cell(ws, "Q11",
+    ws.merge_cells("E12:G12")
+    _set_cell(ws, "E12",
               f"{float(cout):.2f} €" if cout else "",
               font=_value_font(), alignment=left, border=border)
 
-    ws.row_dimensions[11].height = 22
-
-    # Dates
-    ws.merge_cells("C12:D12")
-    _set_cell(ws, "C12", "Date début :", font=_label_font(), fill=_label_fill(),
+    ws.merge_cells("H12:J12")
+    _set_cell(ws, "H12", "Coût salarial :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
-    ws.merge_cells("E12:F12")
-    _set_cell(ws, "E12", _fmt_date(data.get('date_debut')),
-              font=_value_font(), alignment=center, border=border)
-
-    ws.merge_cells("G12:H12")
-    _set_cell(ws, "G12", "Date fin :", font=_label_font(), fill=_label_fill(),
-              alignment=left, border=border)
-    ws.merge_cells("I12:J12")
-    _set_cell(ws, "I12", _fmt_date(data.get('date_fin')),
-              font=_value_font(), alignment=center, border=border)
-
-    ws.merge_cells("K12:L12")
-    _set_cell(ws, "K12", "Durée :", font=_label_font(), fill=_label_fill(),
-              alignment=left, border=border)
-    ws.merge_cells("M12:Q12")
-    _set_cell(ws, "M12", _fmt_duree(data.get('duree_heures')),
+    cout_sal = data.get('cout_salarial')
+    taux = data.get('taux_horaire')
+    cout_sal_str = ""
+    if cout_sal is not None:
+        cout_sal_str = f"{float(cout_sal):.2f} €"
+        if taux:
+            cout_sal_str += f"  ({float(taux):.2f} €/h)"
+    ws.merge_cells("K12:Q12")
+    _set_cell(ws, "K12", cout_sal_str,
               font=_value_font(), alignment=left, border=border)
 
-    ws.row_dimensions[12].height = 22
+    ws.row_dimensions[12].height = 18
 
-    # Formateur
+    # Dates + Durée (ligne 13)
     ws.merge_cells("C13:D13")
-    _set_cell(ws, "C13", "Formateur :", font=_label_font(), fill=_label_fill(),
+    _set_cell(ws, "C13", "Date début :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
-    ws.merge_cells("E13:Q13")
-    _set_cell(ws, "E13", data.get('formateur', ''),
-              font=_value_font(), alignment=left, border=border)
-    ws.row_dimensions[13].height = 22
+    ws.merge_cells("E13:F13")
+    _set_cell(ws, "E13", _fmt_date(data.get('date_debut')),
+              font=_value_font(), alignment=center, border=border)
 
-    # Commentaire / Observations
-    ws.merge_cells("C14:D15")
-    _set_cell(ws, "C14", "Observations :", font=_label_font(), fill=_label_fill(),
+    ws.merge_cells("G13:H13")
+    _set_cell(ws, "G13", "Date fin :", font=_label_font(), fill=_label_fill(),
+              alignment=left, border=border)
+    ws.merge_cells("I13:J13")
+    _set_cell(ws, "I13", _fmt_date(data.get('date_fin')),
+              font=_value_font(), alignment=center, border=border)
+
+    ws.merge_cells("K13:L13")
+    _set_cell(ws, "K13", "Durée :", font=_label_font(), fill=_label_fill(),
+              alignment=left, border=border)
+    ws.merge_cells("M13:Q13")
+    _set_cell(ws, "M13", _fmt_duree(data.get('duree_heures')),
+              font=_value_font(), alignment=left, border=border)
+
+    ws.row_dimensions[13].height = 18
+
+    # Formateur (ligne 14)
+    ws.merge_cells("C14:D14")
+    _set_cell(ws, "C14", "Formateur :", font=_label_font(), fill=_label_fill(),
+              alignment=left, border=border)
+    ws.merge_cells("E14:Q14")
+    _set_cell(ws, "E14", data.get('formateur', ''),
+              font=_value_font(), alignment=left, border=border)
+    ws.row_dimensions[14].height = 18
+
+    # Commentaire / Observations (lignes 15-16)
+    ws.merge_cells("C15:D16")
+    _set_cell(ws, "C15", "Observations :", font=_label_font(), fill=_label_fill(),
               alignment=Alignment(horizontal="left", vertical="top"))
-    ws.merge_cells("E14:Q15")
-    _set_cell(ws, "E14", data.get('commentaire', ''),
+    ws.merge_cells("E15:Q16")
+    _set_cell(ws, "E15", data.get('commentaire', ''),
               font=_value_font(),
               alignment=Alignment(horizontal="left", vertical="top", wrap_text=True))
-    ws.row_dimensions[14].height = 22
-    ws.row_dimensions[15].height = 22
+    ws.row_dimensions[15].height = 16
+    ws.row_dimensions[16].height = 16
 
     # --- Signatures ---
-    ws.row_dimensions[16].height = 6
-    ws.merge_cells("C17:Q17")
-    _set_cell(ws, "C17", "SIGNATURES",
+    ws.row_dimensions[17].height = 2
+    ws.merge_cells("C18:Q18")
+    _set_cell(ws, "C18", "SIGNATURES",
               font=_header_font(11), fill=_header_fill(), alignment=center)
 
-    ws.row_dimensions[18].height = 18
-    headers_sig = [("C18:F18", "Demandeur"), ("G18:J18", "Date"),
-                   ("K18:N18", "Responsable direct"), ("O18:Q18", "Visa")]
+    ws.row_dimensions[19].height = 16
+    headers_sig = [("C19:F19", "Demandeur"), ("G19:J19", "Date"),
+                   ("K19:N19", "Responsable direct"), ("O19:Q19", "Visa")]
     for rng, label in headers_sig:
         ws.merge_cells(rng)
         _set_cell(ws, rng.split(":")[0], label,
                   font=_label_font(), fill=_label_fill(), alignment=center, border=border)
 
-    ws.merge_cells("C19:F21")
-    ws.merge_cells("G19:J21")
-    ws.merge_cells("K19:N21")
-    ws.merge_cells("O19:Q21")
-    for cell_coord in ["C19", "G19", "K19", "O19"]:
+    ws.merge_cells("C20:F22")
+    ws.merge_cells("G20:J22")
+    ws.merge_cells("K20:N22")
+    ws.merge_cells("O20:Q22")
+    for cell_coord in ["C20", "G20", "K20", "O20"]:
         _set_cell(ws, cell_coord, "",
                   font=_value_font(), border=border,
                   alignment=Alignment(horizontal="center", vertical="center"))
-    for r in [19, 20, 21]:
-        ws.row_dimensions[r].height = 22
+    for r in [20, 21, 22]:
+        ws.row_dimensions[r].height = 18
 
-    ws.row_dimensions[22].height = 6
-    ws.merge_cells("C23:F23")
-    _set_cell(ws, "C23", "Le demandeur",
+    ws.row_dimensions[23].height = 4
+    ws.merge_cells("C24:F24")
+    _set_cell(ws, "C24", "Le demandeur",
               font=_label_font(), alignment=center)
-    ws.merge_cells("K23:N23")
-    _set_cell(ws, "K23", "Le responsable hiérarchique",
+    ws.merge_cells("K24:N24")
+    _set_cell(ws, "K24", "Le responsable hiérarchique",
               font=_label_font(), alignment=center)
 
     # Note bas de page
-    ws.row_dimensions[24].height = 6
-    ws.merge_cells("B25:Q25")
-    _set_cell(ws, "B25",
+    ws.row_dimensions[25].height = 4
+    ws.merge_cells("B26:Q26")
+    _set_cell(ws, "B26",
               "Cette demande devra être présentée au responsable hiérarchique "
               "et à la direction des Ressources Humaines.",
               font=Font(name="Calibri", size=9, italic=True),
               alignment=Alignment(horizontal="center", vertical="center", wrap_text=True))
+
+    # Impression : 1 page
+    ws.page_setup.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_area = "A1:Q26"
+    ws.page_margins.left = 0.5
+    ws.page_margins.right = 0.5
+    ws.page_margins.top = 0.75
+    ws.page_margins.bottom = 0.75
 
 
 # ========================  FEUILLE 2 : ÉMARGEMENT  ========================
@@ -460,6 +502,19 @@ def _build_emargement(wb: "openpyxl.Workbook", data: Dict):
               font=Font(name="Calibri", size=9, italic=True),
               alignment=Alignment(horizontal="center", vertical="center"))
 
+    # Impression : 1 page
+    ws.page_setup.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_area = f"A1:I{note_row}"
+    ws.page_margins.left = 0.5
+    ws.page_margins.right = 0.5
+    ws.page_margins.top = 0.75
+    ws.page_margins.bottom = 0.75
+
 
 # ======================  FEUILLE 3 : FICHE DE SUIVI  ======================
 
@@ -495,17 +550,29 @@ def _build_suivi(wb: "openpyxl.Workbook", data: Dict):
     ws.merge_cells("E3:F3")
     _set_cell(ws, "E3", _fmt_date(data.get('date_debut')),
               font=_value_font(), alignment=center, border=border)
+    ws.merge_cells("G3:H3")
     _set_cell(ws, "G3", "au", font=_label_font(), alignment=center)
-    ws.merge_cells("H3:K3")
-    _set_cell(ws, "H3", _fmt_date(data.get('date_fin')),
+    ws.merge_cells("I3:K3")
+    _set_cell(ws, "I3", _fmt_date(data.get('date_fin')),
               font=_value_font(), alignment=center, border=border)
     ws.row_dimensions[3].height = 20
 
     ws.merge_cells("C4:D4")
     _set_cell(ws, "C4", "Durée de la formation :",
               font=_label_font(), fill=_label_fill(), alignment=left, border=border)
-    ws.merge_cells("E4:K4")
+    ws.merge_cells("E4:F4")
     _set_cell(ws, "E4", _fmt_duree(data.get('duree_heures')),
+              font=_value_font(), alignment=left, border=border)
+    ws.merge_cells("G4:H4")
+    _set_cell(ws, "G4", "Coût pédagogique :",
+              font=_label_font(), fill=_label_fill(), alignment=left, border=border)
+    cout = data.get('cout')
+    cout_sal = data.get('cout_salarial')
+    cout_str = f"{float(cout):.2f} €" if cout else "—"
+    if cout_sal:
+        cout_str += f"  |  Salarial : {float(cout_sal):.2f} €"
+    ws.merge_cells("I4:K4")
+    _set_cell(ws, "I4", cout_str,
               font=_value_font(), alignment=left, border=border)
     ws.row_dimensions[4].height = 20
     ws.row_dimensions[5].height = 6
@@ -524,23 +591,27 @@ def _build_suivi(wb: "openpyxl.Workbook", data: Dict):
     ws.merge_cells("C7:D7")
     _set_cell(ws, "C7", "Nom :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
-    _set_cell(ws, "E7", data.get('nom', '').upper(),
+    nom_affiche = data.get('nom', '').upper().replace('-', '-\n')
+    _set_cell(ws, "E7", nom_affiche,
               font=Font(name="Calibri", bold=True, size=11),
-              alignment=left, border=border)
+              alignment=Alignment(horizontal="left", vertical="center", wrap_text=True),
+              border=border)
     ws.merge_cells("F7:G7")
     _set_cell(ws, "F7", "Raison sociale :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
     ws.merge_cells("H7:K7")
     _set_cell(ws, "H7", data.get('organisme', ''),
               font=_value_font(), alignment=left, border=border)
-    ws.row_dimensions[7].height = 20
+    ws.row_dimensions[7].height = 36
 
     ws.merge_cells("C8:D8")
     _set_cell(ws, "C8", "Prénom :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
-    _set_cell(ws, "E8", data.get('prenom', ''),
+    prenom_affiche = data.get('prenom', '').replace('-', '-\n')
+    _set_cell(ws, "E8", prenom_affiche,
               font=Font(name="Calibri", bold=True, size=11),
-              alignment=left, border=border)
+              alignment=Alignment(horizontal="left", vertical="center", wrap_text=True),
+              border=border)
     ws.merge_cells("F8:G8")
     _set_cell(ws, "F8", "Intitulé de la formation :", font=_label_font(), fill=_label_fill(),
               alignment=left, border=border)
@@ -549,7 +620,7 @@ def _build_suivi(wb: "openpyxl.Workbook", data: Dict):
               font=_value_font(),
               alignment=Alignment(horizontal="left", vertical="center", wrap_text=True),
               border=border)
-    ws.row_dimensions[8].height = 36
+    ws.row_dimensions[8].height = 20
 
     # Texte description
     ws.merge_cells("C9:K9")
@@ -706,6 +777,19 @@ def _build_suivi(wb: "openpyxl.Workbook", data: Dict):
     _set_cell(ws, "C40", "Signature du stagiaire :",
               font=_label_font(), fill=_label_fill(), alignment=left, border=border)
     ws.row_dimensions[40].height = 36
+
+    # Impression : 1 page (largeur et hauteur)
+    ws.page_setup.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
+    ws.sheet_properties.pageSetUpPr.fitToPage = True
+    ws.print_area = "A1:K40"
+    ws.page_margins.left = 0.5
+    ws.page_margins.right = 0.5
+    ws.page_margins.top = 0.75
+    ws.page_margins.bottom = 0.75
 
 
 # ========================  POINT D'ENTRÉE PUBLIC  ========================

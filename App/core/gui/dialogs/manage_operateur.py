@@ -364,9 +364,9 @@ class ManageOperatorsDialog(QDialog):
                         msg += f"\nPolyvalence ajoutée au poste {poste_name}"
                 else:
                     msg = (
-                        f"Opérateur '{prenom} {nom}' créé (personnel non-production).\n\n"
+                        f"Personnel '{prenom} {nom}' créé avec succès.\n\n"
                         f"Matricule : {matricule}\n"
-                        f"Cet opérateur n'apparaîtra PAS dans les Listes et Grilles."
+                        f"Ce membre du personnel n'apparaîtra PAS dans les Listes et Grilles."
                     )
                 QMessageBox.information(self, "Succès", msg)
 

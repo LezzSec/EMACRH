@@ -15,7 +15,7 @@ from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QBrush
 from datetime import datetime, timedelta
 
 from core.services.absence_service_crud import AbsenceServiceCRUD, calculer_jours_ouvres
-from core.services.planning_service import get_evaluations_mois
+from core.services.planning_service import get_evaluations_mois, get_documents_expirant
 from core.repositories.personnel_repo import PersonnelRepository
 from core.gui.components.emac_ui_kit import add_custom_title_bar
 from core.utils.logging_config import get_logger
@@ -43,54 +43,90 @@ class PlanningAbsencesDialog(QDialog):
         self.init_ui()
         self.load_absences_month()
         self.load_evaluations_month()
+        self.load_documents_expirant()
 
     def init_ui(self):
         """Initialise l'interface"""
-        # Layout principal avec marges nulles
+        _NAV_BTN = """
+            QPushButton {
+                background: #f3f4f6;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 12px;
+                color: #374151;
+            }
+            QPushButton:hover { background: #e5e7eb; }
+            QPushButton:pressed { background: #d1d5db; }
+        """
+        _TODAY_BTN = """
+            QPushButton {
+                background: #2563eb;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-size: 12px;
+                color: white;
+                font-weight: bold;
+            }
+            QPushButton:hover { background: #1d4ed8; }
+        """
+        _SECTION_LABEL = """
+            QLabel {
+                font-size: 11px;
+                font-weight: bold;
+                color: #6b7280;
+                text-transform: uppercase;
+                letter-spacing: 1px;
+                padding: 4px 0 2px 0;
+            }
+        """
+
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Barre de titre personnalisée
-        title_bar = add_custom_title_bar(self, "Planning des Absences & Évaluations")
+        title_bar = add_custom_title_bar(self, "Planning des Absences & Evaluations")
         main_layout.addWidget(title_bar)
 
-        # Widget de contenu
         content_widget = QWidget()
+        content_widget.setStyleSheet("background: #f9fafb;")
         layout = QVBoxLayout(content_widget)
-        layout.setContentsMargins(16, 16, 16, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(10)
 
-        # Titre
-        title = QLabel("Planning des Absences & Évaluations")
-        title.setFont(QFont("Arial", 18, QFont.Bold))
-        title.setAlignment(Qt.AlignCenter)
-        layout.addWidget(title)
-
-        # Splitter horizontal : Calendrier | Détails
         splitter = QSplitter(Qt.Horizontal)
+        splitter.setStyleSheet("QSplitter::handle { background: #e5e7eb; width: 1px; }")
 
         # === PARTIE GAUCHE : CALENDRIER ===
         left_widget = QWidget()
+        left_widget.setStyleSheet("background: white; border-radius: 8px;")
         left_layout = QVBoxLayout(left_widget)
+        left_layout.setContentsMargins(12, 12, 12, 12)
+        left_layout.setSpacing(8)
 
-        # Contrôles de navigation
+        # Navigation mois
         nav_layout = QHBoxLayout()
+        nav_layout.setSpacing(6)
 
-        btn_prev_month = QPushButton("◀ Mois précédent")
+        btn_prev_month = QPushButton("◀ Mois precedent")
+        btn_prev_month.setStyleSheet(_NAV_BTN)
         btn_prev_month.clicked.connect(self.previous_month)
         nav_layout.addWidget(btn_prev_month)
 
         self.current_month_label = QLabel()
-        self.current_month_label.setFont(QFont("Arial", 12, QFont.Bold))
+        self.current_month_label.setFont(QFont("Arial", 13, QFont.Bold))
         self.current_month_label.setAlignment(Qt.AlignCenter)
-        nav_layout.addWidget(self.current_month_label)
+        self.current_month_label.setStyleSheet("color: #111827; background: transparent;")
+        nav_layout.addWidget(self.current_month_label, 1)
 
         btn_next_month = QPushButton("Mois suivant ▶")
+        btn_next_month.setStyleSheet(_NAV_BTN)
         btn_next_month.clicked.connect(self.next_month)
         nav_layout.addWidget(btn_next_month)
 
         btn_today = QPushButton("Aujourd'hui")
+        btn_today.setStyleSheet(_TODAY_BTN)
         btn_today.clicked.connect(self.goto_today)
         nav_layout.addWidget(btn_today)
 
@@ -99,155 +135,212 @@ class PlanningAbsencesDialog(QDialog):
         # Calendrier
         self.calendar = QCalendarWidget()
         self.calendar.setGridVisible(True)
+        self.calendar.setStyleSheet("""
+            QCalendarWidget QAbstractItemView {
+                selection-background-color: #2563eb;
+                selection-color: white;
+                font-size: 12px;
+            }
+            QCalendarWidget QWidget#qt_calendar_navigationbar {
+                background: transparent;
+            }
+        """)
         self.calendar.clicked.connect(self.date_selected)
         self.calendar.currentPageChanged.connect(self.month_changed)
         left_layout.addWidget(self.calendar)
 
         # Légende
         legend_layout = QHBoxLayout()
-        legend_layout.addWidget(QLabel("Légende:"))
+        legend_layout.setSpacing(16)
 
-        legend_absence = QLabel("  ■  Absence")
-        legend_absence.setStyleSheet("QLabel { color: #e74c3c; font-weight: bold; }")
-        legend_layout.addWidget(legend_absence)
+        lbl_leg = QLabel("Legende :")
+        lbl_leg.setStyleSheet("color: #6b7280; font-size: 11px; background: transparent;")
+        legend_layout.addWidget(lbl_leg)
 
-        legend_evaluation = QLabel("  ■  Évaluation")
-        legend_evaluation.setStyleSheet("QLabel { color: #f39c12; font-weight: bold; }")
-        legend_layout.addWidget(legend_evaluation)
+        dot_absence = QLabel()
+        dot_absence.setFixedSize(12, 12)
+        dot_absence.setStyleSheet("background: #e74c3c; border-radius: 6px;")
+        legend_layout.addWidget(dot_absence)
+        lbl_abs = QLabel("Absence")
+        lbl_abs.setStyleSheet("color: #e74c3c; font-weight: bold; font-size: 11px; background: transparent;")
+        legend_layout.addWidget(lbl_abs)
+
+        dot_eval = QLabel()
+        dot_eval.setFixedSize(12, 12)
+        dot_eval.setStyleSheet("background: #f39c12; border-radius: 6px;")
+        legend_layout.addWidget(dot_eval)
+        lbl_eval = QLabel("Evaluation")
+        lbl_eval.setStyleSheet("color: #f39c12; font-weight: bold; font-size: 11px; background: transparent;")
+        legend_layout.addWidget(lbl_eval)
 
         legend_layout.addStretch()
         left_layout.addLayout(legend_layout)
 
         splitter.addWidget(left_widget)
 
-        # === PARTIE DROITE : DÉTAILS + ACTIONS ===
+        # === PARTIE DROITE : DÉTAILS ===
         right_widget = QWidget()
+        right_widget.setStyleSheet("background: white; border-radius: 8px;")
         right_layout = QVBoxLayout(right_widget)
+        right_layout.setContentsMargins(16, 16, 16, 16)
+        right_layout.setSpacing(12)
 
         # Date sélectionnée
-        self.selected_date_label = QLabel("Sélectionnez une date")
-        self.selected_date_label.setFont(QFont("Arial", 14, QFont.Bold))
+        self.selected_date_label = QLabel("Selectionnez une date")
+        self.selected_date_label.setFont(QFont("Arial", 13, QFont.Bold))
         self.selected_date_label.setAlignment(Qt.AlignCenter)
-        self.selected_date_label.setStyleSheet("padding: 10px; background-color: #ecf0f1; border-radius: 5px;")
+        self.selected_date_label.setStyleSheet("""
+            padding: 10px 16px;
+            background: #eff6ff;
+            border: 1px solid #bfdbfe;
+            border-radius: 8px;
+            color: #1e40af;
+        """)
         right_layout.addWidget(self.selected_date_label)
 
-        # Statistiques du jour
+        # Stats rapides
         stats_layout = QHBoxLayout()
+        stats_layout.setSpacing(8)
 
         self.nb_absents_label = QLabel("0 absent(s)")
-        self.nb_absents_label.setFont(QFont("Arial", 12))
-        self.nb_absents_label.setStyleSheet("color: #e74c3c; font-weight: bold;")
+        self.nb_absents_label.setFont(QFont("Arial", 11, QFont.Bold))
+        self.nb_absents_label.setStyleSheet("""
+            color: #dc2626;
+            background: #fee2e2;
+            border-radius: 6px;
+            padding: 4px 10px;
+        """)
         stats_layout.addWidget(self.nb_absents_label)
 
-        self.nb_evaluations_label = QLabel("0 évaluation(s)")
-        self.nb_evaluations_label.setFont(QFont("Arial", 12))
-        self.nb_evaluations_label.setStyleSheet("color: #f39c12; font-weight: bold;")
+        self.nb_evaluations_label = QLabel("0 evaluation(s)")
+        self.nb_evaluations_label.setFont(QFont("Arial", 11, QFont.Bold))
+        self.nb_evaluations_label.setStyleSheet("""
+            color: #92400e;
+            background: #fef3c7;
+            border-radius: 6px;
+            padding: 4px 10px;
+        """)
         stats_layout.addWidget(self.nb_evaluations_label)
+
+        self.nb_docs_label = QLabel("0 doc(s) expirant")
+        self.nb_docs_label.setFont(QFont("Arial", 11, QFont.Bold))
+        self.nb_docs_label.setStyleSheet("""
+            color: #7c3aed;
+            background: #ede9fe;
+            border-radius: 6px;
+            padding: 4px 10px;
+        """)
+        stats_layout.addWidget(self.nb_docs_label)
 
         stats_layout.addStretch()
         right_layout.addLayout(stats_layout)
 
-        # Table des absents
-        right_layout.addWidget(QLabel("🔴 Personnes absentes ce jour:"))
+        # Section absences
+        lbl_absents = QLabel("Personnes absentes ce jour :")
+        lbl_absents.setStyleSheet(_SECTION_LABEL)
+        right_layout.addWidget(lbl_absents)
 
         self.absents_table = QTableWidget()
         self.absents_table.setColumnCount(4)
-        self.absents_table.setHorizontalHeaderLabels([
-            "Nom Prénom", "Type", "Du", "Au"
-        ])
+        self.absents_table.setHorizontalHeaderLabels(["Nom Prenom", "Type", "Du", "Au"])
         self.absents_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.absents_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.absents_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.absents_table.setAlternatingRowColors(True)
-        self.absents_table.setMaximumHeight(150)
+        self.absents_table.setMaximumHeight(140)
+        self.absents_table.setStyleSheet("""
+            QTableWidget { border: 1px solid #f3f4f6; border-radius: 6px; }
+            QHeaderView::section { background: #f9fafb; font-weight: bold; font-size: 11px; }
+        """)
         right_layout.addWidget(self.absents_table)
 
-        # Table des évaluations
-        right_layout.addWidget(QLabel("🟠 Évaluations prévues ce jour:"))
+        # Section évaluations
+        lbl_evals = QLabel("Evaluations prevues ce jour :")
+        lbl_evals.setStyleSheet(_SECTION_LABEL)
+        right_layout.addWidget(lbl_evals)
 
         self.evaluations_table = QTableWidget()
         self.evaluations_table.setColumnCount(3)
-        self.evaluations_table.setHorizontalHeaderLabels([
-            "Nom Prénom", "Poste", "Niveau"
-        ])
+        self.evaluations_table.setHorizontalHeaderLabels(["Nom Prenom", "Poste", "Niveau"])
         self.evaluations_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.evaluations_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.evaluations_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.evaluations_table.setAlternatingRowColors(True)
-        self.evaluations_table.setMaximumHeight(150)
+        self.evaluations_table.setMaximumHeight(140)
+        self.evaluations_table.setStyleSheet("""
+            QTableWidget { border: 1px solid #f3f4f6; border-radius: 6px; }
+            QHeaderView::section { background: #f9fafb; font-weight: bold; font-size: 11px; }
+        """)
         right_layout.addWidget(self.evaluations_table)
 
-        # Section: Mes actions
-        actions_group = QGroupBox("Mes demandes d'absence")
-        actions_layout = QVBoxLayout()
+        # Section documents expirant
+        lbl_docs = QLabel("Documents expirant (30 jours) :")
+        lbl_docs.setStyleSheet(_SECTION_LABEL)
+        right_layout.addWidget(lbl_docs)
 
-        # Bouton "Nouvelle demande" uniquement si permission d'écriture sur planning
-        if can('planning.absences.edit'):
-            btn_nouvelle_demande = QPushButton("➕ Nouvelle demande d'absence")
-            btn_nouvelle_demande.setStyleSheet("""
-                QPushButton {
-                    background-color: #3498db;
-                    color: white;
-                    padding: 10px;
-                    font-size: 13px;
-                    font-weight: bold;
-                    border-radius: 5px;
-                }
-                QPushButton:hover {
-                    background-color: #2980b9;
-                }
-            """)
-            btn_nouvelle_demande.clicked.connect(self.show_nouvelle_demande)
-            actions_layout.addWidget(btn_nouvelle_demande)
-
-        btn_mes_demandes = QPushButton("📋 Voir mes demandes")
-        btn_mes_demandes.setStyleSheet("""
-            QPushButton {
-                background-color: #95a5a6;
-                color: white;
-                padding: 8px;
-                font-size: 12px;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #7f8c8d;
-            }
+        self.docs_table = QTableWidget()
+        self.docs_table.setColumnCount(3)
+        self.docs_table.setHorizontalHeaderLabels(["Nom Prenom", "Document", "J. restants"])
+        self.docs_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.docs_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.docs_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.docs_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.docs_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.docs_table.setAlternatingRowColors(True)
+        self.docs_table.setMaximumHeight(120)
+        self.docs_table.setStyleSheet("""
+            QTableWidget { border: 1px solid #f3f4f6; border-radius: 6px; }
+            QHeaderView::section { background: #f9fafb; font-weight: bold; font-size: 11px; }
         """)
-        btn_mes_demandes.clicked.connect(self.show_mes_demandes)
-        actions_layout.addWidget(btn_mes_demandes)
-
-        actions_group.setLayout(actions_layout)
-        right_layout.addWidget(actions_group)
+        right_layout.addWidget(self.docs_table)
 
         right_layout.addStretch()
 
         splitter.addWidget(right_widget)
-
-        # Ratio 60/40
         splitter.setStretchFactor(0, 60)
         splitter.setStretchFactor(1, 40)
 
         layout.addWidget(splitter)
 
-        # Boutons en bas
+        # Barre du bas
         bottom_layout = QHBoxLayout()
 
-        btn_refresh = QPushButton("🔄 Actualiser")
+        btn_refresh = QPushButton("Actualiser")
+        btn_refresh.setStyleSheet("""
+            QPushButton {
+                background: #f3f4f6;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                padding: 6px 16px;
+                font-size: 12px;
+                color: #374151;
+            }
+            QPushButton:hover { background: #e5e7eb; }
+        """)
         btn_refresh.clicked.connect(self.refresh_data)
         bottom_layout.addWidget(btn_refresh)
 
         bottom_layout.addStretch()
 
         btn_close = QPushButton("Fermer")
+        btn_close.setStyleSheet("""
+            QPushButton {
+                background: white;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                padding: 6px 20px;
+                font-size: 12px;
+                color: #374151;
+            }
+            QPushButton:hover { background: #f3f4f6; }
+        """)
         btn_close.clicked.connect(self.accept)
         bottom_layout.addWidget(btn_close)
 
         layout.addLayout(bottom_layout)
 
-        # Ajouter le widget de contenu au layout principal
         main_layout.addWidget(content_widget)
 
-        # Initialiser la date sélectionnée
         self.update_month_label()
         today = QDate.currentDate()
         self.date_selected(today)
@@ -432,10 +525,49 @@ class PlanningAbsencesDialog(QDialog):
             self.evaluations_table.setItem(row, 1, QTableWidgetItem(evaluation['poste']))
             self.evaluations_table.setItem(row, 2, QTableWidgetItem(f"Niveau {evaluation['niveau']}"))
 
+    def load_documents_expirant(self):
+        """Charge les documents expirant dans les 30 prochains jours."""
+        try:
+            rows = get_documents_expirant(30)
+            self.docs_table.setRowCount(len(rows))
+            for i, r in enumerate(rows):
+                jours = r.get('jours_restants') or 0
+                nom_complet = f"{r.get('nom', '')} {r.get('prenom', '')}".strip()
+                nom_doc = r.get('nom_document') or r.get('nom_fichier') or ""
+
+                item_nom = QTableWidgetItem(nom_complet)
+                item_doc = QTableWidgetItem(nom_doc)
+                item_j = QTableWidgetItem(f"{jours} j")
+                item_j.setTextAlignment(Qt.AlignCenter)
+
+                if jours <= 7:
+                    color = QColor("#fee2e2")
+                    fg = QColor("#991b1b")
+                elif jours <= 15:
+                    color = QColor("#ffedd5")
+                    fg = QColor("#9a3412")
+                else:
+                    color = QColor("#fef9c3")
+                    fg = QColor("#713f12")
+
+                for item in (item_nom, item_doc, item_j):
+                    item.setBackground(color)
+                    item.setForeground(fg)
+
+                self.docs_table.setItem(i, 0, item_nom)
+                self.docs_table.setItem(i, 1, item_doc)
+                self.docs_table.setItem(i, 2, item_j)
+
+            self.nb_docs_label.setText(f"{len(rows)} doc(s) expirant")
+        except Exception:
+            logger.exception("Erreur chargement documents expirant")
+            self.docs_table.setRowCount(0)
+
     def refresh_data(self):
         """Actualise les données"""
         self.load_absences_month()
         self.load_evaluations_month()
+        self.load_documents_expirant()
         current_date = self.calendar.selectedDate()
         self.date_selected(current_date)
         QMessageBox.information(self, "Actualisation", "Données actualisées avec succès")

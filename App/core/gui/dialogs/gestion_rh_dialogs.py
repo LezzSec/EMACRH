@@ -258,10 +258,10 @@ class EditInfosGeneralesDialog(EmacFormDialog):
 
         self.categorie_combo = QComboBox()
         self.categorie_combo.addItems([
-            '', 'O - Ouvrier', 'E - Employé', 'T - Technicien', 'C - Cadre'
+            '', 'O - Ouvrier', 'E - Employé', 'L - Leader', 'C - Cadre'
         ])
         cat = self.donnees.get('categorie') or ''
-        cat_map = {'O': 'O - Ouvrier', 'E': 'E - Employé', 'T': 'T - Technicien', 'C': 'C - Cadre'}
+        cat_map = {'O': 'O - Ouvrier', 'E': 'E - Employé', 'L': 'L - Leader', 'C': 'C - Cadre'}
         if cat in cat_map:
             idx = self.categorie_combo.findText(cat_map[cat])
             if idx >= 0:
@@ -1951,3 +1951,168 @@ class EditMutuelleDialog(EmacFormDialog):
 
         if not success:
             raise Exception(message)
+
+
+class ConsulterDetailDialog:
+    """Dialog générique lecture seule — affiche un enregistrement RH sous forme de fiche."""
+
+    def __init__(self, title: str, fields: list, parent=None):
+        """
+        Args:
+            title:  Titre de la fenêtre.
+            fields: Liste de tuples (label, valeur) à afficher.
+        """
+        from PyQt5.QtWidgets import (
+            QDialog, QVBoxLayout, QFormLayout, QLabel, QPushButton,
+            QScrollArea, QWidget, QFrame
+        )
+        from PyQt5.QtCore import Qt
+
+        dialog = QDialog(parent)
+        dialog.setWindowTitle(title)
+        dialog.setMinimumWidth(420)
+        dialog.resize(460, min(120 + len(fields) * 32, 560))
+
+        main = QVBoxLayout(dialog)
+        main.setContentsMargins(20, 16, 20, 16)
+        main.setSpacing(12)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        form = QFormLayout(content)
+        form.setSpacing(10)
+        form.setLabelAlignment(Qt.AlignRight)
+
+        for label, value in fields:
+            key = QLabel(f"{label} :")
+            key.setStyleSheet("color: #6b7280; font-weight: bold;")
+            val = QLabel(str(value) if value not in (None, '') else '—')
+            val.setWordWrap(True)
+            val.setStyleSheet("color: #111827;")
+            form.addRow(key, val)
+
+        scroll.setWidget(content)
+        main.addWidget(scroll, 1)
+
+        btn_fermer = QPushButton("Fermer")
+        btn_fermer.setFixedHeight(36)
+        btn_fermer.clicked.connect(dialog.accept)
+        main.addWidget(btn_fermer, alignment=Qt.AlignRight)
+
+        dialog.exec_()
+
+
+class ConsulterFormationDialog:
+    """Affiche le détail complet d'une formation en lecture seule avec export Excel."""
+
+    def __init__(self, formation: dict, parent=None):
+        from PyQt5.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLabel, QPushButton,
+            QScrollArea, QWidget, QFrame, QMessageBox
+        )
+        from PyQt5.QtCore import Qt
+        from core.utils.date_format import format_date
+
+        self._formation = formation
+        self._parent_widget = parent
+
+        dialog = QDialog(parent)
+        dialog.setWindowTitle("Détail de la formation")
+        dialog.setMinimumWidth(480)
+        dialog.resize(520, 560)
+
+        main = QVBoxLayout(dialog)
+        main.setContentsMargins(20, 16, 20, 16)
+        main.setSpacing(12)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        content = QWidget()
+        form = QFormLayout(content)
+        form.setSpacing(10)
+        form.setLabelAlignment(Qt.AlignRight)
+
+        def _val(v):
+            return str(v) if v not in (None, '') else '—'
+
+        def _date(v):
+            if not v:
+                return '—'
+            try:
+                return format_date(v)
+            except Exception:
+                return str(v)
+
+        def _lbl(text):
+            lbl = QLabel(text)
+            lbl.setWordWrap(True)
+            lbl.setStyleSheet("color: #111827;")
+            return lbl
+
+        fields = [
+            ("Intitulé",      _val(formation.get('intitule'))),
+            ("Statut",        _val(formation.get('statut'))),
+            ("Type",          _val(formation.get('type_formation'))),
+            ("Organisme",     _val(formation.get('organisme'))),
+            ("Lieu",          _val(formation.get('lieu'))),
+            ("Formateur",     _val(formation.get('formateur'))),
+            ("Date début",    _date(formation.get('date_debut'))),
+            ("Date fin",      _date(formation.get('date_fin'))),
+            ("Durée",         f"{formation['duree_heures']} h" if formation.get('duree_heures') else '—'),
+            ("Certificat",    "Oui" if formation.get('certificat_obtenu') else "Non"),
+            ("Coût",          f"{formation['cout']} €" if formation.get('cout') else '—'),
+            ("Coût salarial", f"{formation['cout_salarial']} €" if formation.get('cout_salarial') else '—'),
+            ("Objectif",      _val(formation.get('objectif'))),
+            ("Commentaire",   _val(formation.get('commentaire'))),
+        ]
+
+        for label, value in fields:
+            key = QLabel(f"{label} :")
+            key.setStyleSheet("color: #6b7280; font-weight: bold;")
+            form.addRow(key, _lbl(value))
+
+        scroll.setWidget(content)
+        main.addWidget(scroll, 1)
+
+        btn_layout = QHBoxLayout()
+
+        btn_excel = QPushButton("Ouvrir dans Excel")
+        btn_excel.setFixedHeight(36)
+        btn_excel.setStyleSheet("""
+            QPushButton {
+                background: #217346; color: white;
+                border: none; border-radius: 6px;
+                padding: 0 16px; font-weight: bold;
+            }
+            QPushButton:hover { background: #185c37; }
+        """)
+
+        def _generer_et_ouvrir():
+            from core.services.formation_export_service import FormationExportService
+            from core.services.formation_service_crud import FormationServiceCRUD
+            formation_id = formation.get('id')
+            data = FormationServiceCRUD.get_formation_by_id(formation_id) if formation_id else formation
+            if not data:
+                data = formation
+            success, msg, path = FormationExportService.generate_dossier_formation(data)
+            if success and path:
+                FormationExportService.open_file(path)
+            else:
+                QMessageBox.warning(dialog, "Erreur", msg)
+
+        btn_excel.clicked.connect(_generer_et_ouvrir)
+        btn_layout.addWidget(btn_excel)
+
+        btn_layout.addStretch()
+
+        btn_fermer = QPushButton("Fermer")
+        btn_fermer.setFixedHeight(36)
+        btn_fermer.clicked.connect(dialog.accept)
+        btn_layout.addWidget(btn_fermer)
+
+        main.addLayout(btn_layout)
+
+        dialog.exec_()

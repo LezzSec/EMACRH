@@ -38,7 +38,7 @@ from core.gui.dialogs.gestion_rh_dialogs import (
     EditCompetenceDialog, EditFormationDialog, EditVisiteDialog,
     EditAccidentDialog, EditSanctionDialog, EditControleAlcoolDialog,
     EditTestSalivaireDialog, EditEntretienDialog, AjouterDocumentDialog,
-    EditMutuelleDialog,
+    EditMutuelleDialog, ConsulterFormationDialog, ConsulterDetailDialog,
 )
 
 
@@ -508,7 +508,7 @@ class _GestionRHMixin:
             naissance_parts.append(f"({donnees['pays_naissance']})")
         lieu_naissance = ' '.join(naissance_parts) if naissance_parts else '-'
 
-        cat_map = {'O': 'O - Ouvrier', 'E': 'E - Employé', 'T': 'T - Technicien', 'C': 'C - Cadre'}
+        cat_map = {'O': 'O - Ouvrier', 'E': 'E - Employé', 'L': 'L - Leader', 'C': 'C - Cadre'}
         categorie_display = cat_map.get(donnees.get('categorie', ''), val('categorie'))
 
         infos = [
@@ -588,6 +588,19 @@ class _GestionRHMixin:
 
             header = QHBoxLayout()
             header.addStretch()
+            btn_consult = EmacButton("Consulter", variant="ghost")
+            btn_consult.clicked.connect(lambda checked, c=contrat: ConsulterDetailDialog(
+                "Détail du contrat", [
+                    ("Type", c.get('type_contrat')),
+                    ("Date début", self._format_date(c.get('date_debut'))),
+                    ("Date fin", self._format_date(c.get('date_fin')) or "Indéterminée"),
+                    ("Jours restants", c.get('jours_restants')),
+                    ("ETP", c.get('etp', 1.0)),
+                    ("Catégorie", c.get('categorie')),
+                    ("Emploi", c.get('emploi')),
+                    ("Commentaire", c.get('commentaire')),
+                ], self))
+            header.addWidget(btn_consult)
             btn_edit = EmacButton("Modifier", variant="ghost")
             btn_edit.setVisible(can("rh.contrats.edit"))
             btn_edit.clicked.connect(lambda: self._edit_contrat(contrat))
@@ -796,6 +809,15 @@ class _GestionRHMixin:
                 lbl.setStyleSheet("background: transparent;")
                 row.addWidget(lbl)
                 row.addStretch()
+                btn_consult = EmacButton("Consulter", variant="ghost")
+                btn_consult.clicked.connect(lambda checked, d=decl: ConsulterDetailDialog(
+                    "Détail de la déclaration", [
+                        ("Type", d.get('type_declaration')),
+                        ("Date début", self._format_date(d.get('date_debut'))),
+                        ("Date fin", self._format_date(d.get('date_fin'))),
+                        ("Commentaire", d.get('commentaire')),
+                    ], self))
+                row.addWidget(btn_consult)
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.declarations.edit"))
                 btn_edit.clicked.connect(lambda checked, d=decl: self._edit_declaration(d))
@@ -922,6 +944,17 @@ class _GestionRHMixin:
                 row.addLayout(info_layout)
                 row.addStretch()
 
+                btn_consult = EmacButton("Consulter", variant="ghost")
+                btn_consult.clicked.connect(lambda checked, c=comp: ConsulterDetailDialog(
+                    "Détail de la compétence", [
+                        ("Libellé", c.get('libelle')),
+                        ("Catégorie", c.get('categorie')),
+                        ("Date d'acquisition", self._format_date(c.get('date_acquisition'))),
+                        ("Date d'expiration", self._format_date(c.get('date_expiration')) or "Permanente"),
+                        ("Statut", c.get('statut_label') or c.get('statut')),
+                        ("Commentaire", c.get('commentaire')),
+                    ], self))
+                row.addWidget(btn_consult)
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.competences.edit"))
                 btn_edit.clicked.connect(lambda checked, c=comp: self._edit_competence(c))
@@ -1023,6 +1056,9 @@ class _GestionRHMixin:
                 lbl.setStyleSheet("background: transparent;")
                 row.addWidget(lbl)
                 row.addStretch()
+                btn_consult = EmacButton("Consulter", variant="ghost")
+                btn_consult.clicked.connect(lambda checked, f=form: ConsulterFormationDialog(f, self))
+                row.addWidget(btn_consult)
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.formations.edit"))
                 btn_edit.clicked.connect(lambda checked, f=form: self._edit_formation(f))
@@ -1183,6 +1219,18 @@ class _GestionRHMixin:
                 btn_layout_inner.setContentsMargins(4, 4, 4, 4)
                 btn_layout_inner.setSpacing(6)
 
+                btn_consult = EmacButton("Consulter", variant="ghost")
+                btn_consult.clicked.connect(lambda checked, v=visite: ConsulterDetailDialog(
+                    "Détail de la visite médicale", [
+                        ("Date", self._format_date(v.get('date_visite'))),
+                        ("Type", v.get('type_visite')),
+                        ("Résultat", v.get('resultat')),
+                        ("Médecin", v.get('medecin')),
+                        ("Prochaine visite", self._format_date(v.get('prochaine_visite'))),
+                        ("Restrictions", v.get('restrictions')),
+                        ("Commentaire", v.get('commentaire')),
+                    ], self))
+                btn_layout_inner.addWidget(btn_consult)
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.medical.edit"))
                 btn_edit.clicked.connect(lambda checked, v=visite: self._edit_visite(v))
@@ -1252,6 +1300,18 @@ class _GestionRHMixin:
 
                 actions_row = QHBoxLayout()
                 actions_row.addStretch()
+                btn_consult = EmacButton("Consulter", variant="ghost")
+                btn_consult.clicked.connect(lambda checked, a=acc: ConsulterDetailDialog(
+                    "Détail de l'accident", [
+                        ("Date", self._format_date(a.get('date_accident'))),
+                        ("Avec arrêt", "Oui" if a.get('avec_arret') else "Non"),
+                        ("Nb jours d'absence", a.get('nb_jours_absence')),
+                        ("Siège des lésions", a.get('siege_lesions')),
+                        ("Nature des lésions", a.get('nature_lesions')),
+                        ("Description", a.get('description')),
+                        ("Commentaire", a.get('commentaire')),
+                    ], self))
+                actions_row.addWidget(btn_consult)
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.medical.edit"))
                 btn_edit.clicked.connect(lambda checked, a=acc: self._edit_accident(a))
@@ -1396,6 +1456,16 @@ class _GestionRHMixin:
                 btn_layout_inner.setContentsMargins(4, 4, 4, 4)
                 btn_layout_inner.setSpacing(6)
 
+                btn_consult = EmacButton("Consulter", variant="ghost")
+                btn_consult.clicked.connect(lambda checked, s=sanc: ConsulterDetailDialog(
+                    "Détail de la sanction", [
+                        ("Date", self._format_date(s.get('date_sanction'))),
+                        ("Type", s.get('type_sanction')),
+                        ("Durée (jours)", s.get('duree_jours')),
+                        ("Motif", s.get('motif')),
+                        ("Commentaire", s.get('commentaire')),
+                    ], self))
+                btn_layout_inner.addWidget(btn_consult)
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.vie_salarie.edit"))
                 btn_edit.clicked.connect(lambda checked, s=sanc: self._edit_sanction(s))
@@ -1522,6 +1592,17 @@ class _GestionRHMixin:
                 btn_layout_inner.setContentsMargins(4, 4, 4, 4)
                 btn_layout_inner.setSpacing(6)
 
+                btn_consult = EmacButton("Consulter", variant="ghost")
+                btn_consult.clicked.connect(lambda checked, e=ent: ConsulterDetailDialog(
+                    "Détail de l'entretien", [
+                        ("Date", self._format_date(e.get('date_entretien'))),
+                        ("Type", e.get('type_entretien')),
+                        ("Manager", e.get('manager_nom')),
+                        ("Prochaine date", self._format_date(e.get('prochaine_date'))),
+                        ("Objectifs", e.get('objectifs')),
+                        ("Commentaire", e.get('commentaire')),
+                    ], self))
+                btn_layout_inner.addWidget(btn_consult)
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.vie_salarie.edit"))
                 btn_edit.clicked.connect(lambda checked, e=ent: self._edit_entretien(e))
@@ -1843,6 +1924,19 @@ class _GestionRHMixin:
         btn_bar = QHBoxLayout()
         btn_bar.setContentsMargins(0, 0, 0, 8)
         if mutuelle:
+            btn_consult = EmacButton("Consulter", variant="ghost")
+            btn_consult.clicked.connect(lambda checked=False, m=mutuelle: ConsulterDetailDialog(
+                "Détail de la mutuelle", [
+                    ("Statut", m.get('statut_adhesion')),
+                    ("Motif de dispense", m.get('type_dispense')),
+                    ("Organisme", m.get('organisme')),
+                    ("N° adhérent", m.get('numero_adherent')),
+                    ("Régime", m.get('regime')),
+                    ("Date d'adhésion", self._format_date(m.get('date_adhesion'))),
+                    ("Date de fin", self._format_date(m.get('date_fin'))),
+                    ("Commentaire", m.get('commentaire')),
+                ], self))
+            btn_bar.addWidget(btn_consult)
             btn_edit = EmacButton("Modifier", variant="outline")
             btn_edit.setVisible(can("rh.mutuelle.edit"))
             btn_edit.clicked.connect(lambda: self._edit_mutuelle(mutuelle))
@@ -2363,7 +2457,7 @@ class GestionRHDialog(_GestionRHMixin, QDialog):
 
     data_changed = pyqtSignal()
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, preselect_personnel_id: int = None):
         super().__init__(parent)
         self.setWindowTitle("Gestion RH")
         screen = _QApp.primaryScreen().availableGeometry()
@@ -2381,6 +2475,9 @@ class GestionRHDialog(_GestionRHMixin, QDialog):
         self._vm = GestionRHViewModel(parent=self)
         self._setup_ui()
         self._connect_viewmodel()
+
+        if preselect_personnel_id is not None:
+            QTimer.singleShot(200, lambda: self._selectionner_operateur_par_id(preselect_personnel_id))
 
     def _setup_ui(self):
         """Construit l'interface utilisateur."""

@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QGroupBox,
     QMessageBox, QAbstractItemView, QWidget, QTabWidget, QCheckBox,
-    QRadioButton, QDateEdit, QScrollArea, QFrame, QGridLayout
+    QRadioButton, QDateEdit, QScrollArea, QFrame, QGridLayout, QInputDialog
 )
 from PyQt5.QtCore import Qt, QDate, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
@@ -22,7 +22,8 @@ from core.services.optimized_db_logger import log_hist
 from core.gui.dialogs.historique_personnel import HistoriquePersonnelTab
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.services.auth_service import get_current_user
-from core.services.permission_manager import require
+from core.services.permission_manager import require, can
+from core.services.personnel_service import PersonnelService
 
 import datetime as dt
 from core.utils.date_format import format_date
@@ -166,18 +167,35 @@ class DetailOperateurDialog(QDialog):
         layout.addWidget(tabs)
         
         actions = QHBoxLayout()
-        
+
         self.toggle_status_btn = QPushButton()
         self.update_status_button()
         self.toggle_status_btn.clicked.connect(self.toggle_operateur_status)
         actions.addWidget(self.toggle_status_btn)
-        
+
+        if can("rh.personnel.delete"):
+            self.delete_btn = QPushButton("Supprimer definitivement")
+            self.delete_btn.setStyleSheet("""
+                QPushButton {
+                    background: #7f1d1d;
+                    color: white;
+                    font-weight: bold;
+                    padding: 10px 20px;
+                    border-radius: 8px;
+                    border: 2px solid #991b1b;
+                }
+                QPushButton:hover { background: #991b1b; }
+                QPushButton:pressed { background: #450a0a; }
+            """)
+            self.delete_btn.clicked.connect(self.delete_operateur)
+            actions.addWidget(self.delete_btn)
+
         actions.addStretch()
-        
+
         self.export_btn = QPushButton("Exporter le profil")
         self.export_btn.clicked.connect(self.export_profile)
         actions.addWidget(self.export_btn)
-        
+
         self.close_btn = QPushButton("Fermer")
         self.close_btn.clicked.connect(self.close)
         actions.addWidget(self.close_btn)
@@ -685,6 +703,90 @@ class DetailOperateurDialog(QDialog):
         except Exception as e:
             logger.exception(f"Erreur modification statut: {e}")
             show_error_message(self, "Erreur", "Impossible de modifier le statut", e)
+
+    def _get_delete_counts(self, personnel_id: int) -> dict:
+        """Récupère les comptages des données liées à un personnel."""
+        from core.db.query_executor import QueryExecutor
+        counts = {}
+        queries = {
+            "documents":    ("SELECT COUNT(*) FROM documents WHERE personnel_id = %s", personnel_id),
+            "contrats":     ("SELECT COUNT(*) FROM contrat WHERE personnel_id = %s", personnel_id),
+            "formations":   ("SELECT COUNT(*) FROM formation WHERE personnel_id = %s", personnel_id),
+            "absences":     ("SELECT COUNT(*) FROM declaration WHERE personnel_id = %s", personnel_id),
+            "polyvalences": ("SELECT COUNT(*) FROM polyvalence WHERE personnel_id = %s", personnel_id),
+            "historique":   ("SELECT COUNT(*) FROM historique WHERE operateur_id = %s", personnel_id),
+        }
+        for key, (sql, param) in queries.items():
+            try:
+                counts[key] = QueryExecutor.fetch_scalar(sql, (param,), default=0) or 0
+            except Exception:
+                counts[key] = "?"
+        return counts
+
+    def delete_operateur(self):
+        """Supprime définitivement l'opérateur avec double confirmation."""
+        try:
+            require("rh.personnel.delete")
+        except PermissionError:
+            QMessageBox.warning(self, "Accès refusé", "Vous n'avez pas les droits pour supprimer du personnel.")
+            return
+
+        nom_complet = f"{self.operateur_nom} {self.operateur_prenom}"
+
+        counts = self._get_delete_counts(self.operateur_id)
+
+        def _fmt(n):
+            return f"<b>{n}</b>" if isinstance(n, int) and n > 0 else str(n)
+
+        # --- 1re confirmation ---
+        reply = QMessageBox.warning(
+            self,
+            "Suppression définitive",
+            f"<b>Cette action est irréversible.</b><br><br>"
+            f"Supprimer <b>{nom_complet}</b> supprimera également :<br>"
+            f"&nbsp;&nbsp;• {_fmt(counts['documents'])} document(s) RH<br>"
+            f"&nbsp;&nbsp;• {_fmt(counts['contrats'])} contrat(s)<br>"
+            f"&nbsp;&nbsp;• {_fmt(counts['formations'])} formation(s)<br>"
+            f"&nbsp;&nbsp;• {_fmt(counts['absences'])} déclaration(s) d'absence<br>"
+            f"&nbsp;&nbsp;• {_fmt(counts['polyvalences'])} évaluation(s) / polyvalence(s)<br>"
+            f"&nbsp;&nbsp;• {_fmt(counts['historique'])} entrée(s) d'historique<br><br>"
+            f"Voulez-vous continuer ?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if reply != QMessageBox.Yes:
+            return
+
+        # --- 2e confirmation : saisie du nom exact ---
+        texte, ok = QInputDialog.getText(
+            self,
+            "Confirmation finale",
+            f"Pour confirmer, saisissez exactement :\n{nom_complet}",
+        )
+        if not ok:
+            return
+        if texte.strip() != nom_complet:
+            QMessageBox.warning(
+                self, "Annulé",
+                "Le nom saisi ne correspond pas. Suppression annulée."
+            )
+            return
+
+        try:
+            success, msg = PersonnelService.delete(record_id=self.operateur_id)
+            if not success:
+                raise RuntimeError(msg)
+
+            QMessageBox.information(
+                self, "Supprimé",
+                f"{nom_complet} a été supprimé définitivement."
+            )
+            self.operateur_status_changed.emit(self.operateur_id)
+            self.close()
+
+        except Exception as e:
+            logger.exception(f"Erreur suppression personnel {self.operateur_id}: {e}")
+            show_error_message(self, "Erreur", "La suppression a échoué", e)
 
     def export_profile(self):
         """Demande le format d'export puis lance PDF ou Excel."""

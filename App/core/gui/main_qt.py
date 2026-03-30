@@ -1089,11 +1089,15 @@ class MainWindow(QMainWindow):
             new_window.show()
 
     def logout(self):
-        reply = QMessageBox.question(
-            self, "Déconnexion", "Voulez-vous vraiment vous déconnecter?",
-            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
-        )
-        if reply == QMessageBox.Yes:
+        box = QMessageBox(self)
+        box.setWindowTitle("Déconnexion")
+        box.setText("Voulez-vous vraiment vous déconnecter ?")
+        box.setIcon(QMessageBox.Question)
+        btn_oui = box.addButton("Oui", QMessageBox.YesRole)
+        box.addButton("Non", QMessageBox.NoRole)
+        box.setDefaultButton(btn_oui)
+        box.exec_()
+        if box.clickedButton() is btn_oui:
             # Arrêter le timeout manager
             if self._timeout_manager:
                 self._timeout_manager.stop()

@@ -15,6 +15,7 @@ from core.services.planning_service import (
     get_absences_du_mois, get_absences_du_jour, get_postes_avec_polyvalences,
     get_evaluations_dates_du_mois, get_evaluations_du_jour,
     get_historique_declarations, supprimer_declaration,
+    get_documents_expirant,
 )
 from core.utils.logging_config import get_logger
 
@@ -83,7 +84,11 @@ class RegularisationDialog(QDialog):
         self.eval_calendar_tab = self.create_eval_calendar_tab()
         self.tabs.addTab(self.eval_calendar_tab, "📆 Calendrier Évaluations")
 
-        # Onglet 5: Historique
+        # Onglet 5: Documents expirant
+        self.docs_expiration_tab = self.create_docs_expiration_tab()
+        self.tabs.addTab(self.docs_expiration_tab, "⚠️ Documents expirant")
+
+        # Onglet 6: Historique
         self.history_tab = self.create_history_tab()
         self.tabs.addTab(self.history_tab, "📊 Historique")
 
@@ -875,6 +880,142 @@ class RegularisationDialog(QDialog):
             logger.exception(f"Erreur suppression declaration: {e}")
             show_error_message(self, "Erreur", "Impossible de supprimer la déclaration", e)
 
+    # ==================== ONGLET 5: DOCUMENTS EXPIRANT ====================
+
+    def create_docs_expiration_tab(self):
+        """Crée l'onglet des documents RH qui expirent bientôt."""
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        # Barre de filtres
+        filter_row = QHBoxLayout()
+        filter_row.addWidget(QLabel("Horizon (jours) :"))
+        self.docs_horizon_combo = QComboBox()
+        self.docs_horizon_combo.addItems(["30", "60", "90"])
+        self.docs_horizon_combo.currentIndexChanged.connect(self.load_docs_expiration)
+        filter_row.addWidget(self.docs_horizon_combo)
+        filter_row.addStretch()
+
+        refresh_docs_btn = QPushButton("🔄 Actualiser")
+        refresh_docs_btn.clicked.connect(self.load_docs_expiration)
+        filter_row.addWidget(refresh_docs_btn)
+
+        layout.addLayout(filter_row)
+
+        # Table
+        self.docs_expiration_table = QTableWidget()
+        self.docs_expiration_table.setColumnCount(6)
+        self.docs_expiration_table.setHorizontalHeaderLabels([
+            "Nom", "Prénom", "Document", "Catégorie", "Date expiration", "Jours restants"
+        ])
+        hdr = self.docs_expiration_table.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(1, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(2, QHeaderView.Stretch)
+        hdr.setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        hdr.setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        self.docs_expiration_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.docs_expiration_table.setAlternatingRowColors(True)
+        self.docs_expiration_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        # Stocke personnel_id par ligne pour l'action
+        self.docs_expiration_table.setProperty("personnel_ids", [])
+        layout.addWidget(self.docs_expiration_table, 1)
+
+        # Bouton ouvrir fiche RH
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        open_rh_btn = QPushButton("Voir dossier RH")
+        open_rh_btn.setStyleSheet("""
+            QPushButton {
+                background: #3b82f6;
+                color: white;
+                padding: 8px 20px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover { background: #2563eb; }
+        """)
+        open_rh_btn.clicked.connect(self.open_rh_for_selected_doc)
+        btn_row.addWidget(open_rh_btn)
+        layout.addLayout(btn_row)
+
+        return widget
+
+    def load_docs_expiration(self):
+        """Charge les documents expirant bientôt et les affiche."""
+        try:
+            jours = int(self.docs_horizon_combo.currentText())
+            rows = get_documents_expirant(jours)
+
+            self.docs_expiration_table.setRowCount(0)
+            personnel_ids = []
+
+            for r in rows:
+                row_pos = self.docs_expiration_table.rowCount()
+                self.docs_expiration_table.insertRow(row_pos)
+
+                jours_restants = r.get('jours_restants') or 0
+
+                # Couleur selon urgence
+                if jours_restants <= 7:
+                    bg = QColor("#fee2e2")   # rouge pâle
+                    fg = QColor("#991b1b")
+                elif jours_restants <= 30:
+                    bg = QColor("#ffedd5")   # orange pâle
+                    fg = QColor("#9a3412")
+                else:
+                    bg = QColor("#fef9c3")   # jaune pâle
+                    fg = QColor("#713f12")
+
+                def _item(text, background=bg, foreground=fg):
+                    it = QTableWidgetItem(text)
+                    it.setBackground(background)
+                    it.setForeground(foreground)
+                    return it
+
+                self.docs_expiration_table.setItem(row_pos, 0, _item(r.get('nom') or ""))
+                self.docs_expiration_table.setItem(row_pos, 1, _item(r.get('prenom') or ""))
+                self.docs_expiration_table.setItem(row_pos, 2, _item(r.get('nom_document') or ""))
+                self.docs_expiration_table.setItem(row_pos, 3, _item(r.get('categorie') or ""))
+
+                date_exp = r.get('date_expiration')
+                if date_exp and not isinstance(date_exp, str):
+                    date_exp_str = format_date(date_exp)
+                else:
+                    date_exp_str = date_exp or ""
+                self.docs_expiration_table.setItem(row_pos, 4, _item(date_exp_str))
+
+                self.docs_expiration_table.setItem(row_pos, 5, _item(str(jours_restants) + " j"))
+
+                personnel_ids.append(r.get('personnel_id'))
+
+            self.docs_expiration_table.setProperty("personnel_ids", personnel_ids)
+
+        except Exception as e:
+            logger.exception(f"Erreur chargement documents expirant: {e}")
+            show_error_message(self, "Erreur", "Impossible de charger les documents expirant", e)
+
+    def open_rh_for_selected_doc(self):
+        """Ouvre le dossier RH de la personne sélectionnée dans la table documents."""
+        row = self.docs_expiration_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un document dans la liste.")
+            return
+
+        personnel_ids = self.docs_expiration_table.property("personnel_ids") or []
+        if row >= len(personnel_ids) or personnel_ids[row] is None:
+            return
+
+        personnel_id = personnel_ids[row]
+        try:
+            from core.gui.dialogs.gestion_rh import GestionRHDialog
+            dlg = GestionRHDialog(parent=self, preselect_personnel_id=personnel_id)
+            dlg.exec_()
+        except Exception as e:
+            logger.exception(f"Erreur ouverture dossier RH pour personnel {personnel_id}: {e}")
+            show_error_message(self, "Erreur", "Impossible d'ouvrir le dossier RH", e)
+
     # ==================== HELPERS ====================
 
     def refresh_all(self):
@@ -882,6 +1023,7 @@ class RegularisationDialog(QDialog):
         self.load_absents_today()
         self.load_personnel_combo()
         self.load_calendar_absences()
+        self.load_docs_expiration()
         self.load_history()
 
     def format_type_declaration(self, type_decl):

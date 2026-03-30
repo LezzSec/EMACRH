@@ -227,6 +227,38 @@ def get_evaluations_mois(first_day, last_day) -> list:
     )
 
 
+def get_documents_expirant(jours: int = 30) -> List[Dict]:
+    """
+    Retourne les documents RH du personnel actif qui expirent dans les prochains jours.
+    Jours validé en int pour éviter toute injection.
+    """
+    jours = int(jours)
+    return QueryExecutor.fetch_all(
+        """
+        SELECT
+            d.id,
+            d.personnel_id,
+            p.nom,
+            p.prenom,
+            p.matricule,
+            COALESCE(d.nom_affichage, d.nom_fichier) AS nom_document,
+            c.nom AS categorie,
+            d.date_expiration,
+            DATEDIFF(d.date_expiration, CURDATE()) AS jours_restants
+        FROM documents d
+        INNER JOIN personnel p ON p.id = d.personnel_id
+        LEFT JOIN categories_documents c ON c.id = d.categorie_id
+        WHERE d.statut = 'actif'
+          AND d.date_expiration IS NOT NULL
+          AND d.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+          AND p.statut = 'ACTIF'
+        ORDER BY d.date_expiration ASC
+        """,
+        (jours,),
+        dictionary=True,
+    )
+
+
 def supprimer_declaration(decl_id: int) -> bool:
     """Supprime une déclaration d'absence par ID."""
     try:

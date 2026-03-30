@@ -38,10 +38,12 @@ class FormationServiceCRUD(CRUDService):
     ACTION_PREFIX = "FORMATION_"
 
     ALLOWED_FIELDS = [
-        'personnel_id', 'intitule', 'organisme', 'lieu', 'objectif', 'formateur',
-        'date_debut', 'date_fin', 'duree_heures', 'statut', 'certificat_obtenu',
-        'cout', 'commentaire', 'document_id',
+        'personnel_id', 'intitule', 'type_formation', 'code_formation', 'catalogue_formation_id', 'organisme', 'lieu', 'objectif',
+        'formateur', 'date_debut', 'date_fin', 'duree_heures', 'statut',
+        'certificat_obtenu', 'cout', 'cout_salarial', 'commentaire', 'document_id',
     ]
+
+    TYPE_FORMATION_VALUES = ('Réglementaire', 'Technique/Perfectionnement', 'Poste')
 
     # ========================= QUERIES ENRICHIES (JOIN) =========================
 
@@ -104,25 +106,33 @@ class FormationServiceCRUD(CRUDService):
         try:
             formation = QueryExecutor.fetch_one("""
                 SELECT
-                    f.id, f.personnel_id, f.intitule, f.organisme,
+                    f.id, f.personnel_id, f.intitule, f.type_formation,
+                    f.code_formation, f.catalogue_formation_id, f.organisme,
                     f.lieu, f.objectif, f.formateur,
                     f.date_debut, f.date_fin, f.duree_heures, f.statut,
-                    f.certificat_obtenu, f.cout, f.commentaire, f.document_id,
-                    f.date_creation, f.date_modification,
+                    f.certificat_obtenu, f.cout, f.cout_salarial, f.commentaire,
+                    f.document_id, f.date_creation, f.date_modification,
                     p.nom, p.prenom,
                     CONCAT(p.prenom, ' ', p.nom) as nom_complet,
                     p.matricule, p.numposte as service,
-                    d.nom_fichier as attestation_nom
+                    d.nom_fichier as attestation_nom,
+                    pi.categorie,
+                    pi.taux_horaire,
+                    tf.libelle as libelle_tranche
                 FROM formation f
                 JOIN personnel p ON f.personnel_id = p.id
+                LEFT JOIN personnel_infos pi ON p.id = pi.personnel_id
                 LEFT JOIN documents d ON f.document_id = d.id
+                LEFT JOIN tranche_formation tf ON (
+                    f.code_formation >= tf.tranche_min
+                    AND (tf.tranche_max IS NULL OR f.code_formation <= tf.tranche_max)
+                )
                 WHERE f.id = %s
             """, (formation_id,), dictionary=True)
             if formation:
-                if formation.get('duree_heures') is not None:
-                    formation['duree_heures'] = float(formation['duree_heures'])
-                if formation.get('cout') is not None:
-                    formation['cout'] = float(formation['cout'])
+                for field in ('duree_heures', 'cout', 'cout_salarial', 'taux_horaire'):
+                    if formation.get(field) is not None:
+                        formation[field] = float(formation[field])
             return formation
         except Exception as e:
             logger.error(f"Erreur get_formation_by_id {formation_id}: {e}")
@@ -131,12 +141,27 @@ class FormationServiceCRUD(CRUDService):
     # ========================= CRUD MÉTIER =========================
 
     @classmethod
+    def _compute_cout_salarial(cls, personnel_id: int, duree_heures: float) -> Optional[float]:
+        """Calcule le coût salarial à partir du taux horaire stocké dans personnel_infos."""
+        if not personnel_id or not duree_heures:
+            return None
+        taux = QueryExecutor.fetch_scalar(
+            "SELECT taux_horaire FROM personnel_infos WHERE personnel_id = %s",
+            (personnel_id,)
+        )
+        if taux is None:
+            return None
+        return round(float(duree_heures) * float(taux), 2)
+
+    @classmethod
     def add_formation(
         cls,
         operateur_id: int,
         intitule: str,
         date_debut: date,
         date_fin: date = None,
+        type_formation: str = None,
+        code_formation: int = None,
         organisme: str = None,
         lieu: str = None,
         objectif: str = None,
@@ -149,9 +174,12 @@ class FormationServiceCRUD(CRUDService):
     ) -> Tuple[bool, str, Optional[int]]:
         """Ajoute une nouvelle formation (avec vérification permission)."""
         require('rh.formations.edit')
+        cout_salarial = cls._compute_cout_salarial(operateur_id, duree_heures)
         return cls.create(
             operateur_id=operateur_id,
             intitule=intitule,
+            type_formation=type_formation,
+            code_formation=code_formation,
             date_debut=date_debut,
             date_fin=date_fin,
             organisme=organisme,
@@ -162,13 +190,23 @@ class FormationServiceCRUD(CRUDService):
             statut=statut,
             certificat_obtenu=certificat_obtenu,
             cout=cout,
+            cout_salarial=cout_salarial,
             commentaire=commentaire,
         )
 
     @classmethod
     def update_formation(cls, formation_id: int, **kwargs) -> Tuple[bool, str]:
-        """Met à jour une formation (avec vérification permission + whitelist)."""
+        """Met à jour une formation (avec vérification permission + whitelist).
+
+        Si duree_heures est modifié, recalcule automatiquement cout_salarial.
+        """
         require('rh.formations.edit')
+        if 'duree_heures' in kwargs and 'cout_salarial' not in kwargs:
+            formation = cls.get_formation_by_id(formation_id)
+            if formation:
+                kwargs['cout_salarial'] = cls._compute_cout_salarial(
+                    formation['personnel_id'], kwargs['duree_heures']
+                )
         return cls.update(record_id=formation_id, **kwargs)
 
     @classmethod
@@ -176,6 +214,98 @@ class FormationServiceCRUD(CRUDService):
         """Supprime une formation (avec vérification permission)."""
         require('rh.formations.delete')
         return cls.delete(record_id=formation_id)
+
+    # ========================= CATALOGUE =========================
+
+    @classmethod
+    def search_catalogue(cls, query: str = '', code: int = None) -> List[Dict]:
+        """Recherche dans le catalogue (autocomplete / combo UI).
+
+        Args:
+            query: texte partiel sur l'intitulé (LIKE %query%)
+            code:  filtrer par code exact ou tranche (ex: 1000 → formations 1000-1999)
+
+        Returns:
+            Liste de dicts : id, code, intitule, libelle_tranche
+        """
+        try:
+            conditions = ["cf.actif = 1"]
+            params: list = []
+
+            if query:
+                conditions.append("cf.intitule LIKE %s")
+                params.append(f"%{query}%")
+
+            if code is not None:
+                conditions.append("""
+                    EXISTS (
+                        SELECT 1 FROM tranche_formation tf
+                        WHERE cf.code >= tf.tranche_min
+                          AND (tf.tranche_max IS NULL OR cf.code <= tf.tranche_max)
+                          AND tf.tranche_min = %s
+                    )
+                """)
+                params.append(code)
+
+            where = " AND ".join(conditions)
+            return QueryExecutor.fetch_all(f"""
+                SELECT
+                    cf.id, cf.code, cf.intitule,
+                    tf.libelle AS libelle_tranche
+                FROM catalogue_formation cf
+                LEFT JOIN tranche_formation tf ON (
+                    cf.code >= tf.tranche_min
+                    AND (tf.tranche_max IS NULL OR cf.code <= tf.tranche_max)
+                )
+                WHERE {where}
+                ORDER BY cf.code, cf.intitule
+            """, tuple(params), dictionary=True)
+        except Exception as e:
+            logger.error(f"Erreur search_catalogue: {e}")
+            return []
+
+    @classmethod
+    def get_catalogue_entry(cls, catalogue_id: int) -> Optional[Dict]:
+        """Récupère une entrée du catalogue par son ID."""
+        try:
+            return QueryExecutor.fetch_one("""
+                SELECT cf.id, cf.code, cf.intitule, tf.libelle AS libelle_tranche
+                FROM catalogue_formation cf
+                LEFT JOIN tranche_formation tf ON (
+                    cf.code >= tf.tranche_min
+                    AND (tf.tranche_max IS NULL OR cf.code <= tf.tranche_max)
+                )
+                WHERE cf.id = %s
+            """, (catalogue_id,), dictionary=True)
+        except Exception as e:
+            logger.error(f"Erreur get_catalogue_entry {catalogue_id}: {e}")
+            return None
+
+    @classmethod
+    def add_catalogue_entry(cls, code: int, intitule: str) -> Tuple[bool, str, Optional[int]]:
+        """Ajoute une formation au catalogue."""
+        require('rh.formations.edit')
+        try:
+            new_id = QueryExecutor.execute_write(
+                "INSERT INTO catalogue_formation (code, intitule) VALUES (%s, %s)",
+                (code, intitule)
+            )
+            return True, "Formation ajoutée au catalogue.", new_id
+        except Exception as e:
+            logger.error(f"Erreur add_catalogue_entry: {e}")
+            return False, str(e), None
+
+    @classmethod
+    def get_tranches(cls) -> List[Dict]:
+        """Retourne toutes les tranches (pour les filtres UI)."""
+        try:
+            return QueryExecutor.fetch_all(
+                "SELECT tranche_min, tranche_max, libelle FROM tranche_formation ORDER BY tranche_min",
+                dictionary=True
+            )
+        except Exception as e:
+            logger.error(f"Erreur get_tranches: {e}")
+            return []
 
     # ========================= STATISTIQUES =========================
 

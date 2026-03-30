@@ -4,8 +4,7 @@
 """
 
 from PyQt5.QtWidgets import (
-    QDialog, QVBoxLayout, QLabel, QLineEdit,
-    QMessageBox
+    QDialog, QVBoxLayout, QLabel, QLineEdit
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont
@@ -161,34 +160,8 @@ class LoginDialog(QDialog):
         """)
 
     def keyPressEvent(self, event):
-        """Gère les touches clavier"""
-        # Empêcher la fermeture avec Escape
-        if event.key() == Qt.Key_Escape:
-            reply = QMessageBox.question(
-                self,
-                "Quitter",
-                "Voulez-vous vraiment quitter l'application?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if reply == QMessageBox.Yes:
-                self.reject()
-        else:
+        if event.key() != Qt.Key_Escape:
             super().keyPressEvent(event)
 
     def closeEvent(self, event):
-        """Gère la fermeture de la fenêtre"""
-        if not self.login_successful:
-            reply = QMessageBox.question(
-                self,
-                "Quitter",
-                "Voulez-vous vraiment quitter l'application?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
-            )
-            if reply == QMessageBox.Yes:
-                event.accept()
-            else:
-                event.ignore()
-        else:
-            event.accept()
+        event.accept()
