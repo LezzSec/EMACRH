@@ -344,7 +344,7 @@ class ContratServiceCRUD(CRUDService):
         """
         if type_contrat:
             sql = """
-                SELECT c.id, c.type_contrat, c.date_fin, p.nom, p.prenom
+                SELECT c.id, c.type_contrat, c.date_fin, p.id as personnel_id, p.nom, p.prenom
                 FROM contrat c
                 INNER JOIN personnel p ON p.id = c.personnel_id
                 WHERE c.actif = 1
@@ -358,7 +358,7 @@ class ContratServiceCRUD(CRUDService):
             params = (jours, type_contrat, limit)
         else:
             sql = """
-                SELECT c.id, c.type_contrat, c.date_fin, p.nom, p.prenom
+                SELECT c.id, c.type_contrat, c.date_fin, p.id as personnel_id, p.nom, p.prenom
                 FROM contrat c
                 INNER JOIN personnel p ON p.id = c.personnel_id
                 WHERE c.actif = 1

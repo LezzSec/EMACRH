@@ -139,6 +139,8 @@ class GrillesService:
             ValueError: Si le niveau n'est pas un entier valide
             Exception: En cas d'erreur DB
         """
+        from core.services.permission_manager import require
+        require("production.grilles.edit")
         # 1. Lire ancienne valeur
         old_result = QueryExecutor.fetch_one("""
             SELECT niveau, date_evaluation, prochaine_evaluation
@@ -416,6 +418,8 @@ class GrillesService:
         Returns:
             Nombre de modifications réussies
         """
+        from core.services.permission_manager import require
+        require("production.grilles.edit")
         count = 0
         for operateur_id, poste_id, new_niveau_str, operateur_nom, poste_code in modifications:
             try:

@@ -441,7 +441,7 @@ class DetailOperateurDialog(QDialog):
             # Récupérer ancien_niveau pour EventBus AVANT la mise à jour
             poly_info = get_polyvalence_par_id(poly_id)
             ancien_niveau = poly_info['niveau'] if poly_info else None
-            operateur_id = poly_info['operateur_id'] if poly_info else None
+            operateur_id = poly_info['personnel_id'] if poly_info else None
             poste_id_for_event = poly_info['poste_id'] if poly_info else None
 
             # Mise à jour via service

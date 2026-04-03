@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QGroupBox,
     QMessageBox, QAbstractItemView, QWidget, QTabWidget, QCheckBox,
-    QRadioButton, QDateEdit, QScrollArea, QFrame, QGridLayout, QInputDialog
+    QDateEdit, QScrollArea, QFrame, QGridLayout
 )
 from PyQt5.QtCore import Qt, QDate, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
@@ -23,7 +23,6 @@ from core.gui.dialogs.historique_personnel import HistoriquePersonnelTab
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.services.auth_service import get_current_user
 from core.services.permission_manager import require, can
-from core.services.personnel_service import PersonnelService
 
 import datetime as dt
 from core.utils.date_format import format_date
@@ -173,23 +172,6 @@ class DetailOperateurDialog(QDialog):
         self.toggle_status_btn.clicked.connect(self.toggle_operateur_status)
         actions.addWidget(self.toggle_status_btn)
 
-        if can("rh.personnel.delete"):
-            self.delete_btn = QPushButton("Supprimer definitivement")
-            self.delete_btn.setStyleSheet("""
-                QPushButton {
-                    background: #7f1d1d;
-                    color: white;
-                    font-weight: bold;
-                    padding: 10px 20px;
-                    border-radius: 8px;
-                    border: 2px solid #991b1b;
-                }
-                QPushButton:hover { background: #991b1b; }
-                QPushButton:pressed { background: #450a0a; }
-            """)
-            self.delete_btn.clicked.connect(self.delete_operateur)
-            actions.addWidget(self.delete_btn)
-
         actions.addStretch()
 
         self.export_btn = QPushButton("Exporter le profil")
@@ -210,7 +192,7 @@ class DetailOperateurDialog(QDialog):
     def update_status_button(self):
         """Met à jour le texte et le style du bouton de changement de statut."""
         if self.current_statut == "ACTIF":
-            self.toggle_status_btn.setText("Désactiver l'opérateur")
+            self.toggle_status_btn.setText("Désactiver")
             self.toggle_status_btn.setStyleSheet("""
                 QPushButton {
                     background: #dc2626;
@@ -224,7 +206,7 @@ class DetailOperateurDialog(QDialog):
                 }
             """)
         else:
-            self.toggle_status_btn.setText("Réactiver l'opérateur")
+            self.toggle_status_btn.setText("Réactiver")
             self.toggle_status_btn.setStyleSheet("""
                 QPushButton {
                     background: #10b981;
@@ -654,7 +636,7 @@ class DetailOperateurDialog(QDialog):
 
         reply = QMessageBox.question(
             self, f"Confirmer {action}",
-            f"Êtes-vous sûr de vouloir {action} cet opérateur ?\n\n"
+            f"Êtes-vous sûr de vouloir {action} cette personne ?\n\n"
             f"Son statut passera à {new_statut}.",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
@@ -695,7 +677,7 @@ class DetailOperateurDialog(QDialog):
 
             QMessageBox.information(
                 self, "Statut modifié",
-                f"Le statut de l'opérateur a été changé à {new_statut} avec succès !"
+                f"Le statut a été changé à {new_statut} avec succès !"
             )
 
             self.operateur_status_changed.emit(self.operateur_id)
@@ -703,90 +685,6 @@ class DetailOperateurDialog(QDialog):
         except Exception as e:
             logger.exception(f"Erreur modification statut: {e}")
             show_error_message(self, "Erreur", "Impossible de modifier le statut", e)
-
-    def _get_delete_counts(self, personnel_id: int) -> dict:
-        """Récupère les comptages des données liées à un personnel."""
-        from core.db.query_executor import QueryExecutor
-        counts = {}
-        queries = {
-            "documents":    ("SELECT COUNT(*) FROM documents WHERE personnel_id = %s", personnel_id),
-            "contrats":     ("SELECT COUNT(*) FROM contrat WHERE personnel_id = %s", personnel_id),
-            "formations":   ("SELECT COUNT(*) FROM formation WHERE personnel_id = %s", personnel_id),
-            "absences":     ("SELECT COUNT(*) FROM declaration WHERE personnel_id = %s", personnel_id),
-            "polyvalences": ("SELECT COUNT(*) FROM polyvalence WHERE personnel_id = %s", personnel_id),
-            "historique":   ("SELECT COUNT(*) FROM historique WHERE operateur_id = %s", personnel_id),
-        }
-        for key, (sql, param) in queries.items():
-            try:
-                counts[key] = QueryExecutor.fetch_scalar(sql, (param,), default=0) or 0
-            except Exception:
-                counts[key] = "?"
-        return counts
-
-    def delete_operateur(self):
-        """Supprime définitivement l'opérateur avec double confirmation."""
-        try:
-            require("rh.personnel.delete")
-        except PermissionError:
-            QMessageBox.warning(self, "Accès refusé", "Vous n'avez pas les droits pour supprimer du personnel.")
-            return
-
-        nom_complet = f"{self.operateur_nom} {self.operateur_prenom}"
-
-        counts = self._get_delete_counts(self.operateur_id)
-
-        def _fmt(n):
-            return f"<b>{n}</b>" if isinstance(n, int) and n > 0 else str(n)
-
-        # --- 1re confirmation ---
-        reply = QMessageBox.warning(
-            self,
-            "Suppression définitive",
-            f"<b>Cette action est irréversible.</b><br><br>"
-            f"Supprimer <b>{nom_complet}</b> supprimera également :<br>"
-            f"&nbsp;&nbsp;• {_fmt(counts['documents'])} document(s) RH<br>"
-            f"&nbsp;&nbsp;• {_fmt(counts['contrats'])} contrat(s)<br>"
-            f"&nbsp;&nbsp;• {_fmt(counts['formations'])} formation(s)<br>"
-            f"&nbsp;&nbsp;• {_fmt(counts['absences'])} déclaration(s) d'absence<br>"
-            f"&nbsp;&nbsp;• {_fmt(counts['polyvalences'])} évaluation(s) / polyvalence(s)<br>"
-            f"&nbsp;&nbsp;• {_fmt(counts['historique'])} entrée(s) d'historique<br><br>"
-            f"Voulez-vous continuer ?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No,
-        )
-        if reply != QMessageBox.Yes:
-            return
-
-        # --- 2e confirmation : saisie du nom exact ---
-        texte, ok = QInputDialog.getText(
-            self,
-            "Confirmation finale",
-            f"Pour confirmer, saisissez exactement :\n{nom_complet}",
-        )
-        if not ok:
-            return
-        if texte.strip() != nom_complet:
-            QMessageBox.warning(
-                self, "Annulé",
-                "Le nom saisi ne correspond pas. Suppression annulée."
-            )
-            return
-
-        try:
-            success, msg = PersonnelService.delete(record_id=self.operateur_id)
-            if not success:
-                raise RuntimeError(msg)
-
-            QMessageBox.information(
-                self, "Supprimé",
-                f"{nom_complet} a été supprimé définitivement."
-            )
-            self.operateur_status_changed.emit(self.operateur_id)
-            self.close()
-
-        except Exception as e:
-            logger.exception(f"Erreur suppression personnel {self.operateur_id}: {e}")
-            show_error_message(self, "Erreur", "La suppression a échoué", e)
 
     def export_profile(self):
         """Demande le format d'export puis lance PDF ou Excel."""
@@ -1217,7 +1115,7 @@ class DetailOperateurDialog(QDialog):
     
             # Titre & sous-titre fusionnés sur A..S
             ws1.merge_cells("A1:S1")
-            ws1["A1"] = f"Profil opérateur — {nom or ''} {prenom or ''}".strip()
+            ws1["A1"] = f"Profil — {nom or ''} {prenom or ''}".strip()
             ws1["A1"].font = TITLE_FONT
             ws1["A1"].alignment = LEFT
     
@@ -1414,24 +1312,37 @@ class GestionPersonnelDialog(QDialog):
         search_layout.addWidget(self.search_input, 1)
         filters_layout.addLayout(search_layout)
         
-        # Ligne 2 : Statut (Radio buttons)
+        # Ligne 2 : Statut (onglets Actifs / Inactifs / Tous)
         statut_layout = QHBoxLayout()
-        statut_layout.addWidget(QLabel("Statut :"))
 
-        self.radio_tous = QRadioButton("Tous")
-        self.radio_actifs = QRadioButton("Actifs")
-        self.radio_inactifs = QRadioButton("Inactifs")
-
-        self.radio_tous.setChecked(True)
-
-        self.radio_tous.toggled.connect(self._reload_page)
-        self.radio_actifs.toggled.connect(self._reload_page)
-        self.radio_inactifs.toggled.connect(self._reload_page)
-
-        statut_layout.addWidget(self.radio_tous)
-        statut_layout.addWidget(self.radio_actifs)
-        statut_layout.addWidget(self.radio_inactifs)
-        statut_layout.addStretch()
+        self.statut_tabs = QTabWidget()
+        self.statut_tabs.setStyleSheet("""
+            QTabWidget::pane { border: none; }
+            QTabBar::tab {
+                padding: 4px 18px;
+                font-size: 12px;
+                border: 1px solid #d1d5db;
+                border-bottom: none;
+                border-radius: 4px 4px 0 0;
+                margin-right: 2px;
+                background: #f3f4f6;
+                color: #6b7280;
+            }
+            QTabBar::tab:selected {
+                background: #1e40af;
+                color: white;
+                font-weight: 600;
+                border-color: #1e40af;
+            }
+            QTabBar::tab:hover:!selected { background: #e0e7ff; color: #1e40af; }
+        """)
+        self.statut_tabs.setMaximumHeight(36)
+        self.statut_tabs.addTab(QWidget(), "Actifs")
+        self.statut_tabs.addTab(QWidget(), "Inactifs")
+        self.statut_tabs.addTab(QWidget(), "Tous")
+        self.statut_tabs.currentChanged.connect(self._reload_page)
+        statut_layout.addWidget(self.statut_tabs, 1)
+        statut_layout.addStretch(0)
 
         # Checkbox production uniquement (cochée par défaut pour gestion_production)
         self.production_only_check = QCheckBox("Production uniquement")
@@ -1543,9 +1454,10 @@ class GestionPersonnelDialog(QDialog):
     def _get_current_filters(self) -> dict:
         """Retourne les filtres actifs sous forme de dict pour get_paginated()."""
         filters = {}
-        if self.radio_actifs.isChecked():
+        idx = self.statut_tabs.currentIndex()
+        if idx == 0:
             filters['statut'] = 'ACTIF'
-        elif self.radio_inactifs.isChecked():
+        elif idx == 1:
             filters['statut'] = 'INACTIF'
         search = self.search_input.text().strip()
         if search:
@@ -1720,9 +1632,10 @@ class GestionPersonnelDialog(QDialog):
             if self.production_only_check.isChecked():
                 parts.append("production")
 
-            if self.radio_actifs.isChecked():
+            idx = self.statut_tabs.currentIndex()
+            if idx == 0:
                 parts.append("actifs")
-            elif self.radio_inactifs.isChecked():
+            elif idx == 1:
                 parts.append("inactifs")
 
             parts.append(date_str)

@@ -57,6 +57,11 @@ class CRUDService:
     ACTION_PREFIX: str = None
     ALLOWED_FIELDS: List[str] = []
 
+    # Feature requise pour create/update (None = pas de vérification)
+    WRITE_FEATURE: Optional[str] = None
+    # Feature requise pour delete (None = utilise WRITE_FEATURE)
+    DELETE_FEATURE: Optional[str] = None
+
     # Cache de repositories — une instance par sous-classe
     _repo_cache: Dict[str, Any] = {}
 
@@ -114,6 +119,9 @@ class CRUDService:
             ... )
         """
         cls._validate_config()
+        if cls.WRITE_FEATURE:
+            from core.services.permission_manager import require
+            require(cls.WRITE_FEATURE)
         try:
             repo = cls._get_repository()
             record_id = repo.create(dict(kwargs))
@@ -157,6 +165,9 @@ class CRUDService:
             >>> success, msg = PersonnelService.update(record_id=1, statut="INACTIF")
         """
         cls._validate_config()
+        if cls.WRITE_FEATURE:
+            from core.services.permission_manager import require
+            require(cls.WRITE_FEATURE)
 
         if not kwargs:
             return False, "Aucun champ à mettre à jour"
@@ -213,6 +224,10 @@ class CRUDService:
             >>> success, msg = PersonnelService.delete(record_id=1, soft_delete=True)
         """
         cls._validate_config()
+        _delete_feature = cls.DELETE_FEATURE or cls.WRITE_FEATURE
+        if _delete_feature:
+            from core.services.permission_manager import require
+            require(_delete_feature)
 
         try:
             repo = cls._get_repository()

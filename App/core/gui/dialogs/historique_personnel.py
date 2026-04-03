@@ -127,7 +127,7 @@ def format_details_html(action, data, poste_code=None):
     html += "<table style='width: 100%; border-collapse: collapse; margin-bottom: 16px;'>"
 
     operateur = data.get("operateur", "Non spécifié")
-    html += f"<tr><td style='padding: 8px; font-weight: bold; width: 180px;'>👤 Opérateur :</td>"
+    html += f"<tr><td style='padding: 8px; font-weight: bold; width: 180px;'>👤 Personnel :</td>"
     html += f"<td style='padding: 8px;'>{operateur}</td></tr>"
 
     html += f"<tr style='background: #f9fafb;'><td style='padding: 8px; font-weight: bold;'>📍 Poste :</td>"

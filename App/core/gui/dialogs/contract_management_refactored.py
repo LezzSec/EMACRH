@@ -79,11 +79,11 @@ class ContractFormDialog(EmacFormDialog):
         """
         # Informations opérateur (seulement en mode création)
         if not self.is_edit_mode:
-            info_group = QGroupBox("Opérateur")
+            info_group = QGroupBox("Personnel")
             info_layout = QFormLayout()
 
             self.operator_combo = QComboBox()
-            info_layout.addRow("Opérateur :", self.operator_combo)
+            info_layout.addRow("Personnel :", self.operator_combo)
 
             info_group.setLayout(info_layout)
             self.content_layout.addWidget(info_group)

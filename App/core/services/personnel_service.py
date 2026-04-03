@@ -34,6 +34,8 @@ class PersonnelService(CRUDService):
 
     TABLE_NAME = "personnel"
     ACTION_PREFIX = "PERSONNEL_"
+    WRITE_FEATURE = "rh.personnel.edit"
+    DELETE_FEATURE = "rh.personnel.delete"
 
     # Champs autorisés pour les mises à jour (sécurité)
     ALLOWED_FIELDS = [

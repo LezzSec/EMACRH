@@ -50,6 +50,8 @@ def creer_declaration(operateur_id: int, type_decl: str,
     Crée une déclaration d'absence.
     Retourne l'ID de la déclaration créée, ou None si échec.
     """
+    from core.services.permission_manager import require
+    require("planning.absences.edit")
     try:
         new_id = QueryExecutor.execute_write("""
             INSERT INTO declaration (personnel_id, type_declaration, date_debut, date_fin, motif)
@@ -261,6 +263,8 @@ def get_documents_expirant(jours: int = 30) -> List[Dict]:
 
 def supprimer_declaration(decl_id: int) -> bool:
     """Supprime une déclaration d'absence par ID."""
+    from core.services.permission_manager import require
+    require("planning.absences.edit")
     try:
         QueryExecutor.execute_write(
             "DELETE FROM declaration WHERE id = %s", (decl_id,)

@@ -42,6 +42,9 @@ class TypeAlerte:
     PERSONNEL_SANS_CONTRAT = "PERSONNEL_SANS_CONTRAT"
     PERSONNEL_SANS_COMPETENCES = "PERSONNEL_SANS_COMPETENCES"
     PERSONNEL_NOUVEAU_SANS_AFFECTATION = "PERSONNEL_NOUVEAU_SANS_AFFECTATION"
+    PERSONNEL_SANS_MUTUELLE = "PERSONNEL_SANS_MUTUELLE"
+    PERSONNEL_SANS_VISITE = "PERSONNEL_SANS_VISITE"
+    PERSONNEL_SANS_ENTRETIEN = "PERSONNEL_SANS_ENTRETIEN"
 
 
 # ===========================
@@ -398,8 +401,276 @@ class AlertService:
         return alerts
 
     # ===========================
+    # Données manquantes obligatoires
+    # ===========================
+
+    @staticmethod
+    def get_personnel_sans_mutuelle() -> List[Alert]:
+        """Personnel ACTIF sans aucun enregistrement mutuelle."""
+        query = """
+            SELECT p.id, p.nom, p.prenom, p.matricule
+            FROM personnel p
+            LEFT JOIN mutuelle m ON m.personnel_id = p.id
+            WHERE p.statut = 'ACTIF'
+              AND m.id IS NULL
+            ORDER BY p.nom, p.prenom
+        """
+        try:
+            rows = QueryExecutor.fetch_all(query, dictionary=True)
+        except Exception as e:
+            logger.exception(f"get_personnel_sans_mutuelle: erreur DB — {e}")
+            return []
+
+        return [
+            Alert(
+                id=row['id'],
+                categorie="SANS_MUTUELLE",
+                type_alerte=TypeAlerte.PERSONNEL_SANS_MUTUELLE,
+                urgence="AVERTISSEMENT",
+                titre="Mutuelle manquante",
+                description="Aucune mutuelle enregistrée",
+                personnel_id=row['id'],
+                personnel_nom=row['nom'],
+                personnel_prenom=row['prenom'],
+                date_alerte=date.today(),
+                date_echeance=None,
+                jours_restants=None,
+                data={'matricule': row['matricule']}
+            )
+            for row in rows
+        ]
+
+    @staticmethod
+    def get_personnel_sans_visite_medicale() -> List[Alert]:
+        """Personnel ACTIF sans aucune visite médicale enregistrée."""
+        query = """
+            SELECT p.id, p.nom, p.prenom, p.matricule, pi.date_entree
+            FROM personnel p
+            LEFT JOIN personnel_infos pi ON pi.personnel_id = p.id
+            LEFT JOIN medical_visite mv ON mv.personnel_id = p.id
+            WHERE p.statut = 'ACTIF'
+              AND mv.id IS NULL
+            ORDER BY pi.date_entree, p.nom
+        """
+        try:
+            rows = QueryExecutor.fetch_all(query, dictionary=True)
+        except Exception as e:
+            logger.exception(f"get_personnel_sans_visite_medicale: erreur DB — {e}")
+            return []
+
+        return [
+            Alert(
+                id=row['id'],
+                categorie="SANS_VISITE",
+                type_alerte=TypeAlerte.PERSONNEL_SANS_VISITE,
+                urgence="AVERTISSEMENT",
+                titre="Visite médicale manquante",
+                description="Aucune visite médicale enregistrée",
+                personnel_id=row['id'],
+                personnel_nom=row['nom'],
+                personnel_prenom=row['prenom'],
+                date_alerte=date.today(),
+                date_echeance=None,
+                jours_restants=None,
+                data={'matricule': row['matricule']}
+            )
+            for row in rows
+        ]
+
+    @staticmethod
+    def get_personnel_sans_entretien() -> List[Alert]:
+        """Personnel ACTIF sans aucun entretien professionnel enregistré."""
+        query = """
+            SELECT p.id, p.nom, p.prenom, p.matricule, pi.date_entree
+            FROM personnel p
+            LEFT JOIN personnel_infos pi ON pi.personnel_id = p.id
+            LEFT JOIN vie_salarie_entretien e ON e.personnel_id = p.id
+            WHERE p.statut = 'ACTIF'
+              AND e.id IS NULL
+            ORDER BY pi.date_entree, p.nom
+        """
+        try:
+            rows = QueryExecutor.fetch_all(query, dictionary=True)
+        except Exception as e:
+            logger.exception(f"get_personnel_sans_entretien: erreur DB — {e}")
+            return []
+
+        return [
+            Alert(
+                id=row['id'],
+                categorie="SANS_ENTRETIEN",
+                type_alerte=TypeAlerte.PERSONNEL_SANS_ENTRETIEN,
+                urgence="INFO",
+                titre="Entretien manquant",
+                description="Aucun entretien professionnel enregistré",
+                personnel_id=row['id'],
+                personnel_nom=row['nom'],
+                personnel_prenom=row['prenom'],
+                date_alerte=date.today(),
+                date_echeance=None,
+                jours_restants=None,
+                data={'matricule': row['matricule']}
+            )
+            for row in rows
+        ]
+
+    # ===========================
+    # Alertes Mutuelles
+    # ===========================
+
+    @staticmethod
+    def _get_mutuelles_expirant(jours: int = 30) -> List[Alert]:
+        """Mutuelles expirées ou expirant dans N jours."""
+        query = """
+            SELECT m.id, m.personnel_id, m.date_fin, p.nom, p.prenom, p.matricule,
+                   DATEDIFF(m.date_fin, CURDATE()) AS jours_restants
+            FROM mutuelle m
+            JOIN personnel p ON p.id = m.personnel_id
+            WHERE p.statut = 'ACTIF'
+              AND m.date_fin IS NOT NULL
+              AND m.date_fin <= DATE_ADD(CURDATE(), INTERVAL %s DAY)
+            ORDER BY m.date_fin ASC
+        """
+        try:
+            rows = QueryExecutor.fetch_all(query, (jours,), dictionary=True)
+        except Exception as e:
+            logger.exception(f"_get_mutuelles_expirant: erreur DB — {e}")
+            return []
+
+        alerts = []
+        for row in rows:
+            jr = row['jours_restants'] if row['jours_restants'] is not None else 0
+            if jr <= 0:
+                urgence, titre, desc = "CRITIQUE", "Mutuelle expirée", f"Expirée depuis {abs(jr)}j"
+            elif jr <= 7:
+                urgence, titre, desc = "CRITIQUE", "Mutuelle expire bientôt", f"Expire dans {jr}j"
+            else:
+                urgence, titre, desc = "AVERTISSEMENT", "Mutuelle expire bientôt", f"Expire dans {jr}j"
+            alerts.append(Alert(
+                id=row['id'],
+                categorie="MUTUELLE",
+                type_alerte="MUTUELLE_EXPIRANT",
+                urgence=urgence,
+                titre=titre,
+                description=desc,
+                personnel_id=row['personnel_id'],
+                personnel_nom=row['nom'],
+                personnel_prenom=row['prenom'],
+                date_alerte=date.today(),
+                date_echeance=row['date_fin'],
+                jours_restants=jr,
+                data={'matricule': row['matricule']}
+            ))
+        return alerts
+
+    # ===========================
     # Agrégation
     # ===========================
+
+    @staticmethod
+    def get_all_document_alerts(type_doc: Optional[str] = None, jours: int = 30) -> List[Alert]:
+        """
+        Agrège toutes les alertes documents RH : contrats, visites médicales,
+        RQTH, entretiens, mutuelles et personnel sans contrat.
+
+        Args:
+            type_doc: Filtre catégorie (CONTRAT, SANS_CONTRAT, VISITE_MEDICALE, RQTH, ENTRETIEN, MUTUELLE)
+            jours: Horizon "expire bientôt" en jours
+        """
+        alerts: List[Alert] = []
+
+        if not type_doc or type_doc == "CONTRAT":
+            alerts.extend(AlertService.get_contrats_expires())
+            alerts.extend(AlertService.get_contrats_expirant(jours))
+
+        if not type_doc or type_doc == "SANS_CONTRAT":
+            alerts.extend(AlertService.get_personnel_sans_contrat())
+
+        if not type_doc or type_doc == "VISITE_MEDICALE":
+            from core.services.medical_service import get_visites_a_planifier
+            for v in get_visites_a_planifier(jours_avance=jours):
+                jr = v.get('jours_restants') or 0
+                if jr <= 0:
+                    urgence, desc = "CRITIQUE", "En retard"
+                elif jr <= 7:
+                    urgence, desc = "CRITIQUE", f"Prévue dans {jr}j"
+                else:
+                    urgence, desc = "AVERTISSEMENT", f"Prévue dans {jr}j"
+                alerts.append(Alert(
+                    id=v.get('operateur_id'),
+                    categorie="VISITE_MEDICALE",
+                    type_alerte="VISITE_A_PLANIFIER",
+                    urgence=urgence,
+                    titre="Visite médicale",
+                    description=desc,
+                    personnel_id=v.get('operateur_id'),
+                    personnel_nom=v.get('nom', ''),
+                    personnel_prenom=v.get('prenom', ''),
+                    date_alerte=date.today(),
+                    date_echeance=v.get('prochaine_visite'),
+                    jours_restants=jr,
+                    data={'matricule': v.get('matricule')}
+                ))
+
+        if not type_doc or type_doc == "RQTH":
+            from core.services.medical_service import get_rqth_expirant
+            for r in get_rqth_expirant(jours_avance=jours):
+                jr = r.get('jours_restants') or 0
+                urgence = "CRITIQUE" if jr <= 7 else "AVERTISSEMENT"
+                alerts.append(Alert(
+                    id=r.get('personnel_id'),
+                    categorie="RQTH",
+                    type_alerte="RQTH_EXPIRANT",
+                    urgence=urgence,
+                    titre="RQTH expirant",
+                    description=f"Expire dans {jr}j",
+                    personnel_id=r.get('personnel_id'),
+                    personnel_nom=r.get('nom', ''),
+                    personnel_prenom=r.get('prenom', ''),
+                    date_alerte=date.today(),
+                    date_echeance=r.get('date_fin_rqth'),
+                    jours_restants=jr,
+                    data={'matricule': r.get('matricule')}
+                ))
+
+        if not type_doc or type_doc == "ENTRETIEN":
+            from core.services.vie_salarie_service import get_entretiens_a_planifier
+            for e in get_entretiens_a_planifier(jours_avance=jours):
+                jr = e.get('jours_restants') or 0
+                urgence = "CRITIQUE" if jr <= 0 else "AVERTISSEMENT"
+                desc = "En retard" if jr <= 0 else f"Prévu dans {jr}j"
+                alerts.append(Alert(
+                    id=e.get('operateur_id'),
+                    categorie="ENTRETIEN",
+                    type_alerte="ENTRETIEN_A_PLANIFIER",
+                    urgence=urgence,
+                    titre=f"Entretien {e.get('type_entretien', '')}",
+                    description=desc,
+                    personnel_id=e.get('operateur_id'),
+                    personnel_nom=e.get('nom', ''),
+                    personnel_prenom=e.get('prenom', ''),
+                    date_alerte=date.today(),
+                    date_echeance=e.get('prochaine_date'),
+                    jours_restants=jr,
+                    data={'matricule': e.get('matricule'), 'type_entretien': e.get('type_entretien')}
+                ))
+
+        if not type_doc or type_doc == "MUTUELLE":
+            alerts.extend(AlertService._get_mutuelles_expirant(jours))
+
+        if not type_doc or type_doc == "SANS_MUTUELLE":
+            alerts.extend(AlertService.get_personnel_sans_mutuelle())
+
+        if not type_doc or type_doc == "SANS_VISITE":
+            alerts.extend(AlertService.get_personnel_sans_visite_medicale())
+
+        if not type_doc or type_doc == "SANS_ENTRETIEN":
+            alerts.extend(AlertService.get_personnel_sans_entretien())
+
+        def sort_key(a: Alert):
+            return (a.urgence_ordre, a.jours_restants if a.jours_restants is not None else 9999)
+
+        return sorted(alerts, key=sort_key)
 
     @staticmethod
     def get_all_contract_alerts(type_contrat: Optional[str] = None) -> List[Alert]:

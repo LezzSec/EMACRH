@@ -211,7 +211,7 @@ class DetailDialog(QDialog):
 
         # N'afficher la ligne Opérateur que si on a un nom valide
         if op_name:
-            op_label = self._create_info_row("👤 Opérateur :", op_name)
+            op_label = self._create_info_row("👤 Personnel :", op_name)
             info_layout.addWidget(op_label)
 
         # Poste (n'afficher que s'il y en a un)
@@ -315,7 +315,7 @@ class DetailDialog(QDialog):
                 if prochaine_eval:
                     info_layout.addWidget(self._create_info_row("📆 Prochaine évaluation :", prochaine_eval))
 
-                info_text = QLabel("Un nouveau niveau de compétence a été attribué à cet opérateur pour ce poste.")
+                info_text = QLabel("Un nouveau niveau de compétence a été attribué à cette personne pour ce poste.")
                 info_text.setWordWrap(True)
                 info_text.setStyleSheet("color: #757575; font-style: italic; padding: 8px; background-color: #f5f5f5; border-radius: 4px;")
                 info_layout.addWidget(info_text)
@@ -383,7 +383,7 @@ class DetailDialog(QDialog):
                 if date_supprimee:
                     info_layout.addWidget(self._create_info_row("📅 Date d'évaluation (supprimée) :", date_supprimee))
 
-                info_text = QLabel("Cette compétence a été retirée de l'opérateur pour ce poste.")
+                info_text = QLabel("Cette compétence a été retirée de la personne pour ce poste.")
                 info_text.setWordWrap(True)
                 info_text.setStyleSheet("color: #757575; font-style: italic; padding: 8px; background-color: #f5f5f5; border-radius: 4px;")
                 info_layout.addWidget(info_text)
@@ -795,6 +795,19 @@ class HistoriqueDialog(QDialog):
         vsep2.setStyleSheet("QFrame { color: #e0e0e0; }")
         filters_row.addWidget(vsep2, alignment=Qt.AlignVCenter)
 
+        self.sort_order_filter = QComboBox()
+        self.sort_order_filter.addItems(["Plus récent en premier", "Plus ancien en premier"])
+        self.sort_order_filter.setFixedHeight(32)
+        self.sort_order_filter.setStyleSheet(field_style)
+        self.sort_order_filter.currentIndexChanged.connect(self.reload)
+        filters_row.addWidget(self.sort_order_filter)
+
+        vsep3 = QFrame()
+        vsep3.setFrameShape(QFrame.VLine)
+        vsep3.setFixedHeight(22)
+        vsep3.setStyleSheet("QFrame { color: #e0e0e0; }")
+        filters_row.addWidget(vsep3, alignment=Qt.AlignVCenter)
+
         self.search = QLineEdit(placeholderText="🔍  Rechercher...")
         self.search.setFixedHeight(32)
         self.search.returnPressed.connect(self.reload)
@@ -995,6 +1008,7 @@ class HistoriqueDialog(QDialog):
         d_to   = self.to_date.date()
         search_text   = self.search.text()
         action_filter = self.action_filter.currentText()
+        sort_order    = "ASC" if self.sort_order_filter.currentIndex() == 1 else "DESC"
         offset        = self._page_offset
 
         def fetch(progress_callback=None):
@@ -1006,6 +1020,7 @@ class HistoriqueDialog(QDialog):
                 table_names=self._allowed_tables,
                 offset=offset,
                 limit=_PAGE_SIZE + 1,  # +1 pour détecter s'il y a une suite
+                sort_order=sort_order,
             )
 
         def on_result(rows):

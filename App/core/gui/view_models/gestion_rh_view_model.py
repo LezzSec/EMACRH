@@ -101,7 +101,8 @@ class GestionRHViewModel(QObject):
             terme: texte de recherche (None = tous les actifs)
         """
         def fetch(progress_callback=None):
-            return rechercher_operateurs(recherche=terme if terme else None)
+            limit = 50 if terme else 2000
+            return rechercher_operateurs(recherche=terme if terme else None, limit=limit)
 
         def on_success(resultats):
             self.resultats_loaded.emit(resultats)

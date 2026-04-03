@@ -104,7 +104,7 @@ class _GestionRHMixin:
 
         # Titre
         header_layout = QHBoxLayout()
-        titre = QLabel("Sélection Opérateur")
+        titre = QLabel("Sélection Personnel")
         titre.setFont(QFont("Segoe UI", 14, QFont.Bold))
         titre.setStyleSheet("color: #111827;")
         header_layout.addWidget(titre)
@@ -150,6 +150,7 @@ class _GestionRHMixin:
         layout.addWidget(results_label)
 
         self.liste_operateurs = QListWidget()
+        self.liste_operateurs.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.liste_operateurs.setStyleSheet("""
             QListWidget {
                 border: 1px solid #e5e7eb;
@@ -157,8 +158,9 @@ class _GestionRHMixin:
                 background: white;
             }
             QListWidget::item {
-                padding: 12px;
+                padding: 5px 10px;
                 border-bottom: 1px solid #f3f4f6;
+                font-size: 12px;
             }
             QListWidget::item:selected {
                 background-color: #eff6ff;
@@ -172,7 +174,7 @@ class _GestionRHMixin:
         layout.addWidget(self.liste_operateurs, 1)
 
         # Compteur de résultats
-        self.compteur_resultats = QLabel("0 opérateur(s)")
+        self.compteur_resultats = QLabel("0 personne(s)")
         self.compteur_resultats.setStyleSheet("color: #9ca3af; font-size: 12px;")
         layout.addWidget(self.compteur_resultats)
 
@@ -231,13 +233,13 @@ class _GestionRHMixin:
         icon.setAlignment(Qt.AlignCenter)
         layout.addWidget(icon)
 
-        message = QLabel("Sélectionnez un opérateur")
+        message = QLabel("Sélectionnez une personne")
         message.setFont(QFont("Segoe UI", 18, QFont.Bold))
         message.setStyleSheet("color: #6b7280;")
         message.setAlignment(Qt.AlignCenter)
         layout.addWidget(message)
 
-        sous_message = QLabel("Utilisez la zone de recherche à gauche\npour trouver un opérateur")
+        sous_message = QLabel("Utilisez la zone de recherche à gauche\npour trouver une personne")
         sous_message.setStyleSheet("color: #9ca3af;")
         sous_message.setAlignment(Qt.AlignCenter)
         layout.addWidget(sous_message)
@@ -449,8 +451,11 @@ class _GestionRHMixin:
             """)
 
         self.domaine_actif = DomaineRH.GENERAL
+        is_production = (op.get('numposte') or '') == 'Production'
         for code, btn in self.boutons_domaines.items():
             btn.setChecked(code == DomaineRH.GENERAL.value)
+            if code == DomaineRH.POLYVALENCE.value:
+                btn.setVisible(is_production)
         self.btn_archives.setChecked(False)
 
         self._charger_contenu_domaine()
@@ -1636,7 +1641,7 @@ class _GestionRHMixin:
 
         if not polyvalences:
             card_empty = EmacCard("Polyvalence")
-            card_empty.body.addWidget(QLabel("Aucune polyvalence enregistrée pour cet opérateur."))
+            card_empty.body.addWidget(QLabel("Aucune polyvalence enregistrée pour cette personne."))
             layout.addWidget(card_empty)
             return container
 
@@ -2282,7 +2287,7 @@ class _GestionRHMixin:
     def _ajouter_document(self):
         """Ouvre le dialogue pour ajouter un document."""
         if not self.operateur_selectionne:
-            QMessageBox.warning(self, "Attention", "Veuillez sélectionner un opérateur")
+            QMessageBox.warning(self, "Attention", "Veuillez sélectionner une personne")
             return
 
         dialog = AjouterDocumentDialog(
@@ -2328,11 +2333,12 @@ class _GestionRHMixin:
         for op in resultats:
             item = QListWidgetItem()
             item.setData(Qt.UserRole, op['id'])
-            nom_complet = op.get('nom_complet', f"{op.get('prenom', '')} {op.get('nom', '')}")
-            item.setText(f"{nom_complet}\n{op.get('matricule', '-')}")
+            nom = (op.get('nom') or '').upper()
+            prenom = op.get('prenom') or ''
+            item.setText(f"{nom} {prenom}")
             item.setToolTip(f"ID: {op['id']} | Statut: {op.get('statut', 'ACTIF')}")
             self.liste_operateurs.addItem(item)
-        self.compteur_resultats.setText(f"{len(resultats)} opérateur(s)")
+        self.compteur_resultats.setText(f"{len(resultats)} personne(s)")
 
     def _on_operateur_loaded(self, operateur: dict):
         """Appelé quand un opérateur est chargé par le ViewModel."""

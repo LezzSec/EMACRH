@@ -139,6 +139,30 @@ class PersonnelSelectionWidget(QWidget):
         self.status_combo.currentIndexChanged.connect(self._apply_filters)
         filters_layout.addWidget(self.status_combo, 1)
 
+        # Filtre service
+        self.service_combo = QComboBox()
+        self.service_combo.addItem("Tous les services", None)
+        self.service_combo.setStyleSheet("""
+            QComboBox {
+                padding: 8px 12px;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                font-size: 13px;
+                background: white;
+                color: #111827;
+                min-width: 140px;
+            }
+            QComboBox:focus {
+                border: 2px solid #7c3aed;
+            }
+            QComboBox::drop-down {
+                border: none;
+                padding-right: 8px;
+            }
+        """)
+        self.service_combo.currentIndexChanged.connect(self._apply_filters)
+        filters_layout.addWidget(self.service_combo, 1)
+
         layout.addLayout(filters_layout)
 
         # === Table du personnel ===
@@ -244,9 +268,22 @@ class PersonnelSelectionWidget(QWidget):
         """Charge la liste du personnel depuis la base de données."""
         try:
             self._personnel_data = PersonnelRepository.get_all_as_dicts()
+            self._populate_service_combo()
             self._populate_table()
         except Exception as e:
             logger.error(f"Erreur chargement personnel: {e}")
+
+    def _populate_service_combo(self):
+        """Remplit le combo des services à partir des données chargées."""
+        services = sorted(
+            {p['nom_service'] for p in self._personnel_data if p.get('nom_service')}
+        )
+        self.service_combo.blockSignals(True)
+        self.service_combo.clear()
+        self.service_combo.addItem("Tous les services", None)
+        for svc in services:
+            self.service_combo.addItem(svc, svc)
+        self.service_combo.blockSignals(False)
 
     def _populate_table(self):
         """Remplit la table avec les données."""
@@ -289,26 +326,31 @@ class PersonnelSelectionWidget(QWidget):
         self._apply_filters()
 
     def _apply_filters(self):
-        """Applique les filtres de recherche et statut."""
+        """Applique les filtres de recherche, statut et service."""
         search_text = self.search_input.text().lower()
         status_filter = self.status_combo.currentData()
+        service_filter = self.service_combo.currentData()
 
         for row in range(self.table.rowCount()):
-            # Récupérer les données de la ligne
-            nom = self.table.item(row, 1).text().lower() if self.table.item(row, 1) else ""
-            prenom = self.table.item(row, 2).text().lower() if self.table.item(row, 2) else ""
-            matricule = self.table.item(row, 3).text().lower() if self.table.item(row, 3) else ""
-            statut = self.table.item(row, 4).text() if self.table.item(row, 4) else ""
+            checkbox_item = self.table.item(row, 0)
+            personnel_id = checkbox_item.data(Qt.UserRole) if checkbox_item else None
+            row_data = next((p for p in self._personnel_data if p['id'] == personnel_id), {})
 
-            # Appliquer les filtres
+            nom = (row_data.get('nom') or '').lower()
+            prenom = (row_data.get('prenom') or '').lower()
+            matricule = (row_data.get('matricule') or '').lower()
+            statut = row_data.get('statut') or ''
+            nom_service = row_data.get('nom_service') or ''
+
             match_search = (
                 search_text in nom or
                 search_text in prenom or
                 search_text in matricule
             )
             match_status = status_filter == "TOUS" or statut == status_filter
+            match_service = service_filter is None or nom_service == service_filter
 
-            self.table.setRowHidden(row, not (match_search and match_status))
+            self.table.setRowHidden(row, not (match_search and match_status and match_service))
 
         # Get selected IDs once to avoid inconsistency
         selected_ids = self.get_selected_ids()

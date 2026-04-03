@@ -7,12 +7,12 @@ Vue unifiee avec cartes groupees par urgence (Critique > Avertissement > Info).
 
 import logging
 from datetime import date
-from typing import List, Dict, Set, Optional
+from typing import List, Dict, Set
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QLabel, QFrame,
-    QPushButton, QComboBox, QLineEdit, QCheckBox, QScrollArea,
-    QFileDialog, QMessageBox, QSizePolicy
+    QPushButton, QLineEdit, QCheckBox, QScrollArea,
+    QFileDialog, QMessageBox
 )
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont, QCursor
@@ -82,121 +82,7 @@ TYPE_LABELS = {
     TypeAlerte.PERSONNEL_NOUVEAU_SANS_AFFECTATION: "Nouveau arrivant",
 }
 
-FILTER_STYLE = """
-    QLineEdit, QComboBox {
-        background: #ffffff;
-        border: 1px solid #d1d5db;
-        border-radius: 6px;
-        padding: 7px 12px;
-        font-size: 13px;
-        color: #374151;
-    }
-    QLineEdit:focus, QComboBox:focus {
-        border-color: #3b82f6;
-    }
-    QComboBox::drop-down { border: none; }
-    QComboBox QAbstractItemView {
-        background: white;
-        border: 1px solid #d1d5db;
-        selection-background-color: #3b82f6;
-        selection-color: white;
-    }
-    QCheckBox {
-        color: #6b7280;
-        font-size: 13px;
-        spacing: 6px;
-    }
-"""
 
-
-# ===========================
-# KPICard - Grande carte KPI
-# ===========================
-
-class KPICard(QFrame):
-    """Grande carte cliquable affichant un compteur par urgence."""
-
-    clicked = pyqtSignal(str)
-
-    def __init__(self, urgency_key: str, parent=None):
-        super().__init__(parent)
-        self._urgency = urgency_key
-        self._selected = False
-        cfg = URGENCY_CONFIG[urgency_key]
-
-        self.setObjectName(f"kpi_{urgency_key}")
-        self.setCursor(QCursor(Qt.PointingHandCursor))
-        self.setMinimumHeight(100)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(4)
-
-        self._count_label = QLabel("0")
-        self._count_label.setAlignment(Qt.AlignLeft)
-        self._count_label.setStyleSheet("background: transparent; border: none;")
-        font = QFont()
-        font.setPixelSize(36)
-        font.setBold(True)
-        self._count_label.setFont(font)
-        layout.addWidget(self._count_label)
-
-        self._title_label = QLabel(cfg["label"])
-        self._title_label.setStyleSheet("background: transparent; border: none;")
-        title_font = QFont()
-        title_font.setPixelSize(14)
-        title_font.setBold(True)
-        self._title_label.setFont(title_font)
-        layout.addWidget(self._title_label)
-
-        self._apply_style()
-
-    def set_count(self, count: int):
-        self._count_label.setText(str(count))
-
-    def set_selected(self, selected: bool):
-        self._selected = selected
-        self._apply_style()
-
-    def _apply_style(self):
-        cfg = URGENCY_CONFIG[self._urgency]
-        border = "3px solid #ffffff" if self._selected else "none"
-        opacity_bg = cfg["accent"] if not self._selected else cfg["accent_hover"]
-        self.setStyleSheet(f"""
-            QFrame#{self.objectName()} {{
-                background: {opacity_bg};
-                border-radius: 12px;
-                border: {border};
-            }}
-            QFrame#{self.objectName()} QLabel {{
-                color: #ffffff;
-            }}
-        """)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            self.clicked.emit(self._urgency)
-        super().mousePressEvent(event)
-
-    def enterEvent(self, event):
-        cfg = URGENCY_CONFIG[self._urgency]
-        border = "3px solid #ffffff" if self._selected else "none"
-        self.setStyleSheet(f"""
-            QFrame#{self.objectName()} {{
-                background: {cfg['accent_hover']};
-                border-radius: 12px;
-                border: {border};
-            }}
-            QFrame#{self.objectName()} QLabel {{
-                color: #ffffff;
-            }}
-        """)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self._apply_style()
-        super().leaveEvent(event)
 
 
 # ===========================
@@ -445,96 +331,138 @@ class UrgencyGroupWidget(QWidget):
 
 
 # ===========================
-# FilterBar
+# FilterBar - Pill buttons
 # ===========================
 
+def _pill_style(checked: bool, accent: str = "#0f172a") -> str:
+    if checked:
+        return (f"QPushButton {{ padding: 5px 14px; border-radius: 14px; background: {accent}; "
+                f"color: white; font-size: 12px; font-weight: 600; border: 1px solid {accent}; }}")
+    return ("QPushButton { padding: 5px 14px; border-radius: 14px; background: white; "
+            "color: #374151; font-size: 12px; border: 1px solid #d1d5db; } "
+            "QPushButton:hover { background: #f3f4f6; }")
+
+
 class FilterBar(QWidget):
-    """Barre de filtres unifiee."""
+    """Barre de filtres avec boutons-pilules."""
 
     filters_changed = pyqtSignal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(FILTER_STYLE)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(12)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(8)
 
-        # Recherche
+        # --- Ligne 1 : Urgence + recherche + masqués ---
+        row1 = QHBoxLayout()
+        row1.setSpacing(6)
+
+        self._urgency_btns: dict = {}
+        urgency_items = [("Tous", None), ("Critiques", "CRITIQUE"), ("Avertissements", "AVERTISSEMENT"), ("Informations", "INFO")]
+        for label, key in urgency_items:
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setChecked(key is None)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setProperty("urgency_key", key)
+            btn.clicked.connect(self._on_urgency_clicked)
+            accent = URGENCY_CONFIG[key]["accent"] if key else "#0f172a"
+            btn.setProperty("accent", accent)
+            self._urgency_btns[str(key)] = btn
+            row1.addWidget(btn)
+
+        row1.addStretch()
+
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Rechercher par nom...")
-        self.search_input.setMinimumWidth(220)
-        self.search_input.setFixedHeight(34)
+        self.search_input.setFixedHeight(30)
+        self.search_input.setMinimumWidth(200)
+        self.search_input.setStyleSheet(
+            "border: 1px solid #d1d5db; border-radius: 14px; padding: 4px 12px; font-size: 12px; background: white;"
+        )
         self._search_timer = QTimer()
         self._search_timer.setSingleShot(True)
         self._search_timer.setInterval(300)
         self._search_timer.timeout.connect(self.filters_changed.emit)
         self.search_input.textChanged.connect(lambda: self._search_timer.start())
-        layout.addWidget(self.search_input)
+        row1.addWidget(self.search_input)
 
-        # Categorie
-        lbl_cat = QLabel("Categorie:")
-        lbl_cat.setStyleSheet("color: #6b7280; font-size: 13px;")
-        layout.addWidget(lbl_cat)
-
-        self.category_combo = QComboBox()
-        self.category_combo.addItem("Tous", "")
-        self.category_combo.addItem("Contrats", "CONTRAT")
-        self.category_combo.addItem("Personnel", "PERSONNEL")
-        self.category_combo.setFixedHeight(34)
-        self.category_combo.setMinimumWidth(120)
-        self.category_combo.currentIndexChanged.connect(self._on_category_changed)
-        layout.addWidget(self.category_combo)
-
-        # Type
-        lbl_type = QLabel("Type:")
-        lbl_type.setStyleSheet("color: #6b7280; font-size: 13px;")
-        layout.addWidget(lbl_type)
-
-        self.type_combo = QComboBox()
-        self.type_combo.setFixedHeight(34)
-        self.type_combo.setMinimumWidth(160)
-        self.type_combo.currentIndexChanged.connect(lambda: self.filters_changed.emit())
-        layout.addWidget(self.type_combo)
-        self._populate_type_combo("")
-
-        layout.addStretch()
-
-        # Masques
-        self.show_handled_cb = QCheckBox("Afficher masques")
+        self.show_handled_cb = QCheckBox("Masqués")
+        self.show_handled_cb.setStyleSheet("color: #6b7280; font-size: 12px; margin-left: 6px;")
         self.show_handled_cb.stateChanged.connect(lambda: self.filters_changed.emit())
-        layout.addWidget(self.show_handled_cb)
+        row1.addWidget(self.show_handled_cb)
 
-    def _on_category_changed(self):
-        cat = self.category_combo.currentData()
-        self._populate_type_combo(cat)
+        main_layout.addLayout(row1)
+
+        # --- Ligne 2 : Types ---
+        row2 = QHBoxLayout()
+        row2.setSpacing(6)
+
+        self._type_btns: dict = {}
+        type_items = [("Tous les types", "")] + [(label, str(key)) for key, label in TYPE_LABELS.items()]
+        for label, key in type_items:
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setChecked(key == "")
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setProperty("type_key", key)
+            btn.clicked.connect(self._on_type_clicked)
+            self._type_btns[key] = btn
+            row2.addWidget(btn)
+
+        row2.addStretch()
+        main_layout.addLayout(row2)
+
+        self._refresh_styles()
+
+    def _on_urgency_clicked(self):
+        key = self.sender().property("urgency_key")
+        for k, btn in self._urgency_btns.items():
+            btn.setChecked(btn.property("urgency_key") == key)
+        self._refresh_styles()
         self.filters_changed.emit()
 
-    def _populate_type_combo(self, category: str):
-        self.type_combo.blockSignals(True)
-        self.type_combo.clear()
-        self.type_combo.addItem("Tous", "")
+    def _on_type_clicked(self):
+        key = self.sender().property("type_key")
+        for k, btn in self._type_btns.items():
+            btn.setChecked(btn.property("type_key") == key)
+        self._refresh_styles()
+        self.filters_changed.emit()
 
-        if category in ("", None):
-            for key, label in TYPE_LABELS.items():
-                self.type_combo.addItem(label, key)
-        elif category == "CONTRAT":
-            self.type_combo.addItem("Contrat expire", TypeAlerte.CONTRAT_EXPIRE)
-            self.type_combo.addItem("Expire < 7j", TypeAlerte.CONTRAT_EXPIRE_7J)
-            self.type_combo.addItem("Expire < 30j", TypeAlerte.CONTRAT_EXPIRE_30J)
-            self.type_combo.addItem("Sans contrat", TypeAlerte.PERSONNEL_SANS_CONTRAT)
-        elif category == "PERSONNEL":
-            self.type_combo.addItem("Sans competences", TypeAlerte.PERSONNEL_SANS_COMPETENCES)
-            self.type_combo.addItem("Nouveau arrivant", TypeAlerte.PERSONNEL_NOUVEAU_SANS_AFFECTATION)
+    def _refresh_styles(self):
+        for btn in self._urgency_btns.values():
+            accent = btn.property("accent") or "#0f172a"
+            btn.setStyleSheet(_pill_style(btn.isChecked(), accent))
+        for btn in self._type_btns.values():
+            btn.setStyleSheet(_pill_style(btn.isChecked()))
 
-        self.type_combo.blockSignals(False)
+    def update_urgency_counts(self, counts: dict):
+        labels = {None: "Tous", "CRITIQUE": "Critiques", "AVERTISSEMENT": "Avertissements", "INFO": "Informations"}
+        total = sum(counts.values())
+        for key_str, btn in self._urgency_btns.items():
+            real_key = btn.property("urgency_key")
+            count = total if real_key is None else counts.get(real_key, 0)
+            label = labels.get(real_key, "")
+            btn.setText(f"{label} ({count})")
+        self._refresh_styles()
 
     def get_filters(self) -> dict:
+        urgency = None
+        for btn in self._urgency_btns.values():
+            if btn.isChecked():
+                urgency = btn.property("urgency_key")
+                break
+        type_filter = ""
+        for btn in self._type_btns.values():
+            if btn.isChecked():
+                type_filter = btn.property("type_key") or ""
+                break
         return {
             "search": self.search_input.text().lower().strip(),
-            "category": self.category_combo.currentData() or "",
-            "type": self.type_combo.currentData() or "",
+            "urgency": urgency,
+            "type": type_filter,
             "show_handled": self.show_handled_cb.isChecked(),
         }
 
@@ -555,7 +483,6 @@ class GestionAlertesRHDialog(QDialog):
 
         self._all_alerts: List[Alert] = []
         self._handled_ids: Set[str] = set()
-        self._active_urgency_filter: Optional[str] = None
         self._can_view_contrats = True
         self._can_view_personnel = True
 
@@ -610,20 +537,7 @@ class GestionAlertesRHDialog(QDialog):
 
         main_layout.addLayout(header)
 
-        # KPI Cards
-        kpi_row = QHBoxLayout()
-        kpi_row.setSpacing(16)
-
-        self._kpi_cards: Dict[str, KPICard] = {}
-        for urgency_key in ["CRITIQUE", "AVERTISSEMENT", "INFO"]:
-            card = KPICard(urgency_key)
-            card.clicked.connect(self._on_kpi_clicked)
-            self._kpi_cards[urgency_key] = card
-            kpi_row.addWidget(card)
-
-        main_layout.addLayout(kpi_row)
-
-        # Filter bar
+        # Filter bar (urgence + types + recherche)
         self._filter_bar = FilterBar()
         self._filter_bar.filters_changed.connect(self._apply_filters)
         main_layout.addWidget(self._filter_bar)
@@ -739,63 +653,37 @@ class GestionAlertesRHDialog(QDialog):
         for alert in self._all_alerts:
             if alert.urgence in counts:
                 counts[alert.urgence] += 1
-        for key, card in self._kpi_cards.items():
-            card.set_count(counts.get(key, 0))
-
-    def _on_kpi_clicked(self, urgency: str):
-        if self._active_urgency_filter == urgency:
-            self._active_urgency_filter = None
-        else:
-            self._active_urgency_filter = urgency
-
-        for key, card in self._kpi_cards.items():
-            card.set_selected(key == self._active_urgency_filter)
-
-        self._apply_filters()
+        self._filter_bar.update_urgency_counts(counts)
 
     # ------- Filtrage -------
 
     def _apply_filters(self):
         filters = self._filter_bar.get_filters()
         search = filters["search"]
-        category = filters["category"]
+        urgency_filter = filters["urgency"]
         type_filter = filters["type"]
         show_handled = filters["show_handled"]
 
         grouped: Dict[str, List[Alert]] = {"CRITIQUE": [], "AVERTISSEMENT": [], "INFO": []}
 
         for alert in self._all_alerts:
-            # Filtre urgence (KPI click)
-            if self._active_urgency_filter and alert.urgence != self._active_urgency_filter:
+            if urgency_filter and alert.urgence != urgency_filter:
                 continue
-
-            # Filtre masques
             alert_key = f"{alert.categorie}_{alert.type_alerte}_{alert.id}"
             if alert_key in self._handled_ids and not show_handled:
                 continue
-
-            # Filtre categorie
-            if category and alert.categorie != category:
-                continue
-
-            # Filtre type
             if type_filter and alert.type_alerte != type_filter:
                 continue
-
-            # Filtre recherche
             if search:
                 searchable = f"{alert.personnel_nom} {alert.personnel_prenom}".lower()
                 if search not in searchable:
                     continue
-
             if alert.urgence in grouped:
                 grouped[alert.urgence].append(alert)
 
         total_visible = sum(len(v) for v in grouped.values())
-
         for urgency_key, group_widget in self._urgency_groups.items():
             group_widget.set_alerts(grouped.get(urgency_key, []), self._handled_ids)
-
         self._empty_placeholder.setVisible(total_visible == 0)
 
     # ------- Actions -------
@@ -928,18 +816,16 @@ class GestionAlertesRHDialog(QDialog):
         """Retourne la liste des alertes actuellement visibles apres filtrage."""
         filters = self._filter_bar.get_filters()
         search = filters["search"]
-        category = filters["category"]
+        urgency_filter = filters["urgency"]
         type_filter = filters["type"]
         show_handled = filters["show_handled"]
 
         result = []
         for alert in self._all_alerts:
-            if self._active_urgency_filter and alert.urgence != self._active_urgency_filter:
+            if urgency_filter and alert.urgence != urgency_filter:
                 continue
             alert_key = f"{alert.categorie}_{alert.type_alerte}_{alert.id}"
             if alert_key in self._handled_ids and not show_handled:
-                continue
-            if category and alert.categorie != category:
                 continue
             if type_filter and alert.type_alerte != type_filter:
                 continue

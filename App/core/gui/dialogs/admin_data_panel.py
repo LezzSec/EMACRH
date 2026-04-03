@@ -67,18 +67,25 @@ class _ConfigTab(QWidget):
     Widget de base pour un onglet de configuration.
 
     Fournit :
+      - Bandeau de description (DESCRIPTION + USAGE)
       - QTableWidget avec en-têtes configurables
       - Barre de boutons : Ajouter / Modifier / Supprimer / Actualiser
       - Chargement asynchrone via DbWorker
 
     À surcharger :
-      - COLUMNS  : liste de (header_label, row_key) dans l'ordre d'affichage
+      - COLUMNS      : liste de (header_label, row_key) dans l'ordre d'affichage
+      - DESCRIPTION  : courte description de ce que contient cet onglet
+      - USAGE        : où ces données sont utilisées dans l'application
       - fetch_data()    → list[dict]
       - show_form(data) → ouvre add (data=None) ou edit form
     """
 
     # Sous-classes : liste de (header, key_dans_dict)
     COLUMNS: list = []
+
+    # Description affichée en bandeau dans l'onglet
+    DESCRIPTION: str = ""
+    USAGE: str = ""
 
     # Clés dont la valeur est un booléen → affiché "Oui"/"Non"
     BOOL_KEYS: set = set()
@@ -97,6 +104,27 @@ class _ConfigTab(QWidget):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 16, 20, 12)
         layout.setSpacing(12)
+
+        # ── Bandeau description ───────────────────────────────────
+        if self.DESCRIPTION or self.USAGE:
+            info_widget = QWidget()
+            info_widget.setStyleSheet(
+                "background: #f0f4ff; border: 1px solid #c7d2fe; border-radius: 6px;"
+            )
+            info_lay = QVBoxLayout(info_widget)
+            info_lay.setContentsMargins(12, 10, 12, 10)
+            info_lay.setSpacing(3)
+            if self.DESCRIPTION:
+                lbl_desc = QLabel(self.DESCRIPTION)
+                lbl_desc.setStyleSheet("color: #1e3a8a; font-size: 12px; font-weight: 600; background: transparent; border: none;")
+                lbl_desc.setWordWrap(True)
+                info_lay.addWidget(lbl_desc)
+            if self.USAGE:
+                lbl_usage = QLabel(f"Utilisé dans : {self.USAGE}")
+                lbl_usage.setStyleSheet("color: #4b5563; font-size: 11px; background: transparent; border: none;")
+                lbl_usage.setWordWrap(True)
+                info_lay.addWidget(lbl_usage)
+            layout.addWidget(info_widget)
 
         # ── Barre de boutons ──────────────────────────────────────
         btn_bar = QHBoxLayout()
@@ -200,10 +228,22 @@ class _ConfigTab(QWidget):
     def _on_data_loaded(self, records: list):
         self._records = records or []
         self._populate_table(self._records)
+        n = len(self._records)
         self.lbl_status.setText(
-            f"{len(self._records)} enregistrement(s)  —  Cliquez sur une ligne pour activer Modifier / Supprimer"
+            f"{n} enregistrement{'s' if n > 1 else ''}  —  Cliquez sur une ligne pour activer Modifier / Supprimer"
         )
         self.btn_refresh.setEnabled(True)
+        # Notifier le dialog parent pour mettre à jour le badge sidebar
+        self._emit_count(n)
+
+    def _emit_count(self, n: int):
+        """Remonte le comptage au dialog parent pour mise à jour du badge sidebar."""
+        parent = self.parent()
+        while parent is not None:
+            if hasattr(parent, '_update_nav_badge'):
+                parent._update_nav_badge(self, n)
+                break
+            parent = parent.parent() if hasattr(parent, 'parent') else None
 
     def _on_load_error(self, error_msg: str):
         logger.error(f"Erreur chargement {self.__class__.__name__}: {error_msg}")
@@ -390,6 +430,8 @@ class _AtelierForm(_SimpleFormDialog):
 
 class AteliersTab(_ConfigTab):
     COLUMNS = [("ID", "id"), ("Nom", "nom")]
+    DESCRIPTION = "Ateliers de production — unités organisationnelles regroupant des postes de travail."
+    USAGE = "Création/suppression de postes, grille de polyvalence, filtres de planning"
 
     def fetch_data(self):
         from core.services.config_service import AtelierService
@@ -450,6 +492,8 @@ class _ServiceRHForm(_SimpleFormDialog):
 
 class ServicesTab(_ConfigTab):
     COLUMNS = [("ID", "id"), ("Nom", "nom_service"), ("Description", "description")]
+    DESCRIPTION = "Services RH — divisions fonctionnelles du personnel (ex : Maintenance, Logistique…)."
+    USAGE = "Fiche personnel, filtres RH, statistiques par service"
 
     def fetch_data(self):
         from core.services.config_service import ServicesRHService
@@ -561,6 +605,8 @@ class TypesAbsenceTab(_ConfigTab):
         ("Décompte solde", "decompte_solde"), ("Couleur", "couleur"), ("Actif", "actif")
     ]
     BOOL_KEYS = {'decompte_solde', 'actif'}
+    DESCRIPTION = "Types d'absence — catégories disponibles lors de la déclaration d'une absence (CP, RTT, maladie…)."
+    USAGE = "Module Planning, déclarations d'absence, calcul des soldes de congés"
 
     def fetch_data(self):
         from core.services.config_service import TypeAbsenceService
@@ -639,6 +685,8 @@ class JoursFeriesTab(_ConfigTab):
     ]
     BOOL_KEYS = {'fixe'}
     DATE_KEYS = {'date_ferie'}
+    DESCRIPTION = "Jours fériés — dates exclues automatiquement du calcul des jours ouvrés."
+    USAGE = "Calcul des évaluations, planning, décompte des absences"
 
     def fetch_data(self):
         from core.services.config_service import JoursFeriesService
@@ -730,8 +778,9 @@ class CompetencesTab(_ConfigTab):
         ("ID", "id"), ("Code", "code"), ("Libellé", "libelle"),
         ("Catégorie", "categorie"), ("Validité (mois)", "duree_validite_mois"), ("Actif", "actif")
     ]
-
     BOOL_KEYS = {'actif'}
+    DESCRIPTION = "Catalogue de compétences — référentiel des savoir-faire pouvant être attribués au personnel."
+    USAGE = "Fiches de formation, suivi des qualifications, exports RH"
 
     def fetch_data(self):
         from core.services.config_service import CompetencesCatalogueService
@@ -836,6 +885,8 @@ class CategoriesDocsTab(_ConfigTab):
         ("Expiration requise", "exige_date_expiration"), ("Ordre", "ordre_affichage")
     ]
     BOOL_KEYS = {'exige_date_expiration'}
+    DESCRIPTION = "Catégories de documents — classement des fichiers attachés au personnel (contrats, diplômes, visites médicales…)."
+    USAGE = "Module Documents RH, alertes d'expiration, filtres documentaires"
 
     def fetch_data(self):
         from core.services.config_service import CategoriesDocsService
@@ -894,6 +945,8 @@ class _MotifSortieForm(_SimpleFormDialog):
 class MotifsortieTab(_ConfigTab):
     COLUMNS = [("ID", "id"), ("Libellé", "libelle"), ("Actif", "actif")]
     BOOL_KEYS = {'actif'}
+    DESCRIPTION = "Motifs de sortie — raisons sélectionnables lors du passage d'une personne en statut INACTIF (démission, fin de contrat, retraite…)."
+    USAGE = "Désactivation dans la fiche personnel"
 
     def fetch_data(self):
         from core.services.config_service import RefMotifSortieService
@@ -966,6 +1019,8 @@ class _TrancheAgeForm(_SimpleFormDialog):
 
 class TranchesAgeTab(_ConfigTab):
     COLUMNS = [("ID", "id"), ("Libellé", "libelle"), ("Âge min", "age_min"), ("Âge max", "age_max")]
+    DESCRIPTION = "Tranches d'âge — intervalles utilisés pour segmenter les statistiques RH par âge."
+    USAGE = "Rapports et statistiques RH, tableaux de bord"
 
     def _format_cell(self, key, val, record):
         if key == 'age_max' and (val is None or val == 0):
@@ -1030,6 +1085,8 @@ class _RoleForm(_SimpleFormDialog):
 
 class RolesTab(_ConfigTab):
     COLUMNS = [("ID", "id"), ("Nom", "nom"), ("Description", "description")]
+    DESCRIPTION = "Rôles utilisateurs — définissent les droits d'accès dans l'application. Chaque utilisateur est assigné à un rôle."
+    USAGE = "Gestion des utilisateurs, système de permissions (features), contrôle d'accès"
 
     def fetch_data(self):
         from core.services.config_service import RolesConfigService
@@ -1226,6 +1283,8 @@ class SoldeCongesTab(_ConfigTab):
         ("CP acquis", "cp_acquis"), ("CP N-1", "cp_n_1"), ("CP pris", "cp_pris"),
         ("RTT acquis", "rtt_acquis"), ("RTT pris", "rtt_pris"),
     ]
+    DESCRIPTION = "Soldes de congés — compteurs annuels de congés payés et RTT par personne."
+    USAGE = "Module Absences, validation des demandes de congés, alertes dépassement"
 
     def _format_cell(self, key, val, record):
         if key == 'personnel_label':
@@ -1345,6 +1404,8 @@ class DocumentEventRulesTab(_ConfigTab):
         ("Mode", "execution_mode"), ("Priorité", "priority"), ("Actif", "actif"),
     ]
     BOOL_KEYS = {'actif'}
+    DESCRIPTION = "Règles événements/documents — définissent quel template est proposé automatiquement lors d'un événement (création personnel, changement de niveau…)."
+    USAGE = "Génération automatique de documents, module Templates"
 
     def fetch_data(self):
         from core.services.config_service import DocumentEventRulesService
@@ -1412,6 +1473,8 @@ class DemandeAbsenceTab(_ConfigTab):
         ("Statut", "statut"), ("Date création", "date_creation"),
     ]
     DATE_KEYS = {'date_debut', 'date_fin', 'date_creation'}
+    DESCRIPTION = "Demandes d'absence — toutes les demandes soumises par le personnel, en attente de validation ou traitées."
+    USAGE = "Validation RH, planning, soldes de congés"
 
     def _build_ui(self):
         super()._build_ui()
@@ -1523,6 +1586,8 @@ class PolyvalenceAdminTab(_ConfigTab):
         ("Prochaine éval", "prochaine_evaluation"),
     ]
     DATE_KEYS = {'date_evaluation', 'prochaine_evaluation'}
+    DESCRIPTION = "Polyvalence — correction administrative des entrées de niveaux (200 plus récentes). Utiliser l'interface Évaluations en priorité."
+    USAGE = "Grille de polyvalence, tableau de bord évaluations, planning"
 
     def _build_ui(self):
         super()._build_ui()
@@ -1625,7 +1690,7 @@ class AdminDataPanelDialog(QDialog):
             QTimer.singleShot(0, self.reject)
             return
 
-        self.setWindowTitle("Configuration — Données de référence")
+        self.setWindowTitle("Administration — Paramètres de l'application")
         self.setMinimumSize(1100, 680)
         self.setModal(True)
 
@@ -1643,7 +1708,7 @@ class AdminDataPanelDialog(QDialog):
         hdr_lay.setContentsMargins(24, 14, 20, 14)
         hdr_lay.setSpacing(10)
 
-        ttl = QLabel("Configuration — Données de référence")
+        ttl = QLabel("Administration — Paramètres de l'application")
         ttl.setStyleSheet("color: white; font-size: 15px; font-weight: bold;")
         hdr_lay.addWidget(ttl)
 
@@ -1735,6 +1800,9 @@ class AdminDataPanelDialog(QDialog):
             ]),
         ]
 
+        # widget_key → nav_row (pour les badges)
+        self._widget_to_nav_row: dict = {}
+
         first_nav_row = None
         for group_label, items in _GROUPS:
             # En-tête de groupe (non sélectionnable)
@@ -1774,6 +1842,20 @@ class AdminDataPanelDialog(QDialog):
         # Sélection du premier élément
         if first_nav_row is not None:
             self._nav.setCurrentRow(first_nav_row)
+
+    def _update_nav_badge(self, widget, count: int):
+        """Met à jour le badge de comptage dans la sidebar pour un onglet donné."""
+        for nav_row, w in self._nav_widgets.items():
+            if w is widget:
+                item = self._nav.item(nav_row)
+                if item is None:
+                    return
+                text = item.text().strip()
+                # Retirer un éventuel badge précédent (format "Label  [N]")
+                if '  [' in text:
+                    text = text[:text.index('  [')]
+                item.setText(f"  {text.strip()}  [{count}]")
+                break
 
     def _on_nav_changed(self, nav_row: int):
         if nav_row not in self._factories:

@@ -503,12 +503,14 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_all_as_dicts(cls) -> List[Dict[str, Any]]:
         """
-        Retourne tout le personnel sous forme de dicts (id, nom, prenom, matricule, statut).
+        Retourne tout le personnel sous forme de dicts (id, nom, prenom, matricule, statut, nom_service).
         Utilisé pour les listes de sélection dans les interfaces.
         """
         from core.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
-            "SELECT id, nom, prenom, matricule, UPPER(statut) AS statut FROM personnel ORDER BY nom, prenom",
+            "SELECT p.id, p.nom, p.prenom, p.matricule, UPPER(p.statut) AS statut, "
+            "s.nom_service FROM personnel p LEFT JOIN services s ON p.service_id = s.id "
+            "ORDER BY p.nom, p.prenom",
             dictionary=True,
         )
 

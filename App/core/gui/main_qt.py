@@ -195,15 +195,21 @@ class MainWindow(QMainWindow):
         left.addWidget(self.next_card)
 
         # Carte Alertes RH (uniquement pour utilisateurs RH)
-        self.alertes_rh_card = EmacStatusCard("Alertes Contrats", variant='warning', subtitle="Expirent dans 30j")
+        self.alertes_rh_card = EmacStatusCard("Alertes Documents", variant='warning', subtitle="Expirés / Expirent dans 30j")
         self.alertes_rh_filter = QComboBox()
         self.alertes_rh_filter.addItem("Tous les types", "")
-        self.alertes_rh_filter.addItem("CDI", "CDI")
-        self.alertes_rh_filter.addItem("CDD", "CDD")
-        self.alertes_rh_filter.addItem("Intérim", "Intérim")
-        self.alertes_rh_filter.addItem("Alternance", "Alternance")
+        self.alertes_rh_filter.addItem("Contrats", "CONTRAT")
+        self.alertes_rh_filter.addItem("Sans contrat", "SANS_CONTRAT")
+        self.alertes_rh_filter.addItem("Mutuelles", "MUTUELLE")
+        self.alertes_rh_filter.addItem("Sans mutuelle", "SANS_MUTUELLE")
+        self.alertes_rh_filter.addItem("Visites médicales", "VISITE_MEDICALE")
+        self.alertes_rh_filter.addItem("Sans visite médicale", "SANS_VISITE")
+        self.alertes_rh_filter.addItem("Entretiens", "ENTRETIEN")
+        self.alertes_rh_filter.addItem("Sans entretien", "SANS_ENTRETIEN")
+        self.alertes_rh_filter.addItem("RQTH", "RQTH")
         self.alertes_rh_filter.currentIndexChanged.connect(self.load_alertes_rh_async)
         self.alertes_rh_scroll, self.alertes_rh_list = self.create_scrollable_list()
+        self.alertes_rh_list.itemDoubleClicked.connect(self._on_alerte_rh_double_click)
         self.alertes_rh_card.body.addWidget(self.alertes_rh_filter)
         self.alertes_rh_card.body.addWidget(self.alertes_rh_scroll)
 
@@ -352,19 +358,31 @@ class MainWindow(QMainWindow):
 
         # Actions rapides : on ajoute les boutons conditionnels
         # (on évite de les créer au démarrage)
+        insert_idx = 1  # 0 = Liste du Personnel, dernier = Quitter
+
+        if perms.get("contrats_lecture"):
+            r_rh = QHBoxLayout()
+            b_rh = EmacButton("Gestion RH", 'ghost')
+            b_rh.clicked.connect(self.show_contract_management)
+            r_rh.addWidget(b_rh)
+            self.rows.insertLayout(insert_idx, r_rh)
+            insert_idx += 1
+
         if perms.get("grilles_lecture"):
             r2 = QHBoxLayout()
             b2 = EmacButton("Liste et Grilles", 'ghost')
             b2.clicked.connect(self.show_listes_grilles_dialog)
             r2.addWidget(b2)
-            self.rows.insertLayout(1, r2)
+            self.rows.insertLayout(insert_idx, r2)
+            insert_idx += 1
 
         if perms.get("evaluations_lecture"):
             r3 = QHBoxLayout()
             b3 = EmacButton("Gestion des Évaluations", 'ghost')
             b3.clicked.connect(self.show_gestion_evaluations)
             r3.addWidget(b3)
-            self.rows.insertLayout(2, r3)
+            self.rows.insertLayout(insert_idx, r3)
+            insert_idx += 1
 
         # Cartes Évaluations : afficher uniquement pour les utilisateurs Production
         has_production_access = perms.get("evaluations_lecture")
@@ -392,6 +410,7 @@ class MainWindow(QMainWindow):
         # (uniquement pour les utilisateurs RH, 1.5s de délai)
         if has_rh_access:
             QTimer.singleShot(1500, self._load_notification_counts)
+
 
     # ---------------------------
     # Document Trigger Service
@@ -543,8 +562,6 @@ class MainWindow(QMainWindow):
             add_btn("Ajouter du personnel", self.show_manage_operator)
         if perms.get("postes_ecriture"):
             add_btn("Création/Suppression de poste", self.show_poste_form)
-        if perms.get("contrats_ecriture") or perms.get("contrats_lecture") or perms.get("documentsrh_lecture"):
-            add_btn("Gestion RH", self.show_contract_management)
         if perms.get("contrats_ecriture") or perms.get("documentsrh_ecriture"):
             # Bouton "Alertes RH" avec badge de notification
             row_alertes = QWidget()
@@ -679,13 +696,12 @@ class MainWindow(QMainWindow):
             dialog = GestionEvaluationDialog()
             dialog.exec_()
         except Exception as e:
-            from PyQt5.QtWidgets import QMessageBox
-            import traceback
-            error_msg = f"Erreur lors de l'ouverture de la gestion des évaluations :\n\n{str(e)}\n\n"
-            error_msg += f"Type: {type(e).__name__}\n\n"
-            error_msg += "Stack trace:\n" + traceback.format_exc()
-            QMessageBox.critical(self, "Erreur - Gestion Évaluations", error_msg)
-            logger.error(f"show_gestion_evaluations: {e}", exc_info=True)
+            logger.exception(f"show_gestion_evaluations: {e}")
+            if show_error_message:
+                show_error_message(self, "Erreur", "Impossible d'ouvrir la gestion des évaluations.", e)
+            else:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.critical(self, "Erreur", "Impossible d'ouvrir la gestion des évaluations.")
 
     def ouvrir_gestion_evaluations(self, filtre_statut):
         try:
@@ -860,37 +876,63 @@ class MainWindow(QMainWindow):
         w.signals.error.connect(self._on_bg_error)
         DbThreadPool.start(w)
 
-    def _fetch_alertes_rh(self, type_contrat_filter, progress_callback=None):
-        from core.services.contrat_service_crud import ContratServiceCRUD
+    def _fetch_alertes_rh(self, type_doc_filter, progress_callback=None):
+        from core.services.alert_service import AlertService
         try:
-            contrats = ContratServiceCRUD.get_expiring_soon(
+            alertes = AlertService.get_all_document_alerts(
+                type_doc=type_doc_filter or None,
                 jours=30,
-                type_contrat=type_contrat_filter or None,
-                limit=10,
             )
-            return {"contrats": contrats}
+            return {"alertes": alertes}
         except Exception as e:
             logger.error(f"Erreur dans _fetch_alertes_rh: {e}", exc_info=True)
             raise
 
     def _apply_alertes_rh_to_ui(self, payload):
+        from PyQt5.QtWidgets import QListWidgetItem
+        from PyQt5.QtCore import Qt
         try:
-            contrats = payload.get("contrats", [])
+            alertes = payload.get("alertes", [])
 
             self.alertes_rh_list.clear()
 
-            for c in contrats:
-                nom = c.get('nom', '')
-                prenom = c.get('prenom', '')
-                type_contrat = c.get('type_contrat', '')
-                date_fin = c.get('date_fin')
-                date_txt = format_date(date_fin) if hasattr(date_fin, 'strftime') else str(date_fin)
-                self.alertes_rh_list.addItem(f"{nom} {prenom} · {type_contrat}  —  Expire: {date_txt}")
+            _CAT_LABELS = {
+                "CONTRAT": "Contrat",
+                "PERSONNEL": "Sans contrat",
+                "VISITE_MEDICALE": "Visite médicale",
+                "RQTH": "RQTH",
+                "ENTRETIEN": "Entretien",
+                "MUTUELLE": "Mutuelle",
+                "SANS_MUTUELLE": "Sans mutuelle",
+                "SANS_VISITE": "Sans visite médicale",
+                "SANS_ENTRETIEN": "Sans entretien",
+            }
+            for a in alertes:
+                date_txt = ""
+                if a.date_echeance:
+                    date_txt = format_date(a.date_echeance) if hasattr(a.date_echeance, 'strftime') else str(a.date_echeance)
+                    date_txt = f"  —  {date_txt}"
+                cat = _CAT_LABELS.get(a.categorie, a.categorie)
+                label = f"{a.personnel_prenom} {a.personnel_nom}  [{cat}]  {a.description}{date_txt}"
+                item = QListWidgetItem(label)
+                item.setData(Qt.UserRole, a.personnel_id)
+                self.alertes_rh_list.addItem(item)
 
-            if not contrats:
-                self.alertes_rh_list.addItem("✅ Aucun contrat à renouveler")
+            if not alertes:
+                self.alertes_rh_list.addItem("✅ Aucun document à renouveler")
         except Exception as e:
             logger.error(f"Erreur dans _apply_alertes_rh_to_ui: {e}", exc_info=True)
+
+    def _on_alerte_rh_double_click(self, item):
+        from PyQt5.QtCore import Qt
+        personnel_id = item.data(Qt.UserRole)
+        if not personnel_id:
+            return
+        from core.gui.dialogs.gestion_rh import GestionRHDialog
+        dialog = GestionRHDialog(self, preselect_personnel_id=personnel_id)
+        dialog.data_changed.connect(self.load_evaluations_async)
+        dialog.data_changed.connect(self.load_alertes_rh_async)
+        dialog.exec_()
 
     def _on_bg_error(self, tb):
         # Ne bloque pas l'app au démarrage

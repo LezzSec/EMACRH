@@ -238,6 +238,7 @@ def fetch_historique_paginated(
     table_names: Optional[List[str]] = None,
     offset: int = 0,
     limit: int = 100,
+    sort_order: str = "DESC",
 ) -> List[Dict]:
     """
     Récupère les entrées d'historique avec pagination et filtres étendus.
@@ -251,11 +252,13 @@ def fetch_historique_paginated(
         table_names: Liste de noms de tables à inclure (None = toutes)
         offset: Nombre d'entrées à sauter (pagination)
         limit: Nombre max d'entrées à retourner
+        sort_order: "DESC" (plus récent en premier) ou "ASC" (plus ancien en premier)
 
     Returns:
         Liste de dicts avec id, date_time, action, table_name, record_id,
         operateur_id, poste_id, description, utilisateur
     """
+    order = "ASC" if sort_order == "ASC" else "DESC"
     where_clause, params = _build_historique_where(
         date_from, date_to, search_text, action_filter,
         utilisateur_filter, table_names,
@@ -269,7 +272,7 @@ def fetch_historique_paginated(
         "LEFT JOIN personnel p ON h.personnel_id = p.id "
         "LEFT JOIN postes pos ON h.poste_id = pos.id "
         f"WHERE {where_clause} "
-        "ORDER BY h.date_time DESC, h.id DESC "
+        f"ORDER BY h.date_time {order}, h.id {order} "
         "LIMIT %s OFFSET %s"
     )
     params_tuple = tuple(params) + (limit, offset)

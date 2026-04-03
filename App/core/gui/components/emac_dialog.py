@@ -30,8 +30,10 @@ Usage:
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget,
-    QScrollArea
+    QScrollArea, QShortcut
 )
+from PyQt5.QtGui import QKeySequence
+from PyQt5.QtCore import Qt
 from core.gui.components.ui_theme import EmacButton
 from core.gui.components.emac_ui_kit import add_custom_title_bar
 from core.utils.logging_config import get_logger
@@ -107,6 +109,9 @@ class EmacDialog(QDialog):
         if add_buttons:
             self._setup_buttons()
 
+        # Raccourcis clavier communs
+        QShortcut(QKeySequence(Qt.Key_Escape), self).activated.connect(self.close)
+
         # Appeler les méthodes de sous-classe
         self.init_ui()
         self.load_data()
@@ -144,9 +149,11 @@ class EmacDialog(QDialog):
 
         self.save_button = EmacButton("Enregistrer", 'primary')
         self.save_button.clicked.connect(self.on_save)
+        self.save_button.setToolTip("Enregistrer (Ctrl+Entrée)")
 
         self.cancel_button = EmacButton("Annuler", 'ghost')
         self.cancel_button.clicked.connect(self.reject)
+        self.cancel_button.setToolTip("Annuler (Échap)")
 
         button_layout.addWidget(self.save_button)
         button_layout.addWidget(self.cancel_button)
@@ -223,6 +230,8 @@ class EmacFormDialog(EmacDialog):
             add_buttons=True,
             parent=parent
         )
+        # Ctrl+Entrée pour sauvegarder
+        QShortcut(QKeySequence("Ctrl+Return"), self).activated.connect(self.on_save)
 
     def validate(self) -> tuple:
         """
