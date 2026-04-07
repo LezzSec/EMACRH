@@ -32,15 +32,15 @@ if __name__ == "__main__":
         app = QApplication(sys.argv)
 
         # Charger et appliquer le thème
-        from core.gui.components.ui_theme import EmacTheme
+        from gui.components.ui_theme import EmacTheme
         EmacTheme.apply(app)
 
         # Login
-        from core.gui.dialogs.login_dialog import LoginDialog
+        from gui.screens.admin.login_dialog import LoginDialog
         login_dialog = LoginDialog()
 
         if login_dialog.exec_() == LoginDialog.Accepted:
-            from core.gui.main_qt import MainWindow
+            from gui.main_qt import MainWindow
             win = MainWindow()
             win.show()
             sys.exit(app.exec_())

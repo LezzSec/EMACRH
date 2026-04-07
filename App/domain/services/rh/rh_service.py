@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 # Services CRUD
 from domain.services.personnel.personnel_service import PersonnelService
-from core.services.contrat_service_crud import ContratServiceCRUD
+from domain.services.rh.contrat_service_crud import ContratServiceCRUD
 from domain.services.formation.formation_service_crud import FormationServiceCRUD
 from application.permission_manager import require
 from core.services import competences_service

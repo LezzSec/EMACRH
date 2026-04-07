@@ -15,7 +15,7 @@ for /d /r . %%d in (__pycache__) do @if exist "%%d" rd /s /q "%%d"
 echo [3/3] Lancement de l'application...
 echo.
 
-python -B -m core.gui.main_qt
+python -B -m gui.main_qt
 
 echo.
 echo Application fermee.

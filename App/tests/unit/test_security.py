@@ -521,7 +521,7 @@ class TestSessionTimeout:
 
     def test_session_timeout_manager_creation(self):
         """SessionTimeoutManager doit être créé correctement."""
-        from core.gui.workers.session_timeout import SessionTimeoutManager, SESSION_TIMEOUT_MINUTES
+        from gui.workers.session_timeout import SessionTimeoutManager, SESSION_TIMEOUT_MINUTES
 
         # Utiliser None comme parent (QObject(None) est valide, pas d'installEventFilter)
         manager = SessionTimeoutManager(None, timeout_minutes=15)
@@ -532,7 +532,7 @@ class TestSessionTimeout:
 
     def test_session_timeout_remaining_seconds(self):
         """get_remaining_seconds doit retourner le temps correct."""
-        from core.gui.workers.session_timeout import SessionTimeoutManager
+        from gui.workers.session_timeout import SessionTimeoutManager
         from datetime import datetime, timedelta
 
         manager = SessionTimeoutManager(None, timeout_minutes=10)
@@ -546,7 +546,7 @@ class TestSessionTimeout:
 
     def test_session_timeout_reset(self):
         """reset() doit réinitialiser le timer."""
-        from core.gui.workers.session_timeout import SessionTimeoutManager
+        from gui.workers.session_timeout import SessionTimeoutManager
         from datetime import datetime, timedelta
 
         manager = SessionTimeoutManager(None, timeout_minutes=10)
@@ -565,7 +565,7 @@ class TestSessionTimeout:
 
     def test_session_timeout_config(self):
         """La configuration du timeout doit être accessible."""
-        from core.gui.workers.session_timeout import get_session_timeout_config
+        from gui.workers.session_timeout import get_session_timeout_config
 
         config = get_session_timeout_config()
 

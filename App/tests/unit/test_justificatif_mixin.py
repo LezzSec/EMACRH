@@ -230,7 +230,7 @@ _services_to_patch = {
         get_all_competences=MagicMock(return_value=[]),
         update_assignment=MagicMock(return_value=(True, '')),
     ),
-    'core.services.contrat_service_crud': MagicMock(
+    'domain.services.rh.contrat_service_crud': MagicMock(
         ContratServiceCRUD=MagicMock(
             get_contract_types=MagicMock(return_value=['CDI', 'CDD'])
         )
@@ -243,9 +243,9 @@ _services_to_patch = {
         can=MagicMock(return_value=True),
         require=MagicMock(return_value=None),
     ),
-    'core.gui.components.ui_theme': MagicMock(),
-    'core.gui.components.emac_ui_kit': MagicMock(),
-    'core.gui.components.emac_dialog': MagicMock(),
+    'gui.components.ui_theme': MagicMock(),
+    'gui.components.emac_ui_kit': MagicMock(),
+    'gui.components.emac_dialog': MagicMock(),
 }
 
 # Appliquer tous les patches avant import
@@ -271,18 +271,18 @@ class _EmacFormDialogStub:
 
 
 # Remplacer EmacFormDialog dans sys.modules par notre stub
-_emac_dialog_mod = sys.modules['core.gui.components.emac_dialog']
+_emac_dialog_mod = sys.modules['gui.components.emac_dialog']
 _emac_dialog_mod.EmacFormDialog = _EmacFormDialogStub
 
 # Stub EmacButton
-_ui_theme_mod = sys.modules['core.gui.components.ui_theme']
+_ui_theme_mod = sys.modules['gui.components.ui_theme']
 _ui_theme_mod.EmacButton = MagicMock(return_value=MagicMock(
     clicked=MagicMock(connect=MagicMock()),
     setFixedWidth=MagicMock(),
 ))
 
 # Import du module cible APRÈS tous les patches
-from core.gui.dialogs.gestion_rh_dialogs import (  # noqa: E402
+from gui.screens.rh.gestion_rh_dialogs import (  # noqa: E402
     JustificatifMixin,
     EditContratDialog,
     EditDeclarationDialog,
@@ -680,8 +680,8 @@ class TestSaveToDbJustificatif:
     """Vérifie que le justificatif est uploadé après une création réussie."""
 
     # Les fonctions sont importées dans le namespace du module dialogs :
-    # il faut patcher core.gui.gestion_rh_dialogs.<fn>, pas la source.
-    _DIALOGS_MODULE = 'core.gui.dialogs.gestion_rh_dialogs'
+    # il faut patcher gui.screens.rh.gestion_rh_dialogs.<fn>, pas la source.
+    _DIALOGS_MODULE = 'gui.screens.rh.gestion_rh_dialogs'
 
     def _test_creation_upload(self, dialog_cls, fn_name, success_retval):
         """Création réussie → _sauvegarder_justificatif appelé."""
