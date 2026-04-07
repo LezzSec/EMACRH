@@ -16,7 +16,7 @@ from domain.repositories.personnel_repo import PersonnelRepository
 from domain.repositories.polyvalence_repo import PolyvalenceRepository
 from domain.services.rh.contrat_service_crud import ContratServiceCRUD
 from domain.services.formation.formation_service_crud import FormationServiceCRUD
-from core.services import medical_service
+from domain.services.rh import medical_service
 from gui.workers.db_worker import DbWorker, DbThreadPool
 from infrastructure.logging.optimized_db_logger import log_hist
 from gui.screens.personnel.historique_personnel import HistoriquePersonnelTab

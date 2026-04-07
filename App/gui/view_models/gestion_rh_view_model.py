@@ -38,7 +38,7 @@ from domain.services.rh.rh_service import (
     DomaineRH,
     get_domaines_rh,
 )
-from core.services import competences_service as _competences_service
+from domain.services.rh import competences_service as _competences_service
 from domain.services.rh.medical_service import delete_visite, delete_accident
 from domain.services.rh.vie_salarie_service import delete_sanction, delete_entretien
 from domain.services.rh.mutuelle_service import delete_mutuelle

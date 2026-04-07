@@ -31,7 +31,7 @@ from domain.services.personnel.personnel_service import PersonnelService
 from domain.services.rh.contrat_service_crud import ContratServiceCRUD
 from domain.services.formation.formation_service_crud import FormationServiceCRUD
 from application.permission_manager import require
-from core.services import competences_service
+from domain.services.rh import competences_service
 
 # Repositories — seuls accès DB autorisés dans ce service
 from domain.repositories.personnel_repo import PersonnelRepository
@@ -336,7 +336,7 @@ def _get_donnees_competences(operateur_id: int) -> Dict:
 def _get_donnees_medical(operateur_id: int) -> Dict:
     """Retourne toutes les données médicales avec les clés attendues par la GUI."""
     try:
-        from core.services import medical_service
+        from domain.services.rh import medical_service
         visites   = medical_service.get_visites(operateur_id)
         accidents = medical_service.get_accidents(operateur_id)
         validites = medical_service.get_validites(operateur_id)
@@ -360,7 +360,7 @@ def _get_donnees_medical(operateur_id: int) -> Dict:
 def _get_donnees_vie_salarie(operateur_id: int) -> Dict:
     """Retourne toutes les données vie salarié avec les clés attendues par la GUI."""
     try:
-        from core.services import vie_salarie_service as _vs
+        from domain.services.rh import vie_salarie_service as _vs
         sanctions   = _vs.get_sanctions(operateur_id)
         entretiens  = _vs.get_entretiens(operateur_id)
         alcoolemie  = _vs.get_controles_alcool(operateur_id)
@@ -388,7 +388,7 @@ def _get_donnees_vie_salarie(operateur_id: int) -> Dict:
 def _get_donnees_mutuelle(operateur_id: int) -> Dict:
     """Retourne les données mutuelle pour la GUI."""
     try:
-        from core.services import mutuelle_service
+        from domain.services.rh import mutuelle_service
         mutuelle = mutuelle_service.get_mutuelle(operateur_id)
         historique = mutuelle_service.get_historique_mutuelle(operateur_id)
         return {'mutuelle': mutuelle or {}, 'historique': historique}

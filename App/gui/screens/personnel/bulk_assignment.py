@@ -1536,7 +1536,7 @@ class BulkOperationProgressDialog(QDialog):
 
     def start_operation(self):
         """Lance l'opération en background."""
-        from core.services import bulk_service
+        from domain.services.personnel import bulk_service
 
         def do_operation(progress_callback=None):
             # DbWorker injecte automatiquement progress_callback, donc on doit l'accepter

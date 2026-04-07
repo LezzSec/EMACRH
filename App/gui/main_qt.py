@@ -48,7 +48,7 @@ from gui.workers.session_timeout import SessionTimeoutManager
 # ===========================
 
 def _lazy_auth():
-    from core.services import auth_service
+    from domain.services.admin import auth_service
     return auth_service
 
 def _lazy_theme():

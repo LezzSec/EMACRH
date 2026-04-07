@@ -23,7 +23,7 @@ from domain.services.rh.rh_service import (
     is_matricule_disponible,
 )
 from domain.services.rh.declaration_service_crud import DeclarationServiceCRUD as _DeclSvc
-from core.services import competences_service as _competences_service
+from domain.services.rh import competences_service as _competences_service
 get_types_declaration = _DeclSvc.get_types_declaration
 get_catalogue_competences = _competences_service.get_all_competences
 update_competence_personnel = _competences_service.update_assignment
