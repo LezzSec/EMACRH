@@ -2,7 +2,7 @@
 """
 Classe de base pour tous les widgets de domaine RH.
 """
-from PyQt5.QtWidgets import QWidget, QVBoxLayout
+from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSizePolicy
 from PyQt5.QtCore import pyqtSignal
 
 from infrastructure.config.date_format import format_date
@@ -25,6 +25,7 @@ class DomaineWidget(QWidget):
         self._layout = QVBoxLayout(self)
         self._layout.setContentsMargins(0, 0, 0, 0)
         self._layout.setSpacing(12)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
 
     @property
     def operateur_id(self):
@@ -34,6 +35,7 @@ class DomaineWidget(QWidget):
         self._operateur = operateur
         self._clear()
         self._build(donnees, documents or [])
+        self.updateGeometry()
 
     def _clear(self):
         while self._layout.count():

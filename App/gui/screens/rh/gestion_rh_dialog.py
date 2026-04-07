@@ -9,7 +9,7 @@ import subprocess
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QFrame, QStackedWidget,
-    QLabel, QPushButton, QMessageBox,
+    QLabel, QPushButton, QMessageBox, QSizePolicy,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import QApplication as _QApp
@@ -34,6 +34,22 @@ from .domaines.domaine_polyvalence import DomainePolyvalence
 from .domaines.domaine_mutuelle import DomaineMutuelle
 
 logger = logging.getLogger(__name__)
+
+
+class _AdaptiveStack(QStackedWidget):
+    """QStackedWidget dont la sizeHint suit le widget courant, pas le maximum."""
+
+    def sizeHint(self):
+        w = self.currentWidget()
+        return w.sizeHint() if w else super().sizeHint()
+
+    def minimumSizeHint(self):
+        w = self.currentWidget()
+        return w.minimumSizeHint() if w else super().minimumSizeHint()
+
+    def setCurrentWidget(self, widget):
+        super().setCurrentWidget(widget)
+        self.updateGeometry()
 
 
 class GestionRHDialog(QDialog):
@@ -159,7 +175,7 @@ class GestionRHDialog(QDialog):
         inner_layout.setContentsMargins(0, 0, 0, 0)
         inner_layout.setSpacing(16)
 
-        self._domain_stack = QStackedWidget()
+        self._domain_stack = _AdaptiveStack()
         self._domaine_widgets = {}
         for domaine_cls, domaine_key in [
             (DomaineGeneral, DomaineRH.GENERAL),
