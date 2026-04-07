@@ -714,7 +714,7 @@ class MainWindow(QMainWindow):
         dialog.exec_()
 
     def show_contract_management(self):
-        from gui.screens.rh.gestion_rh import GestionRHDialog
+        from gui.screens.rh.gestion_rh_dialog import GestionRHDialog
         dialog = GestionRHDialog(self)
         dialog.data_changed.connect(self.load_evaluations_async)
         dialog.data_changed.connect(self.load_alertes_rh_async)
@@ -886,7 +886,7 @@ class MainWindow(QMainWindow):
         personnel_id = item.data(Qt.UserRole)
         if not personnel_id:
             return
-        from gui.screens.rh.gestion_rh import GestionRHDialog
+        from gui.screens.rh.gestion_rh_dialog import GestionRHDialog
         dialog = GestionRHDialog(self, preselect_personnel_id=personnel_id)
         dialog.data_changed.connect(self.load_evaluations_async)
         dialog.data_changed.connect(self.load_alertes_rh_async)

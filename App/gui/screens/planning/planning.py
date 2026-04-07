@@ -1009,7 +1009,7 @@ class RegularisationDialog(QDialog):
 
         personnel_id = personnel_ids[row]
         try:
-            from gui.screens.rh.gestion_rh import GestionRHDialog
+            from gui.screens.rh.gestion_rh_dialog import GestionRHDialog
             dlg = GestionRHDialog(parent=self, preselect_personnel_id=personnel_id)
             dlg.exec_()
         except Exception as e:

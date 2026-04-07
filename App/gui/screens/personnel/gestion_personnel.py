@@ -490,7 +490,7 @@ class DetailOperateurDialog(QDialog):
 
     def _open_contract_management(self):
         """Ouvre la Gestion RH directement sur l'onglet Contrat pour cet opérateur."""
-        from gui.screens.rh.gestion_rh import GestionRHDialog
+        from gui.screens.rh.gestion_rh_dialog import GestionRHDialog
         from domain.services.rh.rh_service import DomaineRH
         dialog = GestionRHDialog(self)
         dialog._selectionner_operateur_par_id(self.operateur_id)
@@ -501,7 +501,7 @@ class DetailOperateurDialog(QDialog):
 
     def _open_formation_rh(self):
         """Ouvre la Gestion RH directement sur l'onglet Formation pour cet opérateur."""
-        from gui.screens.rh.gestion_rh import GestionRHDialog
+        from gui.screens.rh.gestion_rh_dialog import GestionRHDialog
         from domain.services.rh.rh_service import DomaineRH
         dialog = GestionRHDialog(self)
         dialog._selectionner_operateur_par_id(self.operateur_id)

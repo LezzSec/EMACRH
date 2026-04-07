@@ -694,7 +694,7 @@ class GestionAlertesRHDialog(QDialog):
     def _on_view_contract_detail(self, alert: Alert):
         pid = alert.personnel_id
         if pid:
-            from gui.screens.rh.gestion_rh import GestionRHDialog
+            from gui.screens.rh.gestion_rh_dialog import GestionRHDialog
             from domain.services.rh.rh_service import DomaineRH
             dialog = GestionRHDialog(parent=self)
             dialog.data_changed.connect(self._on_sub_dialog_changed)
