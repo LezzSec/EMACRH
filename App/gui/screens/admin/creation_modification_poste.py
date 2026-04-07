@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import (
     QMessageBox, QComboBox
 )
 
-from .besoin_poste_dialog import BesoinPosteDialog
+from gui.screens.formation.besoin_poste_dialog import BesoinPosteDialog
 from domain.repositories.poste_repo import PosteRepository
 
 
