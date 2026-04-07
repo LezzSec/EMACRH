@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QColor
 
-from core.repositories.polyvalence_repo import PolyvalenceRepository
+from domain.repositories.polyvalence_repo import PolyvalenceRepository
 from core.gui.components.emac_ui_kit import show_error_message
 import json
 import datetime as dt

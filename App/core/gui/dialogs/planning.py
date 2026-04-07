@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QTextCharFormat
 from datetime import date, datetime, timedelta
-from core.services.planning_service import (
+from domain.services.planning.planning_service import (
     get_absents_du_jour, get_personnel_actif_liste, creer_declaration,
     get_absences_du_mois, get_absences_du_jour, get_postes_avec_polyvalences,
     get_evaluations_dates_du_mois, get_evaluations_du_jour,

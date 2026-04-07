@@ -17,7 +17,7 @@ from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QColor, QDesktopServices, QUrl
 
 # Import du service documentaire
-from core.services.document_service import DocumentService
+from domain.services.documents.document_service import DocumentService
 
 
 class DocumentWidget(QWidget):

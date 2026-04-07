@@ -508,7 +508,7 @@ def save_role_features(role_id: int, feature_keys: Set[str]) -> tuple[bool, Opti
         (success, error_message)
     """
     from infrastructure.db.configbd import get_connection
-    from core.services.auth_service import is_admin, get_current_user
+    from domain.services.admin.auth_service import is_admin, get_current_user
     from infrastructure.logging.optimized_db_logger import log_hist_async
 
     if not is_admin():
@@ -566,7 +566,7 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
         (success, error_message)
     """
     from infrastructure.db.configbd import get_connection
-    from core.services.auth_service import is_admin, get_current_user
+    from domain.services.admin.auth_service import is_admin, get_current_user
     from infrastructure.logging.optimized_db_logger import log_hist_async
     from infrastructure.cache.emac_cache import invalidate_user_cache
 
@@ -629,7 +629,7 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
 def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
     """Supprime tous les overrides d'un utilisateur"""
     from infrastructure.db.configbd import get_connection
-    from core.services.auth_service import is_admin, get_current_user
+    from domain.services.admin.auth_service import is_admin, get_current_user
     from infrastructure.logging.optimized_db_logger import log_hist_async
     from infrastructure.cache.emac_cache import invalidate_user_cache
 

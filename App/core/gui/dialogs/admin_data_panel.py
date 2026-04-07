@@ -434,11 +434,11 @@ class AteliersTab(_ConfigTab):
     USAGE = "Création/suppression de postes, grille de polyvalence, filtres de planning"
 
     def fetch_data(self):
-        from core.services.config_service import AtelierService
+        from domain.services.admin.config_service import AtelierService
         return AtelierService.get_all()
 
     def show_form(self, data):
-        from core.services.config_service import AtelierService
+        from domain.services.admin.config_service import AtelierService
         dlg = _AtelierForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -453,7 +453,7 @@ class AteliersTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import AtelierService
+        from domain.services.admin.config_service import AtelierService
         return AtelierService.delete(record_id)
 
 
@@ -496,11 +496,11 @@ class ServicesTab(_ConfigTab):
     USAGE = "Fiche personnel, filtres RH, statistiques par service"
 
     def fetch_data(self):
-        from core.services.config_service import ServicesRHService
+        from domain.services.admin.config_service import ServicesRHService
         return ServicesRHService.get_all()
 
     def show_form(self, data):
-        from core.services.config_service import ServicesRHService
+        from domain.services.admin.config_service import ServicesRHService
         dlg = _ServiceRHForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -515,7 +515,7 @@ class ServicesTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import ServicesRHService
+        from domain.services.admin.config_service import ServicesRHService
         return ServicesRHService.delete(record_id)
 
 
@@ -609,11 +609,11 @@ class TypesAbsenceTab(_ConfigTab):
     USAGE = "Module Planning, déclarations d'absence, calcul des soldes de congés"
 
     def fetch_data(self):
-        from core.services.config_service import TypeAbsenceService
+        from domain.services.admin.config_service import TypeAbsenceService
         return TypeAbsenceService.get_all()
 
     def show_form(self, data):
-        from core.services.config_service import TypeAbsenceService
+        from domain.services.admin.config_service import TypeAbsenceService
         dlg = _TypeAbsenceForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -628,7 +628,7 @@ class TypesAbsenceTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import TypeAbsenceService
+        from domain.services.admin.config_service import TypeAbsenceService
         return TypeAbsenceService.delete(record_id)
 
 
@@ -689,11 +689,11 @@ class JoursFeriesTab(_ConfigTab):
     USAGE = "Calcul des évaluations, planning, décompte des absences"
 
     def fetch_data(self):
-        from core.services.config_service import JoursFeriesService
+        from domain.services.admin.config_service import JoursFeriesService
         return JoursFeriesService.get_all()
 
     def show_form(self, data):
-        from core.services.config_service import JoursFeriesService
+        from domain.services.admin.config_service import JoursFeriesService
         dlg = _JourFerieForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -708,7 +708,7 @@ class JoursFeriesTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import JoursFeriesService
+        from domain.services.admin.config_service import JoursFeriesService
         return JoursFeriesService.delete(record_id)
 
 
@@ -783,11 +783,11 @@ class CompetencesTab(_ConfigTab):
     USAGE = "Fiches de formation, suivi des qualifications, exports RH"
 
     def fetch_data(self):
-        from core.services.config_service import CompetencesCatalogueService
+        from domain.services.admin.config_service import CompetencesCatalogueService
         return CompetencesCatalogueService.get_all()
 
     def show_form(self, data):
-        from core.services.config_service import CompetencesCatalogueService
+        from domain.services.admin.config_service import CompetencesCatalogueService
         dlg = _CompetenceForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -802,7 +802,7 @@ class CompetencesTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import CompetencesCatalogueService
+        from domain.services.admin.config_service import CompetencesCatalogueService
         return CompetencesCatalogueService.delete(record_id)
 
 
@@ -889,11 +889,11 @@ class CategoriesDocsTab(_ConfigTab):
     USAGE = "Module Documents RH, alertes d'expiration, filtres documentaires"
 
     def fetch_data(self):
-        from core.services.config_service import CategoriesDocsService
+        from domain.services.admin.config_service import CategoriesDocsService
         return CategoriesDocsService.get_all()
 
     def show_form(self, data):
-        from core.services.config_service import CategoriesDocsService
+        from domain.services.admin.config_service import CategoriesDocsService
         dlg = _CategorieDocForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -908,7 +908,7 @@ class CategoriesDocsTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import CategoriesDocsService
+        from domain.services.admin.config_service import CategoriesDocsService
         return CategoriesDocsService.delete(record_id)
 
 
@@ -949,11 +949,11 @@ class MotifsortieTab(_ConfigTab):
     USAGE = "Désactivation dans la fiche personnel"
 
     def fetch_data(self):
-        from core.services.config_service import RefMotifSortieService
+        from domain.services.admin.config_service import RefMotifSortieService
         return RefMotifSortieService.get_all()
 
     def show_form(self, data):
-        from core.services.config_service import RefMotifSortieService
+        from domain.services.admin.config_service import RefMotifSortieService
         dlg = _MotifSortieForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -968,7 +968,7 @@ class MotifsortieTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import RefMotifSortieService
+        from domain.services.admin.config_service import RefMotifSortieService
         return RefMotifSortieService.delete(record_id)
 
 
@@ -1028,11 +1028,11 @@ class TranchesAgeTab(_ConfigTab):
         return _txt(val)
 
     def fetch_data(self):
-        from core.services.config_service import TranchesAgeService
+        from domain.services.admin.config_service import TranchesAgeService
         return TranchesAgeService.get_all()
 
     def show_form(self, data):
-        from core.services.config_service import TranchesAgeService
+        from domain.services.admin.config_service import TranchesAgeService
         dlg = _TrancheAgeForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -1047,7 +1047,7 @@ class TranchesAgeTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import TranchesAgeService
+        from domain.services.admin.config_service import TranchesAgeService
         return TranchesAgeService.delete(record_id)
 
 
@@ -1089,11 +1089,11 @@ class RolesTab(_ConfigTab):
     USAGE = "Gestion des utilisateurs, système de permissions (features), contrôle d'accès"
 
     def fetch_data(self):
-        from core.services.config_service import RolesConfigService
+        from domain.services.admin.config_service import RolesConfigService
         return RolesConfigService.get_all()
 
     def show_form(self, data):
-        from core.services.config_service import RolesConfigService
+        from domain.services.admin.config_service import RolesConfigService
         dlg = _RoleForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -1108,7 +1108,7 @@ class RolesTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import RolesConfigService
+        from domain.services.admin.config_service import RolesConfigService
         return RolesConfigService.delete(record_id)
 
 
@@ -1241,7 +1241,7 @@ class _SoldeCongesForm(_SimpleFormDialog):
             self._data = None
 
     def _load_personnel(self):
-        from core.services.config_service import SoldeCongesService
+        from domain.services.admin.config_service import SoldeCongesService
         try:
             personnel = SoldeCongesService.get_all_personnel()
             self.cmb_personnel.clear()
@@ -1292,11 +1292,11 @@ class SoldeCongesTab(_ConfigTab):
         return super()._format_cell(key, val, record)
 
     def fetch_data(self):
-        from core.services.config_service import SoldeCongesService
+        from domain.services.admin.config_service import SoldeCongesService
         return SoldeCongesService.get_all()
 
     def show_form(self, data):
-        from core.services.config_service import SoldeCongesService
+        from domain.services.admin.config_service import SoldeCongesService
         dlg = _SoldeCongesForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -1311,7 +1311,7 @@ class SoldeCongesTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import SoldeCongesService
+        from domain.services.admin.config_service import SoldeCongesService
         return SoldeCongesService.delete(record_id)
 
     def _get_display_name(self, record):
@@ -1369,7 +1369,7 @@ class _DocumentEventRuleForm(_SimpleFormDialog):
             self._pending_template_id = None
 
     def _load_templates(self):
-        from core.services.config_service import DocumentEventRulesService
+        from domain.services.admin.config_service import DocumentEventRulesService
         try:
             templates = DocumentEventRulesService.get_all_templates()
             self.cmb_template.clear()
@@ -1408,11 +1408,11 @@ class DocumentEventRulesTab(_ConfigTab):
     USAGE = "Génération automatique de documents, module Templates"
 
     def fetch_data(self):
-        from core.services.config_service import DocumentEventRulesService
+        from domain.services.admin.config_service import DocumentEventRulesService
         return DocumentEventRulesService.get_all()
 
     def show_form(self, data):
-        from core.services.config_service import DocumentEventRulesService
+        from domain.services.admin.config_service import DocumentEventRulesService
         dlg = _DocumentEventRuleForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -1427,7 +1427,7 @@ class DocumentEventRulesTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import DocumentEventRulesService
+        from domain.services.admin.config_service import DocumentEventRulesService
         return DocumentEventRulesService.delete(record_id)
 
     def _get_display_name(self, record):
@@ -1489,14 +1489,14 @@ class DemandeAbsenceTab(_ConfigTab):
         return super()._format_cell(key, val, record)
 
     def fetch_data(self):
-        from core.services.config_service import DemandeAbsenceAdminService
+        from domain.services.admin.config_service import DemandeAbsenceAdminService
         return DemandeAbsenceAdminService.get_all()
 
     def show_form(self, data):
         """Appelé pour la modification de statut uniquement."""
         if not data:
             return
-        from core.services.config_service import DemandeAbsenceAdminService
+        from domain.services.admin.config_service import DemandeAbsenceAdminService
         dlg = _UpdateStatutForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -1510,7 +1510,7 @@ class DemandeAbsenceTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import DemandeAbsenceAdminService
+        from domain.services.admin.config_service import DemandeAbsenceAdminService
         return DemandeAbsenceAdminService.delete(record_id)
 
     def _get_display_name(self, record):
@@ -1604,13 +1604,13 @@ class PolyvalenceAdminTab(_ConfigTab):
         self.layout().insertWidget(0, lbl_warn)
 
     def fetch_data(self):
-        from core.services.config_service import PolyvalenceAdminService
+        from domain.services.admin.config_service import PolyvalenceAdminService
         return PolyvalenceAdminService.get_all_recent(200)
 
     def show_form(self, data):
         if not data:
             return
-        from core.services.config_service import PolyvalenceAdminService
+        from domain.services.admin.config_service import PolyvalenceAdminService
         dlg = _PolyvalenceAdminForm(data, self)
         if dlg.exec_() == QDialog.Accepted:
             vals = dlg.get_values()
@@ -1622,7 +1622,7 @@ class PolyvalenceAdminTab(_ConfigTab):
                 QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
 
     def delete_record(self, record_id):
-        from core.services.config_service import PolyvalenceAdminService
+        from domain.services.admin.config_service import PolyvalenceAdminService
         return PolyvalenceAdminService.delete(record_id)
 
     def _get_display_name(self, record):
@@ -1645,7 +1645,7 @@ class HistoriqueAdminTab(_ReadOnlyTab):
     DATETIME_KEYS = {'date_time'}
 
     def fetch_data(self):
-        from core.services.config_service import HistoriqueAdminService
+        from domain.services.admin.config_service import HistoriqueAdminService
         return HistoriqueAdminService.get_recent(100)
 
 
@@ -1662,7 +1662,7 @@ class LogsConnexionTab(_ReadOnlyTab):
     DATETIME_KEYS = {'date_connexion', 'date_deconnexion'}
 
     def fetch_data(self):
-        from core.services.config_service import LogsConnexionService
+        from domain.services.admin.config_service import LogsConnexionService
         return LogsConnexionService.get_recent(50)
 
 
@@ -1680,7 +1680,7 @@ class AdminDataPanelDialog(QDialog):
         super().__init__(parent)
 
         # Vérification des droits admin (fresh check en DB)
-        from core.services.auth_service import is_admin
+        from domain.services.admin.auth_service import is_admin
         if not is_admin():
             QMessageBox.critical(
                 self, "Accès refusé",

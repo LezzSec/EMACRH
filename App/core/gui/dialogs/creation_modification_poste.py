@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
 )
 
 from .besoin_poste_dialog import BesoinPosteDialog
-from core.repositories.poste_repo import PosteRepository
+from domain.repositories.poste_repo import PosteRepository
 
 
 

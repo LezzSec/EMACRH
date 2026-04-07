@@ -224,7 +224,7 @@ def sample_evaluation_upcoming():
 @pytest.fixture
 def mock_user_session():
     """Mock de la session utilisateur"""
-    with patch('core.services.auth_service.UserSession') as mock_session:
+    with patch('domain.services.admin.auth_service.UserSession') as mock_session:
         mock_session.get_user.return_value = {
             'id': 1,
             'username': 'admin',
@@ -245,7 +245,7 @@ def mock_user_session():
 @pytest.fixture
 def mock_non_admin_session():
     """Mock de session utilisateur non-admin"""
-    with patch('core.services.auth_service.UserSession') as mock_session:
+    with patch('domain.services.admin.auth_service.UserSession') as mock_session:
         mock_session.get_user.return_value = {
             'id': 2,
             'username': 'user',
@@ -271,10 +271,10 @@ _MODULES_WITH_REQUIRE = [
     'core.services.permission_manager',
     'core.services.contrat_service_crud',
     'core.services.absence_service',
-    'core.services.evaluation_service',
-    'core.services.rh_service',
-    'core.services.medical_service',
-    'core.services.bulk_service',
+    'domain.services.formation.evaluation_service',
+    'domain.services.rh.rh_service',
+    'domain.services.rh.medical_service',
+    'domain.services.personnel.bulk_service',
 ]
 
 

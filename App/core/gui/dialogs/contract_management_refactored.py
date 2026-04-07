@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import QDate
 
 from core.gui.components.emac_dialog import EmacFormDialog
-from core.repositories.personnel_repo import PersonnelRepository
+from domain.repositories.personnel_repo import PersonnelRepository
 from core.services.contrat_service_crud import ContratServiceCRUD
 
 from core.services.contrat_service_crud import ContratServiceCRUD as _ContratServiceCRUD

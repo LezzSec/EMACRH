@@ -157,7 +157,7 @@ class ImprimerDocumentsDialog(QDialog):
 
     def _load_data(self):
         """Charge les documents disponibles pour chaque opérateur."""
-        from core.services.evaluation_service import get_polyvalences_actuelles_operateur
+        from domain.services.formation.evaluation_service import get_polyvalences_actuelles_operateur
         from core.services.event_rule_service import get_matching_templates
 
         self.tree.blockSignals(True)
@@ -373,7 +373,7 @@ class ImprimerDocumentsDialog(QDialog):
 
     def _preview_selected(self):
         """Génère et ouvre les documents cochés pour visualisation (sans impression)."""
-        from core.services.template_service import open_template_file
+        from domain.services.documents.template_service import open_template_file
 
         selected, _ = self._collect_selected_docs()
         if not selected:
@@ -422,7 +422,7 @@ class ImprimerDocumentsDialog(QDialog):
 
         if generated:
             from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
-            from core.services.template_service import print_template_file
+            from domain.services.documents.template_service import print_template_file
 
             printer = QPrinter(QPrinter.HighResolution)
             dlg = QPrintDialog(printer, self)

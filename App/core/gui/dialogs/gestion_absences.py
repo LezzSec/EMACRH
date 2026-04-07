@@ -546,7 +546,7 @@ class GestionAbsencesDialog(QDialog):
 if __name__ == "__main__":
     import sys
     from PyQt5.QtWidgets import QApplication
-    from core.repositories.personnel_repo import PersonnelRepository
+    from domain.repositories.personnel_repo import PersonnelRepository
 
     app = QApplication(sys.argv)
     dialog = GestionAbsencesDialog(personnel_id=PersonnelRepository.get_first_actif_id())

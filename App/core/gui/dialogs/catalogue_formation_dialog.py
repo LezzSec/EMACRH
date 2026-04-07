@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont
 
-from core.services.formation_service_crud import FormationServiceCRUD
+from domain.services.formation.formation_service_crud import FormationServiceCRUD
 from core.gui.workers.lazy_loading import PaginatedTableWidget
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
 from infrastructure.logging.logging_config import get_logger

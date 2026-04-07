@@ -17,8 +17,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate, pyqtSignal, QUrl
 from PyQt5.QtGui import QFont, QColor, QDesktopServices
 
-from core.services.document_service import DocumentService
-from core.repositories.personnel_repo import PersonnelRepository
+from domain.services.documents.document_service import DocumentService
+from domain.repositories.personnel_repo import PersonnelRepository
 from infrastructure.logging.optimized_db_logger import log_hist
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
 from infrastructure.logging.logging_config import get_logger

@@ -701,7 +701,7 @@ class MainWindow(QMainWindow):
         DbThreadPool.start(w)
 
     def _fetch_one_actif_personnel_id(self, progress_callback=None):
-        from core.repositories.personnel_repo import PersonnelRepository
+        from domain.repositories.personnel_repo import PersonnelRepository
         return PersonnelRepository.get_first_actif_id()
 
     def _open_regularisation(self, personnel_id):
@@ -755,7 +755,7 @@ class MainWindow(QMainWindow):
             if (time.time() - self._postes_cache_time) < 300:
                 return self._postes_cache
 
-        from core.repositories.poste_repo import PosteRepository
+        from domain.repositories.poste_repo import PosteRepository
 
         codes = PosteRepository.get_codes_list()
         # Garder le format tuple pour la compatibilité avec _apply_postes_to_filters
@@ -784,7 +784,7 @@ class MainWindow(QMainWindow):
         DbThreadPool.start(w)
 
     def _fetch_evaluations(self, poste_retard, poste_next, progress_callback=None):
-        from core.repositories.polyvalence_repo import PolyvalenceRepository
+        from domain.repositories.polyvalence_repo import PolyvalenceRepository
         try:
             retard = PolyvalenceRepository.get_en_retard_filtre(
                 poste_code=poste_retard or None, limit=10
@@ -835,7 +835,7 @@ class MainWindow(QMainWindow):
         DbThreadPool.start(w)
 
     def _fetch_alertes_rh(self, type_doc_filter, progress_callback=None):
-        from core.services.alert_service import AlertService
+        from domain.services.admin.alert_service import AlertService
         try:
             alertes = AlertService.get_all_document_alerts(
                 type_doc=type_doc_filter or None,
@@ -916,7 +916,7 @@ class MainWindow(QMainWindow):
 
     def _load_notification_counts(self):
         """Charge les compteurs d'alertes pour le badge et le popup de démarrage."""
-        from core.services.alert_service import AlertService
+        from domain.services.admin.alert_service import AlertService
         def _fetch(progress_callback=None):
             return AlertService.get_startup_summary()
         w = DbWorker(_fetch)
@@ -1184,7 +1184,7 @@ if __name__ == "__main__":
     if login_dialog.exec_() == LoginDialog.Accepted:
         # Définir le contexte de logging avec l'utilisateur connecté
         try:
-            from core.services.auth_service import get_current_user
+            from domain.services.admin.auth_service import get_current_user
             user = get_current_user()
             if user:
                 set_log_context(user_id=user.get('username') or user.get('nom'), screen='MainWindow')

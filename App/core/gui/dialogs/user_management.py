@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt
 from core.gui.components.ui_theme import EmacButton, EmacCard
-from core.services.auth_service import (
+from domain.services.admin.auth_service import (
     get_all_users, create_user, update_user_status,
     change_password, get_roles, is_admin, count_active_admins, delete_user, get_current_user, validate_password, get_password_requirements
 )

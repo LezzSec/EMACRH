@@ -12,16 +12,16 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
-from core.repositories.personnel_repo import PersonnelRepository
-from core.repositories.polyvalence_repo import PolyvalenceRepository
+from domain.repositories.personnel_repo import PersonnelRepository
+from domain.repositories.polyvalence_repo import PolyvalenceRepository
 from core.services.contrat_service_crud import ContratServiceCRUD
-from core.services.formation_service_crud import FormationServiceCRUD
+from domain.services.formation.formation_service_crud import FormationServiceCRUD
 from core.services import medical_service
 from core.gui.workers.db_worker import DbWorker, DbThreadPool
 from infrastructure.logging.optimized_db_logger import log_hist
 from core.gui.dialogs.historique_personnel import HistoriquePersonnelTab
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
-from core.services.auth_service import get_current_user
+from domain.services.admin.auth_service import get_current_user
 from core.services.permission_manager import require, can
 
 import datetime as dt
@@ -491,7 +491,7 @@ class DetailOperateurDialog(QDialog):
     def _open_contract_management(self):
         """Ouvre la Gestion RH directement sur l'onglet Contrat pour cet opérateur."""
         from core.gui.dialogs.gestion_rh import GestionRHDialog
-        from core.services.rh_service import DomaineRH
+        from domain.services.rh.rh_service import DomaineRH
         dialog = GestionRHDialog(self)
         dialog._selectionner_operateur_par_id(self.operateur_id)
         dialog._on_domaine_change(DomaineRH.CONTRAT.value)
@@ -502,7 +502,7 @@ class DetailOperateurDialog(QDialog):
     def _open_formation_rh(self):
         """Ouvre la Gestion RH directement sur l'onglet Formation pour cet opérateur."""
         from core.gui.dialogs.gestion_rh import GestionRHDialog
-        from core.services.rh_service import DomaineRH
+        from domain.services.rh.rh_service import DomaineRH
         dialog = GestionRHDialog(self)
         dialog._selectionner_operateur_par_id(self.operateur_id)
         dialog._on_domaine_change(DomaineRH.FORMATION.value)

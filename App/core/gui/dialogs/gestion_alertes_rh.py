@@ -17,8 +17,8 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, pyqtSignal, QTimer
 from PyQt5.QtGui import QFont, QCursor
 
-from core.services.alert_service import AlertService, TypeAlerte
-from core.models import Alert
+from domain.services.admin.alert_service import AlertService, TypeAlerte
+from domain.models import Alert
 from core.services.permission_manager import can
 from infrastructure.config.date_format import format_date
 
@@ -695,7 +695,7 @@ class GestionAlertesRHDialog(QDialog):
         pid = alert.personnel_id
         if pid:
             from core.gui.dialogs.gestion_rh import GestionRHDialog
-            from core.services.rh_service import DomaineRH
+            from domain.services.rh.rh_service import DomaineRH
             dialog = GestionRHDialog(parent=self)
             dialog.data_changed.connect(self._on_sub_dialog_changed)
             dialog._selectionner_operateur_par_id(pid)

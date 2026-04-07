@@ -102,7 +102,7 @@ def get_cached_current_user() -> Optional[Dict]:
     Returns:
         Dictionnaire de l'utilisateur ou None
     """
-    from core.services.auth_service import get_current_user
+    from domain.services.admin.auth_service import get_current_user
     return get_current_user()
 
 
@@ -119,7 +119,7 @@ def get_cached_user_permissions(user_id: Optional[int] = None) -> Dict[str, Dict
     Returns:
         Dict {module: {lecture, ecriture, suppression}}
     """
-    from core.services.auth_service import UserSession
+    from domain.services.admin.auth_service import UserSession
 
     session = UserSession()
     perms = session.get_permissions()

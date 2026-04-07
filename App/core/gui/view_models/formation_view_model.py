@@ -22,8 +22,8 @@ from typing import Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from core.services.formation_service_crud import FormationServiceCRUD
-from core.services.document_service import DocumentService
+from domain.services.formation.formation_service_crud import FormationServiceCRUD
+from domain.services.documents.document_service import DocumentService
 from core.gui.workers.db_worker import DbWorker, DbThreadPool
 from infrastructure.logging.logging_config import get_logger
 
@@ -189,7 +189,7 @@ class FormationViewModel(QObject):
     def generate_dossier(self, formation_id: int) -> None:
         """Génère les documents officiels de formation (async)."""
         def fetch(progress_callback=None):
-            from core.services.formation_export_service import FormationExportService
+            from domain.services.formation.formation_export_service import FormationExportService
             data = FormationServiceCRUD.get_formation_by_id(formation_id)
             if not data:
                 return False, "Formation introuvable.", ""

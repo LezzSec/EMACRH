@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QCursor
 
-from core.services.historique_service import fetch_historique_paginated, delete_historique_range, MODULE_TABLES
+from domain.services.admin.historique_service import fetch_historique_paginated, delete_historique_range, MODULE_TABLES
 from infrastructure.logging.log_exporter import export_day
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.gui.workers.db_worker import DbWorker, DbThreadPool
@@ -49,7 +49,7 @@ def get_action_config(action: str) -> tuple:
 def fr_action(a: str) -> str:
     return ACTION_LABEL.get((a or "").upper(), a or "")
 
-# get_entity_name est importé depuis core.services.historique_service
+# get_entity_name est importé depuis domain.services.admin.historique_service
 
 def get_detailed_action_type(row: dict) -> str:
     action = row.get("action", "")
@@ -941,7 +941,7 @@ class HistoriqueDialog(QDialog):
         None = admin → toutes les tables.
         """
         try:
-            from core.services.auth_service import get_current_user
+            from domain.services.admin.auth_service import get_current_user
             user = get_current_user()
             if not user:
                 return None

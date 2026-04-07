@@ -78,7 +78,7 @@ class CRUDService:
         """
         cache_key = cls.__name__
         if cache_key not in cls._repo_cache:
-            from core.repositories.generic_repo import GenericRepository
+            from domain.repositories.generic_repo import GenericRepository
             cls._repo_cache[cache_key] = GenericRepository(
                 table_name=cls.TABLE_NAME,
                 allowed_fields=cls.ALLOWED_FIELDS or None,

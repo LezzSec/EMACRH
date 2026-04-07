@@ -720,7 +720,7 @@ class FeatureEditorDialog(QDialog):
     def load_data(self):
         """Charge les données initiales"""
         from core.services.permission_manager import get_all_roles
-        from core.services.auth_service import get_all_users
+        from domain.services.admin.auth_service import get_all_users
 
         # Charger les rôles
         roles = get_all_roles()

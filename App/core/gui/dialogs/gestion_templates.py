@@ -357,7 +357,7 @@ class GestionTemplatesDialog(QDialog):
     def load_templates(self):
         """Charge les templates depuis la base de données."""
         try:
-            from core.services.template_service import (
+            from domain.services.documents.template_service import (
                 get_all_templates, check_templates_table_exists,
                 get_postes_for_operateur
             )
@@ -556,7 +556,7 @@ class GestionTemplatesDialog(QDialog):
             return
 
         try:
-            from core.services.template_service import upload_template
+            from domain.services.documents.template_service import upload_template
 
             success, message = upload_template(template['id'], file_path)
 
@@ -576,7 +576,7 @@ class GestionTemplatesDialog(QDialog):
     def generate_template(self, template):
         """Génère un template individuel."""
         try:
-            from core.services.template_service import generate_filled_template, open_template_file
+            from domain.services.documents.template_service import generate_filled_template, open_template_file
 
             success, message, file_path = generate_filled_template(
                 template_id=template['id'],
@@ -638,7 +638,7 @@ class GestionTemplatesDialog(QDialog):
         errors = []
 
         try:
-            from core.services.template_service import generate_filled_template, open_template_file
+            from domain.services.documents.template_service import generate_filled_template, open_template_file
 
             for template_id in selected_ids:
                 template = next((t for t in self.templates_data if t['id'] == template_id), None)
@@ -790,7 +790,7 @@ class TemplateSelectionDialog(QDialog):
     def load_templates(self):
         """Charge les templates pour le contexte donné."""
         try:
-            from core.services.template_service import (
+            from domain.services.documents.template_service import (
                 get_templates_by_contexte, get_templates_for_poste,
                 check_templates_table_exists
             )
@@ -850,7 +850,7 @@ class TemplateSelectionDialog(QDialog):
             return
 
         try:
-            from core.services.template_service import generate_filled_template, open_template_file
+            from domain.services.documents.template_service import generate_filled_template, open_template_file
 
             generated = []
             for template_id in selected_ids:
@@ -1132,7 +1132,7 @@ class ImportTemplateDialog(QDialog):
                 return
 
         try:
-            from core.services.template_service import add_template
+            from domain.services.documents.template_service import add_template
 
             success, message, template_id = add_template(
                 nom=nom,

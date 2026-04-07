@@ -20,7 +20,7 @@ from typing import Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from core.services.evaluation_service import (
+from domain.services.formation.evaluation_service import (
     get_operateurs_avec_stats_polyvalences,
     get_stats_polyvalence_operateur,
     get_polyvalences_actuelles_operateur,
@@ -241,8 +241,8 @@ class EvaluationViewModel(QObject):
     ):
         try:
             from core.services.event_bus import EventBus
-            from core.repositories.poste_repo import PosteRepository
-            from core.services.evaluation_service import has_operateur_deja_eu_niveau_1
+            from domain.repositories.poste_repo import PosteRepository
+            from domain.services.formation.evaluation_service import has_operateur_deja_eu_niveau_1
 
             poste = PosteRepository.get_by_id(poste_id)
             poste_code = poste.get('code') if poste else None

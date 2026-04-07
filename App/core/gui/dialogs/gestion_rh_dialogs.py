@@ -13,7 +13,7 @@ from PyQt5.QtCore import Qt, QDate
 
 from core.gui.components.ui_theme import EmacButton
 from core.gui.components.emac_dialog import EmacFormDialog
-from core.services.rh_service import (
+from domain.services.rh.rh_service import (
     update_infos_generales,
     create_contrat, update_contrat,
     create_formation, update_formation,
@@ -22,17 +22,17 @@ from core.services.rh_service import (
     get_categories_documents, CATEGORIE_TO_DOMAINE, DomaineRH,
     is_matricule_disponible,
 )
-from core.services.declaration_service_crud import DeclarationServiceCRUD as _DeclSvc
+from domain.services.rh.declaration_service_crud import DeclarationServiceCRUD as _DeclSvc
 from core.services import competences_service as _competences_service
 get_types_declaration = _DeclSvc.get_types_declaration
 get_catalogue_competences = _competences_service.get_all_competences
 update_competence_personnel = _competences_service.update_assignment
-from core.services.medical_service import (
+from domain.services.rh.medical_service import (
     create_visite, update_visite,
     create_accident, update_accident,
 )
-from core.services.mutuelle_service import create_mutuelle, update_mutuelle
-from core.services.vie_salarie_service import (
+from domain.services.rh.mutuelle_service import create_mutuelle, update_mutuelle
+from domain.services.rh.vie_salarie_service import (
     create_sanction, update_sanction,
     create_controle_alcool, create_test_salivaire,
     create_entretien, update_entretien,
@@ -123,9 +123,9 @@ class JustificatifMixin:
         if not path:
             return
         import os
-        from core.services.document_service import DocumentService
-        from core.services.auth_service import get_current_user
-        from core.services.rh_service import get_categories_documents
+        from domain.services.documents.document_service import DocumentService
+        from domain.services.admin.auth_service import get_current_user
+        from domain.services.rh.rh_service import get_categories_documents
 
         categorie_nom_hint = getattr(self, '_justificatif_categorie_nom', '')
         categories = get_categories_documents()
@@ -1442,8 +1442,8 @@ class AjouterDocumentDialog(EmacFormDialog):
 
         notes = self.notes.toPlainText().strip() or None
 
-        from core.services.document_service import DocumentService
-        from core.services.auth_service import get_current_user
+        from domain.services.documents.document_service import DocumentService
+        from domain.services.admin.auth_service import get_current_user
 
         user = get_current_user()
         uploaded_by = user.get('nom_complet', 'Utilisateur') if user else 'Utilisateur'
@@ -1577,7 +1577,7 @@ class GestionDocsFormationDialog:
         return self._dialog.exec_()
 
     def _charger_postes(self):
-        from core.services.polyvalence_docs_service import get_tous_les_postes_avec_docs
+        from domain.services.documents.polyvalence_docs_service import get_tous_les_postes_avec_docs
         self._tous_postes = get_tous_les_postes_avec_docs()
         self._remplir_liste_postes(self._tous_postes)
 
@@ -1613,7 +1613,7 @@ class GestionDocsFormationDialog:
 
     def _charger_docs_poste(self):
         from PyQt5.QtWidgets import QTableWidgetItem, QWidget, QHBoxLayout
-        from core.services.polyvalence_docs_service import get_docs_pour_poste
+        from domain.services.documents.polyvalence_docs_service import get_docs_pour_poste
 
         if not self._poste_selectionne:
             return
@@ -1661,7 +1661,7 @@ class GestionDocsFormationDialog:
 
     def _ouvrir_doc(self, doc_id: int):
         import os
-        from core.services.polyvalence_docs_service import extraire_vers_fichier_temp
+        from domain.services.documents.polyvalence_docs_service import extraire_vers_fichier_temp
         temp_path = extraire_vers_fichier_temp(doc_id)
         if temp_path and temp_path.exists():
             if os.name == 'nt':
@@ -1675,7 +1675,7 @@ class GestionDocsFormationDialog:
 
     def _supprimer_doc(self, doc_id: int, nom: str):
         from PyQt5.QtWidgets import QMessageBox
-        from core.services.polyvalence_docs_service import supprimer_document
+        from domain.services.documents.polyvalence_docs_service import supprimer_document
         reply = QMessageBox.question(
             self._dialog,
             "Confirmer la suppression",
@@ -1778,8 +1778,8 @@ class AjouterDocFormationDialog:
 
     def _valider(self):
         from PyQt5.QtWidgets import QMessageBox
-        from core.services.polyvalence_docs_service import ajouter_document
-        from core.services.auth_service import get_current_user
+        from domain.services.documents.polyvalence_docs_service import ajouter_document
+        from domain.services.admin.auth_service import get_current_user
 
         if not self._fichier_path:
             QMessageBox.warning(self._dialog, "Fichier manquant", "Veuillez sélectionner un fichier.")
@@ -2091,8 +2091,8 @@ class ConsulterFormationDialog:
         """)
 
         def _generer_et_ouvrir():
-            from core.services.formation_export_service import FormationExportService
-            from core.services.formation_service_crud import FormationServiceCRUD
+            from domain.services.formation.formation_export_service import FormationExportService
+            from domain.services.formation.formation_service_crud import FormationServiceCRUD
             formation_id = formation.get('id')
             data = FormationServiceCRUD.get_formation_by_id(formation_id) if formation_id else formation
             if not data:

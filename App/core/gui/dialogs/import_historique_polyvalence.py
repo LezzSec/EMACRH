@@ -17,9 +17,9 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont
 
-from core.repositories.personnel_repo import PersonnelRepository
-from core.repositories.poste_repo import PosteRepository
-from core.services.polyvalence_logger import log_polyvalence_action
+from domain.repositories.personnel_repo import PersonnelRepository
+from domain.repositories.poste_repo import PosteRepository
+from domain.services.admin.polyvalence_logger import log_polyvalence_action
 from core.gui.components.emac_ui_kit import show_error_message
 from infrastructure.logging.logging_config import get_logger
 

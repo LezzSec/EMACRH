@@ -10,7 +10,7 @@ import sys
 # import pandas as pd  # Déplacé dans les fonctions qui l'utilisent
 from datetime import datetime
 from .besoin_poste_dialog import BesoinPosteDialog
-from core.services.grilles_service import GrillesService
+from domain.services.formation.grilles_service import GrillesService
 from infrastructure.logging.logging_config import get_logger
 from infrastructure.config.date_format import format_date
 logger = get_logger(__name__)

@@ -7,10 +7,10 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 
-from core.repositories.personnel_repo import PersonnelRepository
-from core.repositories.poste_repo import PosteRepository
-from core.repositories.polyvalence_repo import PolyvalenceRepository
-from core.services.matricule_service import generer_prochain_matricule
+from domain.repositories.personnel_repo import PersonnelRepository
+from domain.repositories.poste_repo import PosteRepository
+from domain.repositories.polyvalence_repo import PolyvalenceRepository
+from domain.services.personnel.matricule_service import generer_prochain_matricule
 from infrastructure.logging.optimized_db_logger import log_hist
 from core.gui.components.emac_ui_kit import show_error_message
 from core.services.permission_manager import require

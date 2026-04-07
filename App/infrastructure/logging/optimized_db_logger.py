@@ -31,7 +31,7 @@ _logger = logging.getLogger(__name__)
 def _get_current_username() -> str | None:
     """Récupère le nom d'utilisateur connecté."""
     try:
-        from core.services.auth_service import get_current_user
+        from domain.services.admin.auth_service import get_current_user
         user = get_current_user()
         if user:
             return user.get('username') or user.get('nom') or None

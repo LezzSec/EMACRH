@@ -36,7 +36,7 @@ from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 from core.services.document_trigger_service import (
     DocumentTriggerService
 )
-from core.services.template_service import open_template_file, print_template_file
+from domain.services.documents.template_service import open_template_file, print_template_file
 
 
 class DocumentProposalDialog(QDialog):

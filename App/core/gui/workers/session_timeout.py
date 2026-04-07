@@ -191,7 +191,7 @@ class SessionTimeoutManager(QObject):
 
         # Mettre à jour UserSession
         try:
-            from core.services.auth_service import UserSession
+            from domain.services.admin.auth_service import UserSession
             UserSession.update_activity()
         except Exception:
             pass
@@ -247,7 +247,7 @@ class SessionTimeoutManager(QObject):
 
         # Mettre à jour UserSession
         try:
-            from core.services.auth_service import UserSession
+            from domain.services.admin.auth_service import UserSession
             UserSession.update_activity()
         except Exception:
             pass
@@ -298,7 +298,7 @@ class SessionTimeoutManager(QObject):
 
         # Log de sécurité
         try:
-            from core.services.auth_service import UserSession, get_current_user
+            from domain.services.admin.auth_service import UserSession, get_current_user
             from infrastructure.logging.optimized_db_logger import log_hist_async
 
             user = get_current_user()

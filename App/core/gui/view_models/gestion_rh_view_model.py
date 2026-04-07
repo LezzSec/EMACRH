@@ -27,7 +27,7 @@ from typing import Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
 
-from core.services.rh_service import (
+from domain.services.rh.rh_service import (
     rechercher_operateurs,
     get_operateur_by_id,
     get_donnees_domaine,
@@ -39,9 +39,9 @@ from core.services.rh_service import (
     get_domaines_rh,
 )
 from core.services import competences_service as _competences_service
-from core.services.medical_service import delete_visite, delete_accident
-from core.services.vie_salarie_service import delete_sanction, delete_entretien
-from core.services.mutuelle_service import delete_mutuelle
+from domain.services.rh.medical_service import delete_visite, delete_accident
+from domain.services.rh.vie_salarie_service import delete_sanction, delete_entretien
+from domain.services.rh.mutuelle_service import delete_mutuelle
 from core.services.permission_manager import require
 from core.gui.workers.db_worker import DbWorker, DbThreadPool
 from infrastructure.logging.logging_config import get_logger
@@ -300,7 +300,7 @@ class GestionRHViewModel(QObject):
         Émet action_succeeded(msg) puis rafraichit domaine + archives.
         """
         try:
-            from core.services.document_service import DocumentService
+            from domain.services.documents.document_service import DocumentService
             doc_service = DocumentService()
             success, message = doc_service.restore_document(doc_id)
             if success:
@@ -326,7 +326,7 @@ class GestionRHViewModel(QObject):
             return
 
         try:
-            from core.services.document_service import DocumentService
+            from domain.services.documents.document_service import DocumentService
             doc_service = DocumentService()
             success, message = doc_service.archive_document(doc_id)
             if success:
@@ -346,7 +346,7 @@ class GestionRHViewModel(QObject):
         La View se charge d'ouvrir le fichier (os.startfile / xdg-open).
         """
         try:
-            from core.services.document_service import DocumentService
+            from domain.services.documents.document_service import DocumentService
             doc_service = DocumentService()
             doc_path = doc_service.get_document_path(doc_id)
             if doc_path and doc_path.exists():
@@ -362,7 +362,7 @@ class GestionRHViewModel(QObject):
         Extrait un dossier de formation vers un fichier temp et émet son chemin.
         """
         try:
-            from core.services.polyvalence_docs_service import extraire_vers_fichier_temp
+            from domain.services.documents.polyvalence_docs_service import extraire_vers_fichier_temp
             temp_path = extraire_vers_fichier_temp(doc_id)
             if temp_path and temp_path.exists():
                 self.document_path_ready.emit(str(temp_path))
@@ -381,8 +381,8 @@ class GestionRHViewModel(QObject):
         veut ouvrir le fichier.
         """
         try:
-            from core.services.formation_export_service import FormationExportService
-            from core.services.formation_service_crud import FormationServiceCRUD
+            from domain.services.formation.formation_export_service import FormationExportService
+            from domain.services.formation.formation_service_crud import FormationServiceCRUD
 
             data = FormationServiceCRUD.get_formation_by_id(formation_id)
             if not data:

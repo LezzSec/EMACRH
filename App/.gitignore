@@ -58,6 +58,9 @@ documents/
 documents/*.pdf
 documents/*.xlsx
 documents/*.docx
+# Exception: domain/services/documents/ est du code source, pas des documents générés
+!domain/services/documents/
+!domain/services/documents/**
 
 # --- IDE et éditeurs ---
 .vscode/

@@ -14,9 +14,9 @@ from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QBrush
 from datetime import datetime, timedelta
 
-from core.services.absence_service_crud import AbsenceServiceCRUD, calculer_jours_ouvres
-from core.services.planning_service import get_evaluations_mois, get_documents_expirant
-from core.repositories.personnel_repo import PersonnelRepository
+from domain.services.planning.absence_service_crud import AbsenceServiceCRUD, calculer_jours_ouvres
+from domain.services.planning.planning_service import get_evaluations_mois, get_documents_expirant
+from domain.repositories.personnel_repo import PersonnelRepository
 from core.gui.components.emac_ui_kit import add_custom_title_bar
 from infrastructure.logging.logging_config import get_logger
 
