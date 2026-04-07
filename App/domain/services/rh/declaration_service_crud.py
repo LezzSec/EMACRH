@@ -18,7 +18,7 @@ Usage:
 """
 
 from typing import Dict, List, Optional, Tuple
-from core.services.crud_service import CRUDService
+from application.crud_service import CRUDService
 from infrastructure.db.query_executor import QueryExecutor
 from infrastructure.logging.logging_config import get_logger
 

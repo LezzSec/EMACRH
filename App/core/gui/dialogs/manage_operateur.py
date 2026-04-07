@@ -13,7 +13,7 @@ from domain.repositories.polyvalence_repo import PolyvalenceRepository
 from domain.services.personnel.matricule_service import generer_prochain_matricule
 from infrastructure.logging.optimized_db_logger import log_hist
 from core.gui.components.emac_ui_kit import show_error_message
-from core.services.permission_manager import require
+from application.permission_manager import require
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)

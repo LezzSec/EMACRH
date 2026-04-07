@@ -5,7 +5,7 @@ Domaine RH : Informations générales.
 from PyQt5.QtWidgets import QDialog, QLabel, QHBoxLayout, QGridLayout
 
 from core.gui.components.ui_theme import EmacCard, EmacButton
-from core.services.permission_manager import can
+from application.permission_manager import can
 from core.gui.dialogs.gestion_rh_dialogs import EditInfosGeneralesDialog
 from .domaine_base import DomaineWidget
 

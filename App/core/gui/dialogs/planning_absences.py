@@ -21,7 +21,7 @@ from core.gui.components.emac_ui_kit import add_custom_title_bar
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
-from core.services.permission_manager import can
+from application.permission_manager import can
 from infrastructure.config.date_format import format_date
 
 

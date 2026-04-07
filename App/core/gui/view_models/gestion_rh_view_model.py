@@ -42,7 +42,7 @@ from core.services import competences_service as _competences_service
 from domain.services.rh.medical_service import delete_visite, delete_accident
 from domain.services.rh.vie_salarie_service import delete_sanction, delete_entretien
 from domain.services.rh.mutuelle_service import delete_mutuelle
-from core.services.permission_manager import require
+from application.permission_manager import require
 from core.gui.workers.db_worker import DbWorker, DbThreadPool
 from infrastructure.logging.logging_config import get_logger
 

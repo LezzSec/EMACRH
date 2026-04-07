@@ -33,7 +33,7 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtPrintSupport import QPrinter, QPrintDialog
 
-from core.services.document_trigger_service import (
+from application.document_trigger_service import (
     DocumentTriggerService
 )
 from domain.services.documents.template_service import open_template_file, print_template_file

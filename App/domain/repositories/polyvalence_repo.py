@@ -307,7 +307,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                     logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
 
                 # Émettre l'événement pour déclencher les documents
-                from core.services.event_bus import EventBus
+                from application.event_bus import EventBus
                 from domain.repositories.personnel_repo import PersonnelRepository
                 from domain.repositories.poste_repo import PosteRepository
                 personnel = PersonnelRepository.get_by_id(operateur_id)
@@ -378,7 +378,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 # Émettre les événements si le niveau a changé
                 old_niveau = old[2]
                 if old_niveau != nouveau_niveau:
-                    from core.services.event_bus import EventBus
+                    from application.event_bus import EventBus
                     from domain.repositories.personnel_repo import PersonnelRepository
                     from domain.repositories.poste_repo import PosteRepository
                     personnel = PersonnelRepository.get_by_id(old[0])
@@ -475,7 +475,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
 
             # Émettre l'événement pour déclencher la proposition du document du poste
             try:
-                from core.services.event_bus import EventBus
+                from application.event_bus import EventBus
                 from domain.repositories.personnel_repo import PersonnelRepository
                 from domain.repositories.poste_repo import PosteRepository
                 personnel = PersonnelRepository.get_by_id(operateur_id)

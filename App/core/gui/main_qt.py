@@ -284,7 +284,7 @@ class MainWindow(QMainWindow):
         auth = _lazy_auth()
         current_user = auth.get_current_user()
 
-        from core.services.permission_manager import can
+        from application.permission_manager import can
         perms = {
             "grilles_lecture": can('production.grilles.view'),
             "evaluations_lecture": can('production.evaluations.view'),
@@ -377,8 +377,8 @@ class MainWindow(QMainWindow):
     def _init_document_trigger_service(self):
         """Initialise le service de déclenchement de documents et connecte les signaux."""
         try:
-            from core.services.document_trigger_service import DocumentTriggerService
-            from core.services.event_bus import EventBus
+            from application.document_trigger_service import DocumentTriggerService
+            from application.event_bus import EventBus
 
             # Initialiser le service (singleton)
             self._doc_trigger = DocumentTriggerService()
@@ -430,7 +430,7 @@ class MainWindow(QMainWindow):
         if not operateur_id:
             return
         try:
-            from core.services.document_trigger_service import DocumentTriggerService
+            from application.document_trigger_service import DocumentTriggerService
 
             if DocumentTriggerService.has_pending_documents(operateur_id):
                 from core.gui.dialogs.document_proposal_dialog import DocumentProposalDialog

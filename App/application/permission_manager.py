@@ -9,7 +9,7 @@ Architecture:
 - Résolution: user_features (override) > role_features > refusé
 
 Usage:
-    from core.services.permission_manager import perm
+    from application.permission_manager import perm
 
     if perm.can("rh.personnel.edit"):
         # Autoriser l'action (utilise le cache)

@@ -18,7 +18,7 @@ from PyQt5.QtGui import QFont
 from core.gui.components.ui_theme import EmacButton
 from core.gui.components.emac_ui_kit import add_custom_title_bar
 from core.gui.view_models.gestion_rh_view_model import GestionRHViewModel, DomaineRH
-from core.services.permission_manager import can
+from application.permission_manager import can
 
 from .rh_selection_panel import RhSelectionPanel
 from .rh_header_widget import RhHeaderWidget

@@ -22,7 +22,7 @@ from infrastructure.logging.optimized_db_logger import log_hist
 from core.gui.dialogs.historique_personnel import HistoriquePersonnelTab
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
 from domain.services.admin.auth_service import get_current_user
-from core.services.permission_manager import require, can
+from application.permission_manager import require, can
 
 import datetime as dt
 from infrastructure.config.date_format import format_date

@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import QLabel, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from PyQt5.QtCore import Qt
 
 from core.gui.components.ui_theme import EmacCard, EmacButton
-from core.services.permission_manager import can
+from application.permission_manager import can
 from .domaine_base import DomaineWidget
 
 

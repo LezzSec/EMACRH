@@ -237,7 +237,7 @@ class ContratRepository(BaseRepository[Contrat]):
                         f"Contrat {data.get('type_contrat')} créé pour personnel {data.get('personnel_id')}")
 
                 # Émettre l'événement pour déclencher les documents
-                from core.services.event_bus import EventBus
+                from application.event_bus import EventBus
                 # Récupérer les infos du personnel pour l'événement
                 from domain.repositories.personnel_repo import PersonnelRepository
                 personnel = PersonnelRepository.get_by_id(data.get('personnel_id'))
@@ -307,7 +307,7 @@ class ContratRepository(BaseRepository[Contrat]):
 
         # Émettre l'événement si la prolongation a réussi
         if success and old_contrat:
-            from core.services.event_bus import EventBus
+            from application.event_bus import EventBus
             from domain.repositories.personnel_repo import PersonnelRepository
             personnel = PersonnelRepository.get_by_id(old_contrat.personnel_id)
             if personnel:

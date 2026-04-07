@@ -6,7 +6,7 @@ Ce module fournit un bus d'événements centralisé pour la communication
 entre les différentes couches de l'application (repositories, services, UI).
 
 Usage:
-    from core.services.event_bus import EventBus
+    from application.event_bus import EventBus
 
     # Émettre un événement
     EventBus.emit('personnel.created', {

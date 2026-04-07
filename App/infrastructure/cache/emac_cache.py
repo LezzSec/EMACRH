@@ -148,7 +148,7 @@ def invalidate_user_cache(reload_current_user: bool = True):
     # singleton garde les anciennes permissions en mémoire.
     if reload_current_user:
         try:
-            from core.services.permission_manager import perm
+            from application.permission_manager import perm
             if perm.is_loaded():
                 perm.reload()
                 import logging

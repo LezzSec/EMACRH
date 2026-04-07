@@ -6,7 +6,7 @@ Ce service charge les règles depuis la table `document_event_rules`
 et retourne les templates à générer pour un événement donné.
 
 Usage:
-    from core.services.event_rule_service import get_matching_templates
+    from application.event_rule_service import get_matching_templates
 
     # Obtenir les templates pour un événement
     templates = get_matching_templates('personnel.created', {

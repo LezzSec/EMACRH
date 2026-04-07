@@ -13,7 +13,7 @@ Gère:
 from typing import Dict, List, Optional, Tuple
 
 from infrastructure.db.query_executor import QueryExecutor
-from core.services.permission_manager import require
+from application.permission_manager import require
 from infrastructure.logging.optimized_db_logger import log_hist
 from infrastructure.logging.logging_config import get_logger
 

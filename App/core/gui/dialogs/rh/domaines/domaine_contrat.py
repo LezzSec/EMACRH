@@ -10,7 +10,7 @@ from core.gui.components.emac_ui_kit import EmacAlert
 from core.gui.dialogs.gestion_rh_dialogs import (
     EditContratDialog, AjouterDocumentDialog, ConsulterDetailDialog,
 )
-from core.services.permission_manager import can
+from application.permission_manager import can
 from .domaine_base import DomaineWidget
 
 

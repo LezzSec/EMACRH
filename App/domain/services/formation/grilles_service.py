@@ -139,7 +139,7 @@ class GrillesService:
             ValueError: Si le niveau n'est pas un entier valide
             Exception: En cas d'erreur DB
         """
-        from core.services.permission_manager import require
+        from application.permission_manager import require
         require("production.grilles.edit")
         # 1. Lire ancienne valeur
         old_result = QueryExecutor.fetch_one("""
@@ -270,7 +270,7 @@ class GrillesService:
           + polyvalence.niveau_3_reached si passage à 3
         """
         try:
-            from core.services.event_bus import EventBus
+            from application.event_bus import EventBus
             from domain.repositories.personnel_repo import PersonnelRepository
 
             personnel = PersonnelRepository.get_by_id(operateur_id)
@@ -418,7 +418,7 @@ class GrillesService:
         Returns:
             Nombre de modifications réussies
         """
-        from core.services.permission_manager import require
+        from application.permission_manager import require
         require("production.grilles.edit")
         count = 0
         for operateur_id, poste_id, new_niveau_str, operateur_nom, poste_code in modifications:

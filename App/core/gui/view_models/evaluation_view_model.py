@@ -240,7 +240,7 @@ class EvaluationViewModel(QObject):
         ancien_niveau, nouveau_niveau, prochaine_eval,
     ):
         try:
-            from core.services.event_bus import EventBus
+            from application.event_bus import EventBus
             from domain.repositories.poste_repo import PosteRepository
             from domain.services.formation.evaluation_service import has_operateur_deja_eu_niveau_1
 

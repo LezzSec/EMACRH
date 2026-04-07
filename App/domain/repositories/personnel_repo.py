@@ -271,7 +271,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
                         f"Création: {data.get('nom')} {data.get('prenom')}")
 
                 # Émettre l'événement pour déclencher les documents
-                from core.services.event_bus import EventBus
+                from application.event_bus import EventBus
                 EventBus.emit('personnel.created', {
                     'operateur_id': new_id,
                     'nom': data.get('nom', ''),
@@ -365,7 +365,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
 
         # Émettre l'événement si le statut a changé
         if success and old_statut != statut:
-            from core.services.event_bus import EventBus
+            from application.event_bus import EventBus
             event_name = 'personnel.deactivated' if statut == 'INACTIF' else 'personnel.reactivated'
             EventBus.emit(event_name, {
                 'operateur_id': id,

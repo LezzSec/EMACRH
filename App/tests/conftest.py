@@ -268,7 +268,7 @@ def mock_non_admin_session():
 
 # Liste des modules qui importent 'require' et doivent être mockés
 _MODULES_WITH_REQUIRE = [
-    'core.services.permission_manager',
+    'application.permission_manager',
     'core.services.contrat_service_crud',
     'core.services.absence_service',
     'domain.services.formation.evaluation_service',
@@ -288,7 +288,7 @@ def reset_and_mock_permissions():
     utilisez le fixture 'enforce_permissions'.
     """
     from contextlib import ExitStack
-    from core.services.permission_manager import PermissionManager
+    from application.permission_manager import PermissionManager
 
     # Reset le singleton
     PermissionManager.reset()
@@ -321,13 +321,13 @@ def enforce_permissions():
 
     Usage:
         def test_permission_denied(enforce_permissions):
-            from core.services.permission_manager import PermissionManager, PermissionError
+            from application.permission_manager import PermissionManager, PermissionError
             PermissionManager.reset()  # Assure que les permissions ne sont pas chargées
             with pytest.raises(PermissionError):
                 # Cette fonction devrait lever PermissionError
                 some_protected_function()
     """
-    from core.services.permission_manager import PermissionManager
+    from application.permission_manager import PermissionManager
     PermissionManager.reset()
     yield
     PermissionManager.reset()
@@ -336,7 +336,7 @@ def enforce_permissions():
 @pytest.fixture
 def mock_permission_manager():
     """Mock du PermissionManager pour simuler des permissions features"""
-    with patch('core.services.permission_manager.perm') as mock_perm:
+    with patch('application.permission_manager.perm') as mock_perm:
         mock_perm.is_loaded.return_value = False  # Par défaut, fallback vers l'ancien système
         mock_perm.can.return_value = False
         yield mock_perm

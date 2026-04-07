@@ -12,7 +12,7 @@ Modes d'exécution:
 
 Usage:
     # Initialisation au démarrage de l'application
-    from core.services.document_trigger_service import DocumentTriggerService
+    from application.document_trigger_service import DocumentTriggerService
     trigger_service = DocumentTriggerService()  # S'abonne automatiquement
 
     # Les événements sont traités automatiquement
@@ -31,8 +31,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from threading import Lock
 
-from core.services.event_bus import EventBus, DomainEvent
-from core.services.event_rule_service import get_matching_templates
+from application.event_bus import EventBus, DomainEvent
+from application.event_rule_service import get_matching_templates
 from domain.services.documents.template_service import generate_filled_template, open_template_file
 from infrastructure.logging.optimized_db_logger import log_hist
 
@@ -463,7 +463,7 @@ class DocumentTriggerService:
         Returns:
             Liste de PendingDocument (non ajoutés à la queue)
         """
-        from core.services.event_rule_service import get_matching_templates
+        from application.event_rule_service import get_matching_templates
 
         result = []
         seen: set = set()
@@ -567,7 +567,7 @@ class DocumentTriggerService:
         Returns:
             Nombre de documents ajoutés à la file d'attente
         """
-        from core.services.event_rule_service import get_matching_templates
+        from application.event_rule_service import get_matching_templates
 
         instance = cls()
         added = 0

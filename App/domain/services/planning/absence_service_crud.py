@@ -31,8 +31,8 @@ Usage:
 from typing import Dict, FrozenSet, List, Optional, Set, Tuple
 from datetime import date, timedelta
 from functools import lru_cache
-from core.services.crud_service import CRUDService
-from core.services.permission_manager import require
+from application.crud_service import CRUDService
+from application.permission_manager import require
 
 
 # =============================================================================

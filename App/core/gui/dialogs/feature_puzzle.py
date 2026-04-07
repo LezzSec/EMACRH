@@ -40,7 +40,7 @@ def get_admin_role_id() -> int:
         return _admin_role_id_cache
 
     try:
-        from core.services.permission_manager import get_admin_role_id as _svc_admin_id
+        from application.permission_manager import get_admin_role_id as _svc_admin_id
 
         role_id = _svc_admin_id()
         if role_id:
@@ -332,7 +332,7 @@ class FeaturePuzzleWidget(QWidget):
 
     def load_role_features(self, role_id: int):
         """Charge les features d'un rôle"""
-        from core.services.permission_manager import get_features_by_module, get_role_features
+        from application.permission_manager import get_features_by_module, get_role_features
 
         self._mode = 'role'
         self._role_id = role_id
@@ -359,7 +359,7 @@ class FeaturePuzzleWidget(QWidget):
 
     def load_user_features(self, user_id: int, role_id: int):
         """Charge les features d'un utilisateur (avec overrides)"""
-        from core.services.permission_manager import (
+        from application.permission_manager import (
             get_features_by_module, get_role_features, get_user_feature_overrides
         )
 
@@ -719,7 +719,7 @@ class FeatureEditorDialog(QDialog):
 
     def load_data(self):
         """Charge les données initiales"""
-        from core.services.permission_manager import get_all_roles
+        from application.permission_manager import get_all_roles
         from domain.services.admin.auth_service import get_all_users
 
         # Charger les rôles
@@ -785,7 +785,7 @@ class FeatureEditorDialog(QDialog):
     def _load_user_features(self):
         user_data = self.user_combo.currentData()
         if user_data:
-            from core.services.permission_manager import get_user_with_role
+            from application.permission_manager import get_user_with_role
 
             user_id = user_data['id']
             user_info = get_user_with_role(user_id)
@@ -807,7 +807,7 @@ class FeatureEditorDialog(QDialog):
             self.puzzle_widget.reset_to_role()
 
     def _on_save(self):
-        from core.services.permission_manager import save_role_features, save_user_feature_overrides
+        from application.permission_manager import save_role_features, save_user_feature_overrides
 
         if self._current_mode == 'role':
             features = self.puzzle_widget.get_role_features()

@@ -28,7 +28,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QColor
 
-from core.services.document_trigger_service import DocumentTriggerService, PendingDocument
+from application.document_trigger_service import DocumentTriggerService, PendingDocument
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -158,7 +158,7 @@ class ImprimerDocumentsDialog(QDialog):
     def _load_data(self):
         """Charge les documents disponibles pour chaque opérateur."""
         from domain.services.formation.evaluation_service import get_polyvalences_actuelles_operateur
-        from core.services.event_rule_service import get_matching_templates
+        from application.event_rule_service import get_matching_templates
 
         self.tree.blockSignals(True)
         self.tree.clear()

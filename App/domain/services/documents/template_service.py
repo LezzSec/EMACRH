@@ -305,7 +305,7 @@ def upload_template(
     Returns:
         (succes, message)
     """
-    from core.services.permission_manager import require
+    from application.permission_manager import require
     require("rh.documents.edit")
     source_path = Path(fichier_source)
     if not source_path.exists():
@@ -379,7 +379,7 @@ def add_template(
     Returns:
         (succes, message, template_id)
     """
-    from core.services.permission_manager import require
+    from application.permission_manager import require
     require("rh.documents.edit")
     source_path = Path(fichier_source)
     if not source_path.exists():

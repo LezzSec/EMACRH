@@ -11,7 +11,7 @@ from typing import List, Dict, Tuple, Optional, Callable, Any
 
 from infrastructure.db.query_executor import QueryExecutor
 from infrastructure.logging.optimized_db_logger import log_hist
-from core.services.permission_manager import require
+from application.permission_manager import require
 from domain.services.documents.document_service import DocumentService
 from infrastructure.logging.logging_config import get_logger
 

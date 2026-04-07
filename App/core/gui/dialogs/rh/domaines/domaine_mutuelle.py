@@ -9,7 +9,7 @@ from PyQt5.QtWidgets import (
 
 from core.gui.components.ui_theme import EmacCard, EmacButton
 from core.gui.dialogs.gestion_rh_dialogs import EditMutuelleDialog, ConsulterDetailDialog
-from core.services.permission_manager import can
+from application.permission_manager import can
 from .domaine_base import DomaineWidget
 
 _STATUT_LABELS = {'ADHERENT': 'Adhérent', 'DISPENSE': 'Dispensé', 'NON_COUVERT': 'Non couvert'}

@@ -13,7 +13,7 @@ from core.gui.dialogs.gestion_rh_dialogs import (
     EditSanctionDialog, EditControleAlcoolDialog, EditTestSalivaireDialog,
     EditEntretienDialog, ConsulterDetailDialog,
 )
-from core.services.permission_manager import can
+from application.permission_manager import can
 from .domaine_base import DomaineWidget
 
 _ROW_H = 30

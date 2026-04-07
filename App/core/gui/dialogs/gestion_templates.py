@@ -1155,7 +1155,7 @@ class ImportTemplateDialog(QDialog):
             # Créer la règle d'impression si un événement est sélectionné
             event_name = self.event_combo.currentData()
             if event_name and template_id:
-                from core.services.event_rule_service import create_rule
+                from application.event_rule_service import create_rule
 
                 rule_success, rule_msg, rule_id = create_rule(
                     event_name=event_name,

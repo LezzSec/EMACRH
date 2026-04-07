@@ -10,7 +10,7 @@ from PyQt5.QtGui import QFont
 
 from core.gui.components.ui_theme import EmacCard, EmacButton
 from core.gui.dialogs.gestion_rh_dialogs import AjouterDocumentDialog
-from core.services.permission_manager import can
+from application.permission_manager import can
 from infrastructure.config.date_format import format_date
 
 

@@ -15,7 +15,7 @@ from core.gui.components.ui_theme import EmacCard, EmacButton
 from core.gui.dialogs.gestion_rh_dialogs import (
     EditVisiteDialog, EditAccidentDialog, ConsulterDetailDialog,
 )
-from core.services.permission_manager import can
+from application.permission_manager import can
 from .domaine_base import DomaineWidget
 
 

@@ -8,7 +8,7 @@ from PyQt5.QtCore import Qt
 from core.gui.components.ui_theme import EmacCard, EmacButton
 from core.gui.components.emac_ui_kit import EmacAlert, EmacChip
 from core.gui.dialogs.gestion_rh_dialogs import EditDeclarationDialog, ConsulterDetailDialog
-from core.services.permission_manager import can
+from application.permission_manager import can
 from .domaine_base import DomaineWidget
 
 

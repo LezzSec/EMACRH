@@ -17,7 +17,7 @@ from infrastructure.logging.logging_config import get_logger
 logger = get_logger(__name__)
 
 from infrastructure.config.performance_monitor import monitor_query
-from core.services.permission_manager import require
+from application.permission_manager import require
 from domain.models import EvaluationResume, StatistiquesEvaluations
 
 

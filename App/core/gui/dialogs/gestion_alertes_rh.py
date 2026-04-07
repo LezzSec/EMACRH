@@ -19,7 +19,7 @@ from PyQt5.QtGui import QFont, QCursor
 
 from domain.services.admin.alert_service import AlertService, TypeAlerte
 from domain.models import Alert
-from core.services.permission_manager import can
+from application.permission_manager import can
 from infrastructure.config.date_format import format_date
 
 logger = logging.getLogger(__name__)

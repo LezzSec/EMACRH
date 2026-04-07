@@ -68,7 +68,7 @@ class DocumentService:
         Returns:
             (succes, message, document_id)
         """
-        from core.services.permission_manager import require
+        from application.permission_manager import require
         require("rh.documents.edit")
         conn = None
         try:
@@ -344,7 +344,7 @@ class DocumentService:
         Returns:
             (succes, message)
         """
-        from core.services.permission_manager import require
+        from application.permission_manager import require
         require("rh.documents.edit")
         try:
             conn = get_connection()
@@ -390,7 +390,7 @@ class DocumentService:
 
     def archive_document(self, document_id: int) -> Tuple[bool, str]:
         """Archive un document (change son statut)"""
-        from core.services.permission_manager import require
+        from application.permission_manager import require
         require("rh.documents.edit")
         try:
             conn = get_connection()
@@ -412,7 +412,7 @@ class DocumentService:
 
     def restore_document(self, document_id: int) -> Tuple[bool, str]:
         """Restaure un document archive (remet son statut a actif)"""
-        from core.services.permission_manager import require
+        from application.permission_manager import require
         require("rh.documents.edit")
         try:
             conn = get_connection()
@@ -482,7 +482,7 @@ class DocumentService:
         categorie_id: int = None
     ) -> Tuple[bool, str]:
         """Met a jour les informations d'un document"""
-        from core.services.permission_manager import require
+        from application.permission_manager import require
         require("rh.documents.edit")
         try:
             conn = get_connection()

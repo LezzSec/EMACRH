@@ -10,7 +10,7 @@ Architecture :
     CRUDService → IRepository → GenericRepository → QueryExecutor → MySQL
 
 Usage :
-    from core.services.crud_service import CRUDService
+    from application.crud_service import CRUDService
 
     class PersonnelService(CRUDService):
         TABLE_NAME = "personnel"
@@ -120,7 +120,7 @@ class CRUDService:
         """
         cls._validate_config()
         if cls.WRITE_FEATURE:
-            from core.services.permission_manager import require
+            from application.permission_manager import require
             require(cls.WRITE_FEATURE)
         try:
             repo = cls._get_repository()
@@ -166,7 +166,7 @@ class CRUDService:
         """
         cls._validate_config()
         if cls.WRITE_FEATURE:
-            from core.services.permission_manager import require
+            from application.permission_manager import require
             require(cls.WRITE_FEATURE)
 
         if not kwargs:
@@ -226,7 +226,7 @@ class CRUDService:
         cls._validate_config()
         _delete_feature = cls.DELETE_FEATURE or cls.WRITE_FEATURE
         if _delete_feature:
-            from core.services.permission_manager import require
+            from application.permission_manager import require
             require(_delete_feature)
 
         try:

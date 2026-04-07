@@ -26,7 +26,7 @@ Usage:
 """
 
 from typing import Dict, List, Optional, Tuple
-from core.services.crud_service import CRUDService
+from application.crud_service import CRUDService
 
 
 class PersonnelService(CRUDService):

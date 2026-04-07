@@ -17,7 +17,7 @@ from typing import List, Dict, Optional, Tuple, Any
 from decimal import Decimal
 
 from infrastructure.db.query_executor import QueryExecutor
-from core.services.permission_manager import require
+from application.permission_manager import require
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)

@@ -302,7 +302,7 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
         UserSession.set_user(user_data, permissions, session_id)
 
         try:
-            from core.services.permission_manager import load_user_permissions
+            from application.permission_manager import load_user_permissions
             load_user_permissions(user['id'], user['role_id'])
             logger.debug(f"Features chargées pour l'utilisateur {username}")
         except Exception as e:
@@ -373,7 +373,7 @@ def logout_user():
         UserSession.clear()
 
         try:
-            from core.services.permission_manager import PermissionManager
+            from application.permission_manager import PermissionManager
             PermissionManager.reset()
         except Exception:
             pass
@@ -396,7 +396,7 @@ def has_permission(module: str, action: str = 'lecture') -> bool:
 
     # Essayer d'abord le système features
     try:
-        from core.services.permission_manager import perm
+        from application.permission_manager import perm
         if perm.is_loaded():
             # Mapping ancien système → features
             feature_key = _map_to_feature(module, action)
@@ -485,7 +485,7 @@ def is_admin() -> bool:
 
     # Vérification par feature
     try:
-        from core.services.permission_manager import perm
+        from application.permission_manager import perm
         if perm.is_loaded() and perm.can('admin.permissions'):
             return True
     except Exception:

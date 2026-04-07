@@ -24,8 +24,8 @@ from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
 from infrastructure.db.query_executor import QueryExecutor
-from core.services.crud_service import CRUDService
-from core.services.permission_manager import require
+from application.crud_service import CRUDService
+from application.permission_manager import require
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)

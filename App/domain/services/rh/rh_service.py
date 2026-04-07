@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 from domain.services.personnel.personnel_service import PersonnelService
 from core.services.contrat_service_crud import ContratServiceCRUD
 from domain.services.formation.formation_service_crud import FormationServiceCRUD
-from core.services.permission_manager import require
+from application.permission_manager import require
 from core.services import competences_service
 
 # Repositories — seuls accès DB autorisés dans ce service
