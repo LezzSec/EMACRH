@@ -646,6 +646,10 @@ class EmacAlert(QtWidgets.QFrame):
         super().__init__(parent)
         self.setObjectName("EmacAlert")
         self.setFrameShape(QtWidgets.QFrame.NoFrame)
+        self.setSizePolicy(
+            QtWidgets.QSizePolicy.Expanding,
+            QtWidgets.QSizePolicy.Preferred,
+        )
 
         # Couleurs selon le variant
         styles = {
