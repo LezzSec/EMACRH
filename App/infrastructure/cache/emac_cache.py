@@ -5,7 +5,7 @@ Fournit des fonctions de cache pour les cas d'usage courants.
 """
 
 from typing import Optional, List, Dict, Any
-from core.utils.cache import CacheManager, CacheTTL, cached
+from infrastructure.cache.cache import CacheManager, CacheTTL, cached
 
 
 # ===========================
@@ -22,7 +22,7 @@ def get_cached_postes() -> List[Dict]:
     Returns:
         Liste des postes avec leurs infos
     """
-    from core.db.configbd import DatabaseCursor
+    from infrastructure.db.configbd import DatabaseCursor
 
     with DatabaseCursor(dictionary=True) as cur:
         cur.execute("""
@@ -46,7 +46,7 @@ def get_cached_postes_actifs() -> List[Dict]:
     Returns:
         Liste des postes actifs
     """
-    from core.db.configbd import DatabaseCursor
+    from infrastructure.db.configbd import DatabaseCursor
 
     with DatabaseCursor(dictionary=True) as cur:
         cur.execute("""
@@ -69,7 +69,7 @@ def get_cached_poste_by_id(poste_id: int) -> Optional[Dict]:
     Returns:
         Dictionnaire du poste ou None
     """
-    from core.db.configbd import DatabaseCursor
+    from infrastructure.db.configbd import DatabaseCursor
 
     with DatabaseCursor(dictionary=True) as cur:
         cur.execute("""
@@ -172,7 +172,7 @@ def get_cached_roles() -> List[Dict]:
     Returns:
         Liste des rôles
     """
-    from core.db.configbd import DatabaseCursor
+    from infrastructure.db.configbd import DatabaseCursor
 
     with DatabaseCursor(dictionary=True) as cur:
         cur.execute("SELECT id, nom, description FROM roles ORDER BY id")
@@ -189,7 +189,7 @@ def get_cached_ateliers() -> List[Dict]:
     Returns:
         Liste des ateliers
     """
-    from core.db.configbd import DatabaseCursor
+    from infrastructure.db.configbd import DatabaseCursor
 
     with DatabaseCursor(dictionary=True) as cur:
         cur.execute("SELECT id, nom FROM atelier ORDER BY nom")
@@ -298,7 +298,7 @@ def get_cached_personnel_actifs() -> List[Dict]:
     Returns:
         Liste du personnel actif
     """
-    from core.db.configbd import DatabaseCursor
+    from infrastructure.db.configbd import DatabaseCursor
 
     with DatabaseCursor(dictionary=True) as cur:
         cur.execute("""
@@ -320,7 +320,7 @@ def get_cached_personnel_count() -> Dict[str, int]:
     Returns:
         Dict {statut: count}
     """
-    from core.db.configbd import DatabaseCursor
+    from infrastructure.db.configbd import DatabaseCursor
 
     with DatabaseCursor(dictionary=True) as cur:
         cur.execute("""

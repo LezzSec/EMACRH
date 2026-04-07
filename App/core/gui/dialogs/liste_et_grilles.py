@@ -11,16 +11,13 @@ import sys
 from datetime import datetime
 from .besoin_poste_dialog import BesoinPosteDialog
 from core.services.grilles_service import GrillesService
-from core.utils.logging_config import get_logger
-from core.utils.date_format import format_date
+from infrastructure.logging.logging_config import get_logger
+from infrastructure.config.date_format import format_date
 logger = get_logger(__name__)
-try:
-    from core.gui.components.ui_theme import EmacButton, get_current_theme
-    from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
-    THEME_AVAILABLE = True
-except ImportError:
-    THEME_AVAILABLE = False
-    show_error_message = None
+from core.gui.components.ui_theme import EmacButton, get_current_theme
+from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
+
+THEME_AVAILABLE = True  # toujours disponible — conservé pour compat branches existantes
 
 
 class GrillesDialog(QDialog):

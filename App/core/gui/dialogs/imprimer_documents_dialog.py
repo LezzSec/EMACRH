@@ -29,7 +29,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QFont, QColor
 
 from core.services.document_trigger_service import DocumentTriggerService, PendingDocument
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

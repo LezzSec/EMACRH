@@ -4,7 +4,7 @@ Service de génération automatique de matricules
 Génère des matricules au format M000XXX pour le personnel de production
 """
 
-from core.db.configbd import get_connection
+from infrastructure.db.configbd import get_connection
 
 
 def generer_prochain_matricule():

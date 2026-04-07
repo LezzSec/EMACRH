@@ -28,11 +28,11 @@ Usage:
 from datetime import date
 from typing import Dict, List, Optional, Tuple
 
-from core.db.query_executor import QueryExecutor
+from infrastructure.db.query_executor import QueryExecutor
 from core.services.crud_service import CRUDService
 from core.services.permission_manager import require
-from core.utils.logging_config import get_logger
-from core.utils.performance_monitor import monitor_query
+from infrastructure.logging.logging_config import get_logger
+from infrastructure.config.performance_monitor import monitor_query
 
 logger = get_logger(__name__)
 

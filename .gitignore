@@ -64,7 +64,7 @@ App/.env
 App/.env.encrypted
 # IMPORTANT: Le fichier config_crypter.py contient la clé de chiffrement
 # Il ne doit JAMAIS être commité avec la vraie clé
-App/core/utils/config_crypter.py
+App/infrastructure/security/config_crypter.py
 
 # PyInstaller build
 build/

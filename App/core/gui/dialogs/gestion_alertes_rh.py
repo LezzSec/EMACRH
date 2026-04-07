@@ -20,20 +20,16 @@ from PyQt5.QtGui import QFont, QCursor
 from core.services.alert_service import AlertService, TypeAlerte
 from core.models import Alert
 from core.services.permission_manager import can
-from core.utils.date_format import format_date
+from infrastructure.config.date_format import format_date
 
 logger = logging.getLogger(__name__)
 
-try:
-    from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message, EmacBadge
-    from core.gui.components.ui_theme import EmacButton
-    from core.gui.workers.db_worker import DbWorker, DbThreadPool
-    from core.gui.components.loading_components import EmptyStatePlaceholder
-    THEME_AVAILABLE = True
-except ImportError as e:
-    logger.warning(f"Theme components not available: {e}")
-    THEME_AVAILABLE = False
-    show_error_message = None
+from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message, EmacBadge
+from core.gui.components.ui_theme import EmacButton
+from core.gui.workers.db_worker import DbWorker, DbThreadPool
+from core.gui.components.loading_components import EmptyStatePlaceholder
+
+THEME_AVAILABLE = True  # toujours disponible — conservé pour compat branches existantes
 
 
 # ===========================
@@ -720,9 +716,9 @@ class GestionAlertesRHDialog(QDialog):
                     parent=self
                 )
                 dialog.exec_()
-            except ImportError as e:
-                logger.error(f"Erreur import DetailOperateurDialog: {e}")
-                QMessageBox.information(self, "Info", f"Detail ID {pid}")
+            except Exception as e:
+                logger.exception(f"Erreur ouverture DetailOperateurDialog pour id={pid}: {e}")
+                show_error_message(self, "Erreur", "Impossible d'ouvrir le détail de l'opérateur.", e)
 
     def _on_handle_alert(self, alert: Alert):
         """Masque ou affiche une alerte."""

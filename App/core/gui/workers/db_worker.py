@@ -20,7 +20,7 @@ import time
 from typing import Callable, Optional
 from PyQt5.QtCore import QObject, pyqtSignal, QRunnable, QThreadPool
 from weakref import WeakSet
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -283,7 +283,7 @@ class DbThreadPool:
         # IMPORTANT : Limiter la concurrence en cohérence avec le pool MySQL
         # Si pool MySQL = 5, on limite à 5 threads DB maximum
         # Cela évite d'avoir 10 workers qui attendent une connexion
-        from core.db.configbd import _get_db_config
+        from infrastructure.db.configbd import _get_db_config
         try:
             config = _get_db_config()
             pool_size = config.get('pool_size', 5)
@@ -336,7 +336,7 @@ class DbThreadPool:
 
         Example:
             def fetch_personnel():
-                from core.db.query_executor import QueryExecutor
+                from infrastructure.db.query_executor import QueryExecutor
                 return QueryExecutor.fetch_all(
                     "SELECT * FROM personnel WHERE statut = 'ACTIF'",
                     dictionary=True
@@ -477,7 +477,7 @@ def async_db_operation(on_result: Optional[Callable] = None,
     Example:
         @async_db_operation(on_result=lambda x: print(f"Résultat: {x}"))
         def fetch_personnel():
-            from core.db.query_executor import QueryExecutor
+            from infrastructure.db.query_executor import QueryExecutor
             return QueryExecutor.fetch_all(
                 "SELECT * FROM personnel",
                 dictionary=True

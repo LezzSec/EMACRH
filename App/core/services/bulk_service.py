@@ -9,11 +9,11 @@ pour les opérations unitaires, et ajoute le tracking batch.
 
 from typing import List, Dict, Tuple, Optional, Callable, Any
 
-from core.db.query_executor import QueryExecutor
-from core.services.optimized_db_logger import log_hist
+from infrastructure.db.query_executor import QueryExecutor
+from infrastructure.logging.optimized_db_logger import log_hist
 from core.services.permission_manager import require
 from core.services.document_service import DocumentService
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

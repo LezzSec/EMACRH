@@ -15,16 +15,13 @@ from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
 from core.gui.components.emac_ui_kit import add_custom_title_bar
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-# Import des composants modernes EMAC
-try:
-    from core.gui.components.ui_theme import EmacCard, EmacButton
-    THEME_AVAILABLE = True
-except ImportError:
-    THEME_AVAILABLE = False
+from core.gui.components.ui_theme import EmacCard, EmacButton
+
+THEME_AVAILABLE = True  # toujours disponible — conservé pour compat branches existantes
 
 
 class GestionTemplatesDialog(QDialog):

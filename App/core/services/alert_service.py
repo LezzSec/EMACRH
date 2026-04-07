@@ -19,10 +19,10 @@ Usage:
 from datetime import date, timedelta
 from typing import List, Dict, Any, Optional
 
-from core.db.query_executor import QueryExecutor
+from infrastructure.db.query_executor import QueryExecutor
 from core.models import Alert, StatistiquesAlertes
-from core.utils.performance_monitor import monitor_query
-from core.utils.logging_config import get_logger
+from infrastructure.config.performance_monitor import monitor_query
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -872,8 +872,11 @@ class AlertService:
         Résumé détaillé par catégorie pour le popup de démarrage.
 
         Returns:
-            Dict avec 'evaluations_retard', 'contrats_expires', 'contrats_expirant',
-            'personnel_sans_contrat', 'total_critique', 'total_avertissement'
+            Dict avec les clés: 'evaluations_retard', 'contrats_expires', 'contrats_expirant',
+            'personnel_sans_contrat', 'mutuelles_expirees', 'mutuelles_expirant',
+            'visites_retard', 'visites_a_planifier', 'rqth_expirant', 'oeth_expirant',
+            'competences_expirees', 'competences_expirant', 'documents_expires',
+            'documents_expirant', 'total_critique', 'total_avertissement'
         """
         logger.debug("get_startup_summary: calcul du résumé de démarrage")
         result = {}
@@ -905,21 +908,124 @@ class AlertService:
                 WHERE p.statut = 'ACTIF' AND c.id IS NULL
             """, default=0)
 
+            # Mutuelles expirées (CRITIQUE)
+            result['mutuelles_expirees'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM mutuelle m
+                JOIN personnel p ON p.id = m.personnel_id
+                WHERE p.statut = 'ACTIF' AND m.date_fin IS NOT NULL AND m.date_fin < CURDATE()
+            """, default=0)
+
+            # Mutuelles expirant dans 30j (AVERTISSEMENT)
+            result['mutuelles_expirant'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM mutuelle m
+                JOIN personnel p ON p.id = m.personnel_id
+                WHERE p.statut = 'ACTIF'
+                  AND m.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+            """, default=0)
+
+            # Visites médicales en retard (CRITIQUE)
+            result['visites_retard'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(DISTINCT mv.operateur_id)
+                FROM medical_visite mv
+                JOIN personnel p ON p.id = mv.operateur_id
+                WHERE p.statut = 'ACTIF'
+                  AND mv.prochaine_visite < CURDATE()
+                  AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE operateur_id = mv.operateur_id)
+            """, default=0)
+
+            # Visites médicales à planifier dans 30j (AVERTISSEMENT)
+            result['visites_a_planifier'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(DISTINCT mv.operateur_id)
+                FROM medical_visite mv
+                JOIN personnel p ON p.id = mv.operateur_id
+                WHERE p.statut = 'ACTIF'
+                  AND mv.prochaine_visite BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                  AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE operateur_id = mv.operateur_id)
+            """, default=0)
+
+            # RQTH expirant dans 90j (AVERTISSEMENT)
+            result['rqth_expirant'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM validite v
+                JOIN personnel p ON p.id = v.operateur_id
+                WHERE p.statut = 'ACTIF' AND v.type_validite = 'RQTH'
+                  AND v.date_fin IS NOT NULL
+                  AND v.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY)
+            """, default=0)
+
+            # OETH expirant dans 90j (AVERTISSEMENT)
+            result['oeth_expirant'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM validite v
+                JOIN personnel p ON p.id = v.operateur_id
+                WHERE p.statut = 'ACTIF' AND v.type_validite = 'OETH'
+                  AND v.date_fin IS NOT NULL
+                  AND v.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY)
+            """, default=0)
+
+            # Compétences expirées (CRITIQUE)
+            result['competences_expirees'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM personnel_competences pc
+                JOIN personnel p ON p.id = pc.personnel_id
+                WHERE p.statut = 'ACTIF'
+                  AND pc.date_expiration IS NOT NULL AND pc.date_expiration < CURDATE()
+            """, default=0)
+
+            # Compétences expirant dans 30j (AVERTISSEMENT)
+            result['competences_expirant'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM personnel_competences pc
+                JOIN personnel p ON p.id = pc.personnel_id
+                WHERE p.statut = 'ACTIF'
+                  AND pc.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+            """, default=0)
+
+            # Documents expirés (CRITIQUE)
+            result['documents_expires'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM documents d
+                JOIN personnel p ON p.id = d.personnel_id
+                WHERE p.statut = 'ACTIF' AND d.statut = 'expire'
+            """, default=0)
+
+            # Documents expirant dans 30j (AVERTISSEMENT)
+            result['documents_expirant'] = QueryExecutor.fetch_scalar("""
+                SELECT COUNT(*) FROM documents d
+                JOIN personnel p ON p.id = d.personnel_id
+                WHERE p.statut = 'ACTIF' AND d.statut = 'actif'
+                  AND d.date_expiration IS NOT NULL
+                  AND d.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+            """, default=0)
+
         except Exception as e:
             logger.exception(f"get_startup_summary: erreur DB — {e}")
-            result.setdefault('evaluations_retard', 0)
-            result.setdefault('contrats_expires', 0)
-            result.setdefault('contrats_expirant', 0)
-            result.setdefault('personnel_sans_contrat', 0)
+            for key in (
+                'evaluations_retard', 'contrats_expires', 'contrats_expirant',
+                'personnel_sans_contrat', 'mutuelles_expirees', 'mutuelles_expirant',
+                'visites_retard', 'visites_a_planifier', 'rqth_expirant', 'oeth_expirant',
+                'competences_expirees', 'competences_expirant', 'documents_expires',
+                'documents_expirant',
+            ):
+                result.setdefault(key, 0)
 
-        result['total_critique'] = result['evaluations_retard'] + result['contrats_expires']
-        result['total_avertissement'] = result['contrats_expirant'] + result['personnel_sans_contrat']
+        result['total_critique'] = (
+            result['evaluations_retard'] + result['contrats_expires'] +
+            result['mutuelles_expirees'] + result['visites_retard'] +
+            result['competences_expirees'] + result['documents_expires']
+        )
+        result['total_avertissement'] = (
+            result['contrats_expirant'] + result['personnel_sans_contrat'] +
+            result['mutuelles_expirant'] + result['visites_a_planifier'] +
+            result['rqth_expirant'] + result['oeth_expirant'] +
+            result['competences_expirant'] + result['documents_expirant']
+        )
 
         logger.info(
             f"get_startup_summary: éval_retard={result['evaluations_retard']}, "
             f"contrats_expirés={result['contrats_expires']}, "
             f"contrats_expirant={result['contrats_expirant']}, "
-            f"sans_contrat={result['personnel_sans_contrat']} | "
+            f"sans_contrat={result['personnel_sans_contrat']}, "
+            f"mutuelles_exp={result['mutuelles_expirees']}/{result['mutuelles_expirant']}, "
+            f"visites={result['visites_retard']}/{result['visites_a_planifier']}, "
+            f"rqth={result['rqth_expirant']}, oeth={result['oeth_expirant']}, "
+            f"competences={result['competences_expirees']}/{result['competences_expirant']}, "
+            f"docs={result['documents_expires']}/{result['documents_expirant']} | "
             f"total_critique={result['total_critique']}, "
             f"total_avertissement={result['total_avertissement']}"
         )

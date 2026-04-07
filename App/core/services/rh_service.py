@@ -26,15 +26,18 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
-# ✅ NOUVEAUX IMPORTS - Patterns refactorisés
-from core.db.query_executor import QueryExecutor
+# Services CRUD
 from core.services.personnel_service import PersonnelService
 from core.services.contrat_service_crud import ContratServiceCRUD
 from core.services.formation_service_crud import FormationServiceCRUD
-
-# Imports existants
 from core.services.permission_manager import require
 from core.services import competences_service
+
+# Repositories — seuls accès DB autorisés dans ce service
+from core.repositories.personnel_repo import PersonnelRepository
+from core.repositories.contrat_repo import ContratRepository
+from core.repositories.declaration_repo import DeclarationRepository
+from core.repositories.document_repo import DocumentRepository
 
 
 # ============================================================
@@ -101,40 +104,9 @@ def rechercher_operateurs(
     APRÈS: 20 lignes, plus lisible
     """
     try:
-        sql = """
-            SELECT
-                p.id,
-                p.nom,
-                p.prenom,
-                p.matricule,
-                p.statut,
-                p.numposte,
-                CONCAT(p.prenom, ' ', p.nom) as nom_complet
-            FROM personnel p
-            WHERE 1=1
-        """
-        params = []
-
-        if statut:
-            sql += " AND p.statut = %s"
-            params.append(statut)
-
-        if recherche:
-            recherche_like = f"%{recherche}%"
-            sql += """ AND (
-                p.nom LIKE %s
-                OR p.prenom LIKE %s
-                OR p.matricule LIKE %s
-                OR CONCAT(p.prenom, ' ', p.nom) LIKE %s
-            )"""
-            params.extend([recherche_like] * 4)
-
-        sql += " ORDER BY p.nom, p.prenom LIMIT %s"
-        params.append(limit)
-
-        # ✅ QueryExecutor remplace with DatabaseCursor
-        return QueryExecutor.fetch_all(sql, tuple(params), dictionary=True)
-
+        return PersonnelRepository.search_as_dicts(
+            recherche=recherche, statut=statut, limit=limit
+        )
     except Exception as e:
         logger.exception(f"Erreur recherche opérateurs: {e}")
         return []
@@ -163,26 +135,16 @@ def get_operateur_by_id(operateur_id: int) -> Optional[Dict]:
 
 
 def get_operateur_by_matricule(matricule: str) -> Optional[Dict]:
-    """
-    ✅ REFACTORISÉ: Utilise QueryExecutor.fetch_one().
-
-    AVANT: 20 lignes avec try/with DatabaseCursor
-    APRÈS: 10 lignes
-    """
+    """Retourne un opérateur par son matricule (dict avec nom_complet)."""
     try:
-        # ✅ QueryExecutor simplifie la requête
-        return QueryExecutor.fetch_one(
-            """
-            SELECT
-                id, nom, prenom, matricule, statut, numposte,
-                CONCAT(prenom, ' ', nom) as nom_complet
-            FROM personnel
-            WHERE matricule = %s
-            """,
-            (matricule,),
-            dictionary=True
+        rows = PersonnelRepository.search_as_dicts(
+            recherche=matricule, statut=None, limit=1
         )
-
+        # Filtrer exactement sur le matricule (search_as_dicts fait un LIKE)
+        for row in rows:
+            if row.get("matricule") == matricule:
+                return row
+        return None
     except Exception as e:
         logger.exception(f"Erreur get_operateur_by_matricule: {e}")
         return None
@@ -243,12 +205,7 @@ def _get_donnees_general(operateur_id: int) -> Dict:
         if not personnel:
             return {}
 
-        # ✅ Récupérer infos détaillées avec QueryExecutor
-        infos = QueryExecutor.fetch_one(
-            "SELECT * FROM personnel_infos WHERE personnel_id = %s",
-            (operateur_id,),
-            dictionary=True
-        ) or {}
+        infos = PersonnelRepository.get_personnel_infos(operateur_id) or {}
 
         # Aplatir les deux dicts (personnel en priorité sur infos)
         donnees = {**infos, **personnel}
@@ -338,17 +295,7 @@ def _get_donnees_declaration(operateur_id: int) -> Dict:
     APRÈS: 15 lignes
     """
     try:
-        # ✅ QueryExecutor pour récupérer les déclarations
-        declarations = QueryExecutor.fetch_all(
-            """
-            SELECT *
-            FROM declaration
-            WHERE personnel_id = %s
-            ORDER BY date_debut DESC
-            """,
-            (operateur_id,),
-            dictionary=True
-        )
+        declarations = DeclarationRepository.get_by_operateur(operateur_id)
 
         from datetime import date as _date
         today = _date.today()
@@ -395,10 +342,7 @@ def _get_donnees_medical(operateur_id: int) -> Dict:
         validites = medical_service.get_validites(operateur_id)
         alertes   = medical_service.get_alertes_medicales(operateur_id)
         # 'medical' = données de la table medical (suivi général)
-        medical   = QueryExecutor.fetch_one(
-            "SELECT * FROM medical WHERE personnel_id = %s",
-            (operateur_id,), dictionary=True
-        ) or {}
+        medical   = medical_service.get_ou_creer_medical(operateur_id) or {}
         return {
             'visites':   visites,
             'accidents': accidents,
@@ -646,47 +590,14 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
         personnel_data = {k: v for k, v in data.items() if k in personnel_fields}
         infos_data = {k: v for k, v in data.items() if k not in personnel_fields and k != 'operateur_id'}
 
-        # ✅ Mise à jour personnel (si nécessaire)
         if personnel_data:
-            # ✅ QueryExecutor.execute_write() pour UPDATE
-            fields = [f"{k} = %s" for k in personnel_data.keys()]
-            values = list(personnel_data.values()) + [operateur_id]
+            PersonnelRepository.update(operateur_id, personnel_data)
 
-            QueryExecutor.execute_write(
-                f"UPDATE personnel SET {', '.join(fields)} WHERE id = %s",
-                tuple(values),
-                return_lastrowid=False
-            )
-
-        # ✅ Mise à jour personnel_infos (si nécessaire)
         if infos_data:
-            # Vérifier si l'enregistrement existe
-            exists = QueryExecutor.exists('personnel_infos', {'personnel_id': operateur_id})  # ✅ Corrigé
-
-            if exists:
-                # UPDATE
-                fields = [f"{k} = %s" for k in infos_data.keys()]
-                values = list(infos_data.values()) + [operateur_id]
-
-                QueryExecutor.execute_write(
-                    f"UPDATE personnel_infos SET {', '.join(fields)} WHERE personnel_id = %s",  # ✅ Corrigé
-                    tuple(values),
-                    return_lastrowid=False
-                )
-            else:
-                # INSERT
-                infos_data['personnel_id'] = operateur_id  # ✅ Corrigé
-                fields = list(infos_data.keys())
-                placeholders = ['%s'] * len(fields)
-                values = list(infos_data.values())
-
-                QueryExecutor.execute_write(
-                    f"INSERT INTO personnel_infos ({', '.join(fields)}) VALUES ({', '.join(placeholders)})",
-                    tuple(values)
-                )
+            PersonnelRepository.upsert_infos(operateur_id, infos_data)
 
         # ✅ Logging manuel (pour l'instant, en attendant PersonnelService.update())
-        from core.services.optimized_db_logger import log_hist
+        from infrastructure.logging.optimized_db_logger import log_hist
         log_hist(
             action="UPDATE_INFOS_GENERALES",
             table_name="personnel",
@@ -812,59 +723,16 @@ def get_documents_domaine(
     domaine: DomaineRH,
     include_archives: bool = False
 ) -> List[Dict]:
-    """
-    Récupère les documents d'un opérateur pour un domaine donné.
-
-    AVANT: 60 lignes avec with DatabaseCursor
-    APRÈS: 40 lignes avec QueryExecutor
-    """
+    """Récupère les documents d'un opérateur pour un domaine donné."""
     try:
-        # Récupérer toutes les catégories
-        all_categories = QueryExecutor.fetch_all(
-            "SELECT id, nom FROM categories_documents",
-            dictionary=True
-        )
-
-        # Trouver les IDs des catégories correspondant au domaine
+        all_categories = DocumentRepository.get_categories()
         categories_ids = [
             cat['id'] for cat in all_categories
             if CATEGORIE_TO_DOMAINE.get(cat['nom'], DomaineRH.GENERAL) == domaine
         ]
-
-        if not categories_ids:
-            return []
-
-        placeholders = ', '.join(['%s'] * len(categories_ids))
-
-        sql = f"""
-            SELECT
-                d.id, d.personnel_id, d.categorie_id,
-                d.nom_fichier, d.nom_affichage, d.chemin_fichier,
-                d.type_mime, d.taille_octets, d.date_upload,
-                d.date_expiration, d.statut, d.notes, d.uploaded_by,
-                c.nom as categorie_nom, c.couleur as categorie_couleur,
-                CASE
-                    WHEN d.date_expiration IS NULL THEN NULL
-                    WHEN d.date_expiration < CURDATE() THEN 'EXPIRE'
-                    WHEN d.date_expiration <= DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 'EXPIRE_BIENTOT'
-                    ELSE 'VALIDE'
-                END as statut_expiration,
-                DATEDIFF(d.date_expiration, CURDATE()) as jours_avant_expiration
-            FROM documents d
-            JOIN categories_documents c ON d.categorie_id = c.id
-            WHERE d.personnel_id = %s
-              AND d.categorie_id IN ({placeholders})
-        """
-
-        params = [operateur_id] + categories_ids
-
-        if not include_archives:
-            sql += " AND (d.statut IS NULL OR d.statut != 'archive')"
-
-        sql += " ORDER BY d.date_upload DESC"
-
-        return QueryExecutor.fetch_all(sql, tuple(params), dictionary=True)
-
+        return DocumentRepository.get_by_operateur_domaine(
+            operateur_id, categories_ids, include_archives=include_archives
+        )
     except Exception as e:
         logger.exception(f"Erreur get_documents_domaine: {e}")
         return []
@@ -873,22 +741,7 @@ def get_documents_domaine(
 def get_documents_archives_operateur(operateur_id: int) -> List[Dict]:
     """Récupère tous les documents archivés d'un opérateur."""
     try:
-        return QueryExecutor.fetch_all(
-            """
-            SELECT
-                d.id, d.personnel_id, d.categorie_id,
-                d.nom_fichier, d.nom_affichage, d.chemin_fichier,
-                d.type_mime, d.taille_octets, d.date_upload,
-                d.date_expiration, d.statut, d.notes, d.uploaded_by,
-                c.nom as categorie_nom, c.couleur as categorie_couleur
-            FROM documents d
-            JOIN categories_documents c ON d.categorie_id = c.id
-            WHERE d.personnel_id = %s AND d.statut = 'archive'
-            ORDER BY d.date_upload DESC
-            """,
-            (operateur_id,),
-            dictionary=True
-        )
+        return DocumentRepository.get_archives_by_operateur(operateur_id)
     except Exception as e:
         logger.exception(f"Erreur get_documents_archives_operateur: {e}")
         return []
@@ -919,94 +772,11 @@ def get_resume_operateur(operateur_id: int) -> Dict[str, Any]:
     resume["statut"] = operateur.get("statut")
 
     try:
-        # Résumé contrat
-        contrat = QueryExecutor.fetch_one(
-            """
-            SELECT type_contrat, date_fin, DATEDIFF(date_fin, CURDATE()) as jours_restants
-            FROM contrat
-            WHERE personnel_id = %s AND actif = 1
-            LIMIT 1
-            """,
-            (operateur_id,),
-            dictionary=True
-        )
-        resume["domaines"]["contrat"] = {
-            "a_contrat_actif": contrat is not None,
-            "type": contrat['type_contrat'] if contrat else None,
-            "jours_restants": contrat['jours_restants'] if contrat else None
-        }
-
-        # Résumé déclarations
-        decl = QueryExecutor.fetch_one(
-            """
-            SELECT COUNT(*) as total,
-                   SUM(CASE WHEN date_debut <= CURDATE() AND date_fin >= CURDATE() THEN 1 ELSE 0 END) as en_cours
-            FROM declaration
-            WHERE personnel_id = %s
-            """,
-            (operateur_id,),
-            dictionary=True
-        )
-        resume["domaines"]["declaration"] = {
-            "total": decl['total'] if decl else 0,
-            "en_cours": decl['en_cours'] if decl else 0
-        }
-
-        # Résumé compétences
-        comp = QueryExecutor.fetch_one(
-            """
-            SELECT COUNT(*) as total,
-                   AVG(niveau) as niveau_moyen,
-                   SUM(CASE WHEN prochaine_evaluation < CURDATE() THEN 1 ELSE 0 END) as en_retard
-            FROM polyvalence
-            WHERE personnel_id = %s
-            """,
-            (operateur_id,),
-            dictionary=True
-        )
-        resume["domaines"]["competences"] = {
-            "nb_postes": comp['total'] if comp else 0,
-            "niveau_moyen": float(comp['niveau_moyen']) if comp and comp['niveau_moyen'] else None,
-            "evaluations_en_retard": comp['en_retard'] if comp else 0
-        }
-
-        # Résumé formations
-        form = QueryExecutor.fetch_one(
-            """
-            SELECT COUNT(*) as total,
-                   SUM(CASE WHEN statut = 'Terminée' THEN 1 ELSE 0 END) as terminees,
-                   SUM(CASE WHEN statut = 'Planifiée' THEN 1 ELSE 0 END) as planifiees
-            FROM formation
-            WHERE personnel_id = %s
-            """,
-            (operateur_id,),
-            dictionary=True
-        )
-        resume["domaines"]["formation"] = {
-            "total": form['total'] if form else 0,
-            "terminees": form['terminees'] if form else 0,
-            "planifiees": form['planifiees'] if form else 0
-        }
-
-        # Résumé documents
-        docs = QueryExecutor.fetch_one(
-            """
-            SELECT COUNT(*) as total,
-                   SUM(CASE WHEN statut = 'expire' THEN 1 ELSE 0 END) as expires,
-                   SUM(CASE WHEN date_expiration IS NOT NULL
-                            AND date_expiration <= DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                            AND date_expiration > CURDATE() THEN 1 ELSE 0 END) as expire_bientot
-            FROM documents
-            WHERE personnel_id = %s AND statut != 'archive'
-            """,
-            (operateur_id,),
-            dictionary=True
-        )
-        resume["documents"] = {
-            "total": docs['total'] if docs else 0,
-            "expires": docs['expires'] if docs else 0,
-            "expire_bientot": docs['expire_bientot'] if docs else 0
-        }
+        resume["domaines"]["contrat"] = ContratRepository.get_resume_for_operateur(operateur_id)
+        resume["domaines"]["declaration"] = DeclarationRepository.get_resume(operateur_id)
+        resume["domaines"]["competences"] = PersonnelRepository.get_resume_competences(operateur_id)
+        resume["domaines"]["formation"] = ContratRepository.get_resume_formation(operateur_id)
+        resume["documents"] = DocumentRepository.get_resume(operateur_id)
 
     except Exception as e:
         logger.exception(f"Erreur get_resume_operateur: {e}")
@@ -1022,17 +792,11 @@ def get_resume_operateur(operateur_id: int) -> Dict[str, Any]:
 def get_categories_documents() -> List[Dict]:
     """Récupère toutes les catégories de documents avec leur domaine RH associé."""
     try:
-        categories = QueryExecutor.fetch_all(
-            "SELECT * FROM categories_documents ORDER BY ordre_affichage",
-            dictionary=True
-        )
-
+        categories = DocumentRepository.get_categories()
         for cat in categories:
             domaine = CATEGORIE_TO_DOMAINE.get(cat['nom'], DomaineRH.GENERAL)
             cat['domaine_rh'] = domaine.value
-
         return categories
-
     except Exception as e:
         logger.exception(f"Erreur get_categories_documents: {e}")
         return []
@@ -1099,96 +863,26 @@ def get_domaines_rh() -> List[Dict]:
 
 
 def get_alertes_rh_dashboard(jours: int = 30) -> Dict:
-    """
-    Récupère les alertes RH pour le dashboard principal.
-
-    AVANT: 50 lignes avec with DatabaseCursor
-    APRÈS: 30 lignes avec QueryExecutor
-    """
-    alertes = {"contrats": [], "documents": []}
-
+    """Récupère les alertes RH pour le dashboard principal."""
+    alertes: Dict = {"contrats": [], "documents": []}
     try:
-        alertes["contrats"] = QueryExecutor.fetch_all(
-            """
-            SELECT
-                c.id, c.personnel_id, c.type_contrat, c.date_fin,
-                p.nom, p.prenom, p.matricule,
-                DATEDIFF(c.date_fin, CURDATE()) as jours_restants
-            FROM contrat c
-            INNER JOIN personnel p ON p.id = c.personnel_id
-            WHERE c.actif = 1
-              AND c.date_fin IS NOT NULL
-              AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
-              AND p.statut = 'ACTIF'
-            ORDER BY c.date_fin ASC
-            LIMIT 15
-            """,
-            (jours,),
-            dictionary=True
-        )
-
-        alertes["documents"] = QueryExecutor.fetch_all(
-            """
-            SELECT
-                d.id, d.personnel_id, d.nom_affichage, d.nom_fichier,
-                d.date_expiration, p.nom, p.prenom, p.matricule,
-                c.nom as categorie,
-                DATEDIFF(d.date_expiration, CURDATE()) as jours_restants
-            FROM documents d
-            INNER JOIN personnel p ON p.id = d.personnel_id
-            LEFT JOIN categories_documents c ON c.id = d.categorie_id
-            WHERE d.statut = 'actif'
-              AND d.date_expiration IS NOT NULL
-              AND d.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
-              AND p.statut = 'ACTIF'
-            ORDER BY d.date_expiration ASC
-            LIMIT 15
-            """,
-            (jours,),
-            dictionary=True
-        )
-
+        alertes["contrats"] = ContratRepository.get_alertes(jours=jours)
+        alertes["documents"] = DocumentRepository.get_alertes(jours=jours)
     except Exception as e:
         logger.exception(f"Erreur get_alertes_rh_dashboard: {e}")
         alertes["error"] = str(e)
-
     return alertes
 
 
 def get_alertes_rh_count(jours: int = 30) -> Dict:
     """Compte le nombre d'alertes RH (contrats + documents)."""
-    counts = {"contrats_count": 0, "documents_count": 0, "total": 0}
-
+    counts: Dict = {"contrats_count": 0, "documents_count": 0, "total": 0}
     try:
-        counts["contrats_count"] = QueryExecutor.fetch_scalar(
-            """
-            SELECT COUNT(*) FROM contrat c
-            INNER JOIN personnel p ON p.id = c.personnel_id
-            WHERE c.actif = 1 AND c.date_fin IS NOT NULL
-              AND c.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
-              AND p.statut = 'ACTIF'
-            """,
-            (jours,),
-            default=0
-        )
-
-        counts["documents_count"] = QueryExecutor.fetch_scalar(
-            """
-            SELECT COUNT(*) FROM documents d
-            INNER JOIN personnel p ON p.id = d.personnel_id
-            WHERE d.statut = 'actif' AND d.date_expiration IS NOT NULL
-              AND d.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
-              AND p.statut = 'ACTIF'
-            """,
-            (jours,),
-            default=0
-        )
-
+        counts["contrats_count"] = ContratRepository.count_alertes(jours=jours)
+        counts["documents_count"] = DocumentRepository.count_alertes(jours=jours)
         counts["total"] = counts["contrats_count"] + counts["documents_count"]
-
     except Exception as e:
         logger.exception(f"Erreur get_alertes_rh_count: {e}")
-
     return counts
 
 
@@ -1196,41 +890,14 @@ def get_alertes_rh_count(jours: int = 30) -> Dict:
 # SÉCURITÉ : ACCÈS AUX DOCUMENTS PAR ENTITÉ
 # ============================================================
 
-# Whitelist des types d'entité autorisés → protection contre l'injection SQL
-_ENTITY_QUERIES = {
-    'contrat': "SELECT id, nom_affichage, nom_fichier, date_expiration FROM documents WHERE contrat_id = %s",
-    'formation': "SELECT id, nom_affichage, nom_fichier, date_expiration FROM documents WHERE formation_id = %s",
-    'declaration': "SELECT id, nom_affichage, nom_fichier, date_expiration FROM documents WHERE declaration_id = %s",
-}
-
-
 def get_documents_entite(entity_type: str, entity_id: int) -> List[Dict]:
     """
-    Retourne les documents associés à une entité.
+    Retourne les documents associés à une entité (contrat, formation, declaration).
 
-    Protection anti-injection SQL : seuls les types de la whitelist sont acceptés.
-    Les types inconnus ou malicieux retournent une liste vide (rejet silencieux).
-
-    Args:
-        entity_type: Type d'entité ('contrat', 'formation', 'declaration')
-        entity_id: ID de l'entité
-
-    Returns:
-        Liste de documents ou [] si type invalide
+    Délègue à DocumentRepository qui maintient la whitelist anti-injection.
+    Les types inconnus retournent [] sans lever d'exception.
     """
-    if not isinstance(entity_type, str) or entity_type not in _ENTITY_QUERIES:
-        logger.warning(f"Type d'entité invalide ou non autorisé: {entity_type!r}")
-        return []
-
-    try:
-        return QueryExecutor.fetch_all(
-            _ENTITY_QUERIES[entity_type],
-            (entity_id,),
-            dictionary=True
-        )
-    except Exception as e:
-        logger.exception(f"Erreur get_documents_entite({entity_type}, {entity_id}): {e}")
-        return []
+    return DocumentRepository.get_by_entite(entity_type, entity_id)
 
 
 def is_matricule_disponible(matricule: str, exclude_operateur_id: int) -> bool:
@@ -1238,9 +905,4 @@ def is_matricule_disponible(matricule: str, exclude_operateur_id: int) -> bool:
     Vérifie si un matricule est disponible (non utilisé par un autre opérateur).
     Retourne True si le matricule est libre, False s'il est déjà pris.
     """
-    existing = QueryExecutor.fetch_one(
-        "SELECT id FROM personnel WHERE matricule = %s AND id != %s",
-        (matricule, exclude_operateur_id),
-        dictionary=True
-    )
-    return existing is None
+    return PersonnelRepository.is_matricule_disponible(matricule, exclude_operateur_id)

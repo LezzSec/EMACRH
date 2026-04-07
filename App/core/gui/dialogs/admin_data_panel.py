@@ -26,8 +26,8 @@ from PyQt5.QtGui import QColor, QFont
 
 from core.gui.components.ui_theme import EmacButton
 from core.gui.workers.db_worker import DbWorker, DbThreadPool
-from core.utils.logging_config import get_logger
-from core.utils.date_format import format_date, format_datetime
+from infrastructure.logging.logging_config import get_logger
+from infrastructure.config.date_format import format_date, format_datetime
 
 logger = get_logger(__name__)
 

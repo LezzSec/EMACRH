@@ -16,10 +16,10 @@ Usage:
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+from infrastructure.db.configbd import DatabaseCursor, DatabaseConnection
 from core.models import Poste, Atelier
 from core.repositories.base import BaseRepository
-from core.utils.performance_monitor import monitor_query
+from infrastructure.config.performance_monitor import monitor_query
 
 logger = logging.getLogger(__name__)
 
@@ -195,7 +195,7 @@ class PosteRepository(BaseRepository[Poste]):
                 new_id = cur.lastrowid
                 conn.commit()
 
-                from core.services.optimized_db_logger import log_hist
+                from infrastructure.logging.optimized_db_logger import log_hist
                 log_hist("CREATE", "postes", new_id, f"Poste {data['poste_code']} créé")
 
                 return True, "Poste créé", new_id
@@ -231,7 +231,7 @@ class PosteRepository(BaseRepository[Poste]):
                 cur.execute(query, tuple(list(update_data.values()) + [id]))
                 conn.commit()
 
-                from core.services.optimized_db_logger import log_hist
+                from infrastructure.logging.optimized_db_logger import log_hist
                 log_hist("UPDATE", "postes", id, f"Mise à jour: {list(update_data.keys())}")
 
                 return True, "Poste mis à jour"
@@ -255,7 +255,7 @@ class PosteRepository(BaseRepository[Poste]):
     @classmethod
     def get_all_codes(cls) -> List[str]:
         """Retourne tous les codes de postes (y compris invisibles) triés."""
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         rows = QueryExecutor.fetch_all(
             "SELECT poste_code FROM postes ORDER BY poste_code ASC",
             dictionary=True,
@@ -265,8 +265,8 @@ class PosteRepository(BaseRepository[Poste]):
     @classmethod
     def delete_by_code(cls, poste_code: str) -> Tuple[bool, str]:
         """Supprime un poste par son code."""
-        from core.db.query_executor import QueryExecutor
-        from core.services.optimized_db_logger import log_hist
+        from infrastructure.db.query_executor import QueryExecutor
+        from infrastructure.logging.optimized_db_logger import log_hist
         import json
         try:
             QueryExecutor.execute_write(

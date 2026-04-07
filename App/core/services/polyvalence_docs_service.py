@@ -13,8 +13,8 @@ from typing import Optional, List, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
-from core.db.query_executor import QueryExecutor
-from core.services.optimized_db_logger import log_hist
+from infrastructure.db.query_executor import QueryExecutor
+from infrastructure.logging.optimized_db_logger import log_hist
 
 
 # ---------------------------------------------------------------------------

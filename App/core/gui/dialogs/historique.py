@@ -7,11 +7,11 @@ from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor, QCursor
 
 from core.services.historique_service import fetch_historique_paginated, delete_historique_range, MODULE_TABLES
-from core.services.log_exporter import export_day
+from infrastructure.logging.log_exporter import export_day
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.gui.workers.db_worker import DbWorker, DbThreadPool
 from core.gui.components.loading_components import LoadingLabel
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 import json
 import datetime as dt

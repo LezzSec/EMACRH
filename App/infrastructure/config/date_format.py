@@ -3,7 +3,7 @@
 Utilitaires de formatage de dates pour l'affichage (format français DD/MM/YYYY).
 
 Usage:
-    from core.utils.date_format import format_date, format_datetime
+    from infrastructure.config.date_format import format_date, format_datetime
 
     label.setText(format_date(some_date))       # "17/03/2026"
     label.setText(format_datetime(some_dt))     # "17/03/2026 14:30:00"

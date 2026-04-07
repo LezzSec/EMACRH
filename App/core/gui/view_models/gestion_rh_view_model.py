@@ -44,7 +44,7 @@ from core.services.vie_salarie_service import delete_sanction, delete_entretien
 from core.services.mutuelle_service import delete_mutuelle
 from core.services.permission_manager import require
 from core.gui.workers.db_worker import DbWorker, DbThreadPool
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

@@ -14,9 +14,9 @@ Usage:
 import datetime as dt
 from typing import List, Dict, Optional, Any
 
-from core.db.query_executor import QueryExecutor
-from core.db.configbd import DatabaseConnection
-from core.utils.logging_config import get_logger
+from infrastructure.db.query_executor import QueryExecutor
+from infrastructure.db.configbd import DatabaseConnection
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

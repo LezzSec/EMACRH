@@ -9,7 +9,7 @@ from pathlib import Path
 # Ajouter le répertoire parent au path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.db.configbd import get_connection
+from infrastructure.db.configbd import get_connection
 
 def check_columns_exist():
     """Vérifie si les colonnes formation_id, contrat_id, declaration_id existent."""

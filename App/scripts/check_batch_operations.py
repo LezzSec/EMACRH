@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.db.configbd import DatabaseCursor
+from infrastructure.db.configbd import DatabaseCursor
 
 print("\n[BATCH OPERATIONS RECENTES]\n")
 print("=" * 120)

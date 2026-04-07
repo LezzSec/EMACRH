@@ -76,7 +76,7 @@ def log_hist(
         details_str = _to_json_str(details)
         final_description = f"{final_description} | Details: {details_str}" if final_description else details_str
 
-    from core.db.configbd import get_connection as _get_conn
+    from infrastructure.db.configbd import get_connection as _get_conn
     conn = cur = None
     try:
         conn = _get_conn()
@@ -227,7 +227,7 @@ class OptimizedDBLogger:
             return
 
         try:
-            from core.db.configbd import DatabaseConnection
+            from infrastructure.db.configbd import DatabaseConnection
             import json
 
             with DatabaseConnection(auto_commit=True) as conn:
@@ -360,7 +360,7 @@ def log_hist_async(
     ✅ Auto-flush toutes les 10 secondes
 
     Usage:
-        from core.services.optimized_db_logger import log_hist_async
+        from infrastructure.logging.optimized_db_logger import log_hist_async
 
         # Au lieu de
         log_hist('INSERT', 'postes', 123, 'Poste créé')  # ❌ 1 requête DB

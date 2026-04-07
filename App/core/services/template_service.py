@@ -18,11 +18,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 
-from core.db.query_executor import QueryExecutor
-from core.db.configbd import get_connection
-from core.services.optimized_db_logger import log_hist
-from core.utils.logging_config import get_logger
-from core.utils.date_format import format_date, format_timestamp
+from infrastructure.db.query_executor import QueryExecutor
+from infrastructure.db.configbd import get_connection
+from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.logging_config import get_logger
+from infrastructure.config.date_format import format_date, format_timestamp
 
 logger = get_logger(__name__)
 

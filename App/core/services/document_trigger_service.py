@@ -34,7 +34,7 @@ from threading import Lock
 from core.services.event_bus import EventBus, DomainEvent
 from core.services.event_rule_service import get_matching_templates
 from core.services.template_service import generate_filled_template, open_template_file
-from core.services.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist
 
 logger = logging.getLogger(__name__)
 

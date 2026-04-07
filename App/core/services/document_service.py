@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import mimetypes
 
-from core.db.configbd import get_connection
+from infrastructure.db.configbd import get_connection
 
 
 # Taille max recommandee pour un fichier (16 Mo)
@@ -319,7 +319,7 @@ class DocumentService:
         """Resout un chemin legacy (fichier sur filesystem)."""
         try:
             # Essayer d'abord avec get_documents_dir
-            from core.utils.app_paths import get_documents_dir
+            from infrastructure.config.app_paths import get_documents_dir
             base = get_documents_dir()
             full_path = base / chemin_fichier
             if full_path.exists():
@@ -556,7 +556,7 @@ class DocumentService:
     def get_document_nom(self, document_id: int) -> Optional[str]:
         """Retourne le nom de fichier affiché d'un document (nom_fichier)."""
         try:
-            from core.db.query_executor import QueryExecutor
+            from infrastructure.db.query_executor import QueryExecutor
             row = QueryExecutor.fetch_one(
                 "SELECT nom_fichier FROM documents WHERE id = %s",
                 (document_id,),
@@ -570,7 +570,7 @@ class DocumentService:
     def check_module_installed(self) -> bool:
         """Vérifie que les tables du module documentaire existent."""
         try:
-            from core.db.query_executor import QueryExecutor
+            from infrastructure.db.query_executor import QueryExecutor
             cat_exists = QueryExecutor.fetch_one("SHOW TABLES LIKE 'categories_documents'")
             doc_exists = QueryExecutor.fetch_one("SHOW TABLES LIKE 'documents'")
             return bool(cat_exists and doc_exists)
@@ -581,7 +581,7 @@ class DocumentService:
     def get_all_non_contrats(self) -> list:
         """Retourne tous les documents hors catégorie 'Contrats de travail'."""
         try:
-            from core.db.query_executor import QueryExecutor
+            from infrastructure.db.query_executor import QueryExecutor
             return QueryExecutor.fetch_all(
                 """
                 SELECT * FROM v_documents_complet

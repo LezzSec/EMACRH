@@ -23,10 +23,10 @@ Usage:
 from datetime import date, datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.db.query_executor import QueryExecutor
+from infrastructure.db.query_executor import QueryExecutor
 from core.services.crud_service import CRUDService
 from core.services.permission_manager import require
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -496,7 +496,7 @@ class FormationServiceCRUD(CRUDService):
     @classmethod
     def get_catalogue_competences(cls) -> list:
         """Retourne le catalogue des compétences actives (id, code, libelle, categorie, duree_validite_mois)."""
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT id, code, libelle, categorie, duree_validite_mois

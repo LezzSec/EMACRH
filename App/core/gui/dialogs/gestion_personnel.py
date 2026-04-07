@@ -1,6 +1,6 @@
 # gestion_personnel.py – Gestion complète du personnel (actifs et inactifs)
 
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 logger = get_logger(__name__)
 
 from PyQt5.QtWidgets import (
@@ -18,14 +18,14 @@ from core.services.contrat_service_crud import ContratServiceCRUD
 from core.services.formation_service_crud import FormationServiceCRUD
 from core.services import medical_service
 from core.gui.workers.db_worker import DbWorker, DbThreadPool
-from core.services.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist
 from core.gui.dialogs.historique_personnel import HistoriquePersonnelTab
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.services.auth_service import get_current_user
 from core.services.permission_manager import require, can
 
 import datetime as dt
-from core.utils.date_format import format_date
+from infrastructure.config.date_format import format_date
 
 
 class DetailOperateurDialog(QDialog):
@@ -998,13 +998,9 @@ class DetailOperateurDialog(QDialog):
             QMessageBox.information(self, "Export réussi", 
                                   f"Le profil a été exporté avec succès !\n\n{file_path}")
     
-        except ImportError:
-            QMessageBox.warning(self, "Module manquant",
-                              "Le module 'reportlab' est requis pour l'export PDF.\n\n"
-                              "Installez-le avec : pip install reportlab")
         except Exception as e:
-            QMessageBox.critical(self, "Erreur d'export", 
-                               f"Une erreur s'est produite lors de l'export PDF :\n\n{str(e)}")
+            logger.exception(f"Erreur export PDF: {e}")
+            show_error_message(self, "Erreur d'export", "Impossible de générer le PDF.", e)
 
 
 
@@ -1193,9 +1189,6 @@ class DetailOperateurDialog(QDialog):
             wb.save(file_path)
             QMessageBox.information(self, "Export réussi", f"Profil exporté :\n{file_path}")
     
-        except ImportError:
-            QMessageBox.warning(self, "Module manquant",
-                                "Le module 'openpyxl' est requis pour l'export Excel.\n\npip install openpyxl")
         except Exception as e:
             logger.exception(f"Erreur export profil: {e}")
             show_error_message(self, "Erreur", "Impossible d'exporter le profil", e)
@@ -1725,12 +1718,6 @@ class GestionPersonnelDialog(QDialog):
                 f"Liste exportée avec succès !\n\n{file_path}"
             )
             
-        except ImportError:
-            QMessageBox.warning(
-                self, "Module manquant",
-                "Le module 'openpyxl' est requis pour l'export Excel.\n\n"
-                "Installez-le avec : pip install openpyxl"
-            )
         except Exception as e:
             logger.exception(f"Erreur export: {e}")
             show_error_message(self, "Erreur", "Impossible d'exporter", e)

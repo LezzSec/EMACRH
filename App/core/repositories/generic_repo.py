@@ -22,9 +22,9 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-from core.db.query_executor import QueryExecutor
+from infrastructure.db.query_executor import QueryExecutor
 from core.repositories.base import safe_table_name
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

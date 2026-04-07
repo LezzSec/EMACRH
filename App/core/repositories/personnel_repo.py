@@ -21,10 +21,10 @@ Usage:
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+from infrastructure.db.configbd import DatabaseCursor, DatabaseConnection
 from core.models import Personnel, PersonnelResume
 from core.repositories.base import BaseRepository
-from core.utils.performance_monitor import monitor_query
+from infrastructure.config.performance_monitor import monitor_query
 
 logger = logging.getLogger(__name__)
 
@@ -266,7 +266,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
                 conn.commit()
 
                 # Log
-                from core.services.optimized_db_logger import log_hist
+                from infrastructure.logging.optimized_db_logger import log_hist
                 log_hist("CREATE", "personnel", new_id,
                         f"Création: {data.get('nom')} {data.get('prenom')}")
 
@@ -329,7 +329,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
                 conn.commit()
 
                 # Log
-                from core.services.optimized_db_logger import log_hist
+                from infrastructure.logging.optimized_db_logger import log_hist
                 log_hist("UPDATE", "personnel", id,
                         f"Mise à jour: {list(update_data.keys())}")
 
@@ -394,7 +394,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_by_nom_prenom(cls, nom: str, prenom: str) -> Optional[int]:
         """Retourne l'id d'un personnel si nom+prenom existe, sinon None."""
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         row = QueryExecutor.fetch_one(
             "SELECT id FROM personnel WHERE `nom` = %s AND `prenom` = %s ORDER BY id DESC LIMIT 1",
             (nom, prenom),
@@ -404,7 +404,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_first_actif_id(cls) -> Optional[int]:
         """Retourne l'id du premier personnel actif (utilisé pour ouvrir des dialogs)."""
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_scalar(
             "SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1"
         )
@@ -412,7 +412,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def save_date_entree(cls, personnel_id: int, date_entree) -> bool:
         """Upsert la date d'entrée dans personnel_infos."""
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         existing = QueryExecutor.exists("personnel_infos", {"personnel_id": personnel_id})
         if existing:
             QueryExecutor.execute_write(
@@ -429,7 +429,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_date_entree(cls, personnel_id: int):
         """Retourne la date d'entrée d'un personnel depuis personnel_infos."""
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         row = QueryExecutor.fetch_one(
             "SELECT date_entree FROM personnel_infos WHERE personnel_id = %s",
             (personnel_id,),
@@ -440,7 +440,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_info_basique(cls, personnel_id: int) -> Optional[Dict[str, Any]]:
         """Retourne nom, prenom, matricule, statut pour les exports."""
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_one(
             "SELECT nom, prenom, COALESCE(matricule,'-') AS matricule, UPPER(statut) AS statut "
             "FROM personnel WHERE id = %s",
@@ -451,7 +451,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_personnel_infos(cls, personnel_id: int) -> Optional[Dict[str, Any]]:
         """Retourne l'ensemble des données de personnel_infos."""
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         rows = QueryExecutor.fetch_all(
             "SELECT * FROM personnel_infos WHERE personnel_id = %s",
             (personnel_id,),
@@ -465,7 +465,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
         Retourne tous les personnels avec stats polyvalence et contrat actif.
         Utilisé par la liste principale de GestionPersonnelDialog.
         """
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT
@@ -488,7 +488,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_personnel_sans_date_entree(cls) -> List[Dict[str, Any]]:
         """Retourne les personnels sans date d'entrée (pour régularisation)."""
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT p.id, p.nom, p.prenom, p.matricule, p.statut, pi.date_entree
@@ -506,7 +506,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
         Retourne tout le personnel sous forme de dicts (id, nom, prenom, matricule, statut, nom_service).
         Utilisé pour les listes de sélection dans les interfaces.
         """
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             "SELECT p.id, p.nom, p.prenom, p.matricule, UPPER(p.statut) AS statut, "
             "s.nom_service FROM personnel p LEFT JOIN services s ON p.service_id = s.id "
@@ -522,13 +522,145 @@ class PersonnelRepository(BaseRepository[Personnel]):
         """
         if not ids:
             return []
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         placeholders = ','.join(['%s'] * len(ids))
         return QueryExecutor.fetch_all(
             f"SELECT id, nom, prenom FROM personnel WHERE id IN ({placeholders})",
             tuple(ids),
             dictionary=True,
         )
+
+    @classmethod
+    def search_as_dicts(
+        cls,
+        recherche: Optional[str] = None,
+        statut: str = "ACTIF",
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        """
+        Recherche des opérateurs et retourne des dicts avec nom_complet.
+
+        Remplace le SQL inline de rechercher_operateurs() dans rh_service.
+
+        Args:
+            recherche: Terme de recherche (nom, prénom, matricule) ou None
+            statut: Filtre sur le statut (None = tous)
+            limit: Nombre maximum de résultats
+
+        Returns:
+            Liste de dicts : id, nom, prenom, matricule, statut, numposte, nom_complet
+        """
+        from infrastructure.db.query_executor import QueryExecutor
+        sql = (
+            "SELECT id, nom, prenom, matricule, statut, numposte, "
+            "CONCAT(prenom, ' ', nom) AS nom_complet "
+            "FROM personnel WHERE 1=1"
+        )
+        params: list = []
+
+        if statut:
+            sql += " AND statut = %s"
+            params.append(statut)
+
+        if recherche:
+            like = f"%{recherche}%"
+            sql += (
+                " AND (nom LIKE %s OR prenom LIKE %s OR matricule LIKE %s"
+                " OR CONCAT(prenom, ' ', nom) LIKE %s)"
+            )
+            params.extend([like, like, like, like])
+
+        sql += " ORDER BY nom, prenom LIMIT %s"
+        params.append(limit)
+
+        return QueryExecutor.fetch_all(sql, tuple(params), dictionary=True)
+
+    @classmethod
+    def upsert_infos(cls, personnel_id: int, data: Dict[str, Any]) -> bool:
+        """
+        INSERT ou UPDATE dans personnel_infos pour un personnel donné.
+
+        Remplace le bloc upsert manuel de update_infos_generales() dans rh_service.
+
+        Seuls les champs présents dans data sont écrits ; les autres restent inchangés.
+
+        Args:
+            personnel_id: ID du personnel
+            data: Champs à écrire (clés = colonnes de personnel_infos, sauf personnel_id)
+
+        Returns:
+            True si succès
+        """
+        from infrastructure.db.query_executor import QueryExecutor
+        if not data:
+            return True
+
+        exists = QueryExecutor.exists("personnel_infos", {"personnel_id": personnel_id})
+
+        if exists:
+            fields = [f"{k} = %s" for k in data.keys()]
+            values = list(data.values()) + [personnel_id]
+            QueryExecutor.execute_write(
+                f"UPDATE personnel_infos SET {', '.join(fields)} WHERE personnel_id = %s",
+                tuple(values),
+                return_lastrowid=False,
+            )
+        else:
+            row = {"personnel_id": personnel_id, **data}
+            cols = ", ".join(row.keys())
+            placeholders = ", ".join(["%s"] * len(row))
+            QueryExecutor.execute_write(
+                f"INSERT INTO personnel_infos ({cols}) VALUES ({placeholders})",
+                tuple(row.values()),
+            )
+        return True
+
+    @classmethod
+    def is_matricule_disponible(cls, matricule: str, exclude_id: int) -> bool:
+        """
+        Vérifie si un matricule est libre (non utilisé par un autre personnel).
+
+        Remplace is_matricule_disponible() dans rh_service.
+
+        Returns:
+            True si le matricule est disponible
+        """
+        from infrastructure.db.query_executor import QueryExecutor
+        existing = QueryExecutor.fetch_one(
+            "SELECT id FROM personnel WHERE matricule = %s AND id != %s",
+            (matricule, exclude_id),
+            dictionary=True,
+        )
+        return existing is None
+
+    @classmethod
+    def get_resume_competences(cls, personnel_id: int) -> Dict[str, Any]:
+        """
+        Retourne un résumé agrégé polyvalence pour un opérateur.
+
+        Utilisé par get_resume_operateur() dans rh_service.
+
+        Returns:
+            {"nb_postes": int, "niveau_moyen": float|None, "evaluations_en_retard": int}
+        """
+        from infrastructure.db.query_executor import QueryExecutor
+        row = QueryExecutor.fetch_one(
+            """
+            SELECT
+                COUNT(*)    AS total,
+                AVG(niveau) AS niveau_moyen,
+                SUM(CASE WHEN prochaine_evaluation < CURDATE() THEN 1 ELSE 0 END) AS en_retard
+            FROM polyvalence
+            WHERE personnel_id = %s
+            """,
+            (personnel_id,),
+            dictionary=True,
+        ) or {}
+        return {
+            "nb_postes": row.get("total") or 0,
+            "niveau_moyen": float(row["niveau_moyen"]) if row.get("niveau_moyen") else None,
+            "evaluations_en_retard": row.get("en_retard") or 0,
+        }
 
     # ===========================
     # Pagination

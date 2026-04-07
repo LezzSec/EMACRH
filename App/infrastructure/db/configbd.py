@@ -65,7 +65,7 @@ def _load_env_once() -> None:
             if is_encrypted:
                 # Charger le fichier chiffré
                 try:
-                    from core.utils.config_crypter import decrypt_env_file
+                    from infrastructure.security.config_crypter import decrypt_env_file
                     import tempfile
                     # Déchiffrer dans un fichier temporaire
                     with tempfile.NamedTemporaryFile(mode='w', suffix='.env', delete=False, encoding='utf-8') as tmp:

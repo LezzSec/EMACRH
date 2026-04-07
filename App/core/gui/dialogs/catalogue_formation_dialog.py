@@ -15,19 +15,17 @@ from PyQt5.QtGui import QFont
 from core.services.formation_service_crud import FormationServiceCRUD
 from core.gui.workers.lazy_loading import PaginatedTableWidget
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-try:
-    from core.gui.components.ui_theme import EmacButton, EmacCard
-    THEME_AVAILABLE = True
-except ImportError:
-    THEME_AVAILABLE = False
+from core.gui.components.ui_theme import EmacButton, EmacCard
+
+THEME_AVAILABLE = True  # toujours disponible — conservé pour compat branches existantes
 
 
 def _btn(label, style='primary'):
-    return EmacButton(label, style) if THEME_AVAILABLE else QPushButton(label)
+    return EmacButton(label, style)
 
 
 class CatalogueFormationDialog(QDialog):

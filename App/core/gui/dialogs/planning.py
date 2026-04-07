@@ -17,11 +17,11 @@ from core.services.planning_service import (
     get_historique_declarations, supprimer_declaration,
     get_documents_expirant,
 )
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
-from core.utils.date_format import format_date
+from infrastructure.config.date_format import format_date
 
 
 

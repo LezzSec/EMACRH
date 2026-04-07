@@ -11,7 +11,7 @@ Sous-vérifications disponibles :
 
 from __future__ import annotations
 
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -71,7 +71,7 @@ def check_db() -> int:
     errors = 0
 
     try:
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
 
         row = QueryExecutor.fetch_one("SELECT VERSION() AS v", dictionary=True)
         print(f"  MySQL : {row['v']}")
@@ -97,7 +97,7 @@ def check_performance() -> int:
     errors = 0
 
     try:
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
 
         # Récupérer tous les index existants en une seule requête
         rows = QueryExecutor.fetch_all(
@@ -139,7 +139,7 @@ def check_views() -> int:
     errors = 0
 
     try:
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
 
         rows = QueryExecutor.fetch_all(
             """

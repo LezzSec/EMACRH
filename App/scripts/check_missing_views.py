@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.db.configbd import get_connection
+from infrastructure.db.configbd import get_connection
 
 # Liste de toutes les vues qui devraient exister selon les migrations
 EXPECTED_VIEWS = [

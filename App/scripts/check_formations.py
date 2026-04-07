@@ -9,7 +9,7 @@ from pathlib import Path
 # Ajouter le dossier parent au path pour les imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.db.configbd import DatabaseCursor
+from infrastructure.db.configbd import DatabaseCursor
 from datetime import datetime
 
 

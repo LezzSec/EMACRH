@@ -20,10 +20,10 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import date, timedelta
 
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+from infrastructure.db.configbd import DatabaseCursor, DatabaseConnection
 from core.models import Polyvalence, EvaluationResume, StatistiquesEvaluations
 from core.repositories.base import BaseRepository
-from core.utils.performance_monitor import monitor_query
+from infrastructure.config.performance_monitor import monitor_query
 
 logger = logging.getLogger(__name__)
 
@@ -289,7 +289,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 new_id = cur.lastrowid
                 conn.commit()
 
-                from core.services.optimized_db_logger import log_hist
+                from infrastructure.logging.optimized_db_logger import log_hist
                 log_hist("CREATE", "polyvalence", new_id,
                         f"Compétence N{niveau} créée", operateur_id=operateur_id, poste_id=poste_id)
 
@@ -355,7 +355,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 cur.execute(query, (nouveau_niveau, date_evaluation, prochaine_evaluation, id))
                 conn.commit()
 
-                from core.services.optimized_db_logger import log_hist
+                from infrastructure.logging.optimized_db_logger import log_hist
                 log_hist("UPDATE", "polyvalence", id,
                         f"Évaluation: N{old[2]}→N{nouveau_niveau}",
                         operateur_id=old[0], poste_id=old[1])
@@ -427,7 +427,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         Inclut poste_code, niveau, date_evaluation, prochaine_evaluation.
         Utilisé par les vues qui ont besoin d'accès par clé de chaîne.
         """
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT ps.poste_code, p.niveau, p.date_evaluation, p.prochaine_evaluation
@@ -454,7 +454,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         Utilisé lors de la création d'un opérateur pour initialiser
         sa polyvalence sans lever d'erreur si elle existe déjà.
         """
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         existing = QueryExecutor.fetch_one(
             "SELECT id FROM polyvalence WHERE personnel_id = %s AND poste_id = %s",
             (operateur_id, poste_id),
@@ -503,7 +503,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             poste_code: Filtre optionnel sur le code poste
             limit: Nombre max de résultats
         """
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         query = """
             SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
             FROM polyvalence poly
@@ -532,7 +532,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             poste_code: Filtre optionnel sur le code poste
             limit: Nombre max de résultats
         """
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         query = """
             SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
             FROM polyvalence poly
@@ -554,7 +554,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
     def delete_competence(cls, operateur_id: int, poste_id: int) -> Tuple[bool, str]:
         """Supprime une compétence."""
         # Lire l'état avant suppression pour l'historique
-        from core.db.query_executor import QueryExecutor as QE
+        from infrastructure.db.query_executor import QueryExecutor as QE
         old = QE.fetch_one(
             "SELECT id, niveau, date_evaluation FROM polyvalence WHERE personnel_id = %s AND poste_id = %s",
             (operateur_id, poste_id), dictionary=True
@@ -570,7 +570,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                 conn.commit()
 
                 if deleted:
-                    from core.services.optimized_db_logger import log_hist
+                    from infrastructure.logging.optimized_db_logger import log_hist
                     log_hist("DELETE", "polyvalence", None,
                             f"Compétence supprimée", operateur_id=operateur_id, poste_id=poste_id)
 
@@ -598,7 +598,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         Retourne les polyvalences actuelles avec les champs type/id/commentaire
         pour la vue historique personnel (HistoriquePersonnelTab).
         """
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT 'ACTUELLE' AS type, p.id, ps.poste_code, p.niveau,
@@ -618,7 +618,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         Retourne l'historique des polyvalences depuis historique_polyvalence
         (IMPORT_MANUEL + MODIFICATION + AJOUT + SUPPRESSION).
         """
-        from core.db.query_executor import QueryExecutor
+        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT 'ANCIENNE' AS type, hp.id, p.poste_code,

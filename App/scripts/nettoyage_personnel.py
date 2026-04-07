@@ -19,8 +19,8 @@ import os
 # Assure que le dossier App est dans le path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from core.db.query_executor import QueryExecutor
-from core.utils.logging_config import setup_logging
+from infrastructure.db.query_executor import QueryExecutor
+from infrastructure.logging.logging_config import setup_logging
 
 setup_logging()
 

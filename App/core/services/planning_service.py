@@ -6,8 +6,8 @@ Centralise tous les accès DB du module planning.py.
 from datetime import date, timedelta
 from typing import List, Dict, Optional
 
-from core.db.query_executor import QueryExecutor
-from core.utils.logging_config import get_logger
+from infrastructure.db.query_executor import QueryExecutor
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -59,7 +59,7 @@ def creer_declaration(operateur_id: int, type_decl: str,
         """, (operateur_id, type_decl, date_debut, date_fin, motif or None),
         return_lastrowid=True)
 
-        from core.services.optimized_db_logger import log_hist
+        from infrastructure.logging.optimized_db_logger import log_hist
         log_hist(
             "INSERT",
             f"Déclaration d'absence : {type_decl}",

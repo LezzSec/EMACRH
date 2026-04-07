@@ -4,7 +4,7 @@ Module de gestion des chemins de fichiers pour EMAC.
 Gère automatiquement les chemins en mode développement et en mode .exe (PyInstaller).
 
 Utilisation:
-    from core.utils.app_paths import get_logs_dir, get_documents_dir, get_exports_dir
+    from infrastructure.config.app_paths import get_logs_dir, get_documents_dir, get_exports_dir
 
     logs_dir = get_logs_dir()  # Retourne Path vers logs/
     docs_dir = get_documents_dir()  # Retourne Path vers documents/

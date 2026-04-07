@@ -19,7 +19,7 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

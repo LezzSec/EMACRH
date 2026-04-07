@@ -16,9 +16,9 @@ Refactorisé: Utilise QueryExecutor au lieu de DatabaseCursor/DatabaseConnection
 from typing import List, Dict, Optional, Tuple, Any
 from decimal import Decimal
 
-from core.db.query_executor import QueryExecutor
+from infrastructure.db.query_executor import QueryExecutor
 from core.services.permission_manager import require
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

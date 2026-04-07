@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.db.configbd import get_connection
+from infrastructure.db.configbd import get_connection
 
 # ── Couleurs ANSI ────────────────────────────────────────────────────────────
 R  = "\033[91m"   # rouge

@@ -186,7 +186,7 @@ class PerformanceMonitor:
         # Fichier log
         if PerformanceConfig.FILE_LOGS:
             try:
-                from core.utils.logging_config import get_logger
+                from infrastructure.logging.logging_config import get_logger
                 logger = get_logger('performance')
                 logger.warning(message)
             except Exception:
@@ -461,7 +461,7 @@ def export_performance_stats(filename: str = 'performance_stats.csv'):
         filename: Nom du fichier de sortie
     """
     import csv
-    from core.utils.app_paths import get_exports_dir
+    from infrastructure.config.app_paths import get_exports_dir
 
     stats = _monitor.get_stats()
 

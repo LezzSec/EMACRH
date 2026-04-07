@@ -3,8 +3,8 @@
 
 import os, csv, datetime as dt, zipfile
 from typing import Dict
-from core.db.configbd import get_connection as get_db_connection
-from core.utils.app_paths import get_logs_dir
+from infrastructure.db.configbd import get_connection as get_db_connection
+from infrastructure.config.app_paths import get_logs_dir
 
 def _ensure_dir(path: str) -> None:
     os.makedirs(path, exist_ok=True)

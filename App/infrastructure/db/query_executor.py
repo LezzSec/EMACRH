@@ -6,7 +6,7 @@ Ce module fournit des méthodes utilitaires pour exécuter des requêtes SQL
 de manière standardisée, réduisant le code boilerplate dans les services.
 
 Usage:
-    from core.db.query_executor import QueryExecutor
+    from infrastructure.db.query_executor import QueryExecutor
 
     # Récupérer plusieurs lignes
     users = QueryExecutor.fetch_all("SELECT * FROM personnel WHERE statut = %s", ('ACTIF',))
@@ -20,8 +20,8 @@ Usage:
 
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
-from core.db.configbd import DatabaseConnection, DatabaseCursor
-from core.utils.logging_config import get_logger
+from infrastructure.db.configbd import DatabaseConnection, DatabaseCursor
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

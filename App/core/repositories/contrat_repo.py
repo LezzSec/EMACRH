@@ -21,10 +21,10 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import date, timedelta
 
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+from infrastructure.db.configbd import DatabaseCursor, DatabaseConnection
 from core.models import Contrat, StatistiquesContrats
 from core.repositories.base import BaseRepository
-from core.utils.performance_monitor import monitor_query
+from infrastructure.config.performance_monitor import monitor_query
 
 logger = logging.getLogger(__name__)
 
@@ -232,7 +232,7 @@ class ContratRepository(BaseRepository[Contrat]):
                 new_id = cur.lastrowid
                 conn.commit()
 
-                from core.services.optimized_db_logger import log_hist
+                from infrastructure.logging.optimized_db_logger import log_hist
                 log_hist("CREATE", "contrat", new_id,
                         f"Contrat {data.get('type_contrat')} créé pour personnel {data.get('personnel_id')}")
 
@@ -288,7 +288,7 @@ class ContratRepository(BaseRepository[Contrat]):
                 cur.execute(query, tuple(list(update_data.values()) + [id]))
                 conn.commit()
 
-                from core.services.optimized_db_logger import log_hist
+                from infrastructure.logging.optimized_db_logger import log_hist
                 log_hist("UPDATE", "contrat", id, f"Mise à jour: {list(update_data.keys())}")
 
                 return True, "Contrat mis à jour"
@@ -327,3 +327,119 @@ class ContratRepository(BaseRepository[Contrat]):
     def terminer(cls, id: int) -> Tuple[bool, str]:
         """Termine un contrat (actif = False)."""
         return cls.update(id, {"actif": False})
+
+    @classmethod
+    def get_resume_for_operateur(cls, operateur_id: int) -> Dict[str, Any]:
+        """
+        Retourne un résumé léger du contrat actif d'un opérateur.
+
+        Utilisé par get_resume_operateur() dans rh_service.
+
+        Returns:
+            {
+                "a_contrat_actif": bool,
+                "type": str | None,
+                "jours_restants": int | None
+            }
+        """
+        from infrastructure.db.query_executor import QueryExecutor
+        row = QueryExecutor.fetch_one(
+            """
+            SELECT type_contrat,
+                   date_fin,
+                   DATEDIFF(date_fin, CURDATE()) AS jours_restants
+            FROM contrat
+            WHERE personnel_id = %s AND actif = 1
+            LIMIT 1
+            """,
+            (operateur_id,),
+            dictionary=True,
+        )
+        return {
+            "a_contrat_actif": row is not None,
+            "type": row["type_contrat"] if row else None,
+            "jours_restants": row["jours_restants"] if row else None,
+        }
+
+    @classmethod
+    def get_alertes(cls, jours: int = 30, limit: int = 15) -> List[Dict[str, Any]]:
+        """
+        Retourne les contrats actifs expirant dans les N prochains jours,
+        pour les opérateurs actifs.
+
+        Utilisé par get_alertes_rh_dashboard() dans rh_service.
+
+        Returns:
+            Liste de dicts (id, personnel_id, type_contrat, date_fin,
+                            nom, prenom, matricule, jours_restants)
+        """
+        from infrastructure.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_all(
+            """
+            SELECT
+                c.id, c.personnel_id, c.type_contrat, c.date_fin,
+                p.nom, p.prenom, p.matricule,
+                DATEDIFF(c.date_fin, CURDATE()) AS jours_restants
+            FROM contrat c
+            INNER JOIN personnel p ON p.id = c.personnel_id
+            WHERE c.actif = 1
+              AND c.date_fin IS NOT NULL
+              AND c.date_fin BETWEEN CURDATE()
+                  AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+              AND p.statut = 'ACTIF'
+            ORDER BY c.date_fin ASC
+            LIMIT %s
+            """,
+            (jours, limit),
+            dictionary=True,
+        )
+
+    @classmethod
+    def count_alertes(cls, jours: int = 30) -> int:
+        """
+        Compte les contrats actifs expirant dans les N prochains jours.
+
+        Utilisé par get_alertes_rh_count() dans rh_service.
+        """
+        from infrastructure.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_scalar(
+            """
+            SELECT COUNT(*) FROM contrat c
+            INNER JOIN personnel p ON p.id = c.personnel_id
+            WHERE c.actif = 1 AND c.date_fin IS NOT NULL
+              AND c.date_fin BETWEEN CURDATE()
+                  AND DATE_ADD(CURDATE(), INTERVAL %s DAY)
+              AND p.statut = 'ACTIF'
+            """,
+            (jours,),
+            default=0,
+        )
+
+    @classmethod
+    def get_resume_formation(cls, operateur_id: int) -> Dict[str, Any]:
+        """
+        Retourne un résumé agrégé des formations d'un opérateur.
+
+        Utilisé par get_resume_operateur() dans rh_service.
+
+        Returns:
+            {"total": int, "terminees": int, "planifiees": int}
+        """
+        from infrastructure.db.query_executor import QueryExecutor
+        row = QueryExecutor.fetch_one(
+            """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN statut = 'Terminée'  THEN 1 ELSE 0 END) AS terminees,
+                SUM(CASE WHEN statut = 'Planifiée' THEN 1 ELSE 0 END) AS planifiees
+            FROM formation
+            WHERE personnel_id = %s
+            """,
+            (operateur_id,),
+            dictionary=True,
+        ) or {}
+        return {
+            "total": row.get("total") or 0,
+            "terminees": row.get("terminees") or 0,
+            "planifiees": row.get("planifiees") or 0,
+        }

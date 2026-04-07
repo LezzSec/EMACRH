@@ -11,12 +11,12 @@ Fournit les fonctions pour recuperer les evaluations en retard et a venir
 from datetime import date, timedelta
 from typing import List, Dict, Optional
 
-from core.db.query_executor import QueryExecutor
-from core.utils.logging_config import get_logger
+from infrastructure.db.query_executor import QueryExecutor
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-from core.utils.performance_monitor import monitor_query
+from infrastructure.config.performance_monitor import monitor_query
 from core.services.permission_manager import require
 from core.models import EvaluationResume, StatistiquesEvaluations
 
@@ -501,7 +501,7 @@ def importer_ancienne_polyvalence(operateur_id: int, poste_id: int, niveau: int,
     - INSERT/UPDATE dans polyvalence
     """
     try:
-        from core.db.configbd import DatabaseConnection
+        from infrastructure.db.configbd import DatabaseConnection
         with DatabaseConnection() as conn:
             cur = conn.cursor()
             cur.execute("""
@@ -521,7 +521,7 @@ def importer_ancienne_polyvalence(operateur_id: int, poste_id: int, niveau: int,
                     prochaine_evaluation = VALUES(prochaine_evaluation)
             """, (operateur_id, poste_id, niveau, date_eval, date_prochaine))
 
-        from core.services.optimized_db_logger import log_hist
+        from infrastructure.logging.optimized_db_logger import log_hist
         log_hist(
             action="IMPORT_MANUEL",
             table_name="polyvalence",
@@ -557,7 +557,7 @@ def update_date_evaluation_polyvalence(poly_id: int, new_date_eval, prochaine_ev
             WHERE id = %s
         """, (new_date_eval, prochaine_eval, poly_id))
 
-        from core.services.optimized_db_logger import log_hist
+        from infrastructure.logging.optimized_db_logger import log_hist
         log_hist(
             action="UPDATE",
             table_name="polyvalence",
@@ -612,7 +612,7 @@ def update_date_champ_polyvalence(poly_id: int, field: str, new_date) -> bool:
 
         QueryExecutor.execute_write(query_update, (new_date, poly_id))
 
-        from core.services.optimized_db_logger import log_hist
+        from infrastructure.logging.optimized_db_logger import log_hist
         log_hist(
             action="UPDATE",
             table_name="polyvalence",
@@ -670,7 +670,7 @@ def supprimer_polyvalence_par_id(poly_id: int) -> bool:
     try:
         QueryExecutor.execute_write("DELETE FROM polyvalence WHERE id = %s", (poly_id,))
 
-        from core.services.optimized_db_logger import log_hist
+        from infrastructure.logging.optimized_db_logger import log_hist
         log_hist(
             action="DELETE",
             table_name="polyvalence",

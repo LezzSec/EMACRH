@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -38,14 +38,14 @@ CREATE TABLE IF NOT EXISTS schema_migrations (
 # ---------------------------------------------------------------------------
 
 def _ensure_tracking_table() -> None:
-    from core.db.configbd import DatabaseConnection
+    from infrastructure.db.configbd import DatabaseConnection
     with DatabaseConnection() as conn:
         cur = conn.cursor()
         cur.execute(_CREATE_TRACKING_TABLE)
 
 
 def _applied_migrations() -> set[str]:
-    from core.db.query_executor import QueryExecutor
+    from infrastructure.db.query_executor import QueryExecutor
     rows = QueryExecutor.fetch_all(
         "SELECT filename FROM schema_migrations",
         dictionary=True,
@@ -65,7 +65,7 @@ def _numbered_sql_files() -> list[Path]:
 
 def _execute_sql_file(path: Path) -> None:
     """Exécute un fichier SQL (DDL multi-statements) et enregistre la migration."""
-    from core.db.configbd import get_connection
+    from infrastructure.db.configbd import get_connection
 
     sql = path.read_text(encoding="utf-8")
 
@@ -180,7 +180,7 @@ def _cmd_mark_applied_all() -> None:
         print("Toutes les migrations sont déjà enregistrées.")
         return
 
-    from core.db.configbd import get_connection
+    from infrastructure.db.configbd import get_connection
     conn = get_connection()
     try:
         cur = conn.cursor()

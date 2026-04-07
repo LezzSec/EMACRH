@@ -36,7 +36,7 @@ from PyQt5.QtGui import QKeySequence
 from PyQt5.QtCore import Qt
 from core.gui.components.ui_theme import EmacButton
 from core.gui.components.emac_ui_kit import add_custom_title_bar
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

@@ -16,7 +16,7 @@ from core.repositories.polyvalence_repo import PolyvalenceRepository
 from core.gui.components.emac_ui_kit import show_error_message
 import json
 import datetime as dt
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

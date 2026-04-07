@@ -25,8 +25,8 @@ from PyQt5.QtWidgets import (
 
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
 from core.gui.view_models.absence_view_model import AbsenceViewModel
-from core.utils.date_format import format_date, format_datetime
-from core.utils.logging_config import get_logger
+from infrastructure.config.date_format import format_date, format_datetime
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

@@ -30,7 +30,7 @@ from PyQt5.QtCore import QObject, pyqtSignal
 
 from core.services.absence_service_crud import AbsenceServiceCRUD, calculer_jours_ouvres
 from core.gui.workers.db_worker import DbWorker, DbThreadPool
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

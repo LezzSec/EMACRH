@@ -299,7 +299,7 @@ class SessionTimeoutManager(QObject):
         # Log de sécurité
         try:
             from core.services.auth_service import UserSession, get_current_user
-            from core.services.optimized_db_logger import log_hist_async
+            from infrastructure.logging.optimized_db_logger import log_hist_async
 
             user = get_current_user()
             if user:

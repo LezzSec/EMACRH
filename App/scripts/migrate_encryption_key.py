@@ -67,7 +67,7 @@ def _encrypt_with_new_key(plain_text: str) -> str:
     """Chiffre avec la nouvelle cle active (suit la priorite du module)."""
     # Import apres avoir configure le sys.path si besoin
     sys.path.insert(0, str(_APP_DIR))
-    from core.utils.config_crypter import encrypt_config, _get_encryption_key
+    from infrastructure.security.config_crypter import encrypt_config, _get_encryption_key
     key_used = _get_encryption_key()
     print(f"  Nouvelle cle (premiers octets) : {key_used[:8]}...")
     return encrypt_config(plain_text)
@@ -76,7 +76,7 @@ def _encrypt_with_new_key(plain_text: str) -> str:
 def verify(encrypted_file: Path = _ENCRYPTED_FILE) -> bool:
     """Verifie que le fichier chiffre actuel est lisible avec la cle active."""
     sys.path.insert(0, str(_APP_DIR))
-    from core.utils.config_crypter import decrypt_env_file
+    from infrastructure.security.config_crypter import decrypt_env_file
     print(f"Verification de : {encrypted_file}")
     try:
         content = decrypt_env_file(str(encrypted_file))
@@ -136,7 +136,7 @@ def migrate(dry_run: bool = False, encrypted_file: Path = _ENCRYPTED_FILE) -> bo
     # --- Etape 4 : verification du round-trip ---
     print("[3/4] Verification du round-trip...")
     sys.path.insert(0, str(_APP_DIR))
-    from core.utils.config_crypter import decrypt_config
+    from infrastructure.security.config_crypter import decrypt_config
     try:
         verified = decrypt_config(new_encrypted)
         if verified != plain_text:

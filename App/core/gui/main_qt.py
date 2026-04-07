@@ -1,8 +1,8 @@
 import sys, os, datetime as dt, time, traceback
 
 # Configuration centralisée du logging (doit être en premier)
-from core.utils.logging_config import setup_logging, get_logger, set_log_context, clear_log_context, get_logs_dir
-from core.utils.date_format import format_date
+from infrastructure.logging.logging_config import setup_logging, get_logger, set_log_context, clear_log_context, get_logs_dir
+from infrastructure.config.date_format import format_date
 
 # Déterminer le mode (production si variable d'environnement définie)
 _production_mode = os.getenv('EMAC_ENV', '').lower() == 'production'
@@ -27,63 +27,21 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import (
     Qt, QUrl, QPropertyAnimation, QEasingCurve, QTimer, QPoint, QEvent,
-    qInstallMessageHandler, QObject, pyqtSignal, QRunnable, QThreadPool
+    qInstallMessageHandler,
 )
 from PyQt5.QtGui import QDesktopServices
 
-try:
-    from core.services.log_exporter import export_day
-except Exception:
-    export_day = None
+from infrastructure.logging.log_exporter import export_day
 
 # ===========================
 #  Workers (ThreadPool)
 # ===========================
 
-try:
-    from core.gui.workers.db_worker import (
-        DbWorker, DbThreadPool
-    )
-    # Initialiser le pool avec la bonne configuration
-    _thread_pool = DbThreadPool.get_pool()
-except ImportError:
-    # Fallback si le module n'existe pas encore
-    class WorkerSignals(QObject):
-        result = pyqtSignal(object)
-        error = pyqtSignal(str)
+from core.gui.workers.db_worker import DbWorker, DbThreadPool
+DbThreadPool.get_pool()  # initialise le pool au démarrage
 
-    class DbWorker(QRunnable):
-        """Exécute une fonction DB en background et renvoie le résultat."""
-        def __init__(self, fn, *args, **kwargs):
-            super().__init__()
-            self.fn = fn
-            self.args = args
-            self.kwargs = kwargs
-            self.signals = WorkerSignals()
-
-        def run(self):
-            try:
-                res = self.fn(*self.args, **self.kwargs)
-                self.signals.result.emit(res)
-            except Exception:
-                self.signals.error.emit(traceback.format_exc())
-
-    _thread_pool = QThreadPool.globalInstance()
-    _thread_pool.setMaxThreadCount(4)
-
-
-# Import de show_error_message
-try:
-    from core.gui.components.emac_ui_kit import show_error_message
-except ImportError:
-    show_error_message = None
-
-# Import du gestionnaire de timeout de session
-try:
-    from core.gui.workers.session_timeout import SessionTimeoutManager
-except ImportError:
-    SessionTimeoutManager = None
-    logger.warning("SessionTimeoutManager non disponible")
+from core.gui.components.emac_ui_kit import show_error_message
+from core.gui.workers.session_timeout import SessionTimeoutManager
 
 # ===========================
 #  Fonctions lazy (DB/Auth/Theme)
@@ -1035,8 +993,18 @@ class MainWindow(QMainWindow):
 
         add_row("🔴", "Évaluations en retard", summary.get('evaluations_retard', 0), "#dc2626")
         add_row("🔴", "Contrats expirés", summary.get('contrats_expires', 0), "#dc2626")
+        add_row("🔴", "Mutuelles expirées", summary.get('mutuelles_expirees', 0), "#dc2626")
+        add_row("🔴", "Visites médicales en retard", summary.get('visites_retard', 0), "#dc2626")
+        add_row("🔴", "Compétences expirées", summary.get('competences_expirees', 0), "#dc2626")
+        add_row("🔴", "Documents expirés", summary.get('documents_expires', 0), "#dc2626")
         add_row("🟡", "Contrats expirant (30j)", summary.get('contrats_expirant', 0), "#d97706")
         add_row("🟡", "Personnel sans contrat", summary.get('personnel_sans_contrat', 0), "#d97706")
+        add_row("🟡", "Mutuelles expirant (30j)", summary.get('mutuelles_expirant', 0), "#d97706")
+        add_row("🟡", "Visites médicales (30j)", summary.get('visites_a_planifier', 0), "#d97706")
+        add_row("🟡", "RQTH expirant (90j)", summary.get('rqth_expirant', 0), "#d97706")
+        add_row("🟡", "OETH expirant (90j)", summary.get('oeth_expirant', 0), "#d97706")
+        add_row("🟡", "Compétences expirant (30j)", summary.get('competences_expirant', 0), "#d97706")
+        add_row("🟡", "Documents expirant (30j)", summary.get('documents_expirant', 0), "#d97706")
 
         layout.addSpacing(8)
 

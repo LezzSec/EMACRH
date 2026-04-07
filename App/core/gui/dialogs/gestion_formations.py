@@ -14,22 +14,18 @@ from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
 
 
-from core.services.formation_service_crud import FormationServiceCRUD as formation_service
-from core.services.document_service import DocumentService as _DocumentService
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
-from core.utils.logging_config import get_logger
-from core.utils.date_format import format_date
-
-_doc_service = _DocumentService()
+from core.gui.view_models.formation_view_model import FormationViewModel
+from infrastructure.logging.logging_config import get_logger
+from infrastructure.config.date_format import format_date
 
 logger = get_logger(__name__)
 
-# Import des composants modernes EMAC
-try:
-    from core.gui.components.ui_theme import EmacCard, EmacButton
-    THEME_AVAILABLE = True
-except ImportError:
-    THEME_AVAILABLE = False
+from core.gui.components.ui_theme import EmacCard, EmacButton
+
+# Le thème EMAC est toujours disponible — ce flag est conservé pour compatibilité
+# avec les branches conditionnelles existantes et sera supprimé lors du prochain refactor.
+THEME_AVAILABLE = True
 
 
 class GestionFormationsDialog(QDialog):
@@ -43,7 +39,9 @@ class GestionFormationsDialog(QDialog):
         self.setWindowTitle("Gestion des Formations")
         self.setGeometry(100, 100, 1300, 750)
 
+        self._vm = FormationViewModel(parent=self)
         self.init_ui()
+        self._connect_viewmodel()
         self.load_data()
 
     def init_ui(self):
@@ -419,49 +417,40 @@ class GestionFormationsDialog(QDialog):
 
         layout.addLayout(btn_layout)
 
-    def load_data(self):
-        """Charge les donnees"""
-        self._load_operateurs()
-        self._load_formations()
-        self._update_stats()
+    def _connect_viewmodel(self):
+        """Connecte les signaux du ViewModel aux handlers de la View."""
+        self._vm.personnel_loaded.connect(self._on_personnel_loaded)
+        self._vm.formations_loaded.connect(self._on_formations_loaded)
+        self._vm.stats_loaded.connect(self._on_stats_loaded)
+        self._vm.formation_loaded.connect(self._on_formation_loaded)
+        self._vm.action_succeeded.connect(self._on_action_succeeded)
+        self._vm.error_occurred.connect(
+            lambda msg: QMessageBox.critical(self, "Erreur", msg)
+        )
+        self._vm.dossier_generated.connect(self._on_dossier_generated)
+        self._vm.document_path_ready.connect(
+            lambda path: self._vm.open_file(path)
+        )
+        self._vm.data_changed.connect(lambda: (self.load_data(), self.data_changed.emit()))
 
-    def _load_operateurs(self):
-        """Charge la liste des operateurs"""
+    def load_data(self):
+        """Déclenche le chargement de toutes les données."""
+        self._vm.load_personnel()
+        self.apply_filters()
+        self._vm.load_stats()
+
+    def _on_personnel_loaded(self, operateurs: list):
         self.operateur_filter.blockSignals(True)
         self.operateur_filter.clear()
         self.operateur_filter.addItem("Tous les employes", None)
-
-        operateurs = formation_service.get_personnel_list()
         for op in operateurs:
             self.operateur_filter.addItem(
                 f"{op['nom_complet']} ({op['matricule']})",
                 op['id']
             )
-
         self.operateur_filter.blockSignals(False)
 
-    def _load_formations(self):
-        """Charge les formations dans le tableau"""
-        # Recuperer les filtres
-        operateur_id = self.operateur_filter.currentData()
-        statut_text = self.statut_filter.currentText()
-        statut = None if statut_text == "Tous" else statut_text
-
-        # Charger les formations
-        formations = formation_service.get_all_formations(
-            statut=statut,
-            operateur_id=operateur_id
-        )
-
-        # Appliquer le filtre de recherche
-        search_text = self.search_input.text().lower().strip()
-        if search_text:
-            formations = [
-                f for f in formations
-                if search_text in (f.get('intitule') or '').lower()
-                or search_text in (f.get('organisme') or '').lower()
-                or search_text in (f.get('nom_complet') or '').lower()
-            ]
+    def _on_formations_loaded(self, formations: list):
 
         # Remplir le tableau
         self.table.setRowCount(len(formations))
@@ -547,18 +536,41 @@ class GestionFormationsDialog(QDialog):
             else:
                 self.table.setItem(row, 10, QTableWidgetItem(''))
 
-    def _update_stats(self):
-        """Met a jour les statistiques"""
-        stats = formation_service.get_formations_stats()
-
+    def _on_stats_loaded(self, stats: dict):
         self.lbl_total.setText(f"Total : {stats.get('total', 0)}")
         self.lbl_en_cours.setText(f"En cours : {stats.get('en_cours', 0)}")
         self.lbl_terminees.setText(f"Terminees : {stats.get('terminees_cette_annee', 0)}")
         self.lbl_planifiees.setText(f"Planifiees : {stats.get('planifiees', 0)}")
 
+    def _on_action_succeeded(self, msg: str):
+        QMessageBox.information(self, "Succès", msg)
+
+    def _on_dossier_generated(self, success: bool, msg: str, path: str):
+        if success and path:
+            reply = QMessageBox.information(
+                self, "Documents générés",
+                f"Dossier de formation généré :\n{path}\n\nOuvrir le fichier ?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes:
+                self._vm.open_file(path)
+        else:
+            QMessageBox.warning(self, "Génération échouée", msg)
+
+    def _on_formation_loaded(self, formation: dict):
+        if '_saved_id' in formation:
+            return
+        dialog = AddEditFormationDialog(formation=formation, vm=self._vm, parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.load_data()
+
     def apply_filters(self):
-        """Applique les filtres"""
-        self._load_formations()
+        """Applique les filtres et recharge la liste."""
+        operateur_id = self.operateur_filter.currentData()
+        statut_text = self.statut_filter.currentText()
+        statut = None if statut_text == "Tous" else statut_text
+        search = self.search_input.text().strip() or None
+        self._vm.load_formations(operateur_id=operateur_id, statut=statut, search=search)
 
     def show_context_menu(self, position):
         """Affiche le menu contextuel"""
@@ -582,96 +594,90 @@ class GestionFormationsDialog(QDialog):
         return None
 
     def add_formation(self):
-        """Ouvre le dialogue d'ajout"""
-        dialog = AddEditFormationDialog(parent=self)
+        """Ouvre le dialogue d'ajout."""
+        dialog = AddEditFormationDialog(vm=self._vm, parent=self)
         if dialog.exec_() == QDialog.Accepted:
             self.load_data()
-            self.data_changed.emit()
 
     def edit_formation(self):
-        """Ouvre le dialogue de modification"""
+        """Charge la formation sélectionnée puis ouvre l'édition (via signal)."""
         formation_id = self.get_selected_formation_id()
         if not formation_id:
-            QMessageBox.warning(self, "Selection", "Veuillez selectionner une formation.")
+            QMessageBox.warning(self, "Sélection", "Veuillez sélectionner une formation.")
             return
-
-        formation = formation_service.get_formation_by_id(formation_id)
-        if formation:
-            dialog = AddEditFormationDialog(formation=formation, parent=self)
-            if dialog.exec_() == QDialog.Accepted:
-                self.load_data()
-                self.data_changed.emit()
+        self._vm.load_formation(formation_id)
 
     def generate_documents(self):
-        """Genere les documents officiels pré-remplis pour la formation selectionnee"""
+        """Lance la génération des documents de formation (async via ViewModel)."""
         formation_id = self.get_selected_formation_id()
         if not formation_id:
-            QMessageBox.warning(self, "Selection", "Veuillez selectionner une formation.")
+            QMessageBox.warning(self, "Sélection", "Veuillez sélectionner une formation.")
             return
-
-        try:
-            from core.services.formation_export_service import FormationExportService
-            data = formation_service.get_formation_by_id(formation_id)
-            if not data:
-                QMessageBox.warning(self, "Erreur", "Formation introuvable.")
-                return
-
-            success, msg, path = FormationExportService.generate_dossier_formation(data)
-            if success and path:
-                reply = QMessageBox.information(
-                    self, "Documents generés",
-                    f"Dossier de formation généré :\n{path}\n\nOuvrir le fichier ?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.Yes
-                )
-                if reply == QMessageBox.Yes:
-                    FormationExportService.open_file(path)
-            else:
-                QMessageBox.warning(self, "Generation echouee", msg)
-        except Exception as e:
-            logger.exception(f"Erreur génération documents: {e}")
-            show_error_message(self, "Erreur", "Impossible de générer les documents", e)
+        self._vm.generate_dossier(formation_id)
 
     def delete_formation(self):
-        """Supprime la formation selectionnee"""
+        """Supprime la formation sélectionnée après confirmation."""
         formation_id = self.get_selected_formation_id()
         if not formation_id:
-            QMessageBox.warning(self, "Selection", "Veuillez selectionner une formation.")
+            QMessageBox.warning(self, "Sélection", "Veuillez sélectionner une formation.")
             return
-
         reply = QMessageBox.question(
             self, "Confirmation",
-            "Etes-vous sur de vouloir supprimer cette formation ?",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            "Etes-vous sûr de vouloir supprimer cette formation ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
-
         if reply == QMessageBox.Yes:
-            success, message = formation_service.delete_formation(formation_id)
-            if success:
-                QMessageBox.information(self, "Succes", message)
-                self.load_data()
-                self.data_changed.emit()
-            else:
-                QMessageBox.critical(self, "Erreur", message)
+            self._vm.delete_formation(formation_id)
 
 
 class AddEditFormationDialog(QDialog):
     """Dialogue d'ajout/modification de formation"""
 
-    def __init__(self, formation=None, parent=None):
+    def __init__(self, formation=None, vm=None, parent=None):
         super().__init__(parent)
         self.formation = formation
         self.is_edit = formation is not None
         self.document_id = formation.get('document_id') if formation else None
+        self._vm = vm
 
         self.setWindowTitle("Modifier la formation" if self.is_edit else "Nouvelle formation")
         self.setFixedSize(640, 820)
 
         self.init_ui()
+        self._connect_viewmodel()
 
         if self.is_edit:
             self.load_formation_data()
+
+    def _connect_viewmodel(self):
+        if not self._vm:
+            return
+        self._vm.personnel_loaded.connect(self._on_personnel_loaded)
+        self._vm.document_path_ready.connect(self._on_document_path_ready)
+        self._vm.document_nom_ready.connect(self._on_document_nom_ready)
+
+    def _on_personnel_loaded(self, operateurs: list):
+        self.operateur_combo.clear()
+        for op in operateurs:
+            self.operateur_combo.addItem(
+                f"{op['nom_complet']} ({op['matricule']})",
+                op['id']
+            )
+        if self.is_edit and self.formation:
+            operateur_id = self.formation.get('operateur_id')
+            for i in range(self.operateur_combo.count()):
+                if self.operateur_combo.itemData(i) == operateur_id:
+                    self.operateur_combo.setCurrentIndex(i)
+                    break
+
+    def _on_document_path_ready(self, path: str):
+        self._vm.open_file(path)
+
+    def _on_document_nom_ready(self, nom: str):
+        self.attestation_label.setText(f"📄 {nom}")
+        self.attestation_label.setStyleSheet("color: #10b981; font-weight: bold;")
+        self.btn_voir.setEnabled(True)
+        self.btn_supprimer_doc.setEnabled(True)
 
     def init_ui(self):
         """Initialise l'interface"""
@@ -843,13 +849,9 @@ class AddEditFormationDialog(QDialog):
         layout.addLayout(btn_layout)
 
     def _load_operateurs(self):
-        """Charge la liste des operateurs"""
-        operateurs = formation_service.get_personnel_list()
-        for op in operateurs:
-            self.operateur_combo.addItem(
-                f"{op['nom_complet']} ({op['matricule']})",
-                op['id']
-            )
+        """Déclenche le chargement des opérateurs via le ViewModel."""
+        if self._vm:
+            self._vm.load_personnel()
 
     def load_formation_data(self):
         """Charge les donnees de la formation a modifier"""
@@ -955,29 +957,10 @@ class AddEditFormationDialog(QDialog):
             show_error_message(self, "Erreur", "Impossible de joindre l'attestation", e)
 
     def voir_attestation(self):
-        """Ouvre l'attestation jointe"""
-        if not self.document_id:
+        """Ouvre l'attestation jointe via le ViewModel."""
+        if not self.document_id or not self._vm:
             return
-
-        try:
-            import os
-            import sys
-            import subprocess
-
-            file_path = _doc_service.get_document_path(self.document_id)
-
-            if file_path and file_path.exists():
-                if sys.platform == 'win32':
-                    os.startfile(str(file_path))
-                elif sys.platform == 'darwin':
-                    subprocess.run(['open', str(file_path)])
-                else:
-                    subprocess.run(['xdg-open', str(file_path)])
-            else:
-                QMessageBox.warning(self, "Erreur", "Fichier introuvable.")
-        except Exception as e:
-            logger.exception(f"Erreur voir attestation: {e}")
-            show_error_message(self, "Erreur", "Impossible d'ouvrir l'attestation", e)
+        self._vm.get_document_path(self.document_id)
 
     def retirer_attestation(self):
         """Retire le lien vers l'attestation (ne supprime pas le fichier)"""
@@ -995,18 +978,9 @@ class AddEditFormationDialog(QDialog):
             self.btn_supprimer_doc.setEnabled(False)
 
     def _update_attestation_display(self):
-        """Met à jour l'affichage de l'attestation"""
-        if self.document_id:
-            try:
-                nom_fichier = _doc_service.get_document_nom(self.document_id)
-
-                if nom_fichier:
-                    self.attestation_label.setText(f"📄 {nom_fichier}")
-                    self.attestation_label.setStyleSheet("color: #10b981; font-weight: bold;")
-                    self.btn_voir.setEnabled(True)
-                    self.btn_supprimer_doc.setEnabled(True)
-            except Exception:
-                pass
+        """Demande le nom du document via le ViewModel."""
+        if self.document_id and self._vm:
+            self._vm.get_document_nom(self.document_id)
 
     def save_formation(self):
         """Enregistre la formation"""
@@ -1051,81 +1025,59 @@ class AddEditFormationDialog(QDialog):
 
         saved_formation_id = None
 
-        if self.is_edit:
-            success, message = formation_service.update_formation(
-                self.formation['id'],
-                operateur_id=operateur_id,
-                intitule=intitule,
-                organisme=organisme,
-                lieu=lieu,
-                objectif=objectif,
-                formateur=formateur,
-                date_debut=date_debut,
-                date_fin=date_fin,
-                duree_heures=duree_heures,
-                statut=statut,
-                certificat_obtenu=certificat_obtenu,
-                cout=cout,
-                commentaire=commentaire,
-                document_id=self.document_id
-            )
-            if success:
-                saved_formation_id = self.formation['id']
-        else:
-            success, message, formation_id = formation_service.add_formation(
-                operateur_id=operateur_id,
-                intitule=intitule,
-                organisme=organisme,
-                lieu=lieu,
-                objectif=objectif,
-                formateur=formateur,
-                date_debut=date_debut,
-                date_fin=date_fin,
-                duree_heures=duree_heures,
-                statut=statut,
-                certificat_obtenu=certificat_obtenu,
-                cout=cout,
-                commentaire=commentaire
-            )
-            if success:
-                saved_formation_id = formation_id
-                if self.document_id and formation_id:
-                    formation_service.update_formation(formation_id, document_id=self.document_id)
+        data = dict(
+            operateur_id=operateur_id,
+            intitule=intitule,
+            organisme=organisme,
+            lieu=lieu,
+            objectif=objectif,
+            formateur=formateur,
+            date_debut=date_debut,
+            date_fin=date_fin,
+            duree_heures=duree_heures,
+            statut=statut,
+            certificat_obtenu=certificat_obtenu,
+            cout=cout,
+            commentaire=commentaire,
+            document_id=self.document_id,
+        )
+        formation_id_edit = self.formation['id'] if self.is_edit else None
 
-        if success:
-            reply = QMessageBox.question(
-                self, "Formation enregistree",
-                f"{message}\n\nVoulez-vous générer les documents de formation pré-remplis ?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes
-            )
-            if reply == QMessageBox.Yes and saved_formation_id:
-                self._generate_documents(saved_formation_id)
+        if not self._vm:
+            QMessageBox.critical(self, "Erreur", "ViewModel non disponible.")
+            return
+
+        self._vm.dossier_generated.connect(self._on_dossier_generated_inner)
+        self._vm.action_succeeded.connect(self._on_save_succeeded)
+        self._vm.save_formation(data, formation_id=formation_id_edit)
+
+    def _on_save_succeeded(self, msg: str):
+        reply = QMessageBox.question(
+            self, "Formation enregistrée",
+            f"{msg}\n\nVoulez-vous générer les documents de formation pré-remplis ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+        )
+        if reply == QMessageBox.Yes and self._vm:
+            self._vm.formation_loaded.connect(self._on_saved_formation_for_dossier)
+        else:
             self.accept()
+
+    def _on_saved_formation_for_dossier(self, formation: dict):
+        saved_id = formation.get('_saved_id')
+        if saved_id and self._vm:
+            self._vm.generate_dossier(saved_id)
         else:
-            QMessageBox.critical(self, "Erreur", message)
+            self.accept()
 
-    def _generate_documents(self, formation_id: int):
-        """Génère les documents officiels de formation pré-remplis."""
-        try:
-            from core.services.formation_export_service import FormationExportService
-            data = formation_service.get_formation_by_id(formation_id)
-            if not data:
-                QMessageBox.warning(self, "Erreur", "Formation introuvable pour la génération.")
-                return
-
-            success, msg, path = FormationExportService.generate_dossier_formation(data)
-            if success and path:
-                reply = QMessageBox.information(
-                    self, "Documents générés",
-                    f"Dossier de formation généré :\n{path}\n\nOuvrir le fichier ?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.Yes
-                )
-                if reply == QMessageBox.Yes:
-                    FormationExportService.open_file(path)
-            else:
-                QMessageBox.warning(self, "Génération échouée", msg)
-        except Exception as e:
-            logger.exception(f"Erreur génération documents formation: {e}")
-            show_error_message(self, "Erreur", "Impossible de générer les documents", e)
+    def _on_dossier_generated_inner(self, success: bool, msg: str, path: str):
+        if success and path:
+            reply = QMessageBox.information(
+                self, "Documents générés",
+                f"Dossier de formation généré :\n{path}\n\nOuvrir le fichier ?",
+                QMessageBox.Yes | QMessageBox.No, QMessageBox.Yes
+            )
+            if reply == QMessageBox.Yes and self._vm:
+                self._vm.open_file(path)
+        else:
+            QMessageBox.warning(self, "Génération échouée", msg)
+        self.accept()

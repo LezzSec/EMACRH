@@ -19,19 +19,16 @@ from PyQt5.QtGui import QFont, QColor, QDesktopServices
 
 from core.services.document_service import DocumentService
 from core.repositories.personnel_repo import PersonnelRepository
-from core.services.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist
 from core.gui.components.emac_ui_kit import add_custom_title_bar, show_error_message
-from core.utils.logging_config import get_logger
-from core.utils.date_format import format_date
+from infrastructure.logging.logging_config import get_logger
+from infrastructure.config.date_format import format_date
 
 logger = get_logger(__name__)
 
-# Import des composants modernes EMAC
-try:
-    from core.gui.components.ui_theme import EmacCard, EmacButton
-    THEME_AVAILABLE = True
-except ImportError:
-    THEME_AVAILABLE = False
+from core.gui.components.ui_theme import EmacCard, EmacButton
+
+THEME_AVAILABLE = True  # toujours disponible — conservé pour compat branches existantes
 
 
 class GestionDocumentaireDialog(QDialog):

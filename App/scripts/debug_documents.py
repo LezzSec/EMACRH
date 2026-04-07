@@ -7,8 +7,8 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from core.db.configbd import get_connection
-from core.utils.app_paths import get_documents_dir
+from infrastructure.db.configbd import get_connection
+from infrastructure.config.app_paths import get_documents_dir
 
 def check_table_structure():
     """Vérifie la structure de la table documents."""

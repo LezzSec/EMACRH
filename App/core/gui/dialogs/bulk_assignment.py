@@ -21,7 +21,7 @@ from core.gui.components.loading_components import ProgressWidget
 from core.repositories.personnel_repo import PersonnelRepository
 from core.services.absence_service_crud import AbsenceServiceCRUD
 from core.services.formation_service_crud import FormationServiceCRUD
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

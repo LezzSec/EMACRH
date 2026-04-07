@@ -7,7 +7,7 @@ Permet d'ajouter des anciennes actions pour lesquelles il n'y avait pas de traç
 import csv
 import uuid
 from datetime import datetime
-from core.utils.date_format import format_timestamp
+from infrastructure.config.date_format import format_timestamp
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
@@ -21,7 +21,7 @@ from core.repositories.personnel_repo import PersonnelRepository
 from core.repositories.poste_repo import PosteRepository
 from core.services.polyvalence_logger import log_polyvalence_action
 from core.gui.components.emac_ui_kit import show_error_message
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

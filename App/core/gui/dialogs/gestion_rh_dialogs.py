@@ -2013,7 +2013,7 @@ class ConsulterFormationDialog:
             QScrollArea, QWidget, QFrame, QMessageBox
         )
         from PyQt5.QtCore import Qt
-        from core.utils.date_format import format_date
+        from infrastructure.config.date_format import format_date
 
         self._formation = formation
         self._parent_widget = parent

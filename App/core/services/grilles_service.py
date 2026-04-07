@@ -24,9 +24,9 @@ import logging
 from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 
-from core.db.query_executor import QueryExecutor
-from core.db.configbd import DatabaseConnection
-from core.services.optimized_db_logger import log_hist
+from infrastructure.db.query_executor import QueryExecutor
+from infrastructure.db.configbd import DatabaseConnection
+from infrastructure.logging.optimized_db_logger import log_hist
 
 logger = logging.getLogger(__name__)
 

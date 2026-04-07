@@ -6,7 +6,7 @@ Ce module configure le système de logging pour toute l'application.
 À initialiser UNE SEULE FOIS au démarrage de l'application (dans main_qt.py).
 
 Usage:
-    from core.utils.logging_config import setup_logging, get_logger
+    from infrastructure.logging.logging_config import setup_logging, get_logger
 
     # Au démarrage de l'application
     setup_logging(production_mode=False)  # False = dev, True = prod
@@ -161,7 +161,7 @@ def setup_logging(production_mode: bool = False) -> None:
 
     Usage:
         # Dans main_qt.py, au tout début
-        from core.utils.logging_config import setup_logging
+        from infrastructure.logging.logging_config import setup_logging
         setup_logging(production_mode=os.getenv('EMAC_ENV') == 'production')
     """
     global _initialized, _production_mode
@@ -236,7 +236,7 @@ def get_logger(name: str) -> logging.Logger:
         Logger configuré
 
     Usage:
-        from core.utils.logging_config import get_logger
+        from infrastructure.logging.logging_config import get_logger
 
         logger = get_logger(__name__)
         logger.debug("Message debug (dev uniquement)")

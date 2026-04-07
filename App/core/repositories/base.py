@@ -27,7 +27,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 
-from core.db.configbd import DatabaseCursor, DatabaseConnection
+from infrastructure.db.configbd import DatabaseCursor, DatabaseConnection
 from core.models import ModelMixin
 
 logger = logging.getLogger(__name__)

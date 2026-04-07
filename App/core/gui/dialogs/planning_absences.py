@@ -18,11 +18,11 @@ from core.services.absence_service_crud import AbsenceServiceCRUD, calculer_jour
 from core.services.planning_service import get_evaluations_mois, get_documents_expirant
 from core.repositories.personnel_repo import PersonnelRepository
 from core.gui.components.emac_ui_kit import add_custom_title_bar
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 from core.services.permission_manager import can
-from core.utils.date_format import format_date
+from infrastructure.config.date_format import format_date
 
 
 class PlanningAbsencesDialog(QDialog):

@@ -12,7 +12,7 @@ COMPARAISON:
 - APRÈS: ~450 lignes, code plus lisible, logging automatique
 """
 
-from core.utils.logging_config import get_logger
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -29,19 +29,10 @@ from core.services.contrat_service_crud import ContratServiceCRUD as _ContratSer
 get_contract_types = _ContratServiceCRUD.get_contract_types
 get_categories = _ContratServiceCRUD.get_categories
 
-# UI
-try:
-    from core.gui.components.emac_ui_kit import show_error_message
-    THEME_AVAILABLE = True
-except ImportError:
-    THEME_AVAILABLE = False
-    show_error_message = None
+from core.gui.components.emac_ui_kit import show_error_message
 
-# Documents
-try:
-    DOCUMENTS_AVAILABLE = True
-except ImportError:
-    DOCUMENTS_AVAILABLE = False
+THEME_AVAILABLE = True      # toujours disponible — conservé pour compat branches existantes
+DOCUMENTS_AVAILABLE = True  # toujours disponible
 
 
 class ContractFormDialog(EmacFormDialog):

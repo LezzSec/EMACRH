@@ -23,8 +23,8 @@ import json
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from core.db.query_executor import QueryExecutor
-from core.utils.logging_config import get_logger
+from infrastructure.db.query_executor import QueryExecutor
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
@@ -388,7 +388,7 @@ def create_rule(
             (event_name.strip(), template_id, execution_mode, condition_str, priority, description)
         )
 
-        from core.services.optimized_db_logger import log_hist
+        from infrastructure.logging.optimized_db_logger import log_hist
         log_hist(
             action="CREATION_REGLE_EVENEMENT",
             table_name="document_event_rules",

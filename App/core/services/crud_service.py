@@ -26,8 +26,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from core.services.optimized_db_logger import log_hist
-from core.utils.logging_config import get_logger
+from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

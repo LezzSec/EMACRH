@@ -10,9 +10,9 @@ Gère les données de paramétrage de l'application :
 Toutes les opérations d'écriture sont tracées dans l'historique.
 """
 
-from core.db.query_executor import QueryExecutor
-from core.services.optimized_db_logger import log_hist
-from core.utils.logging_config import get_logger
+from infrastructure.db.query_executor import QueryExecutor
+from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 

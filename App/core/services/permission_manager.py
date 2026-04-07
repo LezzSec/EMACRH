@@ -114,7 +114,7 @@ class PermissionManager:
             user_id: ID de l'utilisateur
             role_id: ID du rôle de l'utilisateur
         """
-        from core.db.configbd import DatabaseCursor
+        from infrastructure.db.configbd import DatabaseCursor
 
         self._user_id = user_id
         self._role_id = role_id
@@ -210,7 +210,7 @@ class PermissionManager:
             logger.warning("Vérification fraîche impossible: utilisateur non connecté")
             return False
 
-        from core.db.configbd import DatabaseCursor
+        from infrastructure.db.configbd import DatabaseCursor
 
         try:
             with DatabaseCursor(dictionary=True) as cur:
@@ -424,7 +424,7 @@ def invalidate_and_reload_permissions() -> None:
     Appeler cette fonction après modification des permissions d'un utilisateur
     pour s'assurer que les changements sont pris en compte immédiatement.
     """
-    from core.utils.emac_cache import invalidate_user_cache
+    from infrastructure.cache.emac_cache import invalidate_user_cache
     invalidate_user_cache()
     perm.reload()
     logger.info("Permissions invalidées et rechargées")
@@ -436,7 +436,7 @@ def invalidate_and_reload_permissions() -> None:
 
 def get_all_features() -> List[Dict]:
     """Récupère toutes les features du catalogue, groupées par module"""
-    from core.db.configbd import DatabaseCursor
+    from infrastructure.db.configbd import DatabaseCursor
 
     try:
         with DatabaseCursor(dictionary=True) as cur:
@@ -468,7 +468,7 @@ def get_features_by_module() -> Dict[str, List[Dict]]:
 
 def get_role_features(role_id: int) -> Set[str]:
     """Récupère les features d'un rôle"""
-    from core.db.configbd import DatabaseCursor
+    from infrastructure.db.configbd import DatabaseCursor
 
     try:
         with DatabaseCursor() as cur:
@@ -483,7 +483,7 @@ def get_role_features(role_id: int) -> Set[str]:
 
 def get_user_feature_overrides(user_id: int) -> Dict[str, bool]:
     """Récupère les overrides d'un utilisateur"""
-    from core.db.configbd import DatabaseCursor
+    from infrastructure.db.configbd import DatabaseCursor
 
     try:
         with DatabaseCursor(dictionary=True) as cur:
@@ -507,9 +507,9 @@ def save_role_features(role_id: int, feature_keys: Set[str]) -> tuple[bool, Opti
     Returns:
         (success, error_message)
     """
-    from core.db.configbd import get_connection
+    from infrastructure.db.configbd import get_connection
     from core.services.auth_service import is_admin, get_current_user
-    from core.services.optimized_db_logger import log_hist_async
+    from infrastructure.logging.optimized_db_logger import log_hist_async
 
     if not is_admin():
         return False, "Seuls les administrateurs peuvent modifier les permissions"
@@ -565,10 +565,10 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
     Returns:
         (success, error_message)
     """
-    from core.db.configbd import get_connection
+    from infrastructure.db.configbd import get_connection
     from core.services.auth_service import is_admin, get_current_user
-    from core.services.optimized_db_logger import log_hist_async
-    from core.utils.emac_cache import invalidate_user_cache
+    from infrastructure.logging.optimized_db_logger import log_hist_async
+    from infrastructure.cache.emac_cache import invalidate_user_cache
 
     if not is_admin():
         return False, "Seuls les administrateurs peuvent modifier les permissions"
@@ -628,10 +628,10 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
 
 def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
     """Supprime tous les overrides d'un utilisateur"""
-    from core.db.configbd import get_connection
+    from infrastructure.db.configbd import get_connection
     from core.services.auth_service import is_admin, get_current_user
-    from core.services.optimized_db_logger import log_hist_async
-    from core.utils.emac_cache import invalidate_user_cache
+    from infrastructure.logging.optimized_db_logger import log_hist_async
+    from infrastructure.cache.emac_cache import invalidate_user_cache
 
     if not is_admin():
         return False, "Seuls les administrateurs peuvent modifier les permissions"
@@ -676,7 +676,7 @@ def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
 def get_all_roles() -> List[Dict]:
     """Récupère tous les rôles avec leurs descriptions."""
     try:
-        from core.db.configbd import DatabaseCursor
+        from infrastructure.db.configbd import DatabaseCursor
         with DatabaseCursor(dictionary=True) as cur:
             cur.execute("SELECT id, nom, description FROM roles ORDER BY nom")
             return cur.fetchall()
@@ -688,7 +688,7 @@ def get_all_roles() -> List[Dict]:
 def get_admin_role_id() -> Optional[int]:
     """Retourne l'ID du rôle admin."""
     try:
-        from core.db.configbd import DatabaseCursor
+        from infrastructure.db.configbd import DatabaseCursor
         with DatabaseCursor() as cur:
             cur.execute(
                 "SELECT id FROM roles WHERE LOWER(nom) IN ('admin', 'administrateur') LIMIT 1"
@@ -703,7 +703,7 @@ def get_admin_role_id() -> Optional[int]:
 def get_user_with_role(user_id: int) -> Optional[Dict]:
     """Récupère un utilisateur avec son rôle."""
     try:
-        from core.db.configbd import DatabaseCursor
+        from infrastructure.db.configbd import DatabaseCursor
         with DatabaseCursor(dictionary=True) as cur:
             cur.execute("""
                 SELECT u.id, u.username, u.nom, u.prenom, u.role_id, r.nom as role_nom
