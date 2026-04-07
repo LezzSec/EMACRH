@@ -89,7 +89,7 @@ echo.
 
 REM Tester la connexion
 echo Test de la connexion à la base de données...
-py -c "from core.db.configbd import get_connection; conn = get_connection(); print('Connexion MySQL reussie !'); conn.close()" 2>nul
+py -c "from infrastructure.db.configbd import get_connection; conn = get_connection(); print('Connexion MySQL reussie !'); conn.close()" 2>nul
 
 if errorlevel 1 (
     echo.
