@@ -51,7 +51,7 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # === Header ===
-        header = QLabel("📥 Import de données historiques")
+        header = QLabel("Import de données historiques")
         header.setFont(QFont("Arial", 16, QFont.Bold))
         header.setAlignment(Qt.AlignCenter)
         header.setStyleSheet("""
@@ -72,7 +72,7 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
 
         # === Info discrète ===
         info_label = QLabel(
-            "ℹ️  <b>Note :</b> Cet import ajoute uniquement des entrées dans l'historique "
+            "<b>Note :</b> Cet import ajoute uniquement des entrées dans l'historique "
             "pour documenter des évaluations passées. Les polyvalences actuelles ne sont pas modifiées."
         )
         info_label.setWordWrap(True)
@@ -178,7 +178,7 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
         # Boutons d'action formulaire
         form_buttons = QHBoxLayout()
 
-        self.add_btn = QPushButton("➕ Ajouter à la liste")
+        self.add_btn = QPushButton("Ajouter à la liste")
         self.add_btn.setStyleSheet("""
             QPushButton {
                 background: #10b981;
@@ -194,7 +194,7 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
         self.add_btn.clicked.connect(self._add_to_list)
         form_buttons.addWidget(self.add_btn)
 
-        self.clear_btn = QPushButton("🗑️ Effacer")
+        self.clear_btn = QPushButton("Effacer")
         self.clear_btn.clicked.connect(self._clear_form)
         form_buttons.addWidget(self.clear_btn)
 
@@ -223,11 +223,11 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
         # Boutons action tableau
         table_buttons = QHBoxLayout()
 
-        self.remove_btn = QPushButton("❌ Retirer la ligne sélectionnée")
+        self.remove_btn = QPushButton("Retirer la ligne sélectionnée")
         self.remove_btn.clicked.connect(self._remove_from_list)
         table_buttons.addWidget(self.remove_btn)
 
-        self.import_csv_btn = QPushButton("📄 Importer depuis CSV")
+        self.import_csv_btn = QPushButton("Importer depuis CSV")
         self.import_csv_btn.clicked.connect(self._import_from_csv)
         table_buttons.addWidget(self.import_csv_btn)
 
@@ -242,7 +242,7 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
         # === Boutons finaux ===
         final_buttons = QHBoxLayout()
 
-        self.save_all_btn = QPushButton("💾 Enregistrer toutes les actions")
+        self.save_all_btn = QPushButton("Enregistrer toutes les actions")
         self.save_all_btn.setStyleSheet("""
             QPushButton {
                 background: #3b82f6;
@@ -399,7 +399,20 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
         self.count_label.setText(f"{count} action(s) en attente")
 
     def _import_from_csv(self):
-        """Importe des actions depuis un fichier CSV."""
+        """Importe des actions depuis un fichier CSV.
+
+        Format attendu (séparateur ;, encodage UTF-8 avec ou sans BOM) :
+            date;type;operateur_id;poste_id;ancien_niveau;nouveau_niveau;date_eval;commentaire
+
+        - date          : YYYY-MM-DD ou DD/MM/YYYY
+        - type          : AJOUT | MODIFICATION | SUPPRESSION
+        - operateur_id  : entier (ID dans la table personnel)
+        - poste_id      : entier (ID dans la table postes)
+        - ancien_niveau : entier 1-4 ou vide
+        - nouveau_niveau: entier 1-4 ou vide
+        - date_eval     : YYYY-MM-DD ou DD/MM/YYYY ou vide
+        - commentaire   : texte libre ou vide
+        """
         file_path, _ = QFileDialog.getOpenFileName(
             self, "Importer depuis CSV", "", "CSV Files (*.csv)"
         )
@@ -407,18 +420,100 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
         if not file_path:
             return
 
+        import json
+        from datetime import date as date_type
+
+        VALID_TYPES = {"AJOUT", "MODIFICATION", "SUPPRESSION"}
+
+        def _parse_date(val: str):
+            v = (val or "").strip()
+            if not v:
+                return None
+            try:
+                return date_type.fromisoformat(v)
+            except ValueError:
+                return datetime.strptime(v, "%d/%m/%Y").date()
+
+        def _parse_int(val: str):
+            v = (val or "").strip()
+            return int(v) if v else None
+
         try:
-            with open(file_path, 'r', encoding='utf-8-sig') as f:
-                reader = csv.DictReader(f, delimiter=';')
+            imported = 0
+            errors = []
 
-                imported = 0
-                for row_data in reader:
-                    # TODO: Parser et ajouter chaque ligne
-                    # Format attendu: date;type;operateur_id;poste_id;ancien_niveau;nouveau_niveau;date_eval;commentaire
-                    pass
+            with open(file_path, "r", encoding="utf-8-sig") as f:
+                reader = csv.DictReader(f, delimiter=";")
 
-            QMessageBox.information(self, "Import CSV", f"{imported} action(s) importée(s) depuis le fichier CSV.")
+                for line_num, row_data in enumerate(reader, start=2):
+                    try:
+                        date_action = _parse_date(row_data.get("date"))
+                        if date_action is None:
+                            raise ValueError("Champ 'date' obligatoire")
+
+                        action_type = (row_data.get("type") or "").strip().upper()
+                        if action_type not in VALID_TYPES:
+                            raise ValueError(f"Type invalide : '{action_type}' (attendu : AJOUT, MODIFICATION, SUPPRESSION)")
+
+                        operateur_id = _parse_int(row_data.get("operateur_id"))
+                        if operateur_id is None or operateur_id not in self.operateurs_map:
+                            raise ValueError(f"operateur_id {operateur_id!r} introuvable")
+
+                        poste_id = _parse_int(row_data.get("poste_id"))
+                        if poste_id is None or poste_id not in self.postes_map:
+                            raise ValueError(f"poste_id {poste_id!r} introuvable")
+
+                        ancien_niveau = _parse_int(row_data.get("ancien_niveau"))
+                        nouveau_niveau = _parse_int(row_data.get("nouveau_niveau"))
+                        nouvelle_date_eval = _parse_date(row_data.get("date_eval"))
+                        commentaire = (row_data.get("commentaire") or "").strip()
+
+                        data = {
+                            "date_action": date_action.isoformat(),
+                            "action_type": action_type,
+                            "operateur_id": operateur_id,
+                            "poste_id": poste_id,
+                            "ancien_niveau": ancien_niveau,
+                            "ancienne_date_evaluation": None,
+                            "nouveau_niveau": nouveau_niveau,
+                            "nouvelle_date_evaluation": nouvelle_date_eval.isoformat() if nouvelle_date_eval else None,
+                            "nouvelle_prochaine_evaluation": None,
+                            "commentaire": commentaire,
+                        }
+
+                        row = self.table.rowCount()
+                        self.table.insertRow(row)
+                        self.table.setItem(row, 0, QTableWidgetItem(date_action.strftime("%d/%m/%Y")))
+                        self.table.setItem(row, 1, QTableWidgetItem(action_type))
+                        self.table.setItem(row, 2, QTableWidgetItem(self.operateurs_map[operateur_id]))
+                        self.table.setItem(row, 3, QTableWidgetItem(self.postes_map[poste_id]))
+                        self.table.setItem(row, 4, QTableWidgetItem(str(ancien_niveau) if ancien_niveau else "-"))
+                        self.table.setItem(row, 5, QTableWidgetItem(str(nouveau_niveau) if nouveau_niveau else "-"))
+                        self.table.setItem(row, 6, QTableWidgetItem(nouvelle_date_eval.strftime("%d/%m/%Y") if nouvelle_date_eval else "-"))
+                        self.table.setItem(row, 7, QTableWidgetItem(commentaire or "-"))
+                        self.table.setItem(row, 8, QTableWidgetItem(json.dumps(data)))
+
+                        imported += 1
+
+                    except Exception as row_err:
+                        errors.append(f"Ligne {line_num} : {row_err}")
+                        logger.warning(f"Import CSV ligne {line_num} ignorée : {row_err}")
+
             self._update_count()
+
+            if errors:
+                detail = "\n".join(errors[:10])
+                if len(errors) > 10:
+                    detail += f"\n... et {len(errors) - 10} autre(s) erreur(s)"
+                QMessageBox.warning(
+                    self, "Import CSV partiel",
+                    f"{imported} ligne(s) importée(s), {len(errors)} ignorée(s) :\n\n{detail}"
+                )
+            else:
+                QMessageBox.information(
+                    self, "Import CSV",
+                    f"{imported} action(s) importée(s) depuis le fichier CSV."
+                )
 
         except Exception as e:
             logger.exception(f"Erreur import CSV: {e}")
@@ -493,15 +588,15 @@ class ImportHistoriquePolyvalenceDialog(QDialog):
         if error_count == 0:
             QMessageBox.information(
                 self, "Import réussi",
-                f"✅ {success_count} action(s) historique(s) ont été enregistrée(s) avec succès !\n\n"
+                f"{success_count} action(s) historique(s) ont été enregistrée(s) avec succès !\n\n"
                 f"Batch ID : {self.import_batch_id}"
             )
             self.accept()
         else:
             QMessageBox.warning(
                 self, "Import partiel",
-                f"⚠️ {success_count} action(s) enregistrée(s)\n"
-                f"❌ {error_count} erreur(s)\n\n"
+                f"{success_count} action(s) enregistrée(s)\n"
+                f"{error_count} erreur(s)\n\n"
                 f"Batch ID : {self.import_batch_id}"
             )
 

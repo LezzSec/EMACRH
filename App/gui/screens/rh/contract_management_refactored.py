@@ -198,7 +198,7 @@ class ContractFormDialog(EmacFormDialog):
 
     def load_operators(self):
         """
-        ✅ REFACTORISÉ: Utilise QueryExecutor au lieu de with DatabaseCursor.
+        REFACTORISÉ: Utilise QueryExecutor au lieu de with DatabaseCursor.
 
         AVANT: 19 lignes avec try/except/finally
         APRÈS: 10 lignes, plus lisible
@@ -311,7 +311,7 @@ class ContractFormDialog(EmacFormDialog):
 
     def validate(self) -> tuple:
         """
-        ✅ NOUVEAU: Validation du formulaire (appelé automatiquement par EmacFormDialog).
+        NOUVEAU: Validation du formulaire (appelé automatiquement par EmacFormDialog).
 
         Returns:
             (success: bool, error_message: str)
@@ -338,7 +338,7 @@ class ContractFormDialog(EmacFormDialog):
 
     def save_to_db(self):
         """
-        ✅ REFACTORISÉ: Utilise ContratServiceCRUD au lieu de create_contract/update_contract.
+        REFACTORISÉ: Utilise ContratServiceCRUD au lieu de create_contract/update_contract.
 
         AVANT: Appels aux fonctions de l'ancien service
         APRÈS: Utilise le nouveau service CRUD avec logging automatique

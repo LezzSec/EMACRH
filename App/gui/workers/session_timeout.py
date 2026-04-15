@@ -59,7 +59,7 @@ class TimeoutWarningDialog(QDialog):
         layout.setContentsMargins(20, 20, 20, 20)
 
         # Icône et titre
-        title = QLabel("⚠️ Session inactive")
+        title = QLabel("Session inactive")
         title.setStyleSheet("font-size: 16px; font-weight: bold; color: #e67e22;")
         layout.addWidget(title)
 
@@ -163,9 +163,12 @@ class SessionTimeoutManager(QObject):
         self._check_timer = QTimer(self)
         self._check_timer.timeout.connect(self._check_timeout)
 
-        # Installer l'event filter sur la fenêtre parente
-        if parent_window:
-            parent_window.installEventFilter(self)
+        # Installer l'event filter sur QApplication pour capturer l'activité
+        # dans TOUS les widgets (dialogs inclus), pas seulement la fenêtre principale
+        from PyQt5.QtWidgets import QApplication
+        app = QApplication.instance()
+        if app:
+            app.installEventFilter(self)
 
         logger.info(f"SessionTimeoutManager initialisé: timeout={timeout_minutes}min, warning={self.warning_minutes}min")
 

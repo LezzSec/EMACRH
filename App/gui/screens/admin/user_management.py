@@ -47,12 +47,12 @@ class UserManagementDialog(QDialog):
 
         # Boutons d'action
         btn_layout = QHBoxLayout()
-        self.btn_add_user = EmacButton("➕ Nouvel Utilisateur", variant='primary')
+        self.btn_add_user = EmacButton("Nouvel Utilisateur", variant='primary')
         self.btn_add_user.clicked.connect(self.show_add_user_dialog)
         btn_layout.addWidget(self.btn_add_user)
 
         # Bouton pour gérer les permissions (système features)
-        self.btn_permissions = EmacButton("🔐 Gérer les Permissions", variant='ghost')
+        self.btn_permissions = EmacButton("Gérer les Permissions", variant='ghost')
         self.btn_permissions.clicked.connect(self.show_feature_editor)
         btn_layout.addWidget(self.btn_permissions)
 

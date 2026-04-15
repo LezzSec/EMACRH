@@ -32,15 +32,15 @@ ACTION_LABEL = {
 
 # Mapping action → (icône, libellé, couleur texte, couleur fond clair)
 ACTION_CONFIG = {
-    "INSERT":         ("✚",  "Ajout de compétence",     "#4caf50", "#e8f5e9"),
-    "UPDATE":         ("✏️", "Modification de compétence","#f57f17", "#fff8e1"),
-    "DELETE":         ("✕",  "Suppression de compétence","#f44336", "#ffebee"),
-    "ERROR":          ("⚠",  "Erreur",                  "#d32f2f", "#ffebee"),
-    "CONNEXION":      ("🔐", "Connexion utilisateur",    "#1976d2", "#e3f2fd"),
-    "DECONNEXION":    ("🚪", "Déconnexion utilisateur",  "#455a64", "#eceff1"),
-    "LOGOUT_TIMEOUT": ("⏱",  "Déconnexion automatique", "#7b1fa2", "#f3e5f5"),
+    "INSERT":         ("+",   "Ajout de compétence",     "#4caf50", "#e8f5e9"),
+    "UPDATE":         ("~",   "Modification de compétence","#f57f17", "#fff8e1"),
+    "DELETE":         ("-",   "Suppression de compétence","#f44336", "#ffebee"),
+    "ERROR":          ("!",   "Erreur",                  "#d32f2f", "#ffebee"),
+    "CONNEXION":      ("CNX", "Connexion utilisateur",    "#1976d2", "#e3f2fd"),
+    "DECONNEXION":    ("DCX", "Déconnexion utilisateur",  "#455a64", "#eceff1"),
+    "LOGOUT_TIMEOUT": ("TO",  "Déconnexion automatique", "#7b1fa2", "#f3e5f5"),
 }
-_ACTION_CONFIG_DEFAULT = ("ℹ️", "Action",              "#616161", "#f5f5f5")
+_ACTION_CONFIG_DEFAULT = ("i", "Action",              "#616161", "#f5f5f5")
 
 def get_action_config(action: str) -> tuple:
     """Retourne (icône, libellé, couleur, couleur_fond) pour un type d'action."""
@@ -107,20 +107,20 @@ def make_resume(row: dict) -> str:
         
         if action.upper() == "INSERT":
             niveau = data.get("niveau", "?")
-            return f"{op_name} ➜ {po_name} : ✚ Niveau {niveau} (nouveau)"
+            return f"{op_name} > {po_name} : Niveau {niveau} (nouveau)"
         
         elif action.upper() == "UPDATE":
             changes = data.get("changes", {})
             if "niveau" in changes:
                 old = changes["niveau"].get("old", "?")
                 new = changes["niveau"].get("new", "?")
-                return f"{op_name} ➜ {po_name} : Niveau {old} → {new}"
+                return f"{op_name} > {po_name} : Niveau {old} -> {new}"
             else:
-                return f"{op_name} ➜ {po_name} : Modifié"
-        
+                return f"{op_name} > {po_name} : Modifié"
+
         elif action.upper() == "DELETE":
             niveau = data.get("niveau", "?")
-            return f"{op_name} ➜ {po_name} : ✕ Niveau {niveau} (supprimé)"
+            return f"{op_name} > {po_name} : Niveau {niveau} (supprimé)"
         
     except Exception as e:
         pass
@@ -137,7 +137,7 @@ def make_resume(row: dict) -> str:
         parts.append(f"Poste #{po_id}")
     
     if parts:
-        return " ➜ ".join(parts)
+        return " > ".join(parts)
     
     return f"Action : {action}"
 
@@ -182,7 +182,7 @@ class DetailDialog(QDialog):
         except Exception:
             pass
         
-        date_label = QLabel(f"📅 Date : {dt_txt}")
+        date_label = QLabel(f"Date : {dt_txt}")
         date_label.setStyleSheet("font-size: 12px; color: #616161; padding: 4px;")
         layout.addWidget(date_label)
         
@@ -211,7 +211,7 @@ class DetailDialog(QDialog):
 
         # N'afficher la ligne Opérateur que si on a un nom valide
         if op_name:
-            op_label = self._create_info_row("👤 Personnel :", op_name)
+            op_label = self._create_info_row("Personnel :", op_name)
             info_layout.addWidget(op_label)
 
         # Poste (n'afficher que s'il y en a un)
@@ -226,23 +226,23 @@ class DetailDialog(QDialog):
 
         # N'afficher la ligne Poste que si on a un nom valide
         if po_name:
-            po_label = self._create_info_row("📍 Poste :", po_name)
+            po_label = self._create_info_row("Poste :", po_name)
             info_layout.addWidget(po_label)
 
         # Utilisateur (qui a effectué l'action)
         utilisateur = row.get("utilisateur")
         if utilisateur:
-            user_label = self._create_info_row("👨‍💼 Effectué par :", utilisateur)
+            user_label = self._create_info_row("Effectué par :", utilisateur)
             info_layout.addWidget(user_label)
 
         # Table et record modifiés
         table_name = row.get("table_name")
         if table_name:
-            info_layout.addWidget(self._create_info_row("🗃 Table :", table_name))
+            info_layout.addWidget(self._create_info_row("Table :", table_name))
 
         record_id = row.get("record_id")
         if record_id is not None:
-            info_layout.addWidget(self._create_info_row("🔑 ID enregistrement :", str(record_id)))
+            info_layout.addWidget(self._create_info_row("ID enregistrement :", str(record_id)))
 
         # Détails selon le type d'action
         try:
@@ -253,7 +253,7 @@ class DetailDialog(QDialog):
             except (json.JSONDecodeError, ValueError):
                 # Si ce n'est pas du JSON, afficher le texte brut
                 if desc_str and desc_str.strip():
-                    desc_label = self._create_info_row("📝 Description :", desc_str)
+                    desc_label = self._create_info_row("Description :", desc_str)
                     info_layout.addWidget(desc_label)
                 data = {}
 
@@ -262,17 +262,17 @@ class DetailDialog(QDialog):
                 # Matricule
                 matricule = data.get("matricule")
                 if matricule:
-                    info_layout.addWidget(self._create_info_row("🔢 Matricule :", matricule))
+                    info_layout.addWidget(self._create_info_row("Matricule :", matricule))
 
                 # Atelier
                 atelier = data.get("atelier")
                 if atelier:
-                    info_layout.addWidget(self._create_info_row("🏭 Atelier :", atelier))
+                    info_layout.addWidget(self._create_info_row("Atelier :", atelier))
 
                 # Source de la modification
                 source = data.get("source")
                 if source:
-                    info_layout.addWidget(self._create_info_row("📍 Source :", source))
+                    info_layout.addWidget(self._create_info_row("Source :", source))
 
             # === Détails spécifiques : sessions (CONNEXION / DECONNEXION / LOGOUT_TIMEOUT) ===
             if action in ("CONNEXION", "DECONNEXION", "LOGOUT_TIMEOUT"):
@@ -283,7 +283,7 @@ class DetailDialog(QDialog):
                 role_match = re.search(r'r[oô]le\s*:\s*([^\)]+)', desc_str, re.IGNORECASE)
                 if role_match:
                     role_val = role_match.group(1).strip()
-                    info_layout.addWidget(self._create_info_row("🎭 Rôle :", role_val))
+                    info_layout.addWidget(self._create_info_row("Rôle :", role_val))
 
                 # Badge visuel selon le type de session
                 if action == "CONNEXION":
@@ -304,16 +304,16 @@ class DetailDialog(QDialog):
             # === Détails spécifiques selon le type d'action ===
             elif action == "INSERT" and data:
                 niveau = data.get("niveau", "?")
-                niveau_label = self._create_info_row("⭐ Niveau attribué :", f"Niveau {niveau}")
+                niveau_label = self._create_info_row("Niveau attribué :", f"Niveau {niveau}")
                 info_layout.addWidget(niveau_label)
 
                 # Dates d'évaluation
                 date_eval = data.get("date_evaluation")
                 prochaine_eval = data.get("prochaine_evaluation")
                 if date_eval:
-                    info_layout.addWidget(self._create_info_row("📅 Date d'évaluation :", date_eval))
+                    info_layout.addWidget(self._create_info_row("Date d'évaluation :", date_eval))
                 if prochaine_eval:
-                    info_layout.addWidget(self._create_info_row("📆 Prochaine évaluation :", prochaine_eval))
+                    info_layout.addWidget(self._create_info_row("Prochaine évaluation :", prochaine_eval))
 
                 info_text = QLabel("Un nouveau niveau de compétence a été attribué à cette personne pour ce poste.")
                 info_text.setWordWrap(True)
@@ -371,17 +371,17 @@ class DetailDialog(QDialog):
                         info_layout.addWidget(dates_label)
 
                 if prochaine_eval:
-                    info_layout.addWidget(self._create_info_row("📆 Prochaine évaluation :", prochaine_eval))
+                    info_layout.addWidget(self._create_info_row("Prochaine évaluation :", prochaine_eval))
 
             elif action == "DELETE":
                 niveau = data.get("niveau") or data.get("niveau_supprime", "?")
-                niveau_label = self._create_info_row("⭐ Niveau supprimé :", f"Niveau {niveau}")
+                niveau_label = self._create_info_row("Niveau supprimé :", f"Niveau {niveau}")
                 info_layout.addWidget(niveau_label)
 
                 # Date d'évaluation supprimée
                 date_supprimee = data.get("date_eval_supprimee")
                 if date_supprimee:
-                    info_layout.addWidget(self._create_info_row("📅 Date d'évaluation (supprimée) :", date_supprimee))
+                    info_layout.addWidget(self._create_info_row("Date d'évaluation (supprimée) :", date_supprimee))
 
                 info_text = QLabel("Cette compétence a été retirée de la personne pour ce poste.")
                 info_text.setWordWrap(True)
@@ -511,7 +511,7 @@ class ActionCard(QFrame):
         except Exception:
             pass
         
-        time_label = QLabel(f"🕐 {dt_txt}")
+        time_label = QLabel(f"{dt_txt}")
         time_label.setStyleSheet("color: #757575; font-size: 10px; background: transparent;")
         details_layout.addWidget(time_label)
         
@@ -536,7 +536,7 @@ class ActionCard(QFrame):
 
         table_name = row.get("table_name")
         if table_name:
-            extra_parts.append(f"🗃 {table_name}")
+            extra_parts.append(f"{table_name}")
 
         record_id = row.get("record_id")
         if record_id is not None:
@@ -554,7 +554,7 @@ class ActionCard(QFrame):
             if excerpt and len(excerpt) > 2:
                 max_len = 80
                 excerpt_str = excerpt[:max_len] + ("…" if len(excerpt) > max_len else "")
-                extra_parts.append(f"📝 {excerpt_str}")
+                extra_parts.append(f"{excerpt_str}")
 
         if extra_parts:
             extra_layout = QHBoxLayout()
@@ -708,7 +708,7 @@ class HistoriqueDialog(QDialog):
         title_row = QHBoxLayout()
         title_row.setSpacing(10)
 
-        icon_badge = QLabel("🕐")
+        icon_badge = QLabel("~")
         icon_badge.setFont(QFont("Segoe UI", 16))
         icon_badge.setStyleSheet("""
             background-color: #e3f2fd;
@@ -808,7 +808,7 @@ class HistoriqueDialog(QDialog):
         vsep3.setStyleSheet("QFrame { color: #e0e0e0; }")
         filters_row.addWidget(vsep3, alignment=Qt.AlignVCenter)
 
-        self.search = QLineEdit(placeholderText="🔍  Rechercher...")
+        self.search = QLineEdit(placeholderText="Rechercher...")
         self.search.setFixedHeight(32)
         self.search.returnPressed.connect(self.reload)
         self.search.setStyleSheet(field_style)
@@ -1029,9 +1029,9 @@ class HistoriqueDialog(QDialog):
         def on_error(err):
             if self._loading_label:
                 self._loading_label.stop()
-                self._loading_label.setText("❌ Erreur de chargement")
+                self._loading_label.setText("Erreur de chargement")
                 self._loading_label = None
-            self.count_label.setText("❌ Erreur")
+            self.count_label.setText("Erreur")
             logger.error(f"Erreur fetch historique: {err}")
             QMessageBox.critical(self, "Erreur", "Impossible de charger l'historique.")
 
@@ -1076,8 +1076,8 @@ class HistoriqueDialog(QDialog):
 
         total = offset + len(rows)
         self._page_offset = total
-        suffix = " — ⬇ suite disponible" if has_more else ""
-        self.count_label.setText(f"📊 {total} action(s) affichée(s){suffix}")
+        suffix = " — suite disponible" if has_more else ""
+        self.count_label.setText(f"{total} action(s) affichée(s){suffix}")
         self._btn_load_more.setVisible(has_more)
 
     @staticmethod

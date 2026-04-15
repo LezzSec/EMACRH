@@ -3,7 +3,7 @@
 Système de monitoring des performances EMAC.
 Mesure et alerte sur les opérations lentes (> seuil configuré).
 
-✅ Fonctionnalités:
+Fonctionnalités:
 - Mesure temps de login
 - Mesure temps des requêtes DB clés
 - Mesure temps d'ouverture des dialogs
@@ -82,9 +82,9 @@ class PerformanceMonitor:
     """
     Singleton qui collecte et agrège les métriques de performance.
 
-    ✅ Thread-safe
-    ✅ Statistiques en temps réel
-    ✅ Alertes automatiques
+    Thread-safe.
+    Statistiques en temps réel.
+    Alertes automatiques.
     """
 
     _instance = None
@@ -436,7 +436,7 @@ def print_performance_report():
     summary = _monitor.get_summary()
 
     print("\n" + "=" * 80)
-    print("📊 RAPPORT DE PERFORMANCE EMAC")
+    print("RAPPORT DE PERFORMANCE EMAC")
     print("=" * 80)
     print(f"Total opérations      : {summary['total_operations']}")
     print(f"Opérations lentes     : {summary['slow_operations']}")
@@ -494,7 +494,7 @@ def export_performance_stats(filename: str = 'performance_stats.csv'):
                 stat['slow_count']
             ])
 
-    print(f"✅ Statistiques exportées: {filepath}")
+    print(f"Statistiques exportées: {filepath}")
 
 
 # ===========================

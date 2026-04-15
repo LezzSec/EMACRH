@@ -13,8 +13,8 @@ from PyQt5.QtWidgets import (
     QDialog, QLineEdit, QTextEdit, QDateEdit, QHeaderView, QMenu,
     QAbstractItemView, QGroupBox
 )
-from PyQt5.QtCore import Qt, QDate, pyqtSignal
-from PyQt5.QtGui import QColor, QDesktopServices, QUrl
+from PyQt5.QtCore import Qt, QDate, QUrl, pyqtSignal
+from PyQt5.QtGui import QColor, QDesktopServices
 
 # Import du service documentaire
 from domain.services.documents.document_service import DocumentService
@@ -41,7 +41,7 @@ class DocumentWidget(QWidget):
         toolbar = QHBoxLayout()
         
         # Bouton Ajouter
-        self.btn_add = QPushButton("📄 Ajouter un document")
+        self.btn_add = QPushButton("Ajouter un document")
         self.btn_add.clicked.connect(self.add_document)
         toolbar.addWidget(self.btn_add)
         
@@ -66,14 +66,14 @@ class DocumentWidget(QWidget):
         toolbar.addStretch()
         
         # Bouton Rafraîchir
-        self.btn_refresh = QPushButton("🔄 Actualiser")
+        self.btn_refresh = QPushButton("Actualiser")
         self.btn_refresh.clicked.connect(self.load_documents)
         toolbar.addWidget(self.btn_refresh)
         
         layout.addLayout(toolbar)
         
         # === GroupBox d'alertes ===
-        self.alert_group = QGroupBox("⚠️ Alertes")
+        self.alert_group = QGroupBox("Alertes")
         alert_layout = QVBoxLayout()
         self.alert_label = QLabel("Aucune alerte")
         self.alert_label.setStyleSheet("color: #059669; font-weight: bold;")
@@ -218,14 +218,14 @@ class DocumentWidget(QWidget):
         if expires or expire_bientot:
             messages = []
             if expires:
-                messages.append(f"🔴 {len(expires)} document(s) expiré(s)")
+                messages.append(f"{len(expires)} document(s) expiré(s)")
             if expire_bientot:
-                messages.append(f"🟠 {len(expire_bientot)} document(s) expire(nt) bientôt")
+                messages.append(f"{len(expire_bientot)} document(s) expire(nt) bientôt")
             
             self.alert_label.setText(" | ".join(messages))
             self.alert_label.setStyleSheet("color: #dc2626; font-weight: bold;")
         else:
-            self.alert_label.setText("✅ Aucune alerte")
+            self.alert_label.setText("Aucune alerte")
             self.alert_label.setStyleSheet("color: #059669; font-weight: bold;")
     
     def add_document(self):
@@ -339,7 +339,7 @@ class DocumentWidget(QWidget):
             self,
             "Supprimer le document",
             f"Voulez-vous DÉFINITIVEMENT supprimer le document '{nom}' ?\n\n"
-            "⚠️ Cette action est irréversible !",
+            "Cette action est irréversible !",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
         )
@@ -402,7 +402,7 @@ class AddDocumentDialog(QDialog):
         self.file_label.setStyleSheet("color: #64748b; font-style: italic;")
         file_layout.addWidget(self.file_label)
         file_layout.addStretch()
-        self.btn_browse = QPushButton("📁 Parcourir...")
+        self.btn_browse = QPushButton("Parcourir...")
         self.btn_browse.clicked.connect(self.browse_file)
         file_layout.addWidget(self.btn_browse)
         layout.addLayout(file_layout)
@@ -495,7 +495,7 @@ class AddDocumentDialog(QDialog):
         
         # Ajouter le document
         success, message, doc_id = self.doc_service.add_document(
-            operateur_id=self.operateur_id,
+            personnel_id=self.operateur_id,
             categorie_id=categorie_id,
             fichier_source=self.selected_file,
             nom_affichage=nom_affichage,

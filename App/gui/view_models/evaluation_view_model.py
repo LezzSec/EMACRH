@@ -71,13 +71,13 @@ class EvaluationViewModel(QObject):
             for row in rows:
                 pers_id, nom, prenom, matricule, total, n4, n3, n2, n1, a_planifier, retard = row
                 if retard and retard > 0:
-                    statut = f"⚠️ {retard} en retard"
+                    statut = f"{retard} en retard"
                     statut_code = "En retard"
                 elif a_planifier and a_planifier > 0:
-                    statut = f"📅 {a_planifier} à planifier"
+                    statut = f"{a_planifier} à planifier"
                     statut_code = "À planifier"
                 else:
-                    statut = "✅ À jour"
+                    statut = "À jour"
                     statut_code = "À jour"
                 result.append({
                     'personnel_id': pers_id, 'nom': nom, 'prenom': prenom,

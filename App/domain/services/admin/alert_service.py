@@ -925,28 +925,28 @@ class AlertService:
 
             # Visites médicales en retard (CRITIQUE)
             result['visites_retard'] = QueryExecutor.fetch_scalar("""
-                SELECT COUNT(DISTINCT mv.operateur_id)
+                SELECT COUNT(DISTINCT mv.personnel_id)
                 FROM medical_visite mv
-                JOIN personnel p ON p.id = mv.operateur_id
+                JOIN personnel p ON p.id = mv.personnel_id
                 WHERE p.statut = 'ACTIF'
                   AND mv.prochaine_visite < CURDATE()
-                  AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE operateur_id = mv.operateur_id)
+                  AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE personnel_id = mv.personnel_id)
             """, default=0)
 
             # Visites médicales à planifier dans 30j (AVERTISSEMENT)
             result['visites_a_planifier'] = QueryExecutor.fetch_scalar("""
-                SELECT COUNT(DISTINCT mv.operateur_id)
+                SELECT COUNT(DISTINCT mv.personnel_id)
                 FROM medical_visite mv
-                JOIN personnel p ON p.id = mv.operateur_id
+                JOIN personnel p ON p.id = mv.personnel_id
                 WHERE p.statut = 'ACTIF'
                   AND mv.prochaine_visite BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                  AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE operateur_id = mv.operateur_id)
+                  AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE personnel_id = mv.personnel_id)
             """, default=0)
 
             # RQTH expirant dans 90j (AVERTISSEMENT)
             result['rqth_expirant'] = QueryExecutor.fetch_scalar("""
                 SELECT COUNT(*) FROM validite v
-                JOIN personnel p ON p.id = v.operateur_id
+                JOIN personnel p ON p.id = v.personnel_id
                 WHERE p.statut = 'ACTIF' AND v.type_validite = 'RQTH'
                   AND v.date_fin IS NOT NULL
                   AND v.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY)
@@ -955,7 +955,7 @@ class AlertService:
             # OETH expirant dans 90j (AVERTISSEMENT)
             result['oeth_expirant'] = QueryExecutor.fetch_scalar("""
                 SELECT COUNT(*) FROM validite v
-                JOIN personnel p ON p.id = v.operateur_id
+                JOIN personnel p ON p.id = v.personnel_id
                 WHERE p.statut = 'ACTIF' AND v.type_validite = 'OETH'
                   AND v.date_fin IS NOT NULL
                   AND v.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY)

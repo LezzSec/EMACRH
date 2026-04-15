@@ -275,6 +275,9 @@ _MODULES_WITH_REQUIRE = [
     'domain.services.rh.rh_service',
     'domain.services.rh.medical_service',
     'domain.services.personnel.bulk_service',
+    'domain.services.documents.document_service',
+    'domain.services.rh.vie_salarie_service',
+    'domain.services.rh.mutuelle_service',
 ]
 
 

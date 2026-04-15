@@ -3,12 +3,12 @@
 Service d'authentification et de gestion des utilisateurs
 Gère la connexion, déconnexion, et vérification des permissions
 
-✅ OPTIMISATIONS APPLIQUÉES:
+OPTIMISATIONS APPLIQUÉES:
 - Monitoring du temps de login (détection régressions)
 - Cache pour get_roles() (1000x plus rapide)
 - Logs DB optimisés (async, non-bloquant)
 
-🔒 SÉCURITÉ:
+SÉCURITÉ:
 - Politique de mot de passe renforcée (8 chars, complexité)
 """
 
@@ -20,7 +20,8 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 from typing import Optional, Dict, List, Tuple
-from infrastructure.db.configbd import get_connection
+from infrastructure.db.configbd import DatabaseConnection
+from infrastructure.db.query_executor import QueryExecutor
 
 from infrastructure.config.performance_monitor import monitor_login_time, monitor_query
 from infrastructure.cache.emac_cache import get_cached_roles
@@ -46,16 +47,11 @@ def _log_failed_attempt(username: str, reason: str) -> None:
         reason: Raison de l'échec (user_not_found, wrong_password, account_inactive)
     """
     try:
-        conn = get_connection()
-        if conn:
-            cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO logs_tentatives_connexion (username, ip_address, reason, attempt_time)
-                VALUES (%s, %s, %s, %s)
-            """, (username, _get_client_ip(), reason, datetime.now()))
-            conn.commit()
-            cur.close()
-            conn.close()
+        QueryExecutor.execute_write(
+            "INSERT INTO logs_tentatives_connexion (username, ip_address, reason, attempt_time) VALUES (%s, %s, %s, %s)",
+            (username, _get_client_ip(), reason, datetime.now()),
+            return_lastrowid=False
+        )
     except Exception as e:
         # Ne pas bloquer si la table n'existe pas encore
         logger.debug(f"Impossible de logger la tentative échouée: {e}")
@@ -223,73 +219,64 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
     Returns:
         tuple: (succès, message d'erreur si échec)
     """
-    conn = get_connection()
-    if not conn:
-        return False, "Erreur de connexion à la base de données"
-
-    cur = conn.cursor(dictionary=True)
     try:
-        # Récupère utilisateur + rôle + permissions + overrides avec COALESCE pour fusionner
-        cur.execute("""
-            SELECT
-                u.id, u.username, u.password_hash, u.nom, u.prenom,
-                u.role_id, u.actif, r.nom as role_nom,
-                p.module,
-                COALESCE(pu.lecture, p.lecture) as lecture,
-                COALESCE(pu.ecriture, p.ecriture) as ecriture,
-                COALESCE(pu.suppression, p.suppression) as suppression
-            FROM utilisateurs u
-            JOIN roles r ON u.role_id = r.id
-            LEFT JOIN permissions p ON p.role_id = u.role_id
-            LEFT JOIN permissions_utilisateur pu ON pu.utilisateur_id = u.id AND pu.module = p.module
-            WHERE u.username = %s
-        """, (username,))
+        with DatabaseConnection() as conn:
+            cur = conn.cursor(dictionary=True)
 
-        rows = cur.fetchall()
+            cur.execute("""
+                SELECT
+                    u.id, u.username, u.password_hash, u.nom, u.prenom,
+                    u.role_id, u.actif, r.nom as role_nom,
+                    p.module,
+                    COALESCE(pu.lecture, p.lecture) as lecture,
+                    COALESCE(pu.ecriture, p.ecriture) as ecriture,
+                    COALESCE(pu.suppression, p.suppression) as suppression
+                FROM utilisateurs u
+                JOIN roles r ON u.role_id = r.id
+                LEFT JOIN permissions p ON p.role_id = u.role_id
+                LEFT JOIN permissions_utilisateur pu ON pu.utilisateur_id = u.id AND pu.module = p.module
+                WHERE u.username = %s
+            """, (username,))
 
-        if not rows:
-            return False, "Nom d'utilisateur ou mot de passe incorrect"
+            rows = cur.fetchall()
 
-        # Le premier row contient les infos user (toutes les lignes ont les mêmes infos user)
-        user = rows[0]
+            if not rows:
+                cur.close()
+                return False, "Nom d'utilisateur ou mot de passe incorrect"
 
-        if not user['actif']:
-            return False, "Ce compte est désactivé. Contactez un administrateur."
+            user = rows[0]
 
-        # Vérifier le mot de passe
-        if not verify_password(password, user['password_hash']):
-            return False, "Nom d'utilisateur ou mot de passe incorrect"
+            if not user['actif']:
+                cur.close()
+                return False, "Ce compte est désactivé. Contactez un administrateur."
 
-        # Construire le dictionnaire des permissions effectives (rôle + overrides)
-        # (Ancien système conservé pour compatibilité)
-        permissions = {}
-        for row in rows:
-            if row['module']:  # Peut être NULL si pas de permissions
-                permissions[row['module']] = {
-                    'lecture': bool(row['lecture']) if row['lecture'] is not None else False,
-                    'ecriture': bool(row['ecriture']) if row['ecriture'] is not None else False,
-                    'suppression': bool(row['suppression']) if row['suppression'] is not None else False
-                }
+            if not verify_password(password, user['password_hash']):
+                cur.close()
+                return False, "Nom d'utilisateur ou mot de passe incorrect"
 
-        # Créer une session de connexion avec l'adresse IP
-        client_ip = _get_client_ip()
-        cur.execute("""
-            INSERT INTO logs_connexion (utilisateur_id, date_connexion, ip_address)
-            VALUES (%s, %s, %s)
-        """, (user['id'], datetime.now(), client_ip))
+            # Construire le dictionnaire des permissions effectives (rôle + overrides)
+            permissions = {}
+            for row in rows:
+                if row['module']:
+                    permissions[row['module']] = {
+                        'lecture': bool(row['lecture']) if row['lecture'] is not None else False,
+                        'ecriture': bool(row['ecriture']) if row['ecriture'] is not None else False,
+                        'suppression': bool(row['suppression']) if row['suppression'] is not None else False
+                    }
 
-        session_id = cur.lastrowid
+            client_ip = _get_client_ip()
+            cur.execute(
+                "INSERT INTO logs_connexion (utilisateur_id, date_connexion, ip_address) VALUES (%s, %s, %s)",
+                (user['id'], datetime.now(), client_ip)
+            )
+            session_id = cur.lastrowid
 
-        # Mettre à jour la dernière connexion
-        cur.execute("""
-            UPDATE utilisateurs
-            SET derniere_connexion = %s
-            WHERE id = %s
-        """, (datetime.now(), user['id']))
+            cur.execute(
+                "UPDATE utilisateurs SET derniere_connexion = %s WHERE id = %s",
+                (datetime.now(), user['id'])
+            )
+            cur.close()
 
-        conn.commit()
-
-        # Stocker dans la session
         user_data = {
             'id': user['id'],
             'username': user['username'],
@@ -306,10 +293,8 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
             load_user_permissions(user['id'], user['role_id'])
             logger.debug(f"Features chargées pour l'utilisateur {username}")
         except Exception as e:
-            # Ne pas bloquer le login si le nouveau système échoue
             logger.warning(f"Impossible de charger les features: {e}")
 
-        # Log dans l'historique (async + batched)
         log_hist_async(
             action="CONNEXION",
             table_name="utilisateurs",
@@ -322,11 +307,7 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
 
     except Exception as e:
         logger.error(f"Erreur lors de l'authentification: {e}")
-        conn.rollback()
         return False, "Erreur de connexion. Veuillez réessayer ou contacter un administrateur."
-    finally:
-        cur.close()
-        conn.close()
 
 
 def logout_user():
@@ -338,22 +319,12 @@ def logout_user():
     if not user or not session_id:
         return
 
-    conn = get_connection()
-    if not conn:
-        return
-
-    cur = conn.cursor()
     try:
-        # Mettre à jour la date de déconnexion
-        cur.execute("""
-            UPDATE logs_connexion
-            SET date_deconnexion = %s
-            WHERE id = %s
-        """, (datetime.now(), session_id))
-
-        conn.commit()
-
-        # Log dans l'historique (async + batched)
+        QueryExecutor.execute_write(
+            "UPDATE logs_connexion SET date_deconnexion = %s WHERE id = %s",
+            (datetime.now(), session_id),
+            return_lastrowid=False
+        )
         log_hist_async(
             action="DECONNEXION",
             table_name="utilisateurs",
@@ -361,17 +332,10 @@ def logout_user():
             description=f"Déconnexion de l'utilisateur {user['username']}",
             utilisateur=user['username']
         )
-
     except Exception as e:
         logger.error(f"Erreur lors de la déconnexion: {e}")
-        conn.rollback()
     finally:
-        cur.close()
-        conn.close()
-
-        # Effacer la session
         UserSession.clear()
-
         try:
             from application.permission_manager import PermissionManager
             PermissionManager.reset()
@@ -505,27 +469,19 @@ def get_all_users() -> List[Dict]:
     if not is_admin():
         return []
 
-    conn = get_connection()
-    if not conn:
-        return []
-
-    cur = conn.cursor(dictionary=True)
     try:
-        cur.execute("""
-            SELECT u.id, u.username, u.nom, u.prenom, u.actif,
-                   u.date_creation, u.derniere_connexion,
-                   r.nom as role_nom
-            FROM utilisateurs u
-            JOIN roles r ON u.role_id = r.id
-            ORDER BY u.nom, u.prenom
-        """)
-        return cur.fetchall()
+        return QueryExecutor.fetch_all(
+            """SELECT u.id, u.username, u.nom, u.prenom, u.actif,
+                      u.date_creation, u.derniere_connexion,
+                      r.nom as role_nom
+               FROM utilisateurs u
+               JOIN roles r ON u.role_id = r.id
+               ORDER BY u.nom, u.prenom""",
+            dictionary=True
+        )
     except Exception as e:
         logger.error(f"Erreur lors de la récupération des utilisateurs: {e}")
         return []
-    finally:
-        cur.close()
-        conn.close()
 
 
 def create_user(username: str, password: str, nom: str, prenom: str, role_id: int) -> tuple[bool, Optional[str]]:
@@ -538,34 +494,21 @@ def create_user(username: str, password: str, nom: str, prenom: str, role_id: in
     if not is_admin():
         return False, "Seuls les administrateurs peuvent créer des utilisateurs"
 
-    conn = get_connection()
-    if not conn:
-        return False, "Erreur de connexion à la base de données"
-
-    cur = conn.cursor()
     try:
-        # Vérifier si l'utilisateur existe déjà
-        cur.execute("SELECT id FROM utilisateurs WHERE username = %s", (username,))
-        if cur.fetchone():
+        if QueryExecutor.exists('utilisateurs', {'username': username}):
             return False, "Ce nom d'utilisateur existe déjà"
 
-        # Hasher le mot de passe
         password_hash = hash_password(password)
+        new_id = QueryExecutor.execute_write(
+            "INSERT INTO utilisateurs (username, password_hash, nom, prenom, role_id) VALUES (%s, %s, %s, %s, %s)",
+            (username, password_hash, nom, prenom, role_id)
+        )
 
-        # Créer l'utilisateur
-        cur.execute("""
-            INSERT INTO utilisateurs (username, password_hash, nom, prenom, role_id)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (username, password_hash, nom, prenom, role_id))
-
-        conn.commit()
-
-        # Log (async + batched)
         current_user = get_current_user()
         log_hist_async(
             action="CREATION_UTILISATEUR",
             table_name="utilisateurs",
-            record_id=cur.lastrowid,
+            record_id=new_id,
             description=f"Création de l'utilisateur {username}",
             utilisateur=current_user['username'] if current_user else None
         )
@@ -574,59 +517,33 @@ def create_user(username: str, password: str, nom: str, prenom: str, role_id: in
 
     except Exception as e:
         logger.error(f"Erreur lors de la création de l'utilisateur: {e}")
-        conn.rollback()
         return False, f"Erreur: {str(e)}"
-    finally:
-        cur.close()
-        conn.close()
 
 
 def count_active_admins() -> int:
     """Compte le nombre d'administrateurs actifs dans le système"""
-    conn = get_connection()
-    if not conn:
-        return 0
-
-    cur = conn.cursor()
     try:
-        cur.execute("""
-            SELECT COUNT(*) as count
-            FROM utilisateurs u
-            JOIN roles r ON u.role_id = r.id
-            WHERE r.nom = 'admin' AND u.actif = 1
-        """)
-        result = cur.fetchone()
-        return result[0] if result else 0
+        return QueryExecutor.fetch_scalar(
+            "SELECT COUNT(*) FROM utilisateurs u JOIN roles r ON u.role_id = r.id WHERE r.nom = 'admin' AND u.actif = 1",
+            default=0
+        )
     except Exception as e:
         logger.error(f"Erreur lors du comptage des admins actifs: {e}")
         return 0
-    finally:
-        cur.close()
-        conn.close()
 
 
 def is_user_admin(user_id: int) -> bool:
     """Vérifie si un utilisateur donné est administrateur"""
-    conn = get_connection()
-    if not conn:
-        return False
-
-    cur = conn.cursor(dictionary=True)
     try:
-        cur.execute("""
-            SELECT r.nom as role_nom
-            FROM utilisateurs u
-            JOIN roles r ON u.role_id = r.id
-            WHERE u.id = %s
-        """, (user_id,))
-        result = cur.fetchone()
-        return result and result['role_nom'] == 'admin'
+        result = QueryExecutor.fetch_one(
+            "SELECT r.nom as role_nom FROM utilisateurs u JOIN roles r ON u.role_id = r.id WHERE u.id = %s",
+            (user_id,),
+            dictionary=True
+        )
+        return bool(result and result['role_nom'] == 'admin')
     except Exception as e:
         logger.error(f"Erreur lors de la vérification du rôle: {e}")
         return False
-    finally:
-        cur.close()
-        conn.close()
 
 
 def update_user_status(user_id: int, actif: bool) -> tuple[bool, Optional[str]]:
@@ -640,19 +557,11 @@ def update_user_status(user_id: int, actif: bool) -> tuple[bool, Optional[str]]:
         if active_admins <= 1:
             return False, "Impossible de désactiver le dernier administrateur actif du système"
 
-    conn = get_connection()
-    if not conn:
-        return False, "Erreur de connexion à la base de données"
-
-    cur = conn.cursor()
     try:
-        cur.execute("""
-            UPDATE utilisateurs
-            SET actif = %s
-            WHERE id = %s
-        """, (actif, user_id))
-
-        conn.commit()
+        QueryExecutor.execute_write(
+            "UPDATE utilisateurs SET actif = %s WHERE id = %s",
+            (actif, user_id), return_lastrowid=False
+        )
 
         action_txt = "activé" if actif else "désactivé"
         current_user = get_current_user()
@@ -668,11 +577,7 @@ def update_user_status(user_id: int, actif: bool) -> tuple[bool, Optional[str]]:
 
     except Exception as e:
         logger.error(f"Erreur lors de la modification: {e}")
-        conn.rollback()
         return False, f"Erreur: {str(e)}"
-    finally:
-        cur.close()
-        conn.close()
 
 
 def change_password(user_id: int, new_password: str) -> tuple[bool, Optional[str]]:
@@ -685,21 +590,12 @@ def change_password(user_id: int, new_password: str) -> tuple[bool, Optional[str
     if not is_admin() and current_user['id'] != user_id:
         return False, "Vous ne pouvez pas modifier ce mot de passe"
 
-    conn = get_connection()
-    if not conn:
-        return False, "Erreur de connexion à la base de données"
-
-    cur = conn.cursor()
     try:
         password_hash = hash_password(new_password)
-
-        cur.execute("""
-            UPDATE utilisateurs
-            SET password_hash = %s
-            WHERE id = %s
-        """, (password_hash, user_id))
-
-        conn.commit()
+        QueryExecutor.execute_write(
+            "UPDATE utilisateurs SET password_hash = %s WHERE id = %s",
+            (password_hash, user_id), return_lastrowid=False
+        )
 
         log_hist_async(
             action="CHANGEMENT_MDP",
@@ -713,11 +609,7 @@ def change_password(user_id: int, new_password: str) -> tuple[bool, Optional[str
 
     except Exception as e:
         logger.error(f"Erreur lors du changement de mot de passe: {e}")
-        conn.rollback()
         return False, f"Erreur: {str(e)}"
-    finally:
-        cur.close()
-        conn.close()
 
 
 def delete_user(user_id: int) -> tuple[bool, Optional[str]]:
@@ -745,27 +637,20 @@ def delete_user(user_id: int) -> tuple[bool, Optional[str]]:
         if active_admins <= 1:
             return False, "Impossible de supprimer le dernier administrateur du système"
 
-    conn = get_connection()
-    if not conn:
-        return False, "Erreur de connexion à la base de données"
-
-    cur = conn.cursor(dictionary=True)
     try:
-        # Récupérer les infos de l'utilisateur avant suppression (pour le log)
-        cur.execute("SELECT username, nom, prenom FROM utilisateurs WHERE id = %s", (user_id,))
-        user_info = cur.fetchone()
+        user_info = QueryExecutor.fetch_one(
+            "SELECT username, nom, prenom FROM utilisateurs WHERE id = %s",
+            (user_id,), dictionary=True
+        )
         if not user_info:
             return False, "Utilisateur introuvable"
 
-        # Supprimer les logs de connexion associés
-        cur.execute("DELETE FROM logs_connexion WHERE utilisateur_id = %s", (user_id,))
+        with DatabaseConnection() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM logs_connexion WHERE utilisateur_id = %s", (user_id,))
+            cur.execute("DELETE FROM utilisateurs WHERE id = %s", (user_id,))
+            cur.close()
 
-        # Supprimer l'utilisateur
-        cur.execute("DELETE FROM utilisateurs WHERE id = %s", (user_id,))
-
-        conn.commit()
-
-        # Log de la suppression
         log_hist_async(
             action="SUPPRESSION_UTILISATEUR",
             table_name="utilisateurs",
@@ -778,17 +663,13 @@ def delete_user(user_id: int) -> tuple[bool, Optional[str]]:
 
     except Exception as e:
         logger.error(f"Erreur lors de la suppression de l'utilisateur: {e}")
-        conn.rollback()
         return False, f"Erreur: {str(e)}"
-    finally:
-        cur.close()
-        conn.close()
 
 
 def get_roles() -> List[Dict]:
     """
     Récupère la liste des rôles disponibles
 
-    ✅ OPTIMISATION : Utilise le cache (1000x plus rapide)
+    OPTIMISATION : Utilise le cache (1000x plus rapide)
     """
     return get_cached_roles()

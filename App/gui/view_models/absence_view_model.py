@@ -23,7 +23,7 @@ Architecture :
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, date
 from typing import Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -60,6 +60,7 @@ class AbsenceViewModel(QObject):
     demande_submitted = pyqtSignal(int)
     demande_cancelled = pyqtSignal()
     demande_validated = pyqtSignal(bool)
+    absences_jour_loaded = pyqtSignal(list)
     error_occurred = pyqtSignal(str)
     data_changed = pyqtSignal()
 
@@ -261,22 +262,20 @@ class AbsenceViewModel(QObject):
             logger.exception(f"Erreur annulation demande {demande_id}: {e}")
             self.error_occurred.emit(str(e))
 
-    def validate_demande(
-        self,
-        demande_id: int,
-        valide: bool,
-        validateur_id: int,
-    ) -> None:
+    def validate_demande(self, demande_id: int, valide: bool) -> None:
         """
         Valide ou refuse une demande.
 
         Args:
-            demande_id:    ID de la demande
-            valide:        True pour valider, False pour refuser
-            validateur_id: ID du manager connecté
+            demande_id: ID de la demande
+            valide:     True pour valider, False pour refuser
 
         Émet demande_validated(valide) en cas de succès.
         """
+        from domain.services.admin.auth_service import get_current_user
+        current = get_current_user()
+        validateur_id = current['id'] if current else None
+
         try:
             if valide:
                 AbsenceServiceCRUD.valider(demande_id, valideur_id=validateur_id)
@@ -289,3 +288,19 @@ class AbsenceViewModel(QObject):
         except Exception as e:
             logger.exception(f"Erreur validation demande {demande_id}: {e}")
             self.error_occurred.emit(str(e))
+
+    def load_absences_for_date(self, jour: date) -> None:
+        """
+        Charge les absences validées qui couvrent le jour donné.
+
+        Émet absences_jour_loaded(list) avec les absences trouvées.
+
+        Args:
+            jour: Date Python à interroger
+        """
+        try:
+            absences = AbsenceServiceCRUD.get_validees_pour_mois(jour, jour)
+            self.absences_jour_loaded.emit(absences)
+        except Exception as e:
+            logger.exception(f"Erreur chargement absences du jour {jour}: {e}")
+            self.absences_jour_loaded.emit([])

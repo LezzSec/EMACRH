@@ -32,8 +32,8 @@ class EmacTheme:
     BDR = "#e5e7eb"         # bordures
     BDR_STRONG = "#d1d5db"  # bordures fortes (en-têtes)
 
-    PRI = "#0f172a"         # anthracite (primary)
-    PRI_H = "#0b1220"
+    PRI = "#2563eb"         # bleu moderne (primary)
+    PRI_H = "#1d4ed8"
 
     ACC = "#059669"         # succès (vert)
     WARN = "#d97706"        # Avertissement (orange)
@@ -75,6 +75,7 @@ class EmacTheme:
             background: #f9fafb;
         }}
         QPushButton:pressed {{ background: #f3f4f6; }}
+        QPushButton:disabled {{ color: #b0b8c4; background: #f8f9fa; border-color: #e2e8f0; }}
 
         /* Variantes */
         QPushButton[class="primary"] {{
@@ -129,15 +130,48 @@ class EmacTheme:
         }}
 
         /* Inputs & listes */
-        QComboBox, QListWidget, QLineEdit {{
+        QComboBox, QLineEdit {{
+            background: {cls.BG_TABLE};
+            border: 1.5px solid {cls.BDR};
+            border-radius: 8px;
+            padding: 6px 10px;
+            color: {cls.TXT};
+        }}
+        QComboBox:hover, QLineEdit:hover {{
+            border-color: {cls.BDR_STRONG};
+        }}
+        QComboBox:focus, QLineEdit:focus {{
+            border: 1.5px solid {cls.PRI};
+            background: #ffffff;
+        }}
+        QDateEdit {{
+            background: {cls.BG_TABLE};
+            border: 1.5px solid {cls.BDR};
+            border-radius: 8px;
+            padding: 6px 10px;
+            color: {cls.TXT};
+        }}
+        QDateEdit:hover {{ border-color: {cls.BDR_STRONG}; }}
+        QDateEdit:focus {{ border: 1.5px solid {cls.PRI}; background: #ffffff; }}
+        QSpinBox, QDoubleSpinBox, QTextEdit {{
+            background: {cls.BG_TABLE};
+            border: 1.5px solid {cls.BDR};
+            border-radius: 8px;
+            padding: 4px 8px;
+            color: {cls.TXT};
+        }}
+        QSpinBox:focus, QDoubleSpinBox:focus, QTextEdit:focus {{
+            border: 1.5px solid {cls.PRI};
+        }}
+        QListWidget {{
             background: {cls.BG_TABLE};
             border: 1px solid {cls.BDR};
             border-radius: 10px;
-            padding: 6px 8px;
-            color: {cls.TXT}; 
+            padding: 4px;
         }}
-        QListWidget::item {{ padding: 8px 10px; height: 28px; }}
-        QListWidget::item:selected {{ background: #e8eefc; color: {cls.TXT}; }}
+        QListWidget::item {{ padding: 8px 10px; height: 28px; border-radius: 6px; }}
+        QListWidget::item:hover {{ background: #f1f5f9; }}
+        QListWidget::item:selected {{ background: #dbeafe; color: {cls.TXT}; }}
         QListView::item {{ border-bottom: 1px solid #f1f5f9; }}
 
         /* Tables / QAbstractItemView */
@@ -145,15 +179,24 @@ class EmacTheme:
             background: {cls.BG_TABLE};
             color: {cls.TXT};
             gridline-color: {cls.BDR};
-            selection-background-color: #e8eefc;
+            selection-background-color: #dbeafe;
             selection-color: {cls.TXT};
+            alternate-background-color: #f8fafc;
         }}
+        QTableWidget {{ border: 1px solid {cls.BDR}; border-radius: 10px; }}
         QHeaderView::section {{
-            background: #f3f4f6;
-            color: {cls.TXT};
-            border: 1px solid {cls.BDR_STRONG};
-            padding: 6px 10px;
+            background: #f1f5f9;
+            color: {cls.TXT_DIM};
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            border: none;
+            border-bottom: 2px solid {cls.BDR_STRONG};
+            border-right: 1px solid {cls.BDR};
+            padding: 8px 10px;
         }}
+        QHeaderView::section:first {{ border-top-left-radius: 8px; }}
+        QHeaderView::section:last {{ border-right: none; border-top-right-radius: 8px; }}
         
         /* Calendrier FIX */
         QCalendarWidget QWidget#qt_calendar_navigationbar {{
@@ -191,17 +234,33 @@ class EmacTheme:
         pal.setColor(QPalette.Window, QColor(cls.BG))
         pal.setColor(QPalette.WindowText, QColor(cls.TXT))
         pal.setColor(QPalette.Base, QColor(cls.BG_TABLE))
+        pal.setColor(QPalette.AlternateBase, QColor("#f8fafc"))
         pal.setColor(QPalette.Text, QColor(cls.TXT))
         pal.setColor(QPalette.Button, QColor(cls.BG_CARD))
         pal.setColor(QPalette.ButtonText, QColor(cls.TXT))
-        pal.setColor(QPalette.Highlight, QColor("#3b82f6")) # pour la sélection
+        pal.setColor(QPalette.Highlight, QColor(cls.PRI))
         pal.setColor(QPalette.HighlightedText, QColor("#ffffff"))
         # Couleurs spécifiques au calendrier
-        pal.setColor(QPalette.Light, QColor(cls.BG_TABLE)) # Fond des jours
+        pal.setColor(QPalette.Light, QColor(cls.BG_TABLE))
         pal.setColor(QPalette.Midlight, QColor(cls.BG_TABLE))
         app.setPalette(pal)
         # QSS global
         app.setStyleSheet(cls.qss())
+        # Alternance de lignes sur tous les QTableWidget/QTableView créés après apply()
+        from PyQt5.QtWidgets import QTableWidget, QTableView
+        _orig_tw_init = QTableWidget.__init__
+        _orig_tv_init = QTableView.__init__
+
+        def _tw_init(self, *args, **kwargs):
+            _orig_tw_init(self, *args, **kwargs)
+            self.setAlternatingRowColors(True)
+
+        def _tv_init(self, *args, **kwargs):
+            _orig_tv_init(self, *args, **kwargs)
+            self.setAlternatingRowColors(True)
+
+        QTableWidget.__init__ = _tw_init
+        QTableView.__init__ = _tv_init
 
 # -------------------------------------------------------------------
 # === Fonction utilitaire de Thème ===
@@ -248,34 +307,45 @@ class EmacCard(QFrame):
 
 
 class EmacStatusCard(EmacCard):
-    """Carte avec bandeau coloré type alerte/succès, style vif."""
+    """Carte avec indicateur coloré type alerte/succès."""
     COLORS_MAP = {
-        'danger': { 'icon': '⚠️', 'acc_key': 'ERR' },
-        'success': { 'icon': '📅', 'acc_key': 'ACC' },
-        'info': { 'icon': 'ℹ️', 'acc_key': 'PRI' }, # Utilise PRI (Primary) pour info
+        'danger':  {'acc_key': 'ERR',  'dot': '#ef4444', 'bg': '#fef2f2'},
+        'success': {'acc_key': 'ACC',  'dot': '#22c55e', 'bg': '#f0fdf4'},
+        'warning': {'acc_key': 'WARN', 'dot': '#f59e0b', 'bg': '#fffbeb'},
+        'info':    {'acc_key': 'PRI',  'dot': '#2563eb', 'bg': '#eff6ff'},
     }
 
     def __init__(self, title: str, variant: str = 'info', subtitle: str = None, parent=None):
-        # Appelle le constructeur de EmacCard sans titre pour gérer l'entête soi-même
-        super().__init__(None, None, parent) 
-        
-        c = self.COLORS_MAP.get(variant, self.COLORS_MAP['info'])
-        header = QHBoxLayout(); header.setSpacing(8)
-        
-        accent_color = getattr(EmacTheme, c['acc_key'])
-        text_color = "#ffffff" if c['acc_key'] in ['PRI', 'ERR', 'ACC'] else EmacTheme.TXT
+        super().__init__(None, None, parent)
 
-        pill = QLabel(f" {c['icon']}  {title}")
-        pill.setStyleSheet(
-            f"background:{accent_color}; color:{text_color}; font-weight:600; padding:6px 10px; border-radius:8px;")
-        header.addWidget(pill, 0, Qt.AlignLeft)
+        c = self.COLORS_MAP.get(variant, self.COLORS_MAP['info'])
+        dot_color = c['dot']
+
+        header = QHBoxLayout()
+        header.setSpacing(10)
+        header.setContentsMargins(0, 0, 0, 0)
+
+        # Indicateur coloré (point)
+        dot = QFrame()
+        dot.setFixedSize(10, 10)
+        dot.setStyleSheet(
+            f"background: {dot_color}; border-radius: 5px; border: none;"
+        )
+        header.addWidget(dot, 0, Qt.AlignVCenter)
+
+        # Titre
+        lbl = QLabel(title)
+        lbl.setStyleSheet(f"font-weight: 600; font-size: 14px; color: {EmacTheme.TXT}; background: transparent;")
+        header.addWidget(lbl, 0, Qt.AlignVCenter)
         header.addStretch(1)
+
         if subtitle:
-            sub = QLabel(subtitle); sub.setStyleSheet(f"color:{EmacTheme.TXT_DIM};")
-            header.addWidget(sub, 0, Qt.AlignRight)
-        w = QWidget(); w.setLayout(header)
-        
-        # Insérer l'entête avant le body
+            sub = QLabel(subtitle)
+            sub.setStyleSheet(f"color: {EmacTheme.TXT_DIM}; font-size: 12px; background: transparent;")
+            header.addWidget(sub, 0, Qt.AlignRight | Qt.AlignVCenter)
+
+        w = QWidget()
+        w.setLayout(header)
         self.layout.insertWidget(0, w)
 
 
@@ -314,6 +384,7 @@ class EmacButton(QPushButton):
 
     def __init__(self, text: str, variant: str = None, size: str = 'md', parent=None):
         super().__init__(text, parent)
+        self.setCursor(Qt.PointingHandCursor)
         if size == 'sm':
             self.setFixedHeight(32)
             self.setMinimumWidth(80)

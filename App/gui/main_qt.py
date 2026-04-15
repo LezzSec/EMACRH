@@ -127,7 +127,7 @@ class MainWindow(QMainWindow):
         self.retard_card.body.addWidget(self.retard_filter)
         self.retard_card.body.addWidget(self.retard_scroll)
 
-        btn_voir_retards = EmacButton("📋 Voir tout", variant='ghost')
+        btn_voir_retards = EmacButton("Voir tout", variant='ghost')
         btn_voir_retards.clicked.connect(lambda: self.ouvrir_gestion_evaluations("En retard"))
         self.retard_card.body.addWidget(btn_voir_retards)
 
@@ -144,7 +144,7 @@ class MainWindow(QMainWindow):
         self.next_card.body.addWidget(self.next_eval_filter)
         self.next_card.body.addWidget(self.next_eval_scroll)
 
-        btn_voir_prochaines = EmacButton("📋 Voir tout", variant='ghost')
+        btn_voir_prochaines = EmacButton("Voir tout", variant='ghost')
         btn_voir_prochaines.clicked.connect(lambda: self.ouvrir_gestion_evaluations("À planifier (30j)"))
         self.next_card.body.addWidget(btn_voir_prochaines)
 
@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
         self.alertes_rh_card.body.addWidget(self.alertes_rh_filter)
         self.alertes_rh_card.body.addWidget(self.alertes_rh_scroll)
 
-        btn_voir_alertes = EmacButton("📋 Gestion RH", variant='ghost')
+        btn_voir_alertes = EmacButton("Gestion RH", variant='ghost')
         btn_voir_alertes.clicked.connect(self.show_contract_management)
         self.alertes_rh_card.body.addWidget(btn_voir_alertes)
 
@@ -299,17 +299,26 @@ class MainWindow(QMainWindow):
             "historique_lecture": can('admin.historique.view'),
             "is_admin": auth.is_admin(),
         }
-        return {"user": current_user, "perms": perms}
+
+        # Modules activés (table app_modules)
+        try:
+            from domain.services.admin.module_service import get_enabled_codes
+            enabled_modules = get_enabled_codes()
+        except Exception:
+            # Si la migration n'est pas encore appliquée, tout est activé par défaut
+            enabled_modules = {"rh", "production", "planning", "documents", "historique"}
+
+        return {"user": current_user, "perms": perms, "enabled_modules": enabled_modules}
 
     def _apply_user_and_perms(self, payload):
         user = payload.get("user")
         perms = payload.get("perms", {})
 
         if user:
-            user_text = f"👤 {user.get('prenom','')} {user.get('nom','')} - {user.get('role_nom','')}"
+            user_text = f"{user.get('prenom','')} {user.get('nom','')} - {user.get('role_nom','')}"
             self.user_info.setText(user_text)
         else:
-            self.user_info.setText("👤 Non connecté")
+            self.user_info.setText("Non connecté")
 
         theme = get_theme_components()
         EmacButton = theme['EmacButton']
@@ -358,6 +367,7 @@ class MainWindow(QMainWindow):
 
         # Drawer : on le construit au premier clic, mais on garde les perms en mémoire
         self._perms_cache = perms
+        self._modules_cache = payload.get("enabled_modules", {"rh", "production", "planning", "documents", "historique"})
 
         # Forcer la recréation du drawer si les permissions ont changé
         if self.drawer is not None:
@@ -508,6 +518,12 @@ class MainWindow(QMainWindow):
             # fallback minimal (si jamais)
             perms = {"is_admin": False}
 
+        mods = getattr(self, "_modules_cache", {"rh", "production", "planning", "documents", "historique"})
+
+        def mod(code: str) -> bool:
+            """Retourne True si le module est activé."""
+            return code in mods
+
         def add_btn(text, fn, variant='ghost'):
             btn = EmacButton(text, variant=variant)
             btn.setFixedHeight(44)
@@ -516,11 +532,11 @@ class MainWindow(QMainWindow):
                 btn.clicked.connect(self.toggle_drawer)
             drawer_layout.addWidget(btn)
 
-        if perms.get("personnel_ecriture"):
+        if mod("rh") and perms.get("personnel_ecriture"):
             add_btn("Ajouter du personnel", self.show_manage_operator)
-        if perms.get("postes_ecriture"):
+        if mod("production") and perms.get("postes_ecriture"):
             add_btn("Création/Suppression de poste", self.show_poste_form)
-        if perms.get("contrats_ecriture") or perms.get("documentsrh_ecriture"):
+        if mod("rh") and (perms.get("contrats_ecriture") or perms.get("documentsrh_ecriture")):
             # Bouton "Alertes RH" avec badge de notification
             row_alertes = QWidget()
             row_alertes_layout = QHBoxLayout(row_alertes)
@@ -560,12 +576,17 @@ class MainWindow(QMainWindow):
                     self._drawer_notif_badge.show()
 
             drawer_layout.addWidget(row_alertes)
-        if perms.get("planning_lecture"):
+        if mod("planning") and perms.get("planning_lecture"):
             add_btn("Planning", self.show_regularisation)
-        if perms.get("documentsrh_lecture"):
+        if mod("documents") and perms.get("documentsrh_lecture"):
             add_btn("Documents", self.show_gestion_templates)
-        if perms.get("historique_lecture") or perms.get("is_admin"):
+        if mod("historique") and (perms.get("historique_lecture") or perms.get("is_admin")):
             add_btn("Historique", self.show_historique)
+
+        # Statistiques : visible dès qu'on a accès à au moins un module de données
+        if any(perms.get(k) for k in ("personnel_lecture", "contrats_lecture", "evaluations_lecture", "planning_lecture")):
+            add_btn("Statistiques", self.show_statistiques)
+
         if perms.get("is_admin"):
             drawer_layout.addSpacing(10)
             sep = QFrame()
@@ -692,6 +713,10 @@ class MainWindow(QMainWindow):
     def show_historique(self):
         from gui.screens.admin.historique import HistoriqueDialog
         HistoriqueDialog().exec_()
+
+    def show_statistiques(self):
+        from gui.screens.statistiques.statistiques_dialog import StatistiquesDialog
+        StatistiquesDialog(self).exec_()
 
     def show_regularisation(self):
         # DB => on passe en background, puis on ouvre le dialog sur le thread UI
@@ -877,7 +902,7 @@ class MainWindow(QMainWindow):
                 self.alertes_rh_list.addItem(item)
 
             if not alertes:
-                self.alertes_rh_list.addItem("✅ Aucun document à renouveler")
+                self.alertes_rh_list.addItem("Aucun document à renouveler")
         except Exception as e:
             logger.error(f"Erreur dans _apply_alertes_rh_to_ui: {e}", exc_info=True)
 
@@ -954,59 +979,129 @@ class MainWindow(QMainWindow):
 
     def _show_startup_alert_popup(self, summary):
         """Affiche un popup récapitulatif des alertes critiques au démarrage."""
+        nb_critiques = summary.get('total_critique', 0)
+        nb_avertissements = summary.get('total_avertissement', 0)
+
         dlg = QDialog(self)
         dlg.setWindowTitle("Alertes en attente")
-        dlg.setFixedWidth(420)
+        dlg.setFixedWidth(480)
         dlg.setWindowFlags(dlg.windowFlags() & ~Qt.WindowContextHelpButtonHint)
 
         layout = QVBoxLayout(dlg)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(12)
+        layout.setContentsMargins(20, 18, 20, 18)
+        layout.setSpacing(10)
 
-        # En-tête
-        header = QLabel("⚠️  Des alertes nécessitent votre attention")
+        # En-tête avec compteurs
+        header = QLabel("Des alertes necessitent votre attention")
         header.setStyleSheet("font-size: 14px; font-weight: bold; color: #dc2626;")
         header.setWordWrap(True)
         layout.addWidget(header)
+
+        totals_row = QHBoxLayout()
+        totals_row.setSpacing(8)
+        if nb_critiques > 0:
+            lbl_crit = QLabel(f"  {nb_critiques} critique(s)  ")
+            lbl_crit.setStyleSheet(
+                "background: #fee2e2; color: #991b1b; font-weight: bold; "
+                "font-size: 12px; border-radius: 4px; padding: 2px 6px;"
+            )
+            totals_row.addWidget(lbl_crit)
+        if nb_avertissements > 0:
+            lbl_warn = QLabel(f"  {nb_avertissements} avertissement(s)  ")
+            lbl_warn.setStyleSheet(
+                "background: #fef3c7; color: #92400e; font-weight: bold; "
+                "font-size: 12px; border-radius: 4px; padding: 2px 6px;"
+            )
+            totals_row.addWidget(lbl_warn)
+        totals_row.addStretch()
+        layout.addLayout(totals_row)
 
         sep = QFrame()
         sep.setFrameShape(QFrame.HLine)
         sep.setStyleSheet("color: #e5e7eb;")
         layout.addWidget(sep)
 
-        # Lignes de résumé
-        def add_row(icon, label, count, color):
+        # Zone scrollable
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setMaximumHeight(340)
+        scroll.setStyleSheet("QScrollArea { background: transparent; }")
+
+        scroll_widget = QWidget()
+        scroll_widget.setStyleSheet("background: transparent;")
+        scroll_layout = QVBoxLayout(scroll_widget)
+        scroll_layout.setContentsMargins(0, 4, 4, 4)
+        scroll_layout.setSpacing(4)
+
+        def add_section_header(title, bg, fg):
+            lbl = QLabel(f"  {title}")
+            lbl.setStyleSheet(
+                f"background: {bg}; color: {fg}; font-weight: bold; "
+                f"font-size: 11px; border-radius: 4px; padding: 4px 8px;"
+            )
+            scroll_layout.addWidget(lbl)
+
+        def add_row(icon, label, count, color, bg_color):
             if count <= 0:
                 return
-            row = QHBoxLayout()
-            ico = QLabel(icon)
-            ico.setFixedWidth(22)
+            row_widget = QWidget()
+            row_widget.setStyleSheet(
+                f"background: {bg_color}; border-radius: 4px;"
+            )
+            row = QHBoxLayout(row_widget)
+            row.setContentsMargins(10, 5, 10, 5)
+            row.setSpacing(8)
             txt = QLabel(label)
-            txt.setStyleSheet(f"color: {color}; font-size: 13px;")
-            cnt = QLabel(f"<b>{count}</b>")
-            cnt.setStyleSheet(f"color: {color}; font-size: 13px; font-weight: bold;")
-            cnt.setAlignment(Qt.AlignRight)
-            row.addWidget(ico)
+            txt.setStyleSheet(f"color: #1f2937; font-size: 12px; background: transparent;")
+            cnt = QLabel(str(count))
+            cnt.setStyleSheet(f"color: {color}; font-size: 13px; font-weight: bold; background: transparent;")
+            cnt.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             row.addWidget(txt, 1)
             row.addWidget(cnt)
-            layout.addLayout(row)
+            scroll_layout.addWidget(row_widget)
 
-        add_row("🔴", "Évaluations en retard", summary.get('evaluations_retard', 0), "#dc2626")
-        add_row("🔴", "Contrats expirés", summary.get('contrats_expires', 0), "#dc2626")
-        add_row("🔴", "Mutuelles expirées", summary.get('mutuelles_expirees', 0), "#dc2626")
-        add_row("🔴", "Visites médicales en retard", summary.get('visites_retard', 0), "#dc2626")
-        add_row("🔴", "Compétences expirées", summary.get('competences_expirees', 0), "#dc2626")
-        add_row("🔴", "Documents expirés", summary.get('documents_expires', 0), "#dc2626")
-        add_row("🟡", "Contrats expirant (30j)", summary.get('contrats_expirant', 0), "#d97706")
-        add_row("🟡", "Personnel sans contrat", summary.get('personnel_sans_contrat', 0), "#d97706")
-        add_row("🟡", "Mutuelles expirant (30j)", summary.get('mutuelles_expirant', 0), "#d97706")
-        add_row("🟡", "Visites médicales (30j)", summary.get('visites_a_planifier', 0), "#d97706")
-        add_row("🟡", "RQTH expirant (90j)", summary.get('rqth_expirant', 0), "#d97706")
-        add_row("🟡", "OETH expirant (90j)", summary.get('oeth_expirant', 0), "#d97706")
-        add_row("🟡", "Compétences expirant (30j)", summary.get('competences_expirant', 0), "#d97706")
-        add_row("🟡", "Documents expirant (30j)", summary.get('documents_expirant', 0), "#d97706")
+        # Section Critiques
+        critiques = [
+            ("Evaluations en retard",        summary.get('evaluations_retard', 0)),
+            ("Contrats expires",             summary.get('contrats_expires', 0)),
+            ("Mutuelles expirees",           summary.get('mutuelles_expirees', 0)),
+            ("Visites medicales en retard",  summary.get('visites_retard', 0)),
+            ("Competences expirees",         summary.get('competences_expirees', 0)),
+            ("Documents expires",            summary.get('documents_expires', 0)),
+        ]
+        has_critiques = any(c > 0 for _, c in critiques)
+        if has_critiques:
+            add_section_header("CRITIQUES — action immediate requise", "#fee2e2", "#991b1b")
+            for label, count in critiques:
+                add_row("", label, count, "#dc2626", "#fff5f5")
+            scroll_layout.addSpacing(6)
 
-        layout.addSpacing(8)
+        # Section Avertissements
+        avertissements = [
+            ("Personnel sans contrat",       summary.get('personnel_sans_contrat', 0)),
+            ("Contrats expirant (30j)",      summary.get('contrats_expirant', 0)),
+            ("Mutuelles expirant (30j)",     summary.get('mutuelles_expirant', 0)),
+            ("Visites medicales (30j)",      summary.get('visites_a_planifier', 0)),
+            ("RQTH expirant (90j)",          summary.get('rqth_expirant', 0)),
+            ("OETH expirant (90j)",          summary.get('oeth_expirant', 0)),
+            ("Competences expirant (30j)",   summary.get('competences_expirant', 0)),
+            ("Documents expirant (30j)",     summary.get('documents_expirant', 0)),
+        ]
+        has_avertissements = any(c > 0 for _, c in avertissements)
+        if has_avertissements:
+            add_section_header("AVERTISSEMENTS — a traiter prochainement", "#fef3c7", "#92400e")
+            for label, count in avertissements:
+                add_row("", label, count, "#d97706", "#fffbeb")
+
+        scroll_layout.addStretch()
+        scroll.setWidget(scroll_widget)
+        layout.addWidget(scroll)
+
+        sep2 = QFrame()
+        sep2.setFrameShape(QFrame.HLine)
+        sep2.setStyleSheet("color: #e5e7eb;")
+        layout.addWidget(sep2)
 
         # Boutons
         btn_layout = QHBoxLayout()
@@ -1039,7 +1134,7 @@ class MainWindow(QMainWindow):
         try:
             paths = export_day(dt.date.today(), base_dir="logs", make_zip=False)
             dossier = os.path.dirname(paths["csv"])
-            QMessageBox.information(self, "Export", f"Export terminé ✅\n\nCSV : {paths['csv']}")
+            QMessageBox.information(self, "Export", f"Export terminé\n\nCSV : {paths['csv']}")
             QDesktopServices.openUrl(QUrl.fromLocalFile(dossier))
         except Exception as e:
             logger.exception(f"Erreur export: {e}")
@@ -1144,7 +1239,13 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Accès refusé", "Seuls les administrateurs peuvent accéder à la configuration.")
             return
         from gui.screens.admin.admin_data_panel import AdminDataPanelDialog
-        AdminDataPanelDialog(self).exec_()
+        dlg = AdminDataPanelDialog(self)
+        dlg.modules_changed.connect(self._on_modules_changed)
+        dlg.exec_()
+
+    def _on_modules_changed(self):
+        """Recharge les permissions + modules et reconstruit le drawer."""
+        self.load_user_and_permissions_async()
 
     def closeEvent(self, event):
         """Gère la fermeture de l'application."""

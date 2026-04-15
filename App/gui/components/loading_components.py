@@ -23,7 +23,7 @@ class LoadingLabel(QLabel):
         layout.addWidget(loading)
         # ... chargement ...
         loading.stop()
-        loading.setText("Données chargées ✅")
+        loading.setText("Données chargées")
     """
 
     def __init__(self, text: str = "Chargement", parent=None):
@@ -114,7 +114,7 @@ class EmptyStatePlaceholder(QWidget):
         )
     """
 
-    def __init__(self, icon: str = "📋", title: str = "Aucune donnée",
+    def __init__(self, icon: str = "", title: str = "Aucune donnée",
                  subtitle: str = "", parent=None):
         super().__init__(parent)
 
@@ -175,8 +175,8 @@ class ErrorPlaceholder(QWidget):
         layout.setSpacing(12)
 
         # Icône
-        icon_label = QLabel("❌")
-        icon_label.setStyleSheet("font-size: 32px;")
+        icon_label = QLabel("Erreur")
+        icon_label.setStyleSheet("font-size: 14px; color: #d32f2f;")
         icon_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(icon_label)
 

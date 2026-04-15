@@ -27,7 +27,7 @@ import logging
 import sys
 import threading
 from pathlib import Path
-from logging.handlers import RotatingFileHandler
+from logging.handlers import TimedRotatingFileHandler
 from typing import Optional
 
 # ===========================
@@ -38,8 +38,7 @@ _LOG_FORMAT = '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s'
 _LOG_FORMAT_DETAILED = '%(asctime)s | %(levelname)-8s | %(name)s | [%(user_id)s] [%(screen)s] | %(message)s'
 _DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
-_MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
-_BACKUP_COUNT = 5
+_BACKUP_COUNT = 30  # 30 jours de logs conservés
 _LOG_FILENAME = 'emac.log'
 
 _initialized = False
@@ -200,12 +199,15 @@ def setup_logging(production_mode: bool = False) -> None:
     logs_dir = _get_logs_dir()
     log_file = logs_dir / _LOG_FILENAME
 
-    file_handler = RotatingFileHandler(
+    file_handler = TimedRotatingFileHandler(
         log_file,
-        maxBytes=_MAX_FILE_SIZE,
+        when='midnight',
+        interval=1,
         backupCount=_BACKUP_COUNT,
         encoding='utf-8'
     )
+    # Les fichiers de backup sont suffixés automatiquement : emac.log.2026-04-07
+    file_handler.suffix = '%Y-%m-%d'
     file_handler.setLevel(file_level)
     file_handler.setFormatter(formatter)
     file_handler.addFilter(context_filter)

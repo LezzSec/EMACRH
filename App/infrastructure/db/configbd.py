@@ -216,7 +216,7 @@ class DatabaseConnection:
     """
     Gestionnaire de contexte pour gérer automatiquement les connexions avec commit/rollback.
 
-    ✅ Recommandé : À utiliser partout pour standardiser l'accès DB
+    Recommandé : À utiliser partout pour standardiser l'accès DB.
 
     Usage simple:
         with DatabaseConnection() as conn:
@@ -277,7 +277,7 @@ class DatabaseCursor:
     """
     Gestionnaire de contexte pour gérer automatiquement connexion + curseur.
 
-    ✅ Option Pro : Simplifie encore plus le code en gérant conn + cursor.
+    Option Pro : Simplifie encore plus le code en gérant conn + cursor.
 
     Usage:
         with DatabaseCursor() as cur:

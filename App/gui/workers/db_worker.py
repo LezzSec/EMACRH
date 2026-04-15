@@ -3,12 +3,12 @@
 Module de gestion des workers DB pour PyQt5.
 Permet d'exécuter des requêtes DB en background sans bloquer l'UI.
 
-✅ Utilisation recommandée :
+Utilisation recommandée :
     - Toutes les requêtes DB doivent passer par DbWorker
     - Jamais de DB dans le thread principal (UI)
     - Limiter la concurrence avec QThreadPool configuré
 
-✅ Fonctionnalités :
+Fonctionnalités :
     - Cancellation logique (ignore résultats si widget détruit)
     - Timeout configurable pour opérations longues
     - Tracking des workers actifs
@@ -66,13 +66,13 @@ class DbWorker(QRunnable):
     """
     Worker générique pour exécuter des opérations DB en background.
 
-    ✅ Utilisation :
+    Utilisation :
         worker = DbWorker(ma_fonction_db, arg1, arg2, kwarg1=val1)
         worker.signals.result.connect(on_success)
         worker.signals.error.connect(on_error)
         DbThreadPool.start(worker)
 
-    ✅ Avec cancellation (ignore résultat si widget détruit) :
+    Avec cancellation (ignore résultat si widget détruit) :
         worker = DbWorker(ma_fonction_db)
         worker.signals.result.connect(on_success)
         DbThreadPool.start(worker)
@@ -80,12 +80,12 @@ class DbWorker(QRunnable):
         # Plus tard, si l'utilisateur change d'onglet :
         worker.cancel()  # Le résultat sera ignoré
 
-    ✅ Avec timeout :
+    Avec timeout :
         worker = DbWorker(ma_fonction_db, timeout=10.0)  # 10 secondes max
         worker.signals.timeout.connect(on_timeout)
         DbThreadPool.start(worker)
 
-    ✅ Avec progress :
+    Avec progress :
         def ma_fonction(progress_callback=None):
             for i in range(100):
                 if progress_callback:
@@ -206,13 +206,13 @@ class SimpleDbWorker(QRunnable):
     Version simplifiée de DbWorker pour les cas simples.
     Le résultat est directement passé au callback fourni.
 
-    ✅ Utilisation (plus concis) :
+    Utilisation (plus concis) :
         def on_success(result):
             print(f"Résultat : {result}")
 
         SimpleDbWorker(ma_fonction_db, on_success, arg1, arg2)
 
-    ⚠️ Note: Pour les cas nécessitant cancellation/timeout, utiliser DbWorker.
+    Note: Pour les cas nécessitant cancellation/timeout, utiliser DbWorker.
     """
 
     def __init__(self, fn: Callable, on_result: Optional[Callable] = None,
@@ -263,8 +263,8 @@ class DbThreadPool:
     """
     Gestionnaire centralisé du pool de threads pour les opérations DB.
 
-    ✅ Configure la concurrence maximale en fonction du pool MySQL
-    ✅ Fournit des méthodes helper pour lancer des workers
+    Configure la concurrence maximale en fonction du pool MySQL.
+    Fournit des méthodes helper pour lancer des workers.
     """
 
     _instance = None

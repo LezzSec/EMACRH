@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import QLabel, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from PyQt5.QtCore import Qt
 
 from gui.components.ui_theme import EmacCard, EmacButton
-from application.permission_manager import can
 from .domaine_base import DomaineWidget
 
 
@@ -20,11 +19,6 @@ class DomainePolyvalence(DomaineWidget):
             card_empty.body.addWidget(QLabel("Aucune polyvalence enregistrée pour cette personne."))
             self._layout.addWidget(card_empty)
             return
-
-        if can("production.grilles.export") or can("admin.permissions"):
-            btn_admin = EmacButton("Gérer les dossiers de formation", variant="ghost")
-            btn_admin.clicked.connect(self._ouvrir_gestion_docs_formation)
-            self._layout.addWidget(btn_admin, alignment=Qt.AlignRight)
 
         NIVEAU_LABELS = {
             1: "Niv.1 - Apprentissage",
@@ -88,7 +82,7 @@ class DomainePolyvalence(DomaineWidget):
                     for doc in docs:
                         doc_row = QHBoxLayout()
                         doc_row.setSpacing(6)
-                        doc_nom = QLabel(f"📄 {doc.get('nom_affichage', doc.get('nom_fichier', '?'))}")
+                        doc_nom = QLabel(f"{doc.get('nom_affichage', doc.get('nom_fichier', '?'))}")
                         doc_nom.setStyleSheet("font-size: 12px;")
                         if doc.get('description'):
                             doc_nom.setToolTip(doc['description'])
@@ -119,8 +113,3 @@ class DomainePolyvalence(DomaineWidget):
     def _ouvrir_doc_formation(self, doc_id: int):
         self._vm.extraire_doc_formation(doc_id)
 
-    def _ouvrir_gestion_docs_formation(self):
-        from gui.screens.rh.gestion_rh_dialogs import GestionDocsFormationDialog
-        dialog = GestionDocsFormationDialog(self)
-        dialog.exec_()
-        self.refresh_requested.emit()

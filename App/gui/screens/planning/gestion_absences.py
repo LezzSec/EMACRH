@@ -72,6 +72,7 @@ class GestionAbsencesDialog(QDialog):
         self._vm.demande_submitted.connect(self._on_demande_submitted)
         self._vm.demande_cancelled.connect(self._on_demande_cancelled)
         self._vm.demande_validated.connect(self._on_demande_validated)
+        self._vm.absences_jour_loaded.connect(self._on_absences_jour_loaded)
         self._vm.error_occurred.connect(self._on_error)
         self._vm.data_changed.connect(self.data_changed)
 
@@ -526,11 +527,21 @@ class GestionAbsencesDialog(QDialog):
         if reply == QMessageBox.Yes:
             row = selected[0].row()
             demande_id = int(self.table_validation.item(row, 0).text())
-            validateur_id = 1  # TODO: récupérer depuis la session
-            self._vm.validate_demande(demande_id, valide, validateur_id)
+            self._vm.validate_demande(demande_id, valide)
 
-    def _on_calendar_date_clicked(self, date) -> None:
-        pass  # TODO: charger les absences du jour via ViewModel
+    def _on_calendar_date_clicked(self, qdate) -> None:
+        jour = qdate.toPyDate()
+        self._vm.load_absences_for_date(jour)
+
+    def _on_absences_jour_loaded(self, absences: list) -> None:
+        self.absences_jour_list.setRowCount(0)
+        for absence in absences:
+            row = self.absences_jour_list.rowCount()
+            self.absences_jour_list.insertRow(row)
+            self.absences_jour_list.setItem(row, 0, QTableWidgetItem(absence.get('nom_complet', '')))
+            self.absences_jour_list.setItem(row, 1, QTableWidgetItem(absence.get('type_libelle', '')))
+            self.absences_jour_list.setItem(row, 2, QTableWidgetItem(format_date(absence.get('date_debut'))))
+            self.absences_jour_list.setItem(row, 3, QTableWidgetItem(format_date(absence.get('date_fin'))))
 
     # ------------------------------------------------------------------
     # Helpers UI

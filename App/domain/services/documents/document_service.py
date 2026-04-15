@@ -16,7 +16,8 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import mimetypes
 
-from infrastructure.db.configbd import get_connection
+from infrastructure.db.configbd import DatabaseConnection
+from infrastructure.db.query_executor import QueryExecutor
 
 
 # Taille max recommandee pour un fichier (16 Mo)
@@ -70,7 +71,6 @@ class DocumentService:
         """
         from application.permission_manager import require
         require("rh.documents.edit")
-        conn = None
         try:
             # Verifier que le fichier source existe
             source_path = Path(fichier_source)
@@ -83,27 +83,12 @@ class DocumentService:
                 taille_mo = taille_octets / (1024 * 1024)
                 return False, f"Fichier trop volumineux ({taille_mo:.1f} Mo). Maximum: 16 Mo", None
 
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-
             # Verifier que l'operateur existe
-            cursor.execute(
-                "SELECT id FROM personnel WHERE id = %s",
-                (personnel_id,)
-            )
-            if not cursor.fetchone():
-                cursor.close()
-                conn.close()
+            if not QueryExecutor.exists('personnel', {'id': personnel_id}):
                 return False, f"Operateur ID {personnel_id} introuvable", None
 
             # Verifier que la categorie existe
-            cursor.execute(
-                "SELECT id FROM categories_documents WHERE id = %s",
-                (categorie_id,)
-            )
-            if not cursor.fetchone():
-                cursor.close()
-                conn.close()
+            if not QueryExecutor.exists('categories_documents', {'id': categorie_id}):
                 return False, f"Categorie ID {categorie_id} introuvable", None
 
             # Preparer le nom de fichier
@@ -122,42 +107,29 @@ class DocumentService:
             if type_mime is None:
                 type_mime = "application/octet-stream"
 
-            # Inserer dans la base de donnees avec le BLOB
-            sql = """
-                INSERT INTO documents (
+            document_id = QueryExecutor.execute_write(
+                """INSERT INTO documents (
                     personnel_id, categorie_id, nom_fichier, nom_affichage,
                     chemin_fichier, contenu_fichier, stockage_type,
                     type_mime, taille_octets, date_expiration,
                     notes, uploaded_by
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, 'BLOB', %s, %s, %s, %s, %s
+                )""",
+                (
+                    personnel_id, categorie_id, nom_fichier_clean, nom_affichage,
+                    nom_fichier_clean,
+                    contenu_fichier,
+                    type_mime, taille_octets, date_expiration,
+                    notes, uploaded_by
                 )
-            """
-
-            cursor.execute(sql, (
-                personnel_id, categorie_id, nom_fichier_clean, nom_affichage,
-                nom_fichier_clean,  # chemin_fichier = nom du fichier (pour reference)
-                contenu_fichier,
-                type_mime, taille_octets, date_expiration,
-                notes, uploaded_by
-            ))
-
-            document_id = cursor.lastrowid
-            conn.commit()
-
-            cursor.close()
-            conn.close()
+            )
 
             logger.info(f"Document '{nom_affichage}' ajoute en BLOB (ID: {document_id}, {taille_octets} octets)")
             return True, f"Document '{nom_affichage}' ajoute avec succes", document_id
 
         except Exception as e:
             logger.exception(f"Erreur lors de l'ajout du document: {e}")
-            if conn:
-                try:
-                    conn.close()
-                except Exception:
-                    pass
             return False, f"Erreur lors de l'ajout du document: {str(e)}", None
 
     def get_documents_operateur(
@@ -178,9 +150,6 @@ class DocumentService:
             Liste des documents (sans contenu_fichier)
         """
         try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-
             sql = "SELECT * FROM v_documents_complet WHERE personnel_id = %s"
             params = [personnel_id]
 
@@ -194,13 +163,7 @@ class DocumentService:
 
             sql += " ORDER BY date_upload DESC"
 
-            cursor.execute(sql, tuple(params))
-            documents = cursor.fetchall()
-
-            cursor.close()
-            conn.close()
-
-            return documents
+            return QueryExecutor.fetch_all(sql, tuple(params), dictionary=True)
 
         except Exception as e:
             logger.error(f"Erreur lors de la recuperation des documents: {e}")
@@ -217,18 +180,12 @@ class DocumentService:
             Tuple (contenu_bytes, nom_fichier, type_mime) ou None si introuvable
         """
         try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            cursor.execute(
+            doc = QueryExecutor.fetch_one(
                 "SELECT contenu_fichier, stockage_type, chemin_fichier, nom_fichier, type_mime "
                 "FROM documents WHERE id = %s",
-                (document_id,)
+                (document_id,),
+                dictionary=True
             )
-            doc = cursor.fetchone()
-
-            cursor.close()
-            conn.close()
 
             if not doc:
                 return None
@@ -285,17 +242,11 @@ class DocumentService:
         Pour les legacy filesystem, retourne le chemin direct.
         """
         try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            cursor.execute(
+            doc = QueryExecutor.fetch_one(
                 "SELECT stockage_type, chemin_fichier FROM documents WHERE id = %s",
-                (document_id,)
+                (document_id,),
+                dictionary=True
             )
-            doc = cursor.fetchone()
-
-            cursor.close()
-            conn.close()
 
             if not doc:
                 return None
@@ -347,19 +298,13 @@ class DocumentService:
         from application.permission_manager import require
         require("rh.documents.edit")
         try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            # Recuperer les infos du document
-            cursor.execute(
+            doc = QueryExecutor.fetch_one(
                 "SELECT stockage_type, chemin_fichier, nom_affichage FROM documents WHERE id = %s",
-                (document_id,)
+                (document_id,),
+                dictionary=True
             )
-            doc = cursor.fetchone()
 
             if not doc:
-                cursor.close()
-                conn.close()
                 return False, "Document introuvable"
 
             # Si legacy filesystem, supprimer le fichier physique
@@ -374,12 +319,9 @@ class DocumentService:
                 import shutil
                 shutil.rmtree(temp_path, ignore_errors=True)
 
-            # Supprimer de la BDD (le BLOB est supprime avec la ligne)
-            cursor.execute("DELETE FROM documents WHERE id = %s", (document_id,))
-            conn.commit()
-
-            cursor.close()
-            conn.close()
+            QueryExecutor.execute_write(
+                "DELETE FROM documents WHERE id = %s", (document_id,), return_lastrowid=False
+            )
 
             logger.info(f"Document '{doc['nom_affichage']}' supprime (ID: {document_id})")
             return True, f"Document '{doc['nom_affichage']}' supprime avec succes"
@@ -393,18 +335,10 @@ class DocumentService:
         from application.permission_manager import require
         require("rh.documents.edit")
         try:
-            conn = get_connection()
-            cursor = conn.cursor()
-
-            cursor.execute(
+            QueryExecutor.execute_write(
                 "UPDATE documents SET statut = 'archive' WHERE id = %s",
-                (document_id,)
+                (document_id,), return_lastrowid=False
             )
-            conn.commit()
-
-            cursor.close()
-            conn.close()
-
             return True, "Document archive avec succes"
 
         except Exception as e:
@@ -415,18 +349,10 @@ class DocumentService:
         from application.permission_manager import require
         require("rh.documents.edit")
         try:
-            conn = get_connection()
-            cursor = conn.cursor()
-
-            cursor.execute(
+            QueryExecutor.execute_write(
                 "UPDATE documents SET statut = 'actif' WHERE id = %s",
-                (document_id,)
+                (document_id,), return_lastrowid=False
             )
-            conn.commit()
-
-            cursor.close()
-            conn.close()
-
             return True, "Document restaure avec succes"
 
         except Exception as e:
@@ -435,19 +361,10 @@ class DocumentService:
     def get_categories(self) -> List[Dict]:
         """Recupere toutes les categories de documents"""
         try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            cursor.execute(
-                "SELECT * FROM categories_documents ORDER BY ordre_affichage"
+            return QueryExecutor.fetch_all(
+                "SELECT * FROM categories_documents ORDER BY ordre_affichage",
+                dictionary=True
             )
-            categories = cursor.fetchall()
-
-            cursor.close()
-            conn.close()
-
-            return categories
-
         except Exception as e:
             logger.error(f"Erreur lors de la recuperation des categories: {e}")
             return []
@@ -455,20 +372,11 @@ class DocumentService:
     def get_documents_expiring_soon(self, jours: int = 30) -> List[Dict]:
         """Recupere les documents qui expirent bientot"""
         try:
-            conn = get_connection()
-            cursor = conn.cursor(dictionary=True)
-
-            cursor.execute(
+            return QueryExecutor.fetch_all(
                 "SELECT * FROM v_documents_expiration_proche WHERE jours_restants <= %s",
-                (jours,)
+                (jours,),
+                dictionary=True
             )
-            documents = cursor.fetchall()
-
-            cursor.close()
-            conn.close()
-
-            return documents
-
         except Exception as e:
             logger.error(f"Erreur lors de la recuperation des documents expirant: {e}")
             return []
@@ -485,9 +393,6 @@ class DocumentService:
         from application.permission_manager import require
         require("rh.documents.edit")
         try:
-            conn = get_connection()
-            cursor = conn.cursor()
-
             # SECURITE: Construction securisee - seules les clauses predefinies sont utilisees
             updates = []
             params = []
@@ -514,12 +419,7 @@ class DocumentService:
             params.append(document_id)
             sql = "UPDATE documents SET " + ", ".join(updates) + " WHERE id = %s"
 
-            cursor.execute(sql, tuple(params))
-            conn.commit()
-
-            cursor.close()
-            conn.close()
-
+            QueryExecutor.execute_write(sql, tuple(params), return_lastrowid=False)
             return True, "Document mis a jour avec succes"
 
         except Exception as e:

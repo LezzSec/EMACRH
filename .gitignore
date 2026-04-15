@@ -96,6 +96,8 @@ App/database/backups/
 *.old
 exports/
 **/exports/
+export/
+**/export/
 temp/
 
 # Build et tests temporaires

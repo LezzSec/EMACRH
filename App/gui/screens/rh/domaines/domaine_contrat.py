@@ -105,18 +105,41 @@ class DomaineContrat(DomaineWidget):
                 card.body.addWidget(no_doc_lbl)
             else:
                 for doc in docs_actifs:
-                    doc_lbl = QLabel(
-                        f"<b>{doc.get('nom_affichage', '-')}</b>"
-                        f"<span style='color:#6b7280; font-size:11px;'>"
-                        f"  •  Ajouté le {self._format_date(doc.get('date_upload'))}</span>"
-                    )
-                    doc_lbl.setStyleSheet("padding: 3px 0; background: transparent;")
-                    card.body.addWidget(doc_lbl)
+                    card.body.addWidget(self._build_doc_row(doc))
 
             self._layout.addWidget(card)
         else:
             alert = EmacAlert("Aucun contrat actif", variant="info")
             self._layout.addWidget(alert)
+
+    def _build_doc_row(self, doc: dict) -> QFrame:
+        """Construit une ligne de document avec bouton Ouvrir."""
+        row_widget = QFrame()
+        row_widget.setStyleSheet("""
+            QFrame {
+                background: #f9fafb; border: 1px solid #e5e7eb;
+                border-radius: 6px; padding: 6px; margin: 2px 0;
+            }
+            QFrame:hover { background: #f3f4f6; border-color: #3b82f6; }
+        """)
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(8, 6, 8, 6)
+        row_layout.setSpacing(8)
+
+        info = QLabel(
+            f"<b>{doc.get('nom_affichage', '-')}</b>"
+            f"<span style='color:#6b7280; font-size:11px;'>"
+            f"  •  Ajouté le {self._format_date(doc.get('date_upload'))}</span>"
+        )
+        info.setStyleSheet("background: transparent;")
+        row_layout.addWidget(info, 1)
+
+        doc_id = doc.get('id')
+        btn_ouvrir = EmacButton("Ouvrir", variant="ghost")
+        btn_ouvrir.clicked.connect(lambda checked, d=doc_id: self._vm.ouvrir_document(d))
+        row_layout.addWidget(btn_ouvrir)
+
+        return row_widget
 
     def _add_contrat(self):
         if not self._operateur:

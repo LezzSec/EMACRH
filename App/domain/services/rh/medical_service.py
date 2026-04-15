@@ -269,8 +269,9 @@ def create_visite(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[in
         visite_id = QueryExecutor.execute_write(
             """INSERT INTO medical_visite (
                    personnel_id, date_visite, type_visite, resultat,
-                   restrictions, medecin, commentaire, prochaine_visite
-               ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                   restrictions, medecin, commentaire, prochaine_visite,
+                   date_prochaine_convocation
+               ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 operateur_id,
                 data.get('date_visite'),
@@ -279,7 +280,8 @@ def create_visite(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[in
                 data.get('restrictions'),
                 data.get('medecin'),
                 data.get('commentaire'),
-                data.get('prochaine_visite')
+                data.get('prochaine_visite'),
+                data.get('date_prochaine_convocation')
             )
         )
         return True, "Visite enregistrée", visite_id
@@ -297,7 +299,7 @@ def update_visite(visite_id: int, data: Dict) -> Tuple[bool, str]:
             """UPDATE medical_visite SET
                    date_visite = %s, type_visite = %s, resultat = %s,
                    restrictions = %s, medecin = %s, commentaire = %s,
-                   prochaine_visite = %s
+                   prochaine_visite = %s, date_prochaine_convocation = %s
                WHERE id = %s""",
             (
                 data.get('date_visite'),
@@ -307,6 +309,7 @@ def update_visite(visite_id: int, data: Dict) -> Tuple[bool, str]:
                 data.get('medecin'),
                 data.get('commentaire'),
                 data.get('prochaine_visite'),
+                data.get('date_prochaine_convocation'),
                 visite_id
             ),
             return_lastrowid=False
@@ -384,15 +387,16 @@ def create_accident(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
         accident_id = QueryExecutor.execute_write(
             """INSERT INTO medical_accident_travail (
                    personnel_id, date_accident, heure_accident, jour_semaine,
-                   horaires, circonstances, siege_lesions, nature_lesions,
+                   lieu_accident, horaires, circonstances, siege_lesions, nature_lesions,
                    avec_arret, date_reconnaissance_at, date_debut_arret,
                    date_fin_arret_initial, commentaire
-               ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+               ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 operateur_id,
                 data.get('date_accident'),
                 data.get('heure_accident'),
                 data.get('jour_semaine'),
+                data.get('lieu_accident'),
                 data.get('horaires'),
                 data.get('circonstances'),
                 data.get('siege_lesions'),
@@ -423,7 +427,7 @@ def update_accident(accident_id: int, data: Dict) -> Tuple[bool, str]:
         QueryExecutor.execute_write(
             """UPDATE medical_accident_travail SET
                    date_accident = %s, heure_accident = %s, jour_semaine = %s,
-                   horaires = %s, circonstances = %s, siege_lesions = %s,
+                   lieu_accident = %s, horaires = %s, circonstances = %s, siege_lesions = %s,
                    nature_lesions = %s, avec_arret = %s, date_reconnaissance_at = %s,
                    date_debut_arret = %s, date_fin_arret_initial = %s, commentaire = %s
                WHERE id = %s""",
@@ -431,6 +435,7 @@ def update_accident(accident_id: int, data: Dict) -> Tuple[bool, str]:
                 data.get('date_accident'),
                 data.get('heure_accident'),
                 data.get('jour_semaine'),
+                data.get('lieu_accident'),
                 data.get('horaires'),
                 data.get('circonstances'),
                 data.get('siege_lesions'),

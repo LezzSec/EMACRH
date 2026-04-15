@@ -127,24 +127,24 @@ def format_details_html(action, data, poste_code=None):
     html += "<table style='width: 100%; border-collapse: collapse; margin-bottom: 16px;'>"
 
     operateur = data.get("operateur", "Non spécifié")
-    html += f"<tr><td style='padding: 8px; font-weight: bold; width: 180px;'>👤 Personnel :</td>"
+    html += f"<tr><td style='padding: 8px; font-weight: bold; width: 180px;'>Personnel :</td>"
     html += f"<td style='padding: 8px;'>{operateur}</td></tr>"
 
-    html += f"<tr style='background: #f9fafb;'><td style='padding: 8px; font-weight: bold;'>📍 Poste :</td>"
+    html += f"<tr style='background: #f9fafb;'><td style='padding: 8px; font-weight: bold;'>Poste :</td>"
     html += f"<td style='padding: 8px;'>{poste_code}</td></tr>"
 
     # Détails spécifiques selon le type d'action
     if action_upper == "INSERT":
         niveau = data.get("niveau", "?")
-        html += f"<tr><td style='padding: 8px; font-weight: bold;'>⭐ Niveau attribué :</td>"
+        html += f"<tr><td style='padding: 8px; font-weight: bold;'>Niveau attribué :</td>"
         html += f"<td style='padding: 8px;'><strong style='color: {color}; font-size: 13pt;'>Niveau {niveau}</strong></td></tr>"
 
         if "date_evaluation" in data:
-            html += f"<tr style='background: #f9fafb;'><td style='padding: 8px; font-weight: bold;'>📅 Date évaluation :</td>"
+            html += f"<tr style='background: #f9fafb;'><td style='padding: 8px; font-weight: bold;'>Date évaluation :</td>"
             html += f"<td style='padding: 8px;'>{data['date_evaluation']}</td></tr>"
 
         if "prochaine_evaluation" in data:
-            html += f"<tr><td style='padding: 8px; font-weight: bold;'>📅 Prochaine évaluation :</td>"
+            html += f"<tr><td style='padding: 8px; font-weight: bold;'>Prochaine évaluation :</td>"
             html += f"<td style='padding: 8px;'>{data['prochaine_evaluation']}</td></tr>"
 
     elif action_upper == "UPDATE":
@@ -154,7 +154,7 @@ def format_details_html(action, data, poste_code=None):
             old = changes["niveau"].get("old", "?")
             new = changes["niveau"].get("new", "?")
 
-            html += f"<tr><td style='padding: 8px; font-weight: bold;'>⭐ Changement niveau :</td>"
+            html += f"<tr><td style='padding: 8px; font-weight: bold;'>Changement niveau :</td>"
             html += f"<td style='padding: 8px;'>"
             html += f"<span style='background: #fee2e2; padding: 4px 12px; border-radius: 4px; color: #dc2626; font-weight: bold;'>N{old}</span>"
             html += f" <span style='font-size: 16pt; color: #6b7280;'>→</span> "
@@ -164,13 +164,13 @@ def format_details_html(action, data, poste_code=None):
         if "date_evaluation" in changes:
             old = changes["date_evaluation"].get("old", "Non définie")
             new = changes["date_evaluation"].get("new", "Non définie")
-            html += f"<tr style='background: #f9fafb;'><td style='padding: 8px; font-weight: bold;'>📅 Date évaluation :</td>"
+            html += f"<tr style='background: #f9fafb;'><td style='padding: 8px; font-weight: bold;'>Date évaluation :</td>"
             html += f"<td style='padding: 8px;'>{old} → {new}</td></tr>"
 
         if "prochaine_evaluation" in changes:
             old = changes["prochaine_evaluation"].get("old", "Non définie")
             new = changes["prochaine_evaluation"].get("new", "Non définie")
-            html += f"<tr><td style='padding: 8px; font-weight: bold;'>📅 Prochaine évaluation :</td>"
+            html += f"<tr><td style='padding: 8px; font-weight: bold;'>Prochaine évaluation :</td>"
             html += f"<td style='padding: 8px;'>{old} → {new}</td></tr>"
 
         # Afficher toutes les autres modifications
@@ -178,12 +178,12 @@ def format_details_html(action, data, poste_code=None):
             if key not in ["niveau", "date_evaluation", "prochaine_evaluation"]:
                 old = value.get("old", "?")
                 new = value.get("new", "?")
-                html += f"<tr style='background: #f9fafb;'><td style='padding: 8px; font-weight: bold;'>🔄 {key} :</td>"
+                html += f"<tr style='background: #f9fafb;'><td style='padding: 8px; font-weight: bold;'>{key} :</td>"
                 html += f"<td style='padding: 8px;'>{old} → {new}</td></tr>"
 
     elif action_upper == "DELETE":
         niveau = data.get("niveau", "?")
-        html += f"<tr><td style='padding: 8px; font-weight: bold;'>⭐ Niveau supprimé :</td>"
+        html += f"<tr><td style='padding: 8px; font-weight: bold;'>Niveau supprimé :</td>"
         html += f"<td style='padding: 8px;'><strong style='color: {color}; font-size: 13pt;'>Niveau {niveau}</strong></td></tr>"
 
     html += "</table>"
@@ -233,7 +233,7 @@ class DetailHistoriqueDialog(QDialog):
 
         # Date et heure
         dt_str = format_datetime(row_data.get("date_time"))
-        date_label = QLabel(f"🕐 {dt_str}")
+        date_label = QLabel(f"{dt_str}")
         date_label.setStyleSheet("font-size: 11pt; color: #6b7280; padding: 4px;")
         layout.addWidget(date_label)
 
@@ -309,7 +309,7 @@ class HistoriquePersonnelTab(QWidget):
         # === EN-TÊTE ===
         header_layout = QHBoxLayout()
 
-        header = QLabel(f"📜 Historique des polyvalences - {self.operateur_prenom} {self.operateur_nom}")
+        header = QLabel(f"Historique des polyvalences - {self.operateur_prenom} {self.operateur_nom}")
         header.setFont(QFont("Segoe UI", 12, QFont.Bold))
         header.setStyleSheet("color: #374151; padding: 8px;")
         header_layout.addWidget(header)

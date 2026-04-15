@@ -70,27 +70,27 @@ class RegularisationDialog(QDialog):
 
         # Onglet 1: Qui est absent aujourd'hui
         self.absents_tab = self.create_absents_tab()
-        self.tabs.addTab(self.absents_tab, "📋 Absents Aujourd'hui")
+        self.tabs.addTab(self.absents_tab, "Absents Aujourd'hui")
 
         # Onglet 2: Déclarer une absence
         self.declare_tab = self.create_declare_tab()
-        self.tabs.addTab(self.declare_tab, "➕ Déclarer une Absence")
+        self.tabs.addTab(self.declare_tab, "Déclarer une Absence")
 
         # Onglet 3: Calendrier Absences
         self.calendar_tab = self.create_calendar_tab()
-        self.tabs.addTab(self.calendar_tab, "📅 Calendrier Absences")
+        self.tabs.addTab(self.calendar_tab, "Calendrier Absences")
 
         # Onglet 4: Calendrier Évaluations
         self.eval_calendar_tab = self.create_eval_calendar_tab()
-        self.tabs.addTab(self.eval_calendar_tab, "📆 Calendrier Évaluations")
+        self.tabs.addTab(self.eval_calendar_tab, "Calendrier Évaluations")
 
         # Onglet 5: Documents expirant
         self.docs_expiration_tab = self.create_docs_expiration_tab()
-        self.tabs.addTab(self.docs_expiration_tab, "⚠️ Documents expirant")
+        self.tabs.addTab(self.docs_expiration_tab, "Documents expirant")
 
         # Onglet 6: Historique
         self.history_tab = self.create_history_tab()
-        self.tabs.addTab(self.history_tab, "📊 Historique")
+        self.tabs.addTab(self.history_tab, "Historique")
 
         layout.addWidget(self.tabs)
 
@@ -98,7 +98,7 @@ class RegularisationDialog(QDialog):
         action_row = QHBoxLayout()
         action_row.addStretch()
 
-        refresh_btn = QPushButton("🔄 Actualiser")
+        refresh_btn = QPushButton("Actualiser")
         refresh_btn.setStyleSheet("""
             QPushButton {
                 background: #10b981;
@@ -134,7 +134,7 @@ class RegularisationDialog(QDialog):
         layout = QVBoxLayout(widget)
 
         # Info date
-        today_label = QLabel(f"📅 Absences du {format_date(date.today())}")
+        today_label = QLabel(f"Absences du {format_date(date.today())}")
         today_label.setFont(QFont("Arial", 14, QFont.Bold))
         today_label.setStyleSheet("color: #1f2937; padding: 10px;")
         layout.addWidget(today_label)
@@ -300,7 +300,7 @@ class RegularisationDialog(QDialog):
         layout.addWidget(form_group)
 
         # Bouton de validation
-        submit_btn = QPushButton("✅ Enregistrer la déclaration")
+        submit_btn = QPushButton("Enregistrer la déclaration")
         submit_btn.setStyleSheet("""
             QPushButton {
                 background: #3b82f6;
@@ -363,7 +363,7 @@ class RegularisationDialog(QDialog):
 
             QMessageBox.information(
                 self, "Succès",
-                f"✅ Déclaration enregistrée avec succès !\n\n"
+                f"Déclaration enregistrée avec succès !\n\n"
                 f"Type : {type_decl}\n"
                 f"Du {format_date(date_debut)} au {format_date(date_fin)}"
             )
@@ -468,7 +468,7 @@ class RegularisationDialog(QDialog):
     def on_calendar_date_clicked(self, qdate):
         """Affiche les absences du jour sélectionné."""
         selected = qdate.toPyDate()
-        self.selected_date_label.setText(f"📅 Absences du {format_date(selected)}")
+        self.selected_date_label.setText(f"Absences du {format_date(selected)}")
 
         try:
             rows = get_absences_du_jour(selected)
@@ -476,7 +476,7 @@ class RegularisationDialog(QDialog):
             self.calendar_absents_list.clear()
 
             if not rows:
-                item = QListWidgetItem("✅ Aucune absence ce jour")
+                item = QListWidgetItem("Aucune absence ce jour")
                 item.setForeground(QColor("#10b981"))
                 self.calendar_absents_list.addItem(item)
             else:
@@ -519,7 +519,7 @@ class RegularisationDialog(QDialog):
         self.eval_poste_filter.currentIndexChanged.connect(self.load_eval_calendar_data)
         filters.addWidget(self.eval_poste_filter)
 
-        refresh_eval_btn = QPushButton("🔄 Actualiser")
+        refresh_eval_btn = QPushButton("Actualiser")
         refresh_eval_btn.clicked.connect(self.load_eval_calendar_data)
         filters.addWidget(refresh_eval_btn)
 
@@ -660,7 +660,7 @@ class RegularisationDialog(QDialog):
     def on_eval_calendar_date_clicked(self, qdate):
         """Affiche les évaluations du jour sélectionné."""
         selected = qdate.toPyDate()
-        self.eval_selected_date_label.setText(f"📆 Évaluations du {format_date(selected)}")
+        self.eval_selected_date_label.setText(f"Évaluations du {format_date(selected)}")
 
         try:
             search_text = self.eval_search.text().lower()
@@ -671,7 +671,7 @@ class RegularisationDialog(QDialog):
             self.eval_calendar_list.clear()
 
             if not rows:
-                item = QListWidgetItem("✅ Aucune évaluation prévue ce jour")
+                item = QListWidgetItem("Aucune évaluation prévue ce jour")
                 item.setForeground(QColor("#10b981"))
                 self.eval_calendar_list.addItem(item)
             else:
@@ -774,7 +774,7 @@ class RegularisationDialog(QDialog):
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
-        delete_btn = QPushButton("🗑️ Supprimer")
+        delete_btn = QPushButton("Supprimer")
         delete_btn.setStyleSheet("""
             QPushButton {
                 background: #dc2626;
@@ -872,7 +872,7 @@ class RegularisationDialog(QDialog):
             if not supprimer_declaration(decl_id):
                 raise RuntimeError("Échec de la suppression")
 
-            QMessageBox.information(self, "Succès", "✅ Déclaration supprimée avec succès.")
+            QMessageBox.information(self, "Succès", "Déclaration supprimée avec succès.")
 
             self.refresh_all()
 
@@ -896,7 +896,7 @@ class RegularisationDialog(QDialog):
         filter_row.addWidget(self.docs_horizon_combo)
         filter_row.addStretch()
 
-        refresh_docs_btn = QPushButton("🔄 Actualiser")
+        refresh_docs_btn = QPushButton("Actualiser")
         refresh_docs_btn.clicked.connect(self.load_docs_expiration)
         filter_row.addWidget(refresh_docs_btn)
 

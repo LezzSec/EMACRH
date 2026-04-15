@@ -70,7 +70,7 @@ class GestionDocumentaireDialog(QDialog):
             header_layout = QHBoxLayout()
 
             # Sélection d'opérateur
-            operateur_label = QLabel("👤 Employé:")
+            operateur_label = QLabel("Employé:")
             operateur_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
             operateur_label.setStyleSheet("color: #1e293b;")
             header_layout.addWidget(operateur_label)
@@ -91,11 +91,11 @@ class GestionDocumentaireDialog(QDialog):
             header_layout.addStretch()
 
             # Boutons
-            btn_refresh = EmacButton("🔄 Actualiser", 'ghost')
+            btn_refresh = EmacButton("Actualiser", 'ghost')
             btn_refresh.clicked.connect(self.load_data)
             header_layout.addWidget(btn_refresh)
 
-            btn_add = EmacButton("➕ Ajouter un document", 'primary')
+            btn_add = EmacButton("Ajouter un document", 'primary')
             btn_add.clicked.connect(self.add_document)
             header_layout.addWidget(btn_add)
 
@@ -116,11 +116,11 @@ class GestionDocumentaireDialog(QDialog):
 
             header_layout.addStretch()
 
-            btn_refresh = QPushButton("🔄 Rafraîchir")
+            btn_refresh = QPushButton("Rafraîchir")
             btn_refresh.clicked.connect(self.load_data)
             header_layout.addWidget(btn_refresh)
 
-            btn_add = QPushButton("➕ Ajouter un document")
+            btn_add = QPushButton("Ajouter un document")
             btn_add.setStyleSheet("""
                 QPushButton {
                     background-color: #10b981;
@@ -144,7 +144,7 @@ class GestionDocumentaireDialog(QDialog):
             filters_layout = QHBoxLayout()
 
             # Filtre catégorie
-            cat_label = QLabel("📁 Catégorie:")
+            cat_label = QLabel("Catégorie:")
             cat_label.setStyleSheet("color: #475569; font-weight: 600;")
             filters_layout.addWidget(cat_label)
 
@@ -165,7 +165,7 @@ class GestionDocumentaireDialog(QDialog):
             filters_layout.addSpacing(15)
 
             # Filtre statut
-            statut_label = QLabel("📊 Statut:")
+            statut_label = QLabel("Statut:")
             statut_label.setStyleSheet("color: #475569; font-weight: 600;")
             filters_layout.addWidget(statut_label)
 
@@ -186,7 +186,7 @@ class GestionDocumentaireDialog(QDialog):
             filters_layout.addSpacing(15)
 
             # Recherche
-            search_label = QLabel("🔍 Recherche:")
+            search_label = QLabel("Recherche:")
             search_label.setStyleSheet("color: #475569; font-weight: 600;")
             filters_layout.addWidget(search_label)
 
@@ -341,21 +341,21 @@ class GestionDocumentaireDialog(QDialog):
             stats_card = EmacCard()
             stats_layout = QHBoxLayout()
 
-            self.lbl_total = QLabel("📊 Total : 0")
+            self.lbl_total = QLabel("Total : 0")
             self.lbl_total.setFont(QFont("Segoe UI", 10, QFont.Bold))
             self.lbl_total.setStyleSheet("color: #3b82f6;")
             stats_layout.addWidget(self.lbl_total)
 
             stats_layout.addSpacing(20)
 
-            self.lbl_size = QLabel("💾 Taille : 0 MB")
+            self.lbl_size = QLabel("Taille : 0 MB")
             self.lbl_size.setFont(QFont("Segoe UI", 10))
             self.lbl_size.setStyleSheet("color: #64748b;")
             stats_layout.addWidget(self.lbl_size)
 
             stats_layout.addSpacing(20)
 
-            self.lbl_expired = QLabel("⚠️ Expirés : 0")
+            self.lbl_expired = QLabel("Expirés : 0")
             self.lbl_expired.setFont(QFont("Segoe UI", 10))
             self.lbl_expired.setStyleSheet("color: #dc2626;")
             stats_layout.addWidget(self.lbl_expired)
@@ -538,13 +538,13 @@ class GestionDocumentaireDialog(QDialog):
             btn_open.clicked.connect(lambda checked, d=doc: self.open_document_by_id(d['id']))
             actions_layout.addWidget(btn_open)
 
-            btn_download = QPushButton("💾")
+            btn_download = QPushButton("DL")
             btn_download.setToolTip("Télécharger")
             btn_download.setMaximumWidth(30)
             btn_download.clicked.connect(lambda checked, d=doc: self.download_document(d['id']))
             actions_layout.addWidget(btn_download)
 
-            btn_delete = QPushButton("🗑️")
+            btn_delete = QPushButton("X")
             btn_delete.setToolTip("Supprimer")
             btn_delete.setMaximumWidth(30)
             btn_delete.setStyleSheet("QPushButton { color: #dc2626; }")
@@ -680,10 +680,10 @@ class GestionDocumentaireDialog(QDialog):
         """Affiche le menu contextuel"""
         menu = QMenu()
 
-        open_action = menu.addAction("📂 Ouvrir")
-        download_action = menu.addAction("💾 Télécharger")
+        open_action = menu.addAction("Ouvrir")
+        download_action = menu.addAction("Télécharger")
         menu.addSeparator()
-        delete_action = menu.addAction("🗑️ Supprimer")
+        delete_action = menu.addAction("Supprimer")
 
         action = menu.exec_(self.table.viewport().mapToGlobal(position))
 
@@ -733,7 +733,7 @@ class AddDocumentDialog(QDialog):
         file_layout = QVBoxLayout()
 
         file_btn_layout = QHBoxLayout()
-        self.btn_select_file = QPushButton("📁 Sélectionner un fichier...")
+        self.btn_select_file = QPushButton("Sélectionner un fichier...")
         self.btn_select_file.clicked.connect(self.select_file)
         file_btn_layout.addWidget(self.btn_select_file)
         file_layout.addLayout(file_btn_layout)

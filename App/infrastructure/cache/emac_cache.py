@@ -375,7 +375,7 @@ def warm_up_cache():
     # Charger les postes actifs
     get_cached_postes_actifs()
 
-    print("✅ Cache préchauffé avec succès")
+    print("Cache préchauffé avec succès")
 
 
 # ===========================

@@ -52,7 +52,7 @@ class DetailOperateurDialog(QDialog):
         """)
         header_layout = QVBoxLayout(header_frame)
 
-        title = QLabel(f"👤 {operateur_prenom} {operateur_nom}")
+        title = QLabel(f"{operateur_prenom} {operateur_nom}")
         title.setFont(QFont("Segoe UI", 14, QFont.Bold))
         title.setStyleSheet("color: white; background: transparent;")
         header_layout.addWidget(title)
@@ -88,11 +88,11 @@ class DetailOperateurDialog(QDialog):
 
         self.tab_resume = QWidget()
         self._init_tab_resume()
-        self.tabs.addTab(self.tab_resume, "📊 Résumé")
+        self.tabs.addTab(self.tab_resume, "Résumé")
 
         self.tab_anciennes = QWidget()
         self._init_tab_anciennes()
-        self.tabs.addTab(self.tab_anciennes, "📜 Historique")
+        self.tabs.addTab(self.tab_anciennes, "Historique")
 
         layout.addWidget(self.tabs, 1)
 
@@ -144,7 +144,7 @@ class DetailOperateurDialog(QDialog):
         layout.setSpacing(15)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        stats_group = QGroupBox("📈 Statistiques")
+        stats_group = QGroupBox("Statistiques")
         stats_layout = QVBoxLayout(stats_group)
         self.stats_label = QLabel("Chargement...")
         self.stats_label.setStyleSheet("font-size: 11pt; padding: 10px;")
@@ -152,7 +152,7 @@ class DetailOperateurDialog(QDialog):
         stats_layout.addWidget(self.stats_label)
         layout.addWidget(stats_group)
 
-        poly_group = QGroupBox("🎯 Polyvalences actuelles")
+        poly_group = QGroupBox("Polyvalences actuelles")
         poly_layout = QVBoxLayout(poly_group)
 
         self.poly_table = QTableWidget()
@@ -188,7 +188,7 @@ class DetailOperateurDialog(QDialog):
         layout.setSpacing(15)
         layout.setContentsMargins(15, 15, 15, 15)
 
-        anciennes_group = QGroupBox("📜 Historique des polyvalences")
+        anciennes_group = QGroupBox("Historique des polyvalences")
         anciennes_layout = QVBoxLayout(anciennes_group)
 
         self.anciennes_table = QTableWidget()
@@ -238,9 +238,9 @@ class DetailOperateurDialog(QDialog):
             poly_text = " | ".join(parts) if parts else "Aucune"
 
             eval_parts = []
-            if stats.get('retard'): eval_parts.append(f"⚠️ {stats['retard']} en retard")
-            if stats.get('a_planifier'): eval_parts.append(f"📅 {stats['a_planifier']} à planifier")
-            if not eval_parts: eval_parts.append("✅ Toutes à jour")
+            if stats.get('retard'): eval_parts.append(f"{stats['retard']} en retard")
+            if stats.get('a_planifier'): eval_parts.append(f"{stats['a_planifier']} à planifier")
+            if not eval_parts: eval_parts.append("Toutes à jour")
 
             self.stats_label.setText(
                 f"<b>{total} polyvalence(s) actuelle(s)</b><br/>"
@@ -274,11 +274,11 @@ class DetailOperateurDialog(QDialog):
 
             if poly['prochaine_evaluation']:
                 if poly['prochaine_evaluation'] < today:
-                    statut = "⚠️ En retard"
+                    statut = "En retard"
                 elif (poly['prochaine_evaluation'] - today).days <= 30:
-                    statut = "📅 À planifier"
+                    statut = "À planifier"
                 else:
-                    statut = "✅ À jour"
+                    statut = "À jour"
             else:
                 statut = "N/A"
             statut_item = QTableWidgetItem(statut)
@@ -492,7 +492,6 @@ class GestionEvaluationDialog(QDialog):
         filter_layout.setSpacing(10)
         filter_layout.setContentsMargins(0, 0, 0, 0)
 
-        filter_layout.addWidget(QLabel("🔍"))
         filter_layout.addWidget(QLabel("Rechercher :"))
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("Nom, prénom ou matricule...")
@@ -551,9 +550,14 @@ class GestionEvaluationDialog(QDialog):
             "_pers_id", "Nom", "Prénom", "Matricule", "Polyvalences", "Évaluations", "Statut"
         ])
         self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Interactive)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Interactive)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
+        self.table.setColumnWidth(1, 160)
+        self.table.setColumnWidth(2, 140)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -568,15 +572,15 @@ class GestionEvaluationDialog(QDialog):
         # === Boutons ===
         btn_layout = QHBoxLayout()
 
-        self.refresh_btn = EmacButton("🔄 Actualiser", variant='primary')
+        self.refresh_btn = EmacButton("Actualiser", variant='primary')
         self.refresh_btn.clicked.connect(self.load_data)
         btn_layout.addWidget(self.refresh_btn)
 
-        self.export_btn = EmacButton("📄 Exporter PDF", variant='ghost')
+        self.export_btn = EmacButton("Exporter PDF", variant='ghost')
         self.export_btn.clicked.connect(self.export_to_pdf)
         btn_layout.addWidget(self.export_btn)
 
-        self.print_btn = EmacButton("🖨️ Imprimer les documents", variant='ghost')
+        self.print_btn = EmacButton("Imprimer les documents", variant='ghost')
         self.print_btn.setToolTip("Ouvrir la fenêtre de sélection des documents à imprimer")
         self.print_btn.clicked.connect(self._imprimer_documents_operateur)
         btn_layout.addWidget(self.print_btn)
@@ -709,8 +713,8 @@ class GestionEvaluationDialog(QDialog):
 
             # Colonne 5: Évaluations en retard/à planifier
             eval_parts = []
-            if oper_data['retard']: eval_parts.append(f"⚠️ {oper_data['retard']} en retard")
-            if oper_data['a_planifier']: eval_parts.append(f"📅 {oper_data['a_planifier']} à planifier")
+            if oper_data['retard']: eval_parts.append(f"{oper_data['retard']} en retard")
+            if oper_data['a_planifier']: eval_parts.append(f"{oper_data['a_planifier']} à planifier")
 
             eval_text = " | ".join(eval_parts) if eval_parts else "—"
             self.table.setItem(row_pos, 5, QTableWidgetItem(eval_text))

@@ -4,7 +4,7 @@ Service de génération automatique de matricules
 Génère des matricules au format M000XXX pour le personnel de production
 """
 
-from infrastructure.db.configbd import get_connection
+from infrastructure.db.query_executor import QueryExecutor
 
 
 def generer_prochain_matricule():
@@ -21,32 +21,12 @@ def generer_prochain_matricule():
     Raises:
         Exception: Si impossible de se connecter à la base de données
     """
-    conn = get_connection()
-    cur = conn.cursor()
-    try:
-        # Trouver le numéro max actuel (en majuscules uniquement)
-        cur.execute("""
-            SELECT MAX(CAST(SUBSTRING(matricule, 2) AS UNSIGNED)) as dernier_numero
-            FROM personnel
-            WHERE matricule REGEXP '^M[0-9]{6}$'
-        """)
-
-        row = cur.fetchone()
-
-        # Si aucun matricule existant, commencer à 1
-        if row is None or row[0] is None:
-            prochain_numero = 1
-        else:
-            prochain_numero = int(row[0]) + 1
-
-        # Formater avec des zéros (M000001, M000002, etc.)
-        matricule = f"M{prochain_numero:06d}"
-
-        return matricule
-
-    finally:
-        cur.close()
-        conn.close()
+    dernier_numero = QueryExecutor.fetch_scalar(
+        "SELECT MAX(CAST(SUBSTRING(matricule, 2) AS UNSIGNED)) FROM personnel WHERE matricule REGEXP '^M[0-9]{6}$'",
+        default=0
+    )
+    prochain_numero = (int(dernier_numero) if dernier_numero else 0) + 1
+    return f"M{prochain_numero:06d}"
 
 
 def matricule_existe(matricule):
@@ -59,18 +39,10 @@ def matricule_existe(matricule):
     Returns:
         bool: True si le matricule existe, False sinon
     """
-    conn = get_connection()
-    cur = conn.cursor()
-    try:
-        cur.execute(
-            "SELECT COUNT(*) FROM personnel WHERE matricule = %s",
-            (matricule,)
-        )
-        count = cur.fetchone()[0]
-        return count > 0
-    finally:
-        cur.close()
-        conn.close()
+    return QueryExecutor.fetch_scalar(
+        "SELECT COUNT(*) FROM personnel WHERE matricule = %s",
+        (matricule,), default=0
+    ) > 0
 
 
 def assigner_matricule_si_production(operateur_id, est_production=True):
@@ -88,39 +60,25 @@ def assigner_matricule_si_production(operateur_id, est_production=True):
     if not est_production:
         return None
 
-    conn = get_connection()
-    cur = conn.cursor()
-    try:
-        # Vérifier si l'opérateur a déjà un matricule
-        cur.execute(
-            "SELECT matricule FROM personnel WHERE id = %s",
-            (operateur_id,)
-        )
-        row = cur.fetchone()
+    row = QueryExecutor.fetch_one(
+        "SELECT matricule FROM personnel WHERE id = %s", (operateur_id,)
+    )
 
-        if row is None:
-            return None
+    if row is None:
+        return None
 
-        matricule_actuel = row[0]
+    matricule_actuel = row[0]
 
-        # Si déjà un matricule, ne rien faire
-        if matricule_actuel is not None and matricule_actuel.strip() != "":
-            return matricule_actuel
+    if matricule_actuel is not None and matricule_actuel.strip() != "":
+        return matricule_actuel
 
-        # Générer et assigner un nouveau matricule
-        nouveau_matricule = generer_prochain_matricule()
+    nouveau_matricule = generer_prochain_matricule()
+    QueryExecutor.execute_write(
+        "UPDATE personnel SET matricule = %s WHERE id = %s",
+        (nouveau_matricule, operateur_id), return_lastrowid=False
+    )
 
-        cur.execute(
-            "UPDATE personnel SET matricule = %s WHERE id = %s",
-            (nouveau_matricule, operateur_id)
-        )
-        conn.commit()
-
-        return nouveau_matricule
-
-    finally:
-        cur.close()
-        conn.close()
+    return nouveau_matricule
 
 
 # ========================= ALIASES POUR COMPATIBILITÉ =========================

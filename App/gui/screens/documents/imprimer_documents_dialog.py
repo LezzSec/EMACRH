@@ -71,7 +71,7 @@ class ImprimerDocumentsDialog(QDialog):
 
         # Header
         hdr = QHBoxLayout()
-        icon = QLabel("🖨️")
+        icon = QLabel("Impression")
         icon.setFont(QFont("Segoe UI", 20))
         hdr.addWidget(icon)
 
@@ -97,7 +97,7 @@ class ImprimerDocumentsDialog(QDialog):
         bar.setSpacing(8)
 
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍  Rechercher un opérateur…")
+        self.search_input.setPlaceholderText("Rechercher un opérateur…")
         self.search_input.textChanged.connect(self._filter_tree)
         bar.addWidget(self.search_input, 1)
 
@@ -139,13 +139,13 @@ class ImprimerDocumentsDialog(QDialog):
 
         btn_row.addStretch()
 
-        self.btn_preview = QPushButton("👁 Visualiser")
+        self.btn_preview = QPushButton("Visualiser")
         self.btn_preview.setObjectName("secondaryButton")
         self.btn_preview.setEnabled(False)
         self.btn_preview.clicked.connect(self._preview_selected)
         btn_row.addWidget(self.btn_preview)
 
-        self.btn_generate = QPushButton("🖨️ Imprimer")
+        self.btn_generate = QPushButton("Imprimer")
         self.btn_generate.setObjectName("primaryButton")
         self.btn_generate.setEnabled(False)
         self.btn_generate.clicked.connect(self._generate_selected)
@@ -238,7 +238,7 @@ class ImprimerDocumentsDialog(QDialog):
                     # Nœuds documents (niveau 1)
                     for doc in documents:
                         doc_item = QTreeWidgetItem(op_item)
-                        doc_item.setText(0, f"  📄 {doc.template_nom}")
+                        doc_item.setText(0, f"  {doc.template_nom}")
                         doc_item.setText(1, self._event_label(doc.event_name))
                         doc_item.setCheckState(0, Qt.Checked)
                         doc_item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsUserCheckable)
@@ -320,11 +320,11 @@ class ImprimerDocumentsDialog(QDialog):
         self.btn_generate.setEnabled(total > 0)
         self.btn_preview.setEnabled(doc_count > 0)
         if doc_count > 0:
-            self.btn_generate.setText(f"🖨️ Imprimer {doc_count} document(s)")
+            self.btn_generate.setText(f"Imprimer {doc_count} document(s)")
         elif no_doc_count > 0:
-            self.btn_generate.setText(f"🖨️ Imprimer ({no_doc_count} sans document)")
+            self.btn_generate.setText(f"Imprimer ({no_doc_count} sans document)")
         else:
-            self.btn_generate.setText("🖨️ Imprimer")
+            self.btn_generate.setText("Imprimer")
 
     def _toggle_all(self, checked: bool):
         """Coche ou décoche tous les opérateurs et documents visibles."""

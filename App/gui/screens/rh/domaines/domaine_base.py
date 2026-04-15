@@ -35,6 +35,7 @@ class DomaineWidget(QWidget):
         self._operateur = operateur
         self._clear()
         self._build(donnees, documents or [])
+        self._layout.addStretch(1)
         self.updateGeometry()
 
     def _clear(self):

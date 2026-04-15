@@ -6,7 +6,7 @@ Expose deux APIs:
 - log_hist()       : synchrone, immédiat (compatibilité + fallback)
 - log_hist_async() : asynchrone, par batch (production - 10-50x moins de requêtes)
 
-✅ Optimisations appliquées:
+Optimisations appliquées:
 - Buffer en mémoire (INSERT par batch)
 - Async logging (thread séparé)
 - INSERT multiple (1 requête pour N logs)
@@ -355,18 +355,18 @@ def log_hist_async(
     """
     Log une action dans la table historique (async, optimisé).
 
-    ✅ Non-bloquant (retour immédiat)
-    ✅ Écriture par batch (10-50x moins de requêtes)
-    ✅ Auto-flush toutes les 10 secondes
+    Non-bloquant (retour immédiat).
+    Écriture par batch (10-50x moins de requêtes).
+    Auto-flush toutes les 10 secondes.
 
     Usage:
         from infrastructure.logging.optimized_db_logger import log_hist_async
 
         # Au lieu de
-        log_hist('INSERT', 'postes', 123, 'Poste créé')  # ❌ 1 requête DB
+        log_hist('INSERT', 'postes', 123, 'Poste créé')  # 1 requête DB
 
         # Utiliser
-        log_hist_async('INSERT', 'postes', 123, 'Poste créé')  # ✅ Buffered
+        log_hist_async('INSERT', 'postes', 123, 'Poste créé')  # Buffered
 
     Args:
         action: Type d'action (INSERT, UPDATE, DELETE, ERROR, ...)

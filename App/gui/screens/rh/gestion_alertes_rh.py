@@ -575,7 +575,7 @@ class GestionAlertesRHDialog(QDialog):
         # Empty state
         if THEME_AVAILABLE:
             self._empty_placeholder = EmptyStatePlaceholder(
-                icon="✅",
+                icon="",
                 title="Aucune alerte",
                 subtitle="Tout est en ordre, aucune alerte a afficher."
             )

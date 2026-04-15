@@ -13,8 +13,9 @@ from PyQt5.QtWidgets import QGridLayout
 
 from gui.components.ui_theme import EmacCard, EmacButton
 from gui.screens.rh.gestion_rh_dialogs import (
-    EditVisiteDialog, EditAccidentDialog, ConsulterDetailDialog,
+    EditVisiteDialog, EditAccidentDialog, EditValiditeDialog, ConsulterDetailDialog,
 )
+from domain.services.rh.medical_service import delete_validite
 from application.permission_manager import can
 from .domaine_base import DomaineWidget
 
@@ -79,21 +80,47 @@ class DomaineMedical(DomaineWidget):
         card_rqth = EmacCard("RQTH / OETH")
         rqth_layout = QHBoxLayout()
 
-        for label, items_list, bg in [("RQTH", rqth_validites, "#f0fdf4"), ("OETH", oeth_validites, "#eff6ff")]:
+        for type_v, items_list, bg in [("RQTH", rqth_validites, "#f0fdf4"), ("OETH", oeth_validites, "#eff6ff")]:
             frame = QFrame()
-            frame.setStyleSheet(f"padding: 8px; background: {bg}; border-radius: 6px;")
+            frame.setStyleSheet(f"QFrame {{ padding: 8px; background: {bg}; border-radius: 6px; }}")
             inner = QVBoxLayout(frame)
-            inner.addWidget(QLabel(f"<b>{label}</b>"))
-            if items_list:
-                latest = items_list[0]
+            inner.setSpacing(4)
+            inner.addWidget(QLabel(f"<b>{type_v}</b>"))
+
+            latest = items_list[0] if items_list else None
+            if latest:
                 date_fin = latest.get('date_fin')
-                statut = "Active" if date_fin and date_fin >= date_class.today() else "Expirée"
-                inner.addWidget(QLabel(f"Statut: {statut}"))
-                inner.addWidget(QLabel(f"Fin: {self._format_date(date_fin)}"))
-                if label == "RQTH" and latest.get('taux_incapacite'):
-                    inner.addWidget(QLabel(f"Taux: {latest['taux_incapacite']}%"))
+                permanent = latest.get('periodicite') == 'Permanent'
+                if permanent:
+                    statut = "Active"
+                else:
+                    statut = "Active" if date_fin and date_fin >= date_class.today() else "Expirée"
+                color = "#16a34a" if statut == "Active" else "#dc2626"
+                lbl_statut = QLabel(f"<span style='color:{color};font-weight:600;'>Oui — {statut}</span>")
+                inner.addWidget(lbl_statut)
+                if permanent:
+                    inner.addWidget(QLabel("Validité : <b>Permanente</b>"))
+                else:
+                    inner.addWidget(QLabel(f"Validité : {self._format_date(date_fin)}"))
+                if type_v == 'OETH' and latest.get('taux_incapacite') is not None:
+                    inner.addWidget(QLabel(f"Taux d'incapacité : {latest['taux_incapacite']} %"))
+                if can("rh.medical.edit"):
+                    btn_row = QHBoxLayout()
+                    btn_mod = EmacButton("Modifier", variant="outline")
+                    btn_mod.clicked.connect(lambda checked, tv=type_v, v=latest: self._edit_validite(tv, v))
+                    btn_row.addWidget(btn_mod)
+                    btn_del = EmacButton("Supprimer", variant="danger")
+                    btn_del.clicked.connect(lambda checked, v=latest: self._delete_validite(v))
+                    btn_row.addWidget(btn_del)
+                    btn_row.addStretch()
+                    inner.addLayout(btn_row)
             else:
                 inner.addWidget(QLabel("Non applicable"))
+                if can("rh.medical.edit"):
+                    btn_decl = EmacButton(f"Déclarer {type_v}", variant="primary")
+                    btn_decl.clicked.connect(lambda checked, tv=type_v: self._add_validite(tv))
+                    inner.addWidget(btn_decl)
+
             rqth_layout.addWidget(frame)
 
         card_rqth.body.addLayout(rqth_layout)
@@ -277,3 +304,31 @@ class DomaineMedical(DomaineWidget):
         )
         if reply == QMessageBox.Yes:
             self._vm.supprimer_accident(accident['id'])
+
+    def _add_validite(self, type_validite: str):
+        if not self._operateur:
+            return
+        dialog = EditValiditeDialog(self._operateur['id'], type_validite, None, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.refresh_requested.emit()
+
+    def _edit_validite(self, type_validite: str, validite: dict):
+        if not self._operateur:
+            return
+        dialog = EditValiditeDialog(self._operateur['id'], type_validite, validite, self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.refresh_requested.emit()
+
+    def _delete_validite(self, validite: dict):
+        type_v = validite.get('type_validite', '')
+        reply = QMessageBox.question(
+            self, "Confirmer la suppression",
+            f"Voulez-vous vraiment supprimer la déclaration {type_v} ?",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            success, message = delete_validite(validite['id'])
+            if success:
+                self.refresh_requested.emit()
+            else:
+                QMessageBox.critical(self, "Erreur", "Impossible de supprimer la déclaration.")

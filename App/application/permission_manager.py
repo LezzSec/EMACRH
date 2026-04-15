@@ -507,32 +507,24 @@ def save_role_features(role_id: int, feature_keys: Set[str]) -> tuple[bool, Opti
     Returns:
         (success, error_message)
     """
-    from infrastructure.db.configbd import get_connection
+    from infrastructure.db.configbd import DatabaseConnection
     from domain.services.admin.auth_service import is_admin, get_current_user
     from infrastructure.logging.optimized_db_logger import log_hist_async
 
     if not is_admin():
         return False, "Seuls les administrateurs peuvent modifier les permissions"
 
-    conn = get_connection()
-    if not conn:
-        return False, "Erreur de connexion à la base de données"
-
-    cur = conn.cursor()
     try:
-        # Supprimer les features existantes
-        cur.execute("DELETE FROM role_features WHERE role_id = %s", (role_id,))
+        with DatabaseConnection() as conn:
+            cur = conn.cursor()
+            cur.execute("DELETE FROM role_features WHERE role_id = %s", (role_id,))
+            for key in feature_keys:
+                cur.execute(
+                    "INSERT INTO role_features (role_id, feature_key) VALUES (%s, %s)",
+                    (role_id, key)
+                )
+            cur.close()
 
-        # Insérer les nouvelles
-        for key in feature_keys:
-            cur.execute("""
-                INSERT INTO role_features (role_id, feature_key)
-                VALUES (%s, %s)
-            """, (role_id, key))
-
-        conn.commit()
-
-        # Log
         current_user = get_current_user()
         log_hist_async(
             action="MODIFICATION_FEATURES_ROLE",
@@ -546,11 +538,7 @@ def save_role_features(role_id: int, feature_keys: Set[str]) -> tuple[bool, Opti
 
     except Exception as e:
         logger.error(f"Erreur save_role_features: {e}")
-        conn.rollback()
         return False, "Une erreur est survenue lors de la sauvegarde des features"
-    finally:
-        cur.close()
-        conn.close()
 
 
 def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool]]) -> tuple[bool, Optional[str]]:
@@ -565,7 +553,7 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
     Returns:
         (success, error_message)
     """
-    from infrastructure.db.configbd import get_connection
+    from infrastructure.db.configbd import DatabaseConnection
     from domain.services.admin.auth_service import is_admin, get_current_user
     from infrastructure.logging.optimized_db_logger import log_hist_async
     from infrastructure.cache.emac_cache import invalidate_user_cache
@@ -573,40 +561,33 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
     if not is_admin():
         return False, "Seuls les administrateurs peuvent modifier les permissions"
 
-    conn = get_connection()
-    if not conn:
-        return False, "Erreur de connexion à la base de données"
-
-    cur = conn.cursor()
     current_user = get_current_user()
     modifier_id = current_user['id'] if current_user else None
 
     try:
-        for feature_key, value in overrides.items():
-            if value is None:
-                # Supprimer l'override
-                cur.execute("""
-                    DELETE FROM user_features
-                    WHERE user_id = %s AND feature_key = %s
-                """, (user_id, feature_key))
-            else:
-                # Upsert
-                cur.execute("""
-                    INSERT INTO user_features (user_id, feature_key, value, modifie_par)
-                    VALUES (%s, %s, %s, %s)
-                    ON DUPLICATE KEY UPDATE
-                        value = VALUES(value),
-                        modifie_par = VALUES(modifie_par),
-                        date_modification = CURRENT_TIMESTAMP
-                """, (user_id, feature_key, value, modifier_id))
-
-        conn.commit()
+        with DatabaseConnection() as conn:
+            cur = conn.cursor()
+            for feature_key, value in overrides.items():
+                if value is None:
+                    cur.execute(
+                        "DELETE FROM user_features WHERE user_id = %s AND feature_key = %s",
+                        (user_id, feature_key)
+                    )
+                else:
+                    cur.execute(
+                        """INSERT INTO user_features (user_id, feature_key, value, modifie_par)
+                           VALUES (%s, %s, %s, %s)
+                           ON DUPLICATE KEY UPDATE
+                               value = VALUES(value),
+                               modifie_par = VALUES(modifie_par),
+                               date_modification = CURRENT_TIMESTAMP""",
+                        (user_id, feature_key, value, modifier_id)
+                    )
+            cur.close()
 
         # SÉCURITÉ: Invalider le cache ET recharger le PermissionManager
-        # pour éviter les race conditions TOCTOU
         invalidate_user_cache(reload_current_user=True)
 
-        # Log
         log_hist_async(
             action="MODIFICATION_FEATURES_UTILISATEUR",
             table_name="user_features",
@@ -619,16 +600,12 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
 
     except Exception as e:
         logger.error(f"Erreur save_user_feature_overrides: {e}")
-        conn.rollback()
         return False, "Une erreur est survenue lors de la sauvegarde des overrides"
-    finally:
-        cur.close()
-        conn.close()
 
 
 def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
     """Supprime tous les overrides d'un utilisateur"""
-    from infrastructure.db.configbd import get_connection
+    from infrastructure.db.query_executor import QueryExecutor
     from domain.services.admin.auth_service import is_admin, get_current_user
     from infrastructure.logging.optimized_db_logger import log_hist_async
     from infrastructure.cache.emac_cache import invalidate_user_cache
@@ -636,14 +613,10 @@ def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
     if not is_admin():
         return False, "Seuls les administrateurs peuvent modifier les permissions"
 
-    conn = get_connection()
-    if not conn:
-        return False, "Erreur de connexion à la base de données"
-
-    cur = conn.cursor()
     try:
-        cur.execute("DELETE FROM user_features WHERE user_id = %s", (user_id,))
-        conn.commit()
+        QueryExecutor.execute_write(
+            "DELETE FROM user_features WHERE user_id = %s", (user_id,), return_lastrowid=False
+        )
 
         # SÉCURITÉ: Invalider le cache ET recharger le PermissionManager
         invalidate_user_cache(reload_current_user=True)
@@ -661,11 +634,7 @@ def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
 
     except Exception as e:
         logger.error(f"Erreur reset_user_feature_overrides: {e}")
-        conn.rollback()
         return False, "Une erreur est survenue lors de la réinitialisation des overrides"
-    finally:
-        cur.close()
-        conn.close()
 
 
 # ===========================

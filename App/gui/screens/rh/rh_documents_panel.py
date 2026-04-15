@@ -3,7 +3,7 @@
 Panneau de documents : documents actifs + archives d'un opérateur par domaine.
 """
 from PyQt5.QtWidgets import (
-    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame, QMessageBox,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QFrame, QMessageBox,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont
@@ -21,6 +21,7 @@ class RhDocumentsPanel(QWidget):
     """
 
     refresh_requested = pyqtSignal()
+    show_archives_requested = pyqtSignal()  # émis après archivage pour activer la vue archives
 
     def __init__(self, vm, parent=None):
         super().__init__(parent)
@@ -61,7 +62,7 @@ class RhDocumentsPanel(QWidget):
 
     def show_archives(self, archives: list):
         self._clear()
-        card = EmacCard(f"📦 Documents archivés ({len(archives)})")
+        card = EmacCard(f"Documents archivés ({len(archives)})")
 
         if not archives:
             label = QLabel("Aucun document archivé")
@@ -99,7 +100,7 @@ class RhDocumentsPanel(QWidget):
         info_layout = QVBoxLayout()
         info_layout.setSpacing(2)
 
-        prefix = "📦 " if archived else ""
+        prefix = ""
         nom_label = QLabel(f"{prefix}{doc.get('nom_affichage', '-')}")
         nom_label.setFont(QFont("Segoe UI", 10, QFont.Bold))
         nom_label.setStyleSheet(f"color: {'#6b7280' if archived else '#1f2937'}; background: transparent;")
@@ -116,32 +117,17 @@ class RhDocumentsPanel(QWidget):
         doc_id = doc.get('id')
 
         if archived:
-            btn_restaurer = QPushButton("🔄 Restaurer")
+            btn_restaurer = EmacButton("Restaurer", variant="ghost")
             btn_restaurer.setVisible(can("rh.documents.edit"))
-            btn_restaurer.setCursor(Qt.PointingHandCursor)
-            btn_restaurer.setStyleSheet("""
-                QPushButton { background: #10b981; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: bold; }
-                QPushButton:hover { background: #059669; }
-            """)
             btn_restaurer.clicked.connect(lambda checked, d=doc_id: self._restaurer_document(d))
             doc_layout.addWidget(btn_restaurer)
         else:
-            btn_archiver = QPushButton("📦 Archiver")
+            btn_archiver = EmacButton("Archiver", variant="ghost")
             btn_archiver.setVisible(can("rh.documents.edit"))
-            btn_archiver.setCursor(Qt.PointingHandCursor)
-            btn_archiver.setStyleSheet("""
-                QPushButton { background: #f59e0b; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: bold; }
-                QPushButton:hover { background: #d97706; }
-            """)
             btn_archiver.clicked.connect(lambda checked, d=doc_id: self._archiver_document(d))
             doc_layout.addWidget(btn_archiver)
 
-        btn_ouvrir = QPushButton("📂 Ouvrir")
-        btn_ouvrir.setCursor(Qt.PointingHandCursor)
-        btn_ouvrir.setStyleSheet("""
-            QPushButton { background: #3b82f6; color: white; border: none; border-radius: 6px; padding: 8px 16px; font-weight: bold; }
-            QPushButton:hover { background: #2563eb; }
-        """)
+        btn_ouvrir = EmacButton("Ouvrir", variant="ghost")
         btn_ouvrir.clicked.connect(lambda checked, d=doc_id: self._vm.ouvrir_document(d))
         doc_layout.addWidget(btn_ouvrir)
 
@@ -167,6 +153,7 @@ class RhDocumentsPanel(QWidget):
             QMessageBox.Yes | QMessageBox.No, QMessageBox.No
         )
         if reply == QMessageBox.Yes:
+            self.show_archives_requested.emit()
             self._vm.archiver_document(doc_id)
 
     def _restaurer_document(self, doc_id: int):

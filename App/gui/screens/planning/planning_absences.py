@@ -8,7 +8,7 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QTableWidget, QTableWidgetItem, QWidget, QDateEdit, QComboBox,
     QTextEdit, QMessageBox, QHeaderView, QRadioButton, QButtonGroup,
-    QGroupBox, QCalendarWidget, QSplitter
+    QGroupBox, QCalendarWidget, QSplitter, QFrame
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QBrush
@@ -182,8 +182,8 @@ class PlanningAbsencesDialog(QDialog):
         right_widget = QWidget()
         right_widget.setStyleSheet("background: white; border-radius: 8px;")
         right_layout = QVBoxLayout(right_widget)
-        right_layout.setContentsMargins(16, 16, 16, 16)
-        right_layout.setSpacing(12)
+        right_layout.setContentsMargins(14, 14, 14, 14)
+        right_layout.setSpacing(10)
 
         # Date sélectionnée
         self.selected_date_label = QLabel("Selectionnez une date")
@@ -198,47 +198,26 @@ class PlanningAbsencesDialog(QDialog):
         """)
         right_layout.addWidget(self.selected_date_label)
 
-        # Stats rapides
-        stats_layout = QHBoxLayout()
-        stats_layout.setSpacing(8)
+        # === Zone 1 : Absences + Evaluations côte à côte ===
+        day_sections_layout = QHBoxLayout()
+        day_sections_layout.setSpacing(8)
 
-        self.nb_absents_label = QLabel("0 absent(s)")
-        self.nb_absents_label.setFont(QFont("Arial", 11, QFont.Bold))
-        self.nb_absents_label.setStyleSheet("""
-            color: #dc2626;
-            background: #fee2e2;
-            border-radius: 6px;
-            padding: 4px 10px;
+        # -- Panel Absences --
+        abs_panel = QFrame()
+        abs_panel.setStyleSheet("background: #fff5f5; border-radius: 8px; border: 1px solid #fecaca;")
+        abs_layout = QVBoxLayout(abs_panel)
+        abs_layout.setContentsMargins(0, 0, 0, 0)
+        abs_layout.setSpacing(0)
+
+        self.abs_header_label = QLabel("  ABSENCES — 0")
+        self.abs_header_label.setFont(QFont("Arial", 10, QFont.Bold))
+        self.abs_header_label.setStyleSheet("""
+            background: #dc2626;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 7px 7px 0 0;
         """)
-        stats_layout.addWidget(self.nb_absents_label)
-
-        self.nb_evaluations_label = QLabel("0 evaluation(s)")
-        self.nb_evaluations_label.setFont(QFont("Arial", 11, QFont.Bold))
-        self.nb_evaluations_label.setStyleSheet("""
-            color: #92400e;
-            background: #fef3c7;
-            border-radius: 6px;
-            padding: 4px 10px;
-        """)
-        stats_layout.addWidget(self.nb_evaluations_label)
-
-        self.nb_docs_label = QLabel("0 doc(s) expirant")
-        self.nb_docs_label.setFont(QFont("Arial", 11, QFont.Bold))
-        self.nb_docs_label.setStyleSheet("""
-            color: #7c3aed;
-            background: #ede9fe;
-            border-radius: 6px;
-            padding: 4px 10px;
-        """)
-        stats_layout.addWidget(self.nb_docs_label)
-
-        stats_layout.addStretch()
-        right_layout.addLayout(stats_layout)
-
-        # Section absences
-        lbl_absents = QLabel("Personnes absentes ce jour :")
-        lbl_absents.setStyleSheet(_SECTION_LABEL)
-        right_layout.addWidget(lbl_absents)
+        abs_layout.addWidget(self.abs_header_label)
 
         self.absents_table = QTableWidget()
         self.absents_table.setColumnCount(4)
@@ -247,17 +226,30 @@ class PlanningAbsencesDialog(QDialog):
         self.absents_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.absents_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.absents_table.setAlternatingRowColors(True)
-        self.absents_table.setMaximumHeight(140)
         self.absents_table.setStyleSheet("""
-            QTableWidget { border: 1px solid #f3f4f6; border-radius: 6px; }
-            QHeaderView::section { background: #f9fafb; font-weight: bold; font-size: 11px; }
+            QTableWidget { border: none; background: transparent; }
+            QHeaderView::section { background: #fee2e2; font-weight: bold; font-size: 10px; color: #991b1b; border: none; padding: 4px; }
+            QTableWidget::item { padding: 3px; }
         """)
-        right_layout.addWidget(self.absents_table)
+        abs_layout.addWidget(self.absents_table)
+        day_sections_layout.addWidget(abs_panel)
 
-        # Section évaluations
-        lbl_evals = QLabel("Evaluations prevues ce jour :")
-        lbl_evals.setStyleSheet(_SECTION_LABEL)
-        right_layout.addWidget(lbl_evals)
+        # -- Panel Evaluations --
+        eval_panel = QFrame()
+        eval_panel.setStyleSheet("background: #fffbeb; border-radius: 8px; border: 1px solid #fde68a;")
+        eval_layout = QVBoxLayout(eval_panel)
+        eval_layout.setContentsMargins(0, 0, 0, 0)
+        eval_layout.setSpacing(0)
+
+        self.eval_header_label = QLabel("  EVALUATIONS — 0")
+        self.eval_header_label.setFont(QFont("Arial", 10, QFont.Bold))
+        self.eval_header_label.setStyleSheet("""
+            background: #d97706;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 7px 7px 0 0;
+        """)
+        eval_layout.addWidget(self.eval_header_label)
 
         self.evaluations_table = QTableWidget()
         self.evaluations_table.setColumnCount(3)
@@ -266,17 +258,32 @@ class PlanningAbsencesDialog(QDialog):
         self.evaluations_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.evaluations_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.evaluations_table.setAlternatingRowColors(True)
-        self.evaluations_table.setMaximumHeight(140)
         self.evaluations_table.setStyleSheet("""
-            QTableWidget { border: 1px solid #f3f4f6; border-radius: 6px; }
-            QHeaderView::section { background: #f9fafb; font-weight: bold; font-size: 11px; }
+            QTableWidget { border: none; background: transparent; }
+            QHeaderView::section { background: #fef3c7; font-weight: bold; font-size: 10px; color: #92400e; border: none; padding: 4px; }
+            QTableWidget::item { padding: 3px; }
         """)
-        right_layout.addWidget(self.evaluations_table)
+        eval_layout.addWidget(self.evaluations_table)
+        day_sections_layout.addWidget(eval_panel)
 
-        # Section documents expirant
-        lbl_docs = QLabel("Documents expirant (30 jours) :")
-        lbl_docs.setStyleSheet(_SECTION_LABEL)
-        right_layout.addWidget(lbl_docs)
+        right_layout.addLayout(day_sections_layout)
+
+        # === Zone 2 : Alertes du mois ===
+        docs_panel = QFrame()
+        docs_panel.setStyleSheet("background: #f5f3ff; border-radius: 8px; border: 1px solid #ddd6fe;")
+        docs_layout = QVBoxLayout(docs_panel)
+        docs_layout.setContentsMargins(0, 0, 0, 0)
+        docs_layout.setSpacing(0)
+
+        self.docs_header_label = QLabel("  ALERTES DU MOIS — Documents expirant (30 j)  —  0")
+        self.docs_header_label.setFont(QFont("Arial", 10, QFont.Bold))
+        self.docs_header_label.setStyleSheet("""
+            background: #7c3aed;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 7px 7px 0 0;
+        """)
+        docs_layout.addWidget(self.docs_header_label)
 
         self.docs_table = QTableWidget()
         self.docs_table.setColumnCount(3)
@@ -287,18 +294,20 @@ class PlanningAbsencesDialog(QDialog):
         self.docs_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.docs_table.setEditTriggers(QTableWidget.NoEditTriggers)
         self.docs_table.setAlternatingRowColors(True)
-        self.docs_table.setMaximumHeight(120)
+        self.docs_table.setMaximumHeight(130)
         self.docs_table.setStyleSheet("""
-            QTableWidget { border: 1px solid #f3f4f6; border-radius: 6px; }
-            QHeaderView::section { background: #f9fafb; font-weight: bold; font-size: 11px; }
+            QTableWidget { border: none; background: transparent; }
+            QHeaderView::section { background: #ede9fe; font-weight: bold; font-size: 10px; color: #5b21b6; border: none; padding: 4px; }
+            QTableWidget::item { padding: 3px; }
         """)
-        right_layout.addWidget(self.docs_table)
+        docs_layout.addWidget(self.docs_table)
+        right_layout.addWidget(docs_panel)
 
         right_layout.addStretch()
 
         splitter.addWidget(right_widget)
-        splitter.setStretchFactor(0, 60)
-        splitter.setStretchFactor(1, 40)
+        splitter.setStretchFactor(0, 65)
+        splitter.setStretchFactor(1, 35)
 
         layout.addWidget(splitter)
 
@@ -504,9 +513,9 @@ class PlanningAbsencesDialog(QDialog):
         absences = self.absences_by_date.get(date_key, [])
         evaluations = self.evaluations_by_date.get(date_key, [])
 
-        # Mettre à jour les stats
-        self.nb_absents_label.setText(f"{len(absences)} absent(s)")
-        self.nb_evaluations_label.setText(f"{len(evaluations)} évaluation(s)")
+        # Mettre à jour les en-têtes de section
+        self.abs_header_label.setText(f"  ABSENCES — {len(absences)}")
+        self.eval_header_label.setText(f"  EVALUATIONS — {len(evaluations)}")
 
         # Remplir la table des absences
         self.absents_table.setRowCount(len(absences))
@@ -558,7 +567,7 @@ class PlanningAbsencesDialog(QDialog):
                 self.docs_table.setItem(i, 1, item_doc)
                 self.docs_table.setItem(i, 2, item_j)
 
-            self.nb_docs_label.setText(f"{len(rows)} doc(s) expirant")
+            self.docs_header_label.setText(f"  ALERTES DU MOIS — Documents expirant (30 j)  —  {len(rows)}")
         except Exception:
             logger.exception("Erreur chargement documents expirant")
             self.docs_table.setRowCount(0)

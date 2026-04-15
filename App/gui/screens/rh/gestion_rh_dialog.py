@@ -136,7 +136,7 @@ class GestionRHDialog(QDialog):
         layout = QVBoxLayout(widget)
         layout.setAlignment(Qt.AlignCenter)
 
-        icon = QLabel("👤")
+        icon = QLabel("")
         icon.setFont(QFont("Segoe UI", 48))
         icon.setAlignment(Qt.AlignCenter)
         layout.addWidget(icon)
@@ -190,6 +190,7 @@ class GestionRHDialog(QDialog):
         ]:
             widget_domaine = domaine_cls(self._vm)
             widget_domaine.refresh_requested.connect(self._charger_contenu_domaine)
+            widget_domaine.refresh_requested.connect(self.data_changed)
             self._domain_stack.addWidget(widget_domaine)
             self._domaine_widgets[domaine_key] = widget_domaine
 
@@ -197,6 +198,8 @@ class GestionRHDialog(QDialog):
 
         self._docs_panel = RhDocumentsPanel(self._vm)
         self._docs_panel.refresh_requested.connect(self._on_document_action)
+        self._docs_panel.refresh_requested.connect(self.data_changed)
+        self._docs_panel.show_archives_requested.connect(self._header.activate_archives)
         self._docs_panel.setVisible(False)
         inner_layout.addWidget(self._docs_panel)
 
@@ -321,8 +324,6 @@ class GestionRHDialog(QDialog):
             self._docs_panel.setVisible(True)
         else:
             self._docs_panel.setVisible(False)
-
-        self.data_changed.emit()
 
     def _on_archives_loaded(self, archives: list):
         self._header.update_archives_count(len(archives))

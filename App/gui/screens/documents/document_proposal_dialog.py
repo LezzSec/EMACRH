@@ -102,7 +102,7 @@ class DocumentProposalDialog(QDialog):
                 padding: 6px;
             }
         """)
-        icon_label.setText("📄")
+        icon_label.setText("Doc")
         icon_label.setAlignment(Qt.AlignCenter)
         header_layout.addWidget(icon_label)
 

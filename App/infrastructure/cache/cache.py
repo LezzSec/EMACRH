@@ -3,13 +3,13 @@
 Système de cache mémoire pour EMAC.
 Permet de stocker en mémoire des données fréquemment utilisées avec TTL.
 
-✅ Utilisation :
+Utilisation :
     - Postes (rarement modifiés)
     - Permissions / User (changent peu)
     - Listes statiques (rôles, types, etc.)
     - État des écrans (dialog state)
 
-✅ Avantages :
+Avantages :
     - Évite les requêtes DB répétées
     - Gains 100-1000x sur données cachées
     - TTL automatique (expiration)
@@ -17,10 +17,13 @@ Permet de stocker en mémoire des données fréquemment utilisées avec TTL.
 """
 
 import time
+import threading
 from typing import Any, Optional, Callable, Dict
 from dataclasses import dataclass
 from datetime import datetime
 from threading import RLock
+
+_CLEANUP_INTERVAL_SECONDS = 300  # Purge des entrées expirées toutes les 5 minutes
 
 
 # ===========================
@@ -55,7 +58,7 @@ class CacheManager:
     """
     Gestionnaire de cache mémoire thread-safe avec TTL.
 
-    ✅ Features :
+    Features :
         - TTL par clé
         - Invalidation manuelle ou automatique
         - Thread-safe (RLock)
@@ -96,6 +99,20 @@ class CacheManager:
         self._hits = 0
         self._misses = 0
         self._namespaces: Dict[str, set] = {}  # namespace -> set de clés
+        self._start_cleanup_thread()
+
+    def _start_cleanup_thread(self):
+        """Démarre un thread daemon qui purge les entrées expirées périodiquement."""
+        def _loop():
+            while True:
+                time.sleep(_CLEANUP_INTERVAL_SECONDS)
+                try:
+                    self.cleanup_expired()
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=_loop, daemon=True, name='emac-cache-cleanup')
+        t.start()
 
     @classmethod
     def get_instance(cls) -> 'CacheManager':
@@ -421,7 +438,7 @@ def print_cache_stats():
     stats = cache.get_stats()
 
     print("="*60)
-    print("📊 Cache Statistics")
+    print("Cache Statistics")
     print("="*60)
     print(f"Hits          : {stats['hits']}")
     print(f"Misses        : {stats['misses']}")

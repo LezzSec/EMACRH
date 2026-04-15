@@ -19,7 +19,6 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 
 from infrastructure.db.query_executor import QueryExecutor
-from infrastructure.db.configbd import get_connection
 from infrastructure.logging.optimized_db_logger import log_hist
 from infrastructure.logging.logging_config import get_logger
 from infrastructure.config.date_format import format_date, format_timestamp
@@ -324,10 +323,7 @@ def upload_template(
         if type_mime is None:
             type_mime = "application/octet-stream"
 
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
+        QueryExecutor.execute_write(
             """UPDATE documents_templates
                SET contenu_fichier = %s,
                    type_mime = %s,
@@ -335,11 +331,9 @@ def upload_template(
                    stockage_type = 'BLOB',
                    fichier_source = %s
                WHERE id = %s""",
-            (contenu, type_mime, taille, source_path.name, template_id)
+            (contenu, type_mime, taille, source_path.name, template_id),
+            return_lastrowid=False
         )
-        conn.commit()
-        cursor.close()
-        conn.close()
 
         logger.info(f"Template ID {template_id} uploade en BLOB ({taille} octets)")
         return True, f"Template mis a jour avec succes ({source_path.name})"
@@ -400,10 +394,7 @@ def add_template(
 
         postes_json = json.dumps(postes_associes) if postes_associes else None
 
-        conn = get_connection()
-        cursor = conn.cursor()
-
-        cursor.execute(
+        template_id = QueryExecutor.execute_write(
             """INSERT INTO documents_templates (
                 nom, fichier_source, contenu_fichier, type_mime, taille_octets,
                 stockage_type, contexte, postes_associes,
@@ -419,11 +410,6 @@ def add_template(
                 obligatoire, description, ordre_affichage
             )
         )
-
-        template_id = cursor.lastrowid
-        conn.commit()
-        cursor.close()
-        conn.close()
 
         logger.info(f"Nouveau template '{nom}' ajoute en BLOB (ID: {template_id})")
         return True, f"Template '{nom}' ajoute avec succes", template_id

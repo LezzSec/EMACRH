@@ -494,7 +494,8 @@ class PersonnelRepository(BaseRepository[Personnel]):
             SELECT p.id, p.nom, p.prenom, p.matricule, p.statut, pi.date_entree
             FROM personnel p
             LEFT JOIN personnel_infos pi ON p.id = pi.personnel_id
-            WHERE pi.date_entree IS NULL OR pi.personnel_id IS NULL
+            WHERE (pi.date_entree IS NULL OR pi.personnel_id IS NULL)
+              AND p.statut = 'ACTIF'
             ORDER BY p.nom, p.prenom
             """,
             dictionary=True,

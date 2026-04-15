@@ -246,6 +246,17 @@ def _get_donnees_general(operateur_id: int) -> Dict:
                 else:
                     donnees['anciennete'] = f"{max(mois, 0)} mois"
 
+        # Données mobilité (véhicule + distance + prime)
+        try:
+            from domain.services.rh import mobilite_service
+            donnees['mobilite'] = mobilite_service.get_mobilite(operateur_id)
+            donnees['vehicule'] = mobilite_service.get_vehicule_actif(operateur_id)
+            donnees['prime_mobilite'] = mobilite_service.get_prime_courante(operateur_id)
+        except Exception:
+            donnees['mobilite'] = None
+            donnees['vehicule'] = None
+            donnees['prime_mobilite'] = None
+
         return donnees
 
     except Exception as e:

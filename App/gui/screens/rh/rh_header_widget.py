@@ -141,11 +141,15 @@ class RhHeaderWidget(QWidget):
         else:
             self.btn_archives.setVisible(False)
 
-    def _on_archives_click(self):
+    def activate_archives(self):
+        """Active la vue archives (appelable programmatiquement)."""
         for btn in self.boutons_domaines.values():
             btn.setChecked(False)
         self.btn_archives.setChecked(True)
         self.archives_clicked.emit()
+
+    def _on_archives_click(self):
+        self.activate_archives()
 
     @property
     def archives_actif(self) -> bool:
