@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS jours_feries (
 
 -- Insertion des jours fériés français 2025
 INSERT INTO jours_feries (date_ferie, libelle, fixe) VALUES
-('2025-01-01', 'Jour de l\'An', TRUE),
+('2025-01-01', 'Jour de l''An', TRUE),
 ('2025-04-21', 'Lundi de Pâques', FALSE),
 ('2025-05-01', 'Fête du Travail', TRUE),
 ('2025-05-08', 'Victoire 1945', TRUE),

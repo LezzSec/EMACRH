@@ -550,14 +550,8 @@ class GestionEvaluationDialog(QDialog):
             "_pers_id", "Nom", "Prénom", "Matricule", "Polyvalences", "Évaluations", "Statut"
         ])
         self.table.setColumnHidden(0, True)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Interactive)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Stretch)
-        self.table.setColumnWidth(1, 160)
-        self.table.setColumnWidth(2, 140)
+        for col in range(1, 7):
+            self.table.horizontalHeader().setSectionResizeMode(col, QHeaderView.Stretch)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)

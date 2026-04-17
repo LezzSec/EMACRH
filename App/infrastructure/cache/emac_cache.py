@@ -6,6 +6,7 @@ Fournit des fonctions de cache pour les cas d'usage courants.
 
 from typing import Optional, List, Dict, Any
 from infrastructure.cache.cache import CacheManager, CacheTTL, cached
+from infrastructure.db.query_executor import QueryExecutor
 
 
 # ===========================
@@ -22,18 +23,14 @@ def get_cached_postes() -> List[Dict]:
     Returns:
         Liste des postes avec leurs infos
     """
-    from infrastructure.db.configbd import DatabaseCursor
-
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT p.id, p.poste_code, p.nom, p.atelier_id, p.statut,
-                   a.nom as atelier_nom
-            FROM postes p
-            LEFT JOIN atelier a ON p.atelier_id = a.id
-            WHERE p.statut = 'ACTIF'
-            ORDER BY p.poste_code
-        """)
-        return cur.fetchall()
+    return QueryExecutor.fetch_all("""
+        SELECT p.id, p.poste_code, p.nom, p.atelier_id, p.statut,
+               a.nom as atelier_nom
+        FROM postes p
+        LEFT JOIN atelier a ON p.atelier_id = a.id
+        WHERE p.statut = 'ACTIF'
+        ORDER BY p.poste_code
+    """, dictionary=True)
 
 
 @cached(ttl=CacheTTL.MEDIUM, namespace='postes', key_prefix='postes:actifs')
@@ -46,16 +43,12 @@ def get_cached_postes_actifs() -> List[Dict]:
     Returns:
         Liste des postes actifs
     """
-    from infrastructure.db.configbd import DatabaseCursor
-
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT id, poste_code, nom, atelier_id
-            FROM postes
-            WHERE statut = 'ACTIF'
-            ORDER BY poste_code
-        """)
-        return cur.fetchall()
+    return QueryExecutor.fetch_all("""
+        SELECT id, poste_code, nom, atelier_id
+        FROM postes
+        WHERE statut = 'ACTIF'
+        ORDER BY poste_code
+    """, dictionary=True)
 
 
 @cached(ttl=CacheTTL.MEDIUM, namespace='postes', key_prefix='poste:by_id')
@@ -69,17 +62,13 @@ def get_cached_poste_by_id(poste_id: int) -> Optional[Dict]:
     Returns:
         Dictionnaire du poste ou None
     """
-    from infrastructure.db.configbd import DatabaseCursor
-
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT p.id, p.poste_code, p.nom, p.atelier_id, p.statut,
-                   a.nom as atelier_nom
-            FROM postes p
-            LEFT JOIN atelier a ON p.atelier_id = a.id
-            WHERE p.id = %s
-        """, (poste_id,))
-        return cur.fetchone()
+    return QueryExecutor.fetch_one("""
+        SELECT p.id, p.poste_code, p.nom, p.atelier_id, p.statut,
+               a.nom as atelier_nom
+        FROM postes p
+        LEFT JOIN atelier a ON p.atelier_id = a.id
+        WHERE p.id = %s
+    """, (poste_id,), dictionary=True)
 
 
 def invalidate_postes_cache():
@@ -172,11 +161,9 @@ def get_cached_roles() -> List[Dict]:
     Returns:
         Liste des rôles
     """
-    from infrastructure.db.configbd import DatabaseCursor
-
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("SELECT id, nom, description FROM roles ORDER BY id")
-        return cur.fetchall()
+    return QueryExecutor.fetch_all(
+        "SELECT id, nom, description FROM roles ORDER BY id", dictionary=True
+    )
 
 
 @cached(ttl=CacheTTL.LONG, namespace='static', key_prefix='ateliers:all')
@@ -189,11 +176,9 @@ def get_cached_ateliers() -> List[Dict]:
     Returns:
         Liste des ateliers
     """
-    from infrastructure.db.configbd import DatabaseCursor
-
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("SELECT id, nom FROM atelier ORDER BY nom")
-        return cur.fetchall()
+    return QueryExecutor.fetch_all(
+        "SELECT id, nom FROM atelier ORDER BY nom", dictionary=True
+    )
 
 
 @cached(ttl=CacheTTL.LONG, namespace='static', key_prefix='types_contrat:all')
@@ -298,16 +283,12 @@ def get_cached_personnel_actifs() -> List[Dict]:
     Returns:
         Liste du personnel actif
     """
-    from infrastructure.db.configbd import DatabaseCursor
-
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT id, nom, prenom, matricule, statut
-            FROM personnel
-            WHERE statut = 'ACTIF'
-            ORDER BY nom, prenom
-        """)
-        return cur.fetchall()
+    return QueryExecutor.fetch_all("""
+        SELECT id, nom, prenom, matricule, statut
+        FROM personnel
+        WHERE statut = 'ACTIF'
+        ORDER BY nom, prenom
+    """, dictionary=True)
 
 
 @cached(ttl=CacheTTL.SHORT, namespace='personnel', key_prefix='personnel:count')
@@ -320,16 +301,11 @@ def get_cached_personnel_count() -> Dict[str, int]:
     Returns:
         Dict {statut: count}
     """
-    from infrastructure.db.configbd import DatabaseCursor
-
-    with DatabaseCursor(dictionary=True) as cur:
-        cur.execute("""
-            SELECT statut, COUNT(*) as count
-            FROM personnel
-            GROUP BY statut
-        """)
-        rows = cur.fetchall()
-        return {row['statut']: row['count'] for row in rows}
+    rows = QueryExecutor.fetch_all(
+        "SELECT statut, COUNT(*) as count FROM personnel GROUP BY statut",
+        dictionary=True
+    )
+    return {row['statut']: row['count'] for row in rows}
 
 
 def invalidate_personnel_cache():

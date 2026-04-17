@@ -46,7 +46,16 @@ class DomaineVieSalarie(DomaineWidget):
                 """)
                 alert_layout = QHBoxLayout(alert_widget)
                 alert_layout.setContentsMargins(8, 4, 8, 4)
-                lbl = QLabel(alerte.get('message', str(alerte)))
+                type_alerte = alerte.get('type_alerte', '')
+                jours = alerte.get('jours_retard')
+                derniere = self._format_date(alerte.get('derniere_date'))
+                if jours is not None and jours > 0:
+                    texte = f"{type_alerte} — {jours} jour(s) de retard (dernière : {derniere})"
+                elif derniere and derniere != '-':
+                    texte = f"{type_alerte} — dernière : {derniere}"
+                else:
+                    texte = type_alerte or str(alerte)
+                lbl = QLabel(texte)
                 lbl.setStyleSheet("color: #dc2626; font-weight: 500;")
                 alert_layout.addWidget(lbl)
                 alertes_card.body.addWidget(alert_widget)

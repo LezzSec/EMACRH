@@ -25,7 +25,6 @@ from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 
 from infrastructure.db.query_executor import QueryExecutor
-from infrastructure.db.configbd import DatabaseConnection
 from infrastructure.logging.optimized_db_logger import log_hist
 
 logger = logging.getLogger(__name__)
@@ -478,17 +477,10 @@ class GrillesService:
         if QueryExecutor.exists("postes", {"poste_code": poste_code}):
             return False, f"Le poste '{poste_code}' existe déjà."
 
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
-            cur.execute(
-                "INSERT INTO postes (poste_code, visible) VALUES (%s, 1)",
-                (poste_code,)
-            )
-            if besoin is not None:
-                cur.execute(
-                    "UPDATE postes SET besoins_postes = %s WHERE poste_code = %s",
-                    (besoin, poste_code)
-                )
+        ops = [("INSERT INTO postes (poste_code, visible) VALUES (%s, 1)", (poste_code,))]
+        if besoin is not None:
+            ops.append(("UPDATE postes SET besoins_postes = %s WHERE poste_code = %s", (besoin, poste_code)))
+        QueryExecutor.execute_transaction(ops)
         return True, f"Poste '{poste_code}' créé avec succès."
 
     @staticmethod
@@ -535,8 +527,7 @@ class GrillesService:
         if not poste:
             return False, f"Le poste '{poste_code}' n'existe pas ou est masqué."
 
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
+        def _duplicate_poste(cur):
             cur.execute(
                 "INSERT INTO postes (poste_code, visible) VALUES (%s, 1)",
                 (f"{poste_code}_copy",)
@@ -547,6 +538,7 @@ class GrillesService:
                 SELECT personnel_id, %s, niveau FROM polyvalence WHERE poste_id = %s
             """, (new_poste_id, poste['id']))
 
+        QueryExecutor.with_transaction(_duplicate_poste)
         return True, f"Poste '{poste_code}' dupliqué en '{poste_code}_copy'."
 
     @staticmethod
@@ -559,8 +551,7 @@ class GrillesService:
         if not operateur:
             return False, f"L'opérateur '{nom_complet}' n'existe pas ou est inactif."
 
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
+        def _duplicate_operateur(cur):
             cur.execute(
                 "INSERT INTO personnel (nom, prenom, statut) VALUES (%s, %s, 'ACTIF')",
                 (f"{operateur['nom']}_copy", operateur['prenom'])
@@ -571,4 +562,5 @@ class GrillesService:
                 SELECT %s, poste_id, niveau FROM polyvalence WHERE personnel_id = %s
             """, (new_op_id, operateur['id']))
 
+        QueryExecutor.with_transaction(_duplicate_operateur)
         return True, f"Opérateur '{nom_complet}' dupliqué."

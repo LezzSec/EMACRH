@@ -273,6 +273,87 @@ class QueryExecutor:
             raise
 
     @staticmethod
+    def execute_transaction(
+        operations: List[tuple]
+    ) -> List:
+        """
+        Exécute plusieurs requêtes d'écriture dans une seule transaction.
+
+        Si une requête échoue, toute la transaction est annulée (rollback).
+
+        Args:
+            operations: Liste de (query, params) à exécuter séquentiellement.
+
+        Returns:
+            Liste de résultats : lastrowid pour les INSERT, True pour UPDATE/DELETE.
+
+        Raises:
+            Exception: En cas d'erreur SQL (rollback automatique).
+
+        Example:
+            >>> results = QueryExecutor.execute_transaction([
+            ...     ("DELETE FROM role_features WHERE role_id = %s", (role_id,)),
+            ...     ("INSERT INTO role_features (role_id, feature_key) VALUES (%s, %s)", (role_id, 'rh.view')),
+            ... ])
+        """
+        try:
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+                try:
+                    results = []
+                    for query, params in operations:
+                        cur.execute(query, params or ())
+                        if 'INSERT' in query.upper():
+                            results.append(cur.lastrowid)
+                        else:
+                            results.append(True)
+                    logger.debug(f"execute_transaction: {len(operations)} opérations réussies")
+                    return results
+                finally:
+                    cur.close()
+        except Exception as e:
+            logger.error(f"Erreur execute_transaction: {e}", exc_info=True)
+            raise
+
+    @staticmethod
+    def with_transaction(fn):
+        """
+        Exécute une fonction avec un curseur dans une transaction.
+
+        La fonction reçoit un curseur et peut exécuter autant de requêtes
+        que nécessaire. Commit automatique si pas d'erreur, rollback sinon.
+
+        Args:
+            fn: Callable qui reçoit un cursor et retourne un résultat.
+
+        Returns:
+            Le résultat retourné par fn.
+
+        Raises:
+            Exception: En cas d'erreur SQL (rollback automatique).
+
+        Example:
+            >>> def transfer(cur):
+            ...     cur.execute("DELETE FROM role_features WHERE role_id = %s", (role_id,))
+            ...     for key in feature_keys:
+            ...         cur.execute("INSERT INTO role_features (role_id, feature_key) VALUES (%s, %s)", (role_id, key))
+            ...     return True
+            >>> result = QueryExecutor.with_transaction(transfer)
+        """
+        try:
+            with DatabaseConnection() as conn:
+                cur = conn.cursor()
+                try:
+                    result = fn(cur)
+                    logger.debug("with_transaction: transaction réussie")
+                    return result
+                finally:
+                    cur.close()
+        except Exception as e:
+            logger.error(f"Erreur with_transaction: {e}", exc_info=True)
+            raise
+
+    @staticmethod
     def count(
         table: str,
         conditions: Optional[Dict[str, Any]] = None

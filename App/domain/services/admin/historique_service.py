@@ -15,7 +15,6 @@ import datetime as dt
 from typing import List, Dict, Optional, Any
 
 from infrastructure.db.query_executor import QueryExecutor
-from infrastructure.db.configbd import DatabaseConnection
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -290,12 +289,11 @@ def delete_historique_range(date_from: dt.datetime, date_to: dt.datetime) -> int
     Returns:
         Nombre de lignes supprimées
     """
-    with DatabaseConnection() as conn:
-        cur = conn.cursor()
+    def _do_delete(cur):
         cur.execute(
             "DELETE FROM historique WHERE date_time >= %s AND date_time <= %s",
             (date_from, date_to),
         )
-        deleted = cur.rowcount or 0
-        cur.close()
-    return deleted
+        return cur.rowcount or 0
+
+    return QueryExecutor.with_transaction(_do_delete)

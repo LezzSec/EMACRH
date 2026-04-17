@@ -16,7 +16,7 @@ Usage:
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 
-from infrastructure.db.configbd import DatabaseCursor, DatabaseConnection
+from infrastructure.db.query_executor import QueryExecutor
 from domain.models import Poste, Atelier
 from domain.repositories.base import BaseRepository
 from infrastructure.config.performance_monitor import monitor_query
@@ -49,9 +49,7 @@ class PosteRepository(BaseRepository[Poste]):
             WHERE p.visible = 1
             ORDER BY a.nom, p.poste_code
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query)
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, dictionary=True))
 
     @classmethod
     def get_by_code(cls, poste_code: str) -> Optional[Poste]:
@@ -63,10 +61,7 @@ class PosteRepository(BaseRepository[Poste]):
             WHERE p.poste_code = %s
             LIMIT 1
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (poste_code,))
-            row = cur.fetchone()
-            return cls._row_to_model(row)
+        return cls._row_to_model(QueryExecutor.fetch_one(query, (poste_code,), dictionary=True))
 
     @classmethod
     @monitor_query('PosteRepo.get_by_atelier')
@@ -85,17 +80,13 @@ class PosteRepository(BaseRepository[Poste]):
 
         query += " ORDER BY p.poste_code"
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, tuple(params))
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, tuple(params), dictionary=True))
 
     @classmethod
     def get_codes_list(cls) -> List[str]:
         """Récupère la liste des codes de postes (pour combos)."""
         query = "SELECT DISTINCT poste_code FROM postes WHERE visible = 1 ORDER BY poste_code"
-        with DatabaseCursor() as cur:
-            cur.execute(query)
-            return [row[0] for row in cur.fetchall()]
+        return [row[0] for row in QueryExecutor.fetch_all(query)]
 
     @classmethod
     def search(cls, terme: str, limit: int = 20) -> List[Poste]:
@@ -110,9 +101,7 @@ class PosteRepository(BaseRepository[Poste]):
             ORDER BY p.poste_code
             LIMIT %s
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (pattern, pattern, limit))
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, (pattern, pattern, limit), dictionary=True))
 
     # ===========================
     # Statistiques
@@ -122,9 +111,8 @@ class PosteRepository(BaseRepository[Poste]):
     def count_visibles(cls) -> int:
         """Compte les postes visibles."""
         query = "SELECT COUNT(*) as total FROM postes WHERE visible = 1"
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query)
-            return cur.fetchone()['total']
+        row = QueryExecutor.fetch_one(query, dictionary=True)
+        return row['total'] if row else 0
 
     @classmethod
     def count_par_atelier(cls) -> Dict[str, int]:
@@ -137,9 +125,7 @@ class PosteRepository(BaseRepository[Poste]):
             GROUP BY a.id, a.nom
             ORDER BY a.nom
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query)
-            return {row['atelier']: row['count'] for row in cur.fetchall()}
+        return {row['atelier']: row['count'] for row in QueryExecutor.fetch_all(query, dictionary=True)}
 
     @classmethod
     def get_avec_besoin(cls) -> List[Dict]:
@@ -161,9 +147,7 @@ class PosteRepository(BaseRepository[Poste]):
             GROUP BY p.id, p.poste_code, p.besoins_postes, a.nom
             ORDER BY a.nom, p.poste_code
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query)
-            return cur.fetchall()
+        return QueryExecutor.fetch_all(query, dictionary=True)
 
     # ===========================
     # Opérations d'écriture
@@ -189,16 +173,16 @@ class PosteRepository(BaseRepository[Poste]):
         query = f"INSERT INTO postes ({', '.join(columns)}) VALUES ({placeholders})"
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
+            def _do_insert(cur):
                 cur.execute(query, tuple(insert_data.values()))
-                new_id = cur.lastrowid
-                conn.commit()
+                return cur.lastrowid
 
-                from infrastructure.logging.optimized_db_logger import log_hist
-                log_hist("CREATE", "postes", new_id, f"Poste {data['poste_code']} créé")
+            new_id = QueryExecutor.with_transaction(_do_insert)
 
-                return True, "Poste créé", new_id
+            from infrastructure.logging.optimized_db_logger import log_hist
+            log_hist("CREATE", "postes", new_id, f"Poste {data['poste_code']} créé")
+
+            return True, "Poste créé", new_id
 
         except Exception as e:
             logger.error(f"Erreur création poste: {e}")
@@ -226,15 +210,12 @@ class PosteRepository(BaseRepository[Poste]):
         query = f"UPDATE postes SET {', '.join(set_clauses)} WHERE id = %s"
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
-                cur.execute(query, tuple(list(update_data.values()) + [id]))
-                conn.commit()
+            QueryExecutor.execute_write(query, tuple(list(update_data.values()) + [id]))
 
-                from infrastructure.logging.optimized_db_logger import log_hist
-                log_hist("UPDATE", "postes", id, f"Mise à jour: {list(update_data.keys())}")
+            from infrastructure.logging.optimized_db_logger import log_hist
+            log_hist("UPDATE", "postes", id, f"Mise à jour: {list(update_data.keys())}")
 
-                return True, "Poste mis à jour"
+            return True, "Poste mis à jour"
 
         except Exception as e:
             logger.error(f"Erreur mise à jour poste: {e}")
@@ -255,7 +236,6 @@ class PosteRepository(BaseRepository[Poste]):
     @classmethod
     def get_all_codes(cls) -> List[str]:
         """Retourne tous les codes de postes (y compris invisibles) triés."""
-        from infrastructure.db.query_executor import QueryExecutor
         rows = QueryExecutor.fetch_all(
             "SELECT poste_code FROM postes ORDER BY poste_code ASC",
             dictionary=True,
@@ -265,7 +245,6 @@ class PosteRepository(BaseRepository[Poste]):
     @classmethod
     def delete_by_code(cls, poste_code: str) -> Tuple[bool, str]:
         """Supprime un poste par son code."""
-        from infrastructure.db.query_executor import QueryExecutor
         from infrastructure.logging.optimized_db_logger import log_hist
         import json
         try:
@@ -295,24 +274,17 @@ class AtelierRepository(BaseRepository[Atelier]):
         """Récupère tous les ateliers."""
         columns = ", ".join(cls.COLUMNS)
         query = f"SELECT {columns} FROM atelier ORDER BY nom LIMIT %s"
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (limit,))
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, (limit,), dictionary=True))
 
     @classmethod
     def get_by_nom(cls, nom: str) -> Optional[Atelier]:
         """Récupère un atelier par son nom."""
         columns = ", ".join(cls.COLUMNS)
         query = f"SELECT {columns} FROM atelier WHERE nom = %s LIMIT 1"
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (nom,))
-            row = cur.fetchone()
-            return cls._row_to_model(row)
+        return cls._row_to_model(QueryExecutor.fetch_one(query, (nom,), dictionary=True))
 
     @classmethod
     def get_noms_list(cls) -> List[str]:
         """Récupère la liste des noms d'ateliers (pour combos)."""
         query = "SELECT nom FROM atelier ORDER BY nom"
-        with DatabaseCursor() as cur:
-            cur.execute(query)
-            return [row[0] for row in cur.fetchall()]
+        return [row[0] for row in QueryExecutor.fetch_all(query)]

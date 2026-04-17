@@ -133,15 +133,41 @@ class EditMobiliteDialog(EmacFormDialog):
         'autre': 'Autre',
     }
 
-    def __init__(self, personnel_id: int, mobilite: dict = None, vehicule: dict = None, parent=None):
+    def __init__(self, personnel_id: int, mobilite: dict = None, vehicule: dict = None,
+                 distance_auto: float = None, duree_auto: int = None, parent=None):
         self.personnel_id = personnel_id
         self.mobilite = mobilite or {}
         self.vehicule = vehicule or {}
         self.is_edit = bool(mobilite)
+        self.distance_auto = distance_auto
+        self.duree_auto = duree_auto
         title = "Modifier la mobilité" if self.is_edit else "Déclarer la mobilité"
         super().__init__(title=title, min_width=440, min_height=380, add_title_bar=False, parent=parent)
 
     def init_ui(self):
+        # Bannière distance calculée automatiquement
+        if self.distance_auto is not None and not self.is_edit:
+            from PyQt5.QtWidgets import QLabel, QHBoxLayout, QWidget, QPushButton
+            banner = QWidget()
+            banner.setStyleSheet(
+                "background: #eff6ff; border: 1px solid #93c5fd; border-radius: 6px;"
+            )
+            banner_layout = QHBoxLayout(banner)
+            banner_layout.setContentsMargins(10, 8, 10, 8)
+            duree_txt = f" ({self.duree_auto} min)" if self.duree_auto else ""
+            lbl = QLabel(f"Distance calculée depuis l'adresse : <b>{self.distance_auto} km{duree_txt}</b>")
+            lbl.setStyleSheet("color: #1e40af; border: none; background: transparent;")
+            banner_layout.addWidget(lbl, 1)
+            btn_use = QPushButton("Utiliser cette distance")
+            btn_use.setStyleSheet(
+                "QPushButton { background: #3b82f6; color: white; border: none; "
+                "border-radius: 4px; padding: 4px 10px; font-size: 12px; }"
+                "QPushButton:hover { background: #2563eb; }"
+            )
+            btn_use.clicked.connect(lambda: self.distance.setValue(float(self.distance_auto)))
+            banner_layout.addWidget(btn_use)
+            self.content_layout.addWidget(banner)
+
         form = QFormLayout()
         form.setSpacing(10)
 

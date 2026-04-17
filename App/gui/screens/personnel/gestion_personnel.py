@@ -7,7 +7,7 @@ logger = get_logger(__name__)
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QLineEdit, QGroupBox,
-    QMessageBox, QAbstractItemView, QWidget, QTabWidget, QCheckBox,
+    QMessageBox, QAbstractItemView, QWidget, QComboBox,
 )
 from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
@@ -19,7 +19,6 @@ from gui.view_models.personnel_list_view_model import PersonnelListViewModel
 from domain.services.admin.auth_service import get_current_user
 
 from gui.screens.personnel.detail_operateur_dialog import DetailOperateurDialog
-from gui.screens.personnel.affecter_dates_entree import AffecterDatesEntreeDialog
 
 import datetime as dt
 
@@ -84,54 +83,46 @@ class GestionPersonnelDialog(QDialog):
         search_layout.addWidget(self.search_input, 1)
         filters_layout.addLayout(search_layout)
 
-        # Ligne 2 : Statut (onglets Actifs / Inactifs / Tous)
-        statut_layout = QHBoxLayout()
+        # Ligne 2 : Vue (combo preset) + bouton actualiser discret
+        vue_layout = QHBoxLayout()
+        vue_layout.addWidget(QLabel("Vue :"))
 
-        self.statut_tabs = QTabWidget()
-        self.statut_tabs.setStyleSheet("""
-            QTabWidget::pane { border: none; }
-            QTabBar::tab {
-                padding: 4px 18px;
-                font-size: 12px;
-                border: 1px solid #d1d5db;
-                border-bottom: none;
-                border-radius: 4px 4px 0 0;
-                margin-right: 2px;
-                background: #f3f4f6;
-                color: #6b7280;
-            }
-            QTabBar::tab:selected {
-                background: #1e40af;
-                color: white;
-                font-weight: 600;
-                border-color: #1e40af;
-            }
-            QTabBar::tab:hover:!selected { background: #e0e7ff; color: #1e40af; }
-        """)
-        self.statut_tabs.setMaximumHeight(36)
-        self.statut_tabs.addTab(QWidget(), "Actifs")
-        self.statut_tabs.addTab(QWidget(), "Inactifs")
-        self.statut_tabs.addTab(QWidget(), "Tous")
-        self.statut_tabs.currentChanged.connect(self._reload_page)
-        statut_layout.addWidget(self.statut_tabs, 1)
-        statut_layout.addStretch(0)
-
-        # Checkbox production uniquement (cochée par défaut pour gestion_production)
-        self.production_only_check = QCheckBox("Production uniquement")
         current_user = get_current_user()
         is_gestion_production = (
             current_user and
             current_user.get('role_nom') == 'gestion_production'
         )
-        self.production_only_check.setChecked(is_gestion_production)
-        self.production_only_check.toggled.connect(self._on_production_toggled)
-        statut_layout.addWidget(self.production_only_check)
 
-        self.refresh_btn = QPushButton("Actualiser")
+        self.vue_combo = QComboBox()
+        self.vue_combo.addItem("Actifs en production", ("ACTIF", True))
+        self.vue_combo.addItem("Tous les actifs", ("ACTIF", False))
+        self.vue_combo.addItem("Inactifs", ("INACTIF", False))
+        self.vue_combo.addItem("Personnel administratif", ("ACTIF", False))
+        self.vue_combo.addItem("Tout le personnel", (None, False))
+        self.vue_combo.setCurrentIndex(0 if is_gestion_production else 1)
+        self.vue_combo.setMinimumWidth(220)
+        self.vue_combo.currentIndexChanged.connect(self._on_vue_changed)
+        vue_layout.addWidget(self.vue_combo)
+
+        vue_layout.addStretch()
+
+        self.refresh_btn = QPushButton("\u27f3")
+        self.refresh_btn.setToolTip("Actualiser les données depuis le serveur")
+        self.refresh_btn.setFixedWidth(36)
+        self.refresh_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #6b7280;
+                border: 1px solid #d1d5db;
+                border-radius: 6px;
+                font-size: 16px;
+            }
+            QPushButton:hover { background: #f3f4f6; color: #1e40af; }
+        """)
         self.refresh_btn.clicked.connect(self.load_data)
-        statut_layout.addWidget(self.refresh_btn)
+        vue_layout.addWidget(self.refresh_btn)
 
-        filters_layout.addLayout(statut_layout)
+        filters_layout.addLayout(vue_layout)
 
         filters_group.setLayout(filters_layout)
         layout.addWidget(filters_group)
@@ -151,13 +142,8 @@ class GestionPersonnelDialog(QDialog):
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.table.doubleClicked.connect(self.open_detail_dialog)
+        self.table.itemSelectionChanged.connect(self._on_selection_changed)
         layout.addWidget(self.table, 1)
-
-        # === Stats globales ===
-        stats_label = QLabel("Double-cliquez sur une ligne pour voir les détails complets")
-        stats_label.setStyleSheet("color: #6b7280; font-style: italic; padding: 8px;")
-        stats_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(stats_label)
 
         self.total_label = QLabel("Total : 0 personne(s)")
         self.total_label.setFont(QFont("Segoe UI", 11, QFont.Bold))
@@ -183,23 +169,14 @@ class GestionPersonnelDialog(QDialog):
 
         # === Actions ===
         actions = QHBoxLayout()
-        actions.addStretch()
 
-        self.dates_entree_btn = QPushButton("Affecter dates d'entrée")
-        self.dates_entree_btn.setStyleSheet("""
-            QPushButton {
-                background: #3b82f6;
-                color: white;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background: #2563eb;
-            }
-        """)
-        self.dates_entree_btn.clicked.connect(self.open_dates_entree_dialog)
-        actions.addWidget(self.dates_entree_btn)
+        self.detail_btn = QPushButton("Voir le détail")
+        self.detail_btn.setEnabled(False)
+        self.detail_btn.setToolTip("Sélectionnez une ligne pour afficher le détail")
+        self.detail_btn.clicked.connect(self.open_detail_dialog)
+        actions.addWidget(self.detail_btn)
+
+        actions.addStretch()
 
         self.export_btn = QPushButton("Exporter la liste")
         self.export_btn.clicked.connect(self.export_list)
@@ -212,10 +189,10 @@ class GestionPersonnelDialog(QDialog):
         layout.addLayout(actions)
         main_layout.addWidget(content_widget)
 
-        # Appliquer l'état initial des colonnes polyvalence
-        if is_gestion_production:
-            for col in range(5, 10):
-                self.table.setColumnHidden(col, False)
+        # Appliquer l'état initial des colonnes polyvalence selon la vue sélectionnée
+        _, production_only_init = self.vue_combo.currentData()
+        for col in range(5, 10):
+            self.table.setColumnHidden(col, not production_only_init)
 
         self.all_data = []
         self.load_data()
@@ -226,13 +203,23 @@ class GestionPersonnelDialog(QDialog):
 
     def _sync_filters(self) -> None:
         """Lit les filtres depuis l'UI et les pousse dans le ViewModel."""
-        idx = self.statut_tabs.currentIndex()
-        statut = "ACTIF" if idx == 0 else ("INACTIF" if idx == 1 else None)
+        statut, production_only = self.vue_combo.currentData()
         self.vm.set_filters(
             statut=statut,
             search=self.search_input.text(),
-            production_only=self.production_only_check.isChecked(),
+            production_only=production_only,
         )
+
+    def _on_vue_changed(self) -> None:
+        """Bascule les colonnes polyvalence et recharge quand la vue change."""
+        _, production_only = self.vue_combo.currentData()
+        for col in range(5, 10):
+            self.table.setColumnHidden(col, not production_only)
+        self._reload_page()
+
+    def _on_selection_changed(self) -> None:
+        """Active/désactive le bouton Voir le détail selon la sélection."""
+        self.detail_btn.setEnabled(bool(self.table.selectedItems()))
 
     # ------------------------------------------------------------------
     # Navigation de page
@@ -347,12 +334,6 @@ class GestionPersonnelDialog(QDialog):
             n4_item.setTextAlignment(Qt.AlignCenter)
             self.table.setItem(row, 9, n4_item)
 
-    def _on_production_toggled(self, checked: bool) -> None:
-        """Bascule les colonnes polyvalence et recharge quand la checkbox Production change."""
-        for col in range(5, 10):
-            self.table.setColumnHidden(col, not checked)
-        self._reload_page()
-
     # ------------------------------------------------------------------
     # Actions utilisateur
     # ------------------------------------------------------------------
@@ -383,10 +364,6 @@ class GestionPersonnelDialog(QDialog):
         self.load_data()
         self.data_changed.emit()
 
-    def open_dates_entree_dialog(self) -> None:
-        """Ouvre le dialogue d'affectation des dates d'entrée."""
-        dialog = AffecterDatesEntreeDialog(self)
-        dialog.exec_()
 
     # ------------------------------------------------------------------
     # Export
@@ -402,13 +379,12 @@ class GestionPersonnelDialog(QDialog):
             date_str = dt.date.today().strftime('%Y%m%d')
             parts = ["personnel"]
 
-            if self.production_only_check.isChecked():
+            statut_key, production_only = self.vue_combo.currentData()
+            if production_only:
                 parts.append("production")
-
-            idx = self.statut_tabs.currentIndex()
-            if idx == 0:
+            if statut_key == "ACTIF":
                 parts.append("actifs")
-            elif idx == 1:
+            elif statut_key == "INACTIF":
                 parts.append("inactifs")
 
             parts.append(date_str)
@@ -426,7 +402,7 @@ class GestionPersonnelDialog(QDialog):
             ws = wb.active
             ws.title = "Personnel"
 
-            production_only = self.production_only_check.isChecked()
+            _, production_only = self.vue_combo.currentData()
             headers = ["Nom", "Prénom", "Matricule", "Type Contrat", "Statut"]
             if production_only:
                 headers += ["Nb Postes", "Niveau 1", "Niveau 2", "Niveau 3", "Niveau 4"]

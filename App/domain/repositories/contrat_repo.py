@@ -21,7 +21,7 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import date, timedelta
 
-from infrastructure.db.configbd import DatabaseCursor, DatabaseConnection
+from infrastructure.db.query_executor import QueryExecutor
 from domain.models import Contrat, StatistiquesContrats
 from domain.repositories.base import BaseRepository
 from infrastructure.config.performance_monitor import monitor_query
@@ -56,9 +56,7 @@ class ContratRepository(BaseRepository[Contrat]):
             ORDER BY c.date_fin ASC
             LIMIT %s
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (limit,))
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, (limit,), dictionary=True))
 
     @classmethod
     def get_by_operateur(cls, operateur_id: int, include_inactifs: bool = False) -> List[Contrat]:
@@ -75,9 +73,7 @@ class ContratRepository(BaseRepository[Contrat]):
 
         query += " ORDER BY date_debut DESC"
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, tuple(params))
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, tuple(params), dictionary=True))
 
     @classmethod
     def get_actif_by_operateur(cls, operateur_id: int) -> Optional[Contrat]:
@@ -89,10 +85,7 @@ class ContratRepository(BaseRepository[Contrat]):
             ORDER BY date_debut DESC
             LIMIT 1
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (operateur_id,))
-            row = cur.fetchone()
-            return cls._row_to_model(row)
+        return cls._row_to_model(QueryExecutor.fetch_one(query, (operateur_id,), dictionary=True))
 
     @classmethod
     @monitor_query('ContratRepo.get_expirant_dans')
@@ -119,9 +112,7 @@ class ContratRepository(BaseRepository[Contrat]):
               AND p.statut = 'ACTIF'
             ORDER BY c.date_fin ASC
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (date_limite,))
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, (date_limite,), dictionary=True))
 
     @classmethod
     def get_expires(cls) -> List[Contrat]:
@@ -135,9 +126,7 @@ class ContratRepository(BaseRepository[Contrat]):
               AND c.date_fin < CURDATE()
             ORDER BY c.date_fin ASC
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query)
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, dictionary=True))
 
     @classmethod
     def get_cdi(cls) -> List[Contrat]:
@@ -149,9 +138,7 @@ class ContratRepository(BaseRepository[Contrat]):
             WHERE c.actif = 1 AND c.type_contrat = 'CDI'
             ORDER BY p.nom
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query)
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, dictionary=True))
 
     # ===========================
     # Statistiques
@@ -163,40 +150,35 @@ class ContratRepository(BaseRepository[Contrat]):
         """Calcule les statistiques des contrats."""
         stats = StatistiquesContrats()
 
-        with DatabaseCursor(dictionary=True) as cur:
-            # Total actifs
-            cur.execute("SELECT COUNT(*) as total FROM contrat WHERE actif = 1")
-            stats.total = cur.fetchone()['total']
+        row = QueryExecutor.fetch_one(
+            "SELECT COUNT(*) as total FROM contrat WHERE actif = 1", dictionary=True
+        )
+        stats.total = row['total'] if row else 0
 
-            # Par type
-            cur.execute("""
-                SELECT type_contrat, COUNT(*) as count
-                FROM contrat WHERE actif = 1
-                GROUP BY type_contrat
-            """)
-            for row in cur.fetchall():
-                if row['type_contrat'] == 'CDI':
-                    stats.cdi = row['count']
-                elif row['type_contrat'] == 'CDD':
-                    stats.cdd = row['count']
-                elif row['type_contrat'] == 'INTERIM':
-                    stats.interim = row['count']
+        for row in QueryExecutor.fetch_all(
+            "SELECT type_contrat, COUNT(*) as count FROM contrat WHERE actif = 1 GROUP BY type_contrat",
+            dictionary=True
+        ):
+            if row['type_contrat'] == 'CDI':
+                stats.cdi = row['count']
+            elif row['type_contrat'] == 'CDD':
+                stats.cdd = row['count']
+            elif row['type_contrat'] == 'INTERIM':
+                stats.interim = row['count']
 
-            # Expirant 7j
-            cur.execute("""
-                SELECT COUNT(*) as count FROM contrat
-                WHERE actif = 1 AND date_fin IS NOT NULL
-                AND date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
-            """)
-            stats.expirant_7j = cur.fetchone()['count']
+        row7 = QueryExecutor.fetch_one("""
+            SELECT COUNT(*) as count FROM contrat
+            WHERE actif = 1 AND date_fin IS NOT NULL
+            AND date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+        """, dictionary=True)
+        stats.expirant_7j = row7['count'] if row7 else 0
 
-            # Expirant 30j
-            cur.execute("""
-                SELECT COUNT(*) as count FROM contrat
-                WHERE actif = 1 AND date_fin IS NOT NULL
-                AND date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-            """)
-            stats.expirant_30j = cur.fetchone()['count']
+        row30 = QueryExecutor.fetch_one("""
+            SELECT COUNT(*) as count FROM contrat
+            WHERE actif = 1 AND date_fin IS NOT NULL
+            AND date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+        """, dictionary=True)
+        stats.expirant_30j = row30['count'] if row30 else 0
 
         return stats
 
@@ -226,33 +208,31 @@ class ContratRepository(BaseRepository[Contrat]):
         query = f"INSERT INTO contrat ({columns_str}) VALUES ({placeholders})"
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
+            def _do_insert(cur):
                 cur.execute(query, tuple(insert_data.values()))
-                new_id = cur.lastrowid
-                conn.commit()
+                return cur.lastrowid
 
-                from infrastructure.logging.optimized_db_logger import log_hist
-                log_hist("CREATE", "contrat", new_id,
+            new_id = QueryExecutor.with_transaction(_do_insert)
+
+            from infrastructure.logging.optimized_db_logger import log_hist
+            log_hist("CREATE", "contrat", new_id,
                         f"Contrat {data.get('type_contrat')} créé pour personnel {data.get('personnel_id')}")
 
-                # Émettre l'événement pour déclencher les documents
-                from application.event_bus import EventBus
-                # Récupérer les infos du personnel pour l'événement
-                from domain.repositories.personnel_repo import PersonnelRepository
-                personnel = PersonnelRepository.get_by_id(data.get('personnel_id'))
-                if personnel:
-                    EventBus.emit('contrat.created', {
-                        'contrat_id': new_id,
-                        'personnel_id': data.get('personnel_id'),
-                        'nom': personnel.nom,
-                        'prenom': personnel.prenom,
-                        'type_contrat': data.get('type_contrat'),
-                        'date_debut': str(data.get('date_debut')),
-                        'date_fin': str(data.get('date_fin')) if data.get('date_fin') else None
-                    }, source='ContratRepository.create')
+            from application.event_bus import EventBus
+            from domain.repositories.personnel_repo import PersonnelRepository
+            personnel = PersonnelRepository.get_by_id(data.get('personnel_id'))
+            if personnel:
+                EventBus.emit('contrat.created', {
+                    'contrat_id': new_id,
+                    'personnel_id': data.get('personnel_id'),
+                    'nom': personnel.nom,
+                    'prenom': personnel.prenom,
+                    'type_contrat': data.get('type_contrat'),
+                    'date_debut': str(data.get('date_debut')),
+                    'date_fin': str(data.get('date_fin')) if data.get('date_fin') else None
+                }, source='ContratRepository.create')
 
-                return True, "Contrat créé avec succès", new_id
+            return True, "Contrat créé avec succès", new_id
 
         except Exception as e:
             logger.error(f"Erreur création contrat: {e}")
@@ -283,15 +263,12 @@ class ContratRepository(BaseRepository[Contrat]):
         query = f"UPDATE contrat SET {', '.join(set_clauses)} WHERE id = %s"
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
-                cur.execute(query, tuple(list(update_data.values()) + [id]))
-                conn.commit()
+            QueryExecutor.execute_write(query, tuple(list(update_data.values()) + [id]))
 
-                from infrastructure.logging.optimized_db_logger import log_hist
-                log_hist("UPDATE", "contrat", id, f"Mise à jour: {list(update_data.keys())}")
+            from infrastructure.logging.optimized_db_logger import log_hist
+            log_hist("UPDATE", "contrat", id, f"Mise à jour: {list(update_data.keys())}")
 
-                return True, "Contrat mis à jour"
+            return True, "Contrat mis à jour"
 
         except Exception as e:
             logger.error(f"Erreur mise à jour contrat: {e}")
@@ -342,7 +319,6 @@ class ContratRepository(BaseRepository[Contrat]):
                 "jours_restants": int | None
             }
         """
-        from infrastructure.db.query_executor import QueryExecutor
         row = QueryExecutor.fetch_one(
             """
             SELECT type_contrat,
@@ -373,7 +349,6 @@ class ContratRepository(BaseRepository[Contrat]):
             Liste de dicts (id, personnel_id, type_contrat, date_fin,
                             nom, prenom, matricule, jours_restants)
         """
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT
@@ -401,7 +376,6 @@ class ContratRepository(BaseRepository[Contrat]):
 
         Utilisé par get_alertes_rh_count() dans rh_service.
         """
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_scalar(
             """
             SELECT COUNT(*) FROM contrat c
@@ -425,7 +399,6 @@ class ContratRepository(BaseRepository[Contrat]):
         Returns:
             {"total": int, "terminees": int, "planifiees": int}
         """
-        from infrastructure.db.query_executor import QueryExecutor
         row = QueryExecutor.fetch_one(
             """
             SELECT

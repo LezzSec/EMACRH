@@ -54,6 +54,13 @@ class DomaineGeneral(DomaineWidget):
         cat_map = {'O': 'O - Ouvrier', 'E': 'E - Employé', 'T': 'T - Technicien', 'C': 'C - Cadre'}
         categorie_display = cat_map.get(donnees.get('categorie', ''), val('categorie'))
 
+        if donnees.get('distance_domicile_km') is not None:
+            dist_km = donnees['distance_domicile_km']
+            duree = donnees.get('duree_trajet_min')
+            distance_display = f"{dist_km} km ({duree} min)" if duree else f"{dist_km} km"
+        else:
+            distance_display = None
+
         infos = [
             ("Nom", val('nom')),
             ("Prénom", val('prenom')),
@@ -75,6 +82,8 @@ class DomaineGeneral(DomaineWidget):
             ("Ville", ville),
             ("Pays", val('pays_adresse')),
         ]
+        if distance_display:
+            infos.append(("Distance domicile", distance_display))
 
         for i, (label, valeur) in enumerate(infos):
             row, col = divmod(i, 3)
@@ -231,7 +240,13 @@ class DomaineGeneral(DomaineWidget):
     def _add_mobilite(self, vehicule: dict):
         if not self._operateur:
             return
-        dialog = EditMobiliteDialog(self._operateur['id'], vehicule=vehicule, parent=self)
+        dialog = EditMobiliteDialog(
+            self._operateur['id'],
+            vehicule=vehicule,
+            distance_auto=self._donnees.get('distance_domicile_km'),
+            duree_auto=self._donnees.get('duree_trajet_min'),
+            parent=self,
+        )
         if dialog.exec_() == QDialog.Accepted:
             self.refresh_requested.emit()
 

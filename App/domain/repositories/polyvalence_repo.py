@@ -20,7 +20,7 @@ import logging
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import date, timedelta
 
-from infrastructure.db.configbd import DatabaseCursor, DatabaseConnection
+from infrastructure.db.query_executor import QueryExecutor
 from domain.models import Polyvalence, EvaluationResume, StatistiquesEvaluations
 from domain.repositories.base import BaseRepository
 from infrastructure.config.performance_monitor import monitor_query
@@ -53,9 +53,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             WHERE p.personnel_id = %s
             ORDER BY pos.poste_code
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (operateur_id,))
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, (operateur_id,), dictionary=True))
 
     @classmethod
     @monitor_query('PolyvalenceRepo.get_by_poste')
@@ -74,9 +72,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
 
         query += " ORDER BY p.niveau DESC, pers.nom"
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, tuple(params))
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, tuple(params), dictionary=True))
 
     @classmethod
     @monitor_query('PolyvalenceRepo.get_en_retard')
@@ -101,22 +97,21 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             ORDER BY jours_retard DESC
             LIMIT %s
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (limit,))
-            return [
-                EvaluationResume(
-                    polyvalence_id=row['polyvalence_id'],
-                    operateur_id=row['personnel_id'],
-                    operateur_nom=row['operateur_nom'],
-                    operateur_prenom=row['operateur_prenom'],
-                    poste_code=row['poste_code'],
-                    poste_nom=row['poste_nom'],
-                    niveau=row['niveau'],
-                    prochaine_evaluation=row['prochaine_evaluation'],
-                    jours_retard=row['jours_retard']
-                )
-                for row in cur.fetchall()
-            ]
+        rows = QueryExecutor.fetch_all(query, (limit,), dictionary=True)
+        return [
+            EvaluationResume(
+                polyvalence_id=row['polyvalence_id'],
+                operateur_id=row['personnel_id'],
+                operateur_nom=row['operateur_nom'],
+                operateur_prenom=row['operateur_prenom'],
+                poste_code=row['poste_code'],
+                poste_nom=row['poste_nom'],
+                niveau=row['niveau'],
+                prochaine_evaluation=row['prochaine_evaluation'],
+                jours_retard=row['jours_retard']
+            )
+            for row in rows
+        ]
 
     @classmethod
     @monitor_query('PolyvalenceRepo.get_a_venir')
@@ -143,22 +138,21 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             ORDER BY p.prochaine_evaluation ASC
             LIMIT %s
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (date_limite, limit))
-            return [
-                EvaluationResume(
-                    polyvalence_id=row['polyvalence_id'],
-                    operateur_id=row['personnel_id'],
-                    operateur_nom=row['operateur_nom'],
-                    operateur_prenom=row['operateur_prenom'],
-                    poste_code=row['poste_code'],
-                    poste_nom=row['poste_nom'],
-                    niveau=row['niveau'],
-                    prochaine_evaluation=row['prochaine_evaluation'],
-                    jours_retard=-row['jours_restants']  # Négatif = à venir
-                )
-                for row in cur.fetchall()
-            ]
+        rows = QueryExecutor.fetch_all(query, (date_limite, limit), dictionary=True)
+        return [
+            EvaluationResume(
+                polyvalence_id=row['polyvalence_id'],
+                operateur_id=row['personnel_id'],
+                operateur_nom=row['operateur_nom'],
+                operateur_prenom=row['operateur_prenom'],
+                poste_code=row['poste_code'],
+                poste_nom=row['poste_nom'],
+                niveau=row['niveau'],
+                prochaine_evaluation=row['prochaine_evaluation'],
+                jours_retard=-row['jours_restants']  # Négatif = à venir
+            )
+            for row in rows
+        ]
 
     @classmethod
     def get_matrice_poste(cls, poste_id: int) -> List[Dict]:
@@ -180,9 +174,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             WHERE pers.statut = 'ACTIF'
             ORDER BY pers.nom, pers.prenom
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (poste_id,))
-            return cur.fetchall()
+        return QueryExecutor.fetch_all(query, (poste_id,), dictionary=True)
 
     @classmethod
     def get_matrice_operateur(cls, operateur_id: int) -> List[Dict]:
@@ -205,9 +197,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             WHERE pos.visible = 1
             ORDER BY a.nom, pos.poste_code
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (operateur_id,))
-            return cur.fetchall()
+        return QueryExecutor.fetch_all(query, (operateur_id,), dictionary=True)
 
     # ===========================
     # Statistiques
@@ -219,28 +209,26 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         """Calcule les statistiques des évaluations (1 seule requête agrégée)."""
         stats = StatistiquesEvaluations()
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT
-                    COUNT(*) AS total,
-                    SUM(CASE WHEN p.prochaine_evaluation < CURDATE()
-                        THEN 1 ELSE 0 END) AS en_retard,
-                    SUM(CASE WHEN p.prochaine_evaluation
-                        BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
-                        THEN 1 ELSE 0 END) AS a_venir_7j,
-                    SUM(CASE WHEN p.prochaine_evaluation
-                        BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                        THEN 1 ELSE 0 END) AS a_venir_30j
-                FROM polyvalence p
-                JOIN personnel pers ON p.personnel_id = pers.id
-                WHERE pers.statut = 'ACTIF'
-            """)
-            row = cur.fetchone()
-            if row:
-                stats.total       = row['total']       or 0
-                stats.en_retard   = row['en_retard']   or 0
-                stats.a_venir_7j  = row['a_venir_7j']  or 0
-                stats.a_venir_30j = row['a_venir_30j'] or 0
+        row = QueryExecutor.fetch_one("""
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE WHEN p.prochaine_evaluation < CURDATE()
+                    THEN 1 ELSE 0 END) AS en_retard,
+                SUM(CASE WHEN p.prochaine_evaluation
+                    BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+                    THEN 1 ELSE 0 END) AS a_venir_7j,
+                SUM(CASE WHEN p.prochaine_evaluation
+                    BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+                    THEN 1 ELSE 0 END) AS a_venir_30j
+            FROM polyvalence p
+            JOIN personnel pers ON p.personnel_id = pers.id
+            WHERE pers.statut = 'ACTIF'
+        """, dictionary=True)
+        if row:
+            stats.total       = row['total']       or 0
+            stats.en_retard   = row['en_retard']   or 0
+            stats.a_venir_7j  = row['a_venir_7j']  or 0
+            stats.a_venir_30j = row['a_venir_30j'] or 0
 
         return stats
 
@@ -255,9 +243,8 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             GROUP BY niveau
             ORDER BY niveau
         """
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query)
-            return {row['niveau']: row['count'] for row in cur.fetchall()}
+        rows = QueryExecutor.fetch_all(query, dictionary=True)
+        return {row['niveau']: row['count'] for row in rows}
 
     # ===========================
     # Opérations d'écriture
@@ -272,58 +259,57 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             return False, "Le niveau doit être entre 1 et 4", None
 
         # Vérifier si existe déjà
-        query_check = "SELECT id FROM polyvalence WHERE personnel_id = %s AND poste_id = %s"
-        with DatabaseCursor() as cur:
-            cur.execute(query_check, (operateur_id, poste_id))
-            if cur.fetchone():
-                return False, "Cette compétence existe déjà", None
+        if QueryExecutor.fetch_one(
+            "SELECT id FROM polyvalence WHERE personnel_id = %s AND poste_id = %s",
+            (operateur_id, poste_id)
+        ):
+            return False, "Cette compétence existe déjà", None
 
         query = """
             INSERT INTO polyvalence (personnel_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
             VALUES (%s, %s, %s, %s, %s)
         """
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
+            def _do_insert(cur):
                 cur.execute(query, (operateur_id, poste_id, niveau, date_evaluation, prochaine_evaluation))
-                new_id = cur.lastrowid
-                conn.commit()
+                return cur.lastrowid
 
-                from infrastructure.logging.optimized_db_logger import log_hist
-                log_hist("CREATE", "polyvalence", new_id,
-                        f"Compétence N{niveau} créée", operateur_id=operateur_id, poste_id=poste_id)
+            new_id = QueryExecutor.with_transaction(_do_insert)
 
-                try:
-                    from domain.services.admin.polyvalence_logger import log_polyvalence_action
-                    log_polyvalence_action(
-                        action_type='AJOUT',
-                        operateur_id=operateur_id, poste_id=poste_id,
-                        polyvalence_id=new_id,
-                        nouveau_niveau=niveau,
-                        nouvelle_date_evaluation=date_evaluation,
-                        source='GUI',
-                    )
-                except Exception as _e:
-                    logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
+            from infrastructure.logging.optimized_db_logger import log_hist
+            log_hist("CREATE", "polyvalence", new_id,
+                    f"Compétence N{niveau} créée", operateur_id=operateur_id, poste_id=poste_id)
 
-                # Émettre l'événement pour déclencher les documents
-                from application.event_bus import EventBus
-                from domain.repositories.personnel_repo import PersonnelRepository
-                from domain.repositories.poste_repo import PosteRepository
-                personnel = PersonnelRepository.get_by_id(operateur_id)
-                poste = PosteRepository.get_by_id(poste_id)
-                if personnel and poste:
-                    EventBus.emit('polyvalence.created', {
-                        'polyvalence_id': new_id,
-                        'operateur_id': operateur_id,
-                        'nom': personnel.nom,
-                        'prenom': personnel.prenom,
-                        'poste_id': poste_id,
-                        'code_poste': poste.poste_code if hasattr(poste, 'poste_code') else str(poste_id),
-                        'niveau': niveau
-                    }, source='PolyvalenceRepository.create')
+            try:
+                from domain.services.admin.polyvalence_logger import log_polyvalence_action
+                log_polyvalence_action(
+                    action_type='AJOUT',
+                    operateur_id=operateur_id, poste_id=poste_id,
+                    polyvalence_id=new_id,
+                    nouveau_niveau=niveau,
+                    nouvelle_date_evaluation=date_evaluation,
+                    source='GUI',
+                )
+            except Exception as _e:
+                logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
 
-                return True, "Compétence créée", new_id
+            from application.event_bus import EventBus
+            from domain.repositories.personnel_repo import PersonnelRepository
+            from domain.repositories.poste_repo import PosteRepository
+            personnel = PersonnelRepository.get_by_id(operateur_id)
+            poste = PosteRepository.get_by_id(poste_id)
+            if personnel and poste:
+                EventBus.emit('polyvalence.created', {
+                    'polyvalence_id': new_id,
+                    'operateur_id': operateur_id,
+                    'nom': personnel.nom,
+                    'prenom': personnel.prenom,
+                    'poste_id': poste_id,
+                    'code_poste': poste.poste_code if hasattr(poste, 'poste_code') else str(poste_id),
+                    'niveau': niveau
+                }, source='PolyvalenceRepository.create')
+
+            return True, "Compétence créée", new_id
 
         except Exception as e:
             logger.error(f"Erreur création polyvalence: {e}")
@@ -337,12 +323,11 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             return False, "Le niveau doit être entre 1 et 4"
 
         # Récupérer l'ancien niveau pour le log
-        query_old = "SELECT personnel_id, poste_id, niveau FROM polyvalence WHERE id = %s"
-        with DatabaseCursor() as cur:
-            cur.execute(query_old, (id,))
-            old = cur.fetchone()
-            if not old:
-                return False, "Compétence non trouvée"
+        old = QueryExecutor.fetch_one(
+            "SELECT personnel_id, poste_id, niveau FROM polyvalence WHERE id = %s", (id,)
+        )
+        if not old:
+            return False, "Compétence non trouvée"
 
         query = """
             UPDATE polyvalence
@@ -350,70 +335,64 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             WHERE id = %s
         """
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
-                cur.execute(query, (nouveau_niveau, date_evaluation, prochaine_evaluation, id))
-                conn.commit()
+            QueryExecutor.execute_write(query, (nouveau_niveau, date_evaluation, prochaine_evaluation, id))
 
-                from infrastructure.logging.optimized_db_logger import log_hist
-                log_hist("UPDATE", "polyvalence", id,
-                        f"Évaluation: N{old[2]}→N{nouveau_niveau}",
-                        operateur_id=old[0], poste_id=old[1])
+            from infrastructure.logging.optimized_db_logger import log_hist
+            log_hist("UPDATE", "polyvalence", id,
+                    f"Évaluation: N{old[2]}→N{nouveau_niveau}",
+                    operateur_id=old[0], poste_id=old[1])
 
-                if old[2] != nouveau_niveau:
-                    try:
-                        from domain.services.admin.polyvalence_logger import log_polyvalence_action
-                        log_polyvalence_action(
-                            action_type='MODIFICATION',
-                            operateur_id=old[0], poste_id=old[1],
-                            polyvalence_id=id,
-                            ancien_niveau=old[2],
-                            nouveau_niveau=nouveau_niveau,
-                            nouvelle_date_evaluation=date_evaluation,
-                            source='GUI',
-                        )
-                    except Exception as _e:
-                        logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
+            if old[2] != nouveau_niveau:
+                try:
+                    from domain.services.admin.polyvalence_logger import log_polyvalence_action
+                    log_polyvalence_action(
+                        action_type='MODIFICATION',
+                        operateur_id=old[0], poste_id=old[1],
+                        polyvalence_id=id,
+                        ancien_niveau=old[2],
+                        nouveau_niveau=nouveau_niveau,
+                        nouvelle_date_evaluation=date_evaluation,
+                        source='GUI',
+                    )
+                except Exception as _e:
+                    logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
 
-                # Émettre les événements si le niveau a changé
-                old_niveau = old[2]
-                if old_niveau != nouveau_niveau:
-                    from application.event_bus import EventBus
-                    from domain.repositories.personnel_repo import PersonnelRepository
-                    from domain.repositories.poste_repo import PosteRepository
-                    personnel = PersonnelRepository.get_by_id(old[0])
-                    poste = PosteRepository.get_by_id(old[1])
+            old_niveau = old[2]
+            if old_niveau != nouveau_niveau:
+                from application.event_bus import EventBus
+                from domain.repositories.personnel_repo import PersonnelRepository
+                from domain.repositories.poste_repo import PosteRepository
+                personnel = PersonnelRepository.get_by_id(old[0])
+                poste = PosteRepository.get_by_id(old[1])
 
-                    if personnel and poste:
-                        event_data = {
-                            'polyvalence_id': id,
-                            'operateur_id': old[0],
-                            'nom': personnel.nom,
-                            'prenom': personnel.prenom,
-                            'poste_id': old[1],
-                            'code_poste': poste.poste_code if hasattr(poste, 'poste_code') else str(old[1]),
-                            'old_niveau': old_niveau,
-                            'new_niveau': nouveau_niveau
-                        }
+                if personnel and poste:
+                    event_data = {
+                        'polyvalence_id': id,
+                        'operateur_id': old[0],
+                        'nom': personnel.nom,
+                        'prenom': personnel.prenom,
+                        'poste_id': old[1],
+                        'code_poste': poste.poste_code if hasattr(poste, 'poste_code') else str(old[1]),
+                        'old_niveau': old_niveau,
+                        'new_niveau': nouveau_niveau
+                    }
 
-                        EventBus.emit('polyvalence.niveau_changed', event_data,
-                                     source='PolyvalenceRepository.update_niveau')
+                    EventBus.emit('polyvalence.niveau_changed', event_data,
+                                 source='PolyvalenceRepository.update_niveau')
 
-                        # Événement spécial pour le passage au niveau 2
-                        if nouveau_niveau == 2 and old_niveau < 2:
-                            EventBus.emit('polyvalence.niveau_2_reached', {
-                                **event_data,
-                                'niveau': 2
-                            }, source='PolyvalenceRepository.update_niveau')
+                    if nouveau_niveau == 2 and old_niveau < 2:
+                        EventBus.emit('polyvalence.niveau_2_reached', {
+                            **event_data,
+                            'niveau': 2
+                        }, source='PolyvalenceRepository.update_niveau')
 
-                        # Événement spécial pour le passage au niveau 3
-                        if nouveau_niveau == 3 and old_niveau < 3:
-                            EventBus.emit('polyvalence.niveau_3_reached', {
-                                **event_data,
-                                'niveau': 3
-                            }, source='PolyvalenceRepository.update_niveau')
+                    if nouveau_niveau == 3 and old_niveau < 3:
+                        EventBus.emit('polyvalence.niveau_3_reached', {
+                            **event_data,
+                            'niveau': 3
+                        }, source='PolyvalenceRepository.update_niveau')
 
-                return True, "Évaluation enregistrée"
+            return True, "Évaluation enregistrée"
 
         except Exception as e:
             logger.error(f"Erreur mise à jour polyvalence: {e}")
@@ -427,7 +406,6 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         Inclut poste_code, niveau, date_evaluation, prochaine_evaluation.
         Utilisé par les vues qui ont besoin d'accès par clé de chaîne.
         """
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT ps.poste_code, p.niveau, p.date_evaluation, p.prochaine_evaluation
@@ -454,7 +432,6 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         Utilisé lors de la création d'un opérateur pour initialiser
         sa polyvalence sans lever d'erreur si elle existe déjà.
         """
-        from infrastructure.db.query_executor import QueryExecutor
         existing = QueryExecutor.fetch_one(
             "SELECT id FROM polyvalence WHERE personnel_id = %s AND poste_id = %s",
             (operateur_id, poste_id),
@@ -503,7 +480,6 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             poste_code: Filtre optionnel sur le code poste
             limit: Nombre max de résultats
         """
-        from infrastructure.db.query_executor import QueryExecutor
         query = """
             SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
             FROM polyvalence poly
@@ -532,7 +508,6 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             poste_code: Filtre optionnel sur le code poste
             limit: Nombre max de résultats
         """
-        from infrastructure.db.query_executor import QueryExecutor
         query = """
             SELECT p.nom, p.prenom, pos.poste_code, poly.prochaine_evaluation
             FROM polyvalence poly
@@ -554,8 +529,7 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
     def delete_competence(cls, operateur_id: int, poste_id: int) -> Tuple[bool, str]:
         """Supprime une compétence."""
         # Lire l'état avant suppression pour l'historique
-        from infrastructure.db.query_executor import QueryExecutor as QE
-        old = QE.fetch_one(
+        old = QueryExecutor.fetch_one(
             "SELECT id, niveau, date_evaluation FROM polyvalence WHERE personnel_id = %s AND poste_id = %s",
             (operateur_id, poste_id), dictionary=True
         )
@@ -563,30 +537,30 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         query = "DELETE FROM polyvalence WHERE personnel_id = %s AND poste_id = %s"
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
+            def _do_delete(cur):
                 cur.execute(query, (operateur_id, poste_id))
-                deleted = cur.rowcount > 0
-                conn.commit()
+                return cur.rowcount > 0
 
-                if deleted:
-                    from infrastructure.logging.optimized_db_logger import log_hist
-                    log_hist("DELETE", "polyvalence", None,
-                            f"Compétence supprimée", operateur_id=operateur_id, poste_id=poste_id)
+            deleted = QueryExecutor.with_transaction(_do_delete)
 
-                    try:
-                        from domain.services.admin.polyvalence_logger import log_polyvalence_action
-                        log_polyvalence_action(
-                            action_type='SUPPRESSION',
-                            operateur_id=operateur_id, poste_id=poste_id,
-                            ancien_niveau=old['niveau'] if old else None,
-                            ancienne_date_evaluation=old['date_evaluation'] if old else None,
-                            source='GUI',
-                        )
-                    except Exception as _e:
-                        logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
+            if deleted:
+                from infrastructure.logging.optimized_db_logger import log_hist
+                log_hist("DELETE", "polyvalence", None,
+                        f"Compétence supprimée", operateur_id=operateur_id, poste_id=poste_id)
 
-                return deleted, "Compétence supprimée" if deleted else "Compétence non trouvée"
+                try:
+                    from domain.services.admin.polyvalence_logger import log_polyvalence_action
+                    log_polyvalence_action(
+                        action_type='SUPPRESSION',
+                        operateur_id=operateur_id, poste_id=poste_id,
+                        ancien_niveau=old['niveau'] if old else None,
+                        ancienne_date_evaluation=old['date_evaluation'] if old else None,
+                        source='GUI',
+                    )
+                except Exception as _e:
+                    logger.warning(f"Erreur archivage historique_polyvalence: {_e}")
+
+            return deleted, "Compétence supprimée" if deleted else "Compétence non trouvée"
 
         except Exception as e:
             logger.error(f"Erreur suppression polyvalence: {e}")
@@ -598,7 +572,6 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         Retourne les polyvalences actuelles avec les champs type/id/commentaire
         pour la vue historique personnel (HistoriquePersonnelTab).
         """
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT 'ACTUELLE' AS type, p.id, ps.poste_code, p.niveau,
@@ -618,7 +591,6 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         Retourne l'historique des polyvalences depuis historique_polyvalence
         (IMPORT_MANUEL + MODIFICATION + AJOUT + SUPPRESSION).
         """
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT 'ANCIENNE' AS type, hp.id, p.poste_code,

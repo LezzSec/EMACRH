@@ -10,9 +10,7 @@ from typing import List, Set, Tuple
 from PyQt5.QtWidgets import (
     QApplication, QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
     QTableWidget, QTableWidgetItem, QLabel, QMessageBox, QInputDialog,
-    QFileDialog, QAbstractItemView, QWidget, QDialog as _QDialog,
-    QVBoxLayout as _QVBoxLayout, QHBoxLayout as _QHBoxLayout,
-    QRadioButton, QButtonGroup, QGroupBox,
+    QFileDialog, QAbstractItemView, QWidget, QToolButton, QMenu, QAction,
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
@@ -480,94 +478,40 @@ class GrillesDialog(QDialog):
     # Export                                                               #
     # ------------------------------------------------------------------ #
 
-    def export_data(self):
-        """Dialogue de choix état/format puis délègue aux services d'export."""
-        dialog = _QDialog(self)
-        dialog.setWindowTitle("Exporter les données")
-        dialog.setMinimumWidth(500)
-
-        layout = _QVBoxLayout(dialog)
-        layout.setSpacing(20)
-        layout.setContentsMargins(24, 24, 24, 24)
-
-        header = QLabel("Exporter la grille de polyvalence")
-        header.setStyleSheet("font-size: 18px; font-weight: bold; padding-bottom: 8px;")
-        layout.addWidget(header)
-
-        # Groupe état
-        state_group = QGroupBox("Données à exporter")
-        sg_layout = _QVBoxLayout()
-        state_btn_group = QButtonGroup(dialog)
-        current_radio = QRadioButton("État actuel (avec filtres et modifications)")
-        current_radio.setChecked(True)
-        full_radio = QRadioButton("Grille complète (toutes les données)")
-        state_btn_group.addButton(current_radio, 0)
-        state_btn_group.addButton(full_radio, 1)
-        sg_layout.addWidget(current_radio)
-        sg_layout.addWidget(full_radio)
-        state_group.setLayout(sg_layout)
-        layout.addWidget(state_group)
-
-        # Groupe format
-        format_group = QGroupBox("Format d'exportation")
-        fg_layout = _QVBoxLayout()
-        format_btn_group = QButtonGroup(dialog)
-        excel_radio = QRadioButton("Excel (.xlsx)")
-        excel_radio.setChecked(True)
-        pdf_radio = QRadioButton("PDF (.pdf)")
-        format_btn_group.addButton(excel_radio, 0)
-        format_btn_group.addButton(pdf_radio, 1)
-        fg_layout.addWidget(excel_radio)
-        fg_layout.addWidget(pdf_radio)
-        format_group.setLayout(fg_layout)
-        layout.addWidget(format_group)
-
-        # Boutons
-        btn_layout = _QHBoxLayout()
-        btn_layout.addStretch()
-        cancel_btn = EmacButton("Annuler", variant='ghost')
-        export_btn = EmacButton("Exporter", variant='primary')
-        cancel_btn.clicked.connect(dialog.reject)
-        export_btn.clicked.connect(dialog.accept)
-        btn_layout.addWidget(cancel_btn)
-        btn_layout.addWidget(export_btn)
-        layout.addLayout(btn_layout)
-
-        if dialog.exec_() != QDialog.Accepted:
-            return
-
-        export_current = (state_btn_group.checkedId() == 0)
-        fmt = "Excel" if format_btn_group.checkedId() == 0 else "PDF"
-        ext = "xlsx" if fmt == "Excel" else "pdf"
-
+    def _export_direct(self, format_type: str, current: bool):
+        """Export direct sans dialog intermédiaire."""
+        import datetime as _dt
+        suffix = "vue_actuelle" if current else "complet"
+        default_name = f"grille_polyvalence_{suffix}_{_dt.date.today():%Y%m%d}.{format_type}"
+        file_filter = "Excel Files (*.xlsx)" if format_type == "xlsx" else "PDF Files (*.pdf)"
         file_name, _ = QFileDialog.getSaveFileName(
-            self, "Enregistrer le fichier", "", f"{fmt} Files (*.{ext})"
+            self, "Enregistrer l'export", default_name, file_filter
         )
         if not file_name:
             return
 
-        headers, row_labels, data = self._collect_export_data(export_current)
+        headers, row_labels, data = self._collect_export_data(export_current=current)
         if not data:
             QMessageBox.warning(self, "Exportation annulée", "Aucune donnée visible à exporter.")
             return
 
+        fmt_label = "Excel" if format_type == "xlsx" else "PDF"
         try:
-            if fmt == "Excel":
+            if format_type == "xlsx":
                 from domain.services.formation.grilles_export_excel import export_grille_excel
                 export_grille_excel(file_name, headers, row_labels, data)
             else:
                 from domain.services.formation.grilles_export_pdf import export_grille_pdf
                 synthesis_start = sum(
                     1 for r in range(self.main_table.rowCount())
-                    if not (export_current and self.main_table.isRowHidden(r))
+                    if not (current and self.main_table.isRowHidden(r))
                     and r < len(self.operateurs)
                 )
                 export_grille_pdf(file_name, headers, row_labels, data, synthesis_start)
-
             QMessageBox.information(self, "Exportation réussie", f"Fichier généré : {file_name}")
         except Exception as e:
-            logger.exception(f"Erreur export {fmt}: {e}")
-            show_error_message(self, "Erreur", f"Erreur lors de l'export {fmt}", e)
+            logger.exception(f"Erreur export {fmt_label}: {e}")
+            show_error_message(self, "Erreur", f"Erreur lors de l'export {fmt_label}", e)
 
     def _collect_export_data(self, export_current: bool):
         """Collecte headers, row_labels et data depuis le tableau, en respectant la visibilité."""
@@ -639,10 +583,25 @@ class GrillesDialog(QDialog):
 
         toolbar.addStretch()
 
-        btn_export = EmacButton("Exporter", variant='ghost')
-        btn_export.setToolTip("Exporter l'état visuel actuel")
-        btn_export.clicked.connect(self.export_data)
-        toolbar.addWidget(btn_export)
+        self.export_btn = QToolButton()
+        self.export_btn.setText("Exporter \u25bc")
+        self.export_btn.setPopupMode(QToolButton.InstantPopup)
+        export_menu = QMenu(self)
+        act_xlsx_current = QAction("Excel \u2014 vue actuelle (filtres appliqu\u00e9s)", self)
+        act_xlsx_current.triggered.connect(lambda: self._export_direct("xlsx", current=True))
+        export_menu.addAction(act_xlsx_current)
+        act_xlsx_full = QAction("Excel \u2014 grille compl\u00e8te", self)
+        act_xlsx_full.triggered.connect(lambda: self._export_direct("xlsx", current=False))
+        export_menu.addAction(act_xlsx_full)
+        export_menu.addSeparator()
+        act_pdf_current = QAction("PDF \u2014 vue actuelle (filtres appliqu\u00e9s)", self)
+        act_pdf_current.triggered.connect(lambda: self._export_direct("pdf", current=True))
+        export_menu.addAction(act_pdf_current)
+        act_pdf_full = QAction("PDF \u2014 grille compl\u00e8te", self)
+        act_pdf_full.triggered.connect(lambda: self._export_direct("pdf", current=False))
+        export_menu.addAction(act_pdf_full)
+        self.export_btn.setMenu(export_menu)
+        toolbar.addWidget(self.export_btn)
 
         self.layout.addLayout(toolbar)
 

@@ -21,7 +21,7 @@ Usage:
 import logging
 from typing import List, Dict, Any, Optional, Tuple
 
-from infrastructure.db.configbd import DatabaseCursor, DatabaseConnection
+from infrastructure.db.query_executor import QueryExecutor
 from domain.models import Personnel, PersonnelResume
 from domain.repositories.base import BaseRepository
 from infrastructure.config.performance_monitor import monitor_query
@@ -66,9 +66,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
             .limit(limit)
             .build())
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, params)
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, params, dictionary=True))
 
     @classmethod
     @monitor_query('PersonnelRepo.get_all_inactifs')
@@ -80,9 +78,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
             .limit(limit)
             .build())
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, params)
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, params, dictionary=True))
 
     @classmethod
     def get_by_matricule(cls, matricule: str) -> Optional[Personnel]:
@@ -100,10 +96,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
             .limit(1)
             .build())
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, params)
-            row = cur.fetchone()
-            return cls._row_to_model(row)
+        return cls._row_to_model(QueryExecutor.fetch_one(query, params, dictionary=True))
 
     @classmethod
     @monitor_query('PersonnelRepo.search')
@@ -144,9 +137,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
         query += " ORDER BY nom LIMIT %s"
         params.append(limit)
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, tuple(params))
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, tuple(params), dictionary=True))
 
     @classmethod
     def get_by_atelier(cls, atelier_id: int) -> List[Personnel]:
@@ -163,9 +154,7 @@ class PersonnelRepository(BaseRepository[Personnel]):
         """
         params = (atelier_id,)
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, params)
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, params, dictionary=True))
 
     @classmethod
     def get_resume_list(cls, statut: str = "ACTIF") -> List[PersonnelResume]:
@@ -185,9 +174,8 @@ class PersonnelRepository(BaseRepository[Personnel]):
             ORDER BY nom, prenom
         """
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, (statut,))
-            return [PersonnelResume.from_dict(row) for row in cur.fetchall()]
+        rows = QueryExecutor.fetch_all(query, (statut,), dictionary=True)
+        return [PersonnelResume.from_dict(row) for row in rows]
 
     # ===========================
     # Statistiques
@@ -207,10 +195,8 @@ class PersonnelRepository(BaseRepository[Personnel]):
             GROUP BY statut
         """
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query)
-            results = cur.fetchall()
-            return {row['statut']: row['count'] for row in results}
+        results = QueryExecutor.fetch_all(query, dictionary=True)
+        return {row['statut']: row['count'] for row in results}
 
     @classmethod
     def count_actifs(cls) -> int:
@@ -219,10 +205,8 @@ class PersonnelRepository(BaseRepository[Personnel]):
             .where("statut", "=", "ACTIF")
             .build_count())
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, params)
-            result = cur.fetchone()
-            return result['total'] if result else 0
+        result = QueryExecutor.fetch_one(query, params, dictionary=True)
+        return result['total'] if result else 0
 
     # ===========================
     # Opérations d'écriture
@@ -259,28 +243,26 @@ class PersonnelRepository(BaseRepository[Personnel]):
         values = tuple(insert_data.values())
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
+            def _do_create(cur):
                 cur.execute(query, values)
-                new_id = cur.lastrowid
-                conn.commit()
+                return cur.lastrowid
 
-                # Log
-                from infrastructure.logging.optimized_db_logger import log_hist
-                log_hist("CREATE", "personnel", new_id,
-                        f"Création: {data.get('nom')} {data.get('prenom')}")
+            new_id = QueryExecutor.with_transaction(_do_create)
 
-                # Émettre l'événement pour déclencher les documents
-                from application.event_bus import EventBus
-                EventBus.emit('personnel.created', {
-                    'operateur_id': new_id,
-                    'nom': data.get('nom', ''),
-                    'prenom': data.get('prenom', ''),
-                    'matricule': data.get('matricule'),
-                    'is_production': data.get('numposte') == 'Production'
-                }, source='PersonnelRepository.create')
+            from infrastructure.logging.optimized_db_logger import log_hist
+            log_hist("CREATE", "personnel", new_id,
+                    f"Création: {data.get('nom')} {data.get('prenom')}")
 
-                return True, "Employé créé avec succès", new_id
+            from application.event_bus import EventBus
+            EventBus.emit('personnel.created', {
+                'operateur_id': new_id,
+                'nom': data.get('nom', ''),
+                'prenom': data.get('prenom', ''),
+                'matricule': data.get('matricule'),
+                'is_production': data.get('numposte') == 'Production'
+            }, source='PersonnelRepository.create')
+
+            return True, "Employé créé avec succès", new_id
 
         except Exception as e:
             logger.error(f"Erreur création personnel: {e}")
@@ -323,17 +305,13 @@ class PersonnelRepository(BaseRepository[Personnel]):
         values = tuple(list(update_data.values()) + [id])
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
-                cur.execute(query, values)
-                conn.commit()
+            QueryExecutor.execute_write(query, values)
 
-                # Log
-                from infrastructure.logging.optimized_db_logger import log_hist
-                log_hist("UPDATE", "personnel", id,
-                        f"Mise à jour: {list(update_data.keys())}")
+            from infrastructure.logging.optimized_db_logger import log_hist
+            log_hist("UPDATE", "personnel", id,
+                    f"Mise à jour: {list(update_data.keys())}")
 
-                return True, "Employé mis à jour avec succès"
+            return True, "Employé mis à jour avec succès"
 
         except Exception as e:
             logger.error(f"Erreur mise à jour personnel id={id}: {e}")
@@ -617,6 +595,47 @@ class PersonnelRepository(BaseRepository[Personnel]):
         return True
 
     @classmethod
+    def get_adresse_and_coords(cls, personnel_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Retourne l'adresse actuellement enregistrée et les coordonnées GPS.
+        Utilisé pour détecter si l'adresse a changé avant de recalculer la distance.
+        """
+        from infrastructure.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_one(
+            """SELECT adresse1, cp_adresse, ville_adresse,
+                      latitude, longitude, distance_domicile_km
+               FROM personnel_infos WHERE personnel_id = %s""",
+            (personnel_id,),
+            dictionary=True,
+        )
+
+    @classmethod
+    def update_distance_domicile(
+        cls,
+        personnel_id: int,
+        latitude: Optional[float],
+        longitude: Optional[float],
+        distance_km: Optional[float],
+        duree_min: Optional[int],
+    ) -> None:
+        """
+        Met à jour les coordonnées GPS et la distance domicile-entreprise
+        d'un membre du personnel.
+        """
+        from infrastructure.db.query_executor import QueryExecutor
+        QueryExecutor.execute_write(
+            """UPDATE personnel_infos
+               SET latitude = %s,
+                   longitude = %s,
+                   distance_domicile_km = %s,
+                   duree_trajet_min = %s,
+                   distance_calculee_at = NOW()
+               WHERE personnel_id = %s""",
+            (latitude, longitude, distance_km, duree_min, personnel_id),
+            return_lastrowid=False,
+        )
+
+    @classmethod
     def is_matricule_disponible(cls, matricule: str, exclude_id: int) -> bool:
         """
         Vérifie si un matricule est libre (non utilisé par un autre personnel).
@@ -757,14 +776,8 @@ class PersonnelRepository(BaseRepository[Personnel]):
             WHERE {where_sql}
         """
 
-        with DatabaseCursor(dictionary=True) as cur:
-            # Données paginées
-            cur.execute(query, tuple(params_data))
-            rows = cur.fetchall()
-
-            # Total
-            cur.execute(count_query, tuple(params))
-            total = cur.fetchone()['total']
-
+        rows = QueryExecutor.fetch_all(query, tuple(params_data), dictionary=True)
+        count_row = QueryExecutor.fetch_one(count_query, tuple(params), dictionary=True)
+        total = count_row['total'] if count_row else 0
         return rows, total
 

@@ -27,7 +27,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 
-from infrastructure.db.configbd import DatabaseCursor, DatabaseConnection
+from infrastructure.db.query_executor import QueryExecutor
 from domain.models import ModelMixin
 
 logger = logging.getLogger(__name__)
@@ -343,10 +343,7 @@ class BaseRepository(ABC, Generic[T]):
             .limit(1)
             .build())
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, params)
-            row = cur.fetchone()
-            return cls._row_to_model(row)
+        return cls._row_to_model(QueryExecutor.fetch_one(query, params, dictionary=True))
 
     @classmethod
     def get_all(cls, limit: int = 1000) -> List[T]:
@@ -363,28 +360,21 @@ class BaseRepository(ABC, Generic[T]):
             .limit(limit)
             .build())
 
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, params)
-            return cls._rows_to_models(cur.fetchall())
+        return cls._rows_to_models(QueryExecutor.fetch_all(query, params, dictionary=True))
 
     @classmethod
     def count(cls) -> int:
         """Compte le nombre total d'enregistrements"""
         query, params = cls._get_builder().build_count()
-
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute(query, params)
-            result = cur.fetchone()
-            return result['total'] if result else 0
+        result = QueryExecutor.fetch_one(query, params, dictionary=True)
+        return result['total'] if result else 0
 
     @classmethod
     def exists(cls, id: int) -> bool:
         """Vérifie si un enregistrement existe"""
-        query = f"SELECT 1 FROM {cls.TABLE} WHERE id = %s LIMIT 1"
-
-        with DatabaseCursor() as cur:
-            cur.execute(query, (id,))
-            return cur.fetchone() is not None
+        return QueryExecutor.fetch_one(
+            f"SELECT 1 FROM {cls.TABLE} WHERE id = %s LIMIT 1", (id,)
+        ) is not None
 
     @classmethod
     def delete(cls, id: int) -> bool:
@@ -400,12 +390,10 @@ class BaseRepository(ABC, Generic[T]):
         query = f"DELETE FROM {cls.TABLE} WHERE id = %s"
 
         try:
-            with DatabaseConnection() as conn:
-                cur = conn.cursor()
+            def _do_delete(cur):
                 cur.execute(query, (id,))
-                deleted = cur.rowcount > 0
-                conn.commit()
-                return deleted
+                return cur.rowcount > 0
+            return QueryExecutor.with_transaction(_do_delete)
         except Exception as e:
             logger.error(f"Erreur suppression {cls.TABLE} id={id}: {e}")
             return False
@@ -466,15 +454,9 @@ class BaseRepository(ABC, Generic[T]):
                 count_builder.where(column, "=", value)
         count_query, count_params = count_builder.build_count()
 
-        with DatabaseCursor(dictionary=True) as cur:
-            # Données paginées
-            cur.execute(query, params)
-            rows = cls._rows_to_models(cur.fetchall())
-
-            # Total
-            cur.execute(count_query, count_params)
-            total = cur.fetchone()['total']
-
+        rows = cls._rows_to_models(QueryExecutor.fetch_all(query, params, dictionary=True))
+        total_row = QueryExecutor.fetch_one(count_query, count_params, dictionary=True)
+        total = total_row['total'] if total_row else 0
         return rows, total
 
 

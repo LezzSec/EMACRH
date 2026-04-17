@@ -220,6 +220,8 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
         tuple: (succès, message d'erreur si échec)
     """
     try:
+        # Transaction mixte read+write (SELECT dict → INSERT → UPDATE) :
+        # DatabaseConnection directe requise ici — ne pas convertir en QueryExecutor.
         with DatabaseConnection() as conn:
             cur = conn.cursor(dictionary=True)
 
@@ -645,11 +647,10 @@ def delete_user(user_id: int) -> tuple[bool, Optional[str]]:
         if not user_info:
             return False, "Utilisateur introuvable"
 
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
-            cur.execute("DELETE FROM logs_connexion WHERE utilisateur_id = %s", (user_id,))
-            cur.execute("DELETE FROM utilisateurs WHERE id = %s", (user_id,))
-            cur.close()
+        QueryExecutor.execute_transaction([
+            ("DELETE FROM logs_connexion WHERE utilisateur_id = %s", (user_id,)),
+            ("DELETE FROM utilisateurs WHERE id = %s", (user_id,)),
+        ])
 
         log_hist_async(
             action="SUPPRESSION_UTILISATEUR",

@@ -16,7 +16,6 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import mimetypes
 
-from infrastructure.db.configbd import DatabaseConnection
 from infrastructure.db.query_executor import QueryExecutor
 
 

@@ -28,6 +28,17 @@ from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+# Cache module-level : évite de requêter la DB pour chaque opérateur/polyvalence
+_table_exists_cache: Optional[bool] = None
+_rules_cache: Dict[str, List] = {}  # event_name → List[EventRule]
+
+
+def _invalidate_rules_cache() -> None:
+    """Vide le cache des règles (à appeler après création/modification d'une règle)."""
+    global _table_exists_cache, _rules_cache
+    _table_exists_cache = None
+    _rules_cache.clear()
+
 
 @dataclass
 class EventRule:
@@ -55,38 +66,44 @@ class EventRule:
 def check_event_rules_table_exists() -> bool:
     """
     Vérifie si la table document_event_rules existe.
+    Résultat mis en cache pour éviter une requête par appel.
 
     Returns:
         True si la table existe, False sinon
     """
+    global _table_exists_cache
+    if _table_exists_cache is not None:
+        return _table_exists_cache
     try:
         count = QueryExecutor.fetch_scalar("""
             SELECT COUNT(*) FROM information_schema.tables
             WHERE table_schema = DATABASE()
             AND table_name = 'document_event_rules'
         """, default=0)
-        return count > 0
+        _table_exists_cache = (count > 0)
     except Exception:
-        return False
+        _table_exists_cache = False
+    return _table_exists_cache
 
 
 def get_rules_for_event(event_name: str) -> List[EventRule]:
     """
     Récupère toutes les règles actives pour un événement.
+    Résultats mis en cache par event_name pour éviter des requêtes répétées
+    lors d'un chargement en masse (ex: dialog impression 80 opérateurs).
 
     Args:
         event_name: Nom de l'événement (ex: 'personnel.created')
 
     Returns:
         Liste des EventRule triées par priorité
-
-    Example:
-        rules = get_rules_for_event('personnel.created')
-        for rule in rules:
-            print(f"Rule {rule.id}: template={rule.template_nom}")
     """
+    if event_name in _rules_cache:
+        return _rules_cache[event_name]
+
     if not check_event_rules_table_exists():
         logger.warning("Table document_event_rules n'existe pas")
+        _rules_cache[event_name] = []
         return []
 
     query = """
@@ -108,6 +125,7 @@ def get_rules_for_event(event_name: str) -> List[EventRule]:
         rows = QueryExecutor.fetch_all(query, (event_name,), dictionary=True)
     except Exception as e:
         logger.error(f"Erreur lecture règles pour '{event_name}': {e}")
+        _rules_cache[event_name] = []
         return []
 
     rules = []
@@ -118,7 +136,6 @@ def get_rules_for_event(event_name: str) -> List[EventRule]:
                 if isinstance(row['condition_json'], str):
                     condition = json.loads(row['condition_json'])
                 else:
-                    # MySQL retourne déjà un dict pour les colonnes JSON
                     condition = row['condition_json']
             except json.JSONDecodeError as e:
                 logger.warning(f"Condition JSON invalide pour règle {row['id']}: {e}")
@@ -134,6 +151,7 @@ def get_rules_for_event(event_name: str) -> List[EventRule]:
         ))
 
     logger.debug(f"Trouvé {len(rules)} règle(s) pour '{event_name}'")
+    _rules_cache[event_name] = rules
     return rules
 
 
@@ -294,7 +312,7 @@ def get_matching_templates(event_name: str, event_data: Dict) -> List[Dict]:
         else:
             logger.debug(f"Règle {rule.id} ignorée (condition non satisfaite)")
 
-    logger.info(f"get_matching_templates('{event_name}'): {len(matching)} template(s)")
+    logger.debug(f"get_matching_templates('{event_name}'): {len(matching)} template(s)")
     return matching
 
 
@@ -396,6 +414,7 @@ def create_rule(
             description=f"Règle '{event_name}' → template #{template_id} ({execution_mode})"
         )
 
+        _invalidate_rules_cache()
         return True, "Règle créée avec succès", rule_id
 
     except Exception as e:

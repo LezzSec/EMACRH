@@ -29,6 +29,8 @@ import logging
 import time
 from typing import Set, List, Optional, Dict, Callable, TypeVar, Any
 
+from infrastructure.db.query_executor import QueryExecutor
+
 logger = logging.getLogger(__name__)
 
 # TTL du cache des permissions (en secondes)
@@ -114,56 +116,47 @@ class PermissionManager:
             user_id: ID de l'utilisateur
             role_id: ID du rôle de l'utilisateur
         """
-        from infrastructure.db.configbd import DatabaseCursor
-
         self._user_id = user_id
         self._role_id = role_id
         self._allowed_features.clear()
         self._user_overrides.clear()
 
         try:
-            with DatabaseCursor(dictionary=True) as cur:
-                # 1. Charger les features du rôle
-                cur.execute("""
-                    SELECT feature_key
-                    FROM role_features
-                    WHERE role_id = %s
-                """, (role_id,))
+            role_features_rows = QueryExecutor.fetch_all(
+                "SELECT feature_key FROM role_features WHERE role_id = %s",
+                (role_id,), dictionary=True
+            )
+            role_features = {row['feature_key'] for row in role_features_rows}
+            logger.debug(f"Features du rôle {role_id}: {len(role_features)} features")
 
-                role_features = {row['feature_key'] for row in cur.fetchall()}
-                logger.debug(f"Features du rôle {role_id}: {len(role_features)} features")
+            user_features_rows = QueryExecutor.fetch_all(
+                "SELECT feature_key, value FROM user_features WHERE user_id = %s",
+                (user_id,), dictionary=True
+            )
+            for row in user_features_rows:
+                self._user_overrides[row['feature_key']] = bool(row['value'])
 
-                # 2. Charger les overrides utilisateur
-                cur.execute("""
-                    SELECT feature_key, value
-                    FROM user_features
-                    WHERE user_id = %s
-                """, (user_id,))
+            logger.debug(f"Overrides utilisateur {user_id}: {len(self._user_overrides)} overrides")
 
-                for row in cur.fetchall():
-                    self._user_overrides[row['feature_key']] = bool(row['value'])
-
-                logger.debug(f"Overrides utilisateur {user_id}: {len(self._user_overrides)} overrides")
-
-                # 3. Calculer les permissions effectives
-                for feature_key in role_features:
-                    # Override utilisateur ?
-                    if feature_key in self._user_overrides:
-                        if self._user_overrides[feature_key]:
-                            self._allowed_features.add(feature_key)
-                        # Si False, on n'ajoute pas (refusé explicitement)
-                    else:
-                        # Pas d'override → hérite du rôle
+            # 3. Calculer les permissions effectives
+            for feature_key in role_features:
+                # Override utilisateur ?
+                if feature_key in self._user_overrides:
+                    if self._user_overrides[feature_key]:
                         self._allowed_features.add(feature_key)
+                    # Si False, on n'ajoute pas (refusé explicitement)
+                else:
+                    # Pas d'override → hérite du rôle
+                    self._allowed_features.add(feature_key)
 
-                # 4. Ajouter les overrides qui accordent des features non présentes dans le rôle
-                for feature_key, value in self._user_overrides.items():
-                    if value and feature_key not in self._allowed_features:
-                        self._allowed_features.add(feature_key)
+            # 4. Ajouter les overrides qui accordent des features non présentes dans le rôle
+            for feature_key, value in self._user_overrides.items():
+                if value and feature_key not in self._allowed_features:
+                    self._allowed_features.add(feature_key)
 
-                self._loaded = True
-                self._cache_timestamp = time.time()
-                logger.info(f"Permissions chargées: {len(self._allowed_features)} features autorisées")
+            self._loaded = True
+            self._cache_timestamp = time.time()
+            logger.info(f"Permissions chargées: {len(self._allowed_features)} features autorisées")
 
         except Exception as e:
             logger.error(f"Impossible de charger les permissions (user_id={user_id}, role_id={role_id}): {e}")
@@ -210,32 +203,21 @@ class PermissionManager:
             logger.warning("Vérification fraîche impossible: utilisateur non connecté")
             return False
 
-        from infrastructure.db.configbd import DatabaseCursor
-
         try:
-            with DatabaseCursor(dictionary=True) as cur:
-                # 1. Vérifier si un override utilisateur existe
-                cur.execute("""
-                    SELECT value FROM user_features
-                    WHERE user_id = %s AND feature_key = %s
-                """, (self._user_id, feature_key))
-                override = cur.fetchone()
+            override = QueryExecutor.fetch_one(
+                "SELECT value FROM user_features WHERE user_id = %s AND feature_key = %s",
+                (self._user_id, feature_key), dictionary=True
+            )
+            if override is not None:
+                return bool(override['value'])
 
-                if override is not None:
-                    # Override explicite: TRUE ou FALSE
-                    return bool(override['value'])
-
-                # 2. Pas d'override → vérifier si le rôle a cette feature
-                cur.execute("""
-                    SELECT 1 FROM role_features
-                    WHERE role_id = %s AND feature_key = %s
-                """, (self._role_id, feature_key))
-
-                return cur.fetchone() is not None
+            return QueryExecutor.fetch_one(
+                "SELECT 1 FROM role_features WHERE role_id = %s AND feature_key = %s",
+                (self._role_id, feature_key)
+            ) is not None
 
         except Exception as e:
             logger.error(f"Erreur vérification fraîche permission '{feature_key}': {e}")
-            # En cas d'erreur DB, refuser par sécurité
             return False
 
     def can(self, feature_key: str, fresh: bool = False) -> bool:
@@ -436,17 +418,13 @@ def invalidate_and_reload_permissions() -> None:
 
 def get_all_features() -> List[Dict]:
     """Récupère toutes les features du catalogue, groupées par module"""
-    from infrastructure.db.configbd import DatabaseCursor
-
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT id, key_code, label, module, description, display_order, is_active
-                FROM features
-                WHERE is_active = TRUE
-                ORDER BY module, display_order, key_code
-            """)
-            return cur.fetchall()
+        return QueryExecutor.fetch_all("""
+            SELECT id, key_code, label, module, description, display_order, is_active
+            FROM features
+            WHERE is_active = TRUE
+            ORDER BY module, display_order, key_code
+        """, dictionary=True)
     except Exception as e:
         logger.error(f"Erreur get_all_features: {e}")
         return []
@@ -468,14 +446,11 @@ def get_features_by_module() -> Dict[str, List[Dict]]:
 
 def get_role_features(role_id: int) -> Set[str]:
     """Récupère les features d'un rôle"""
-    from infrastructure.db.configbd import DatabaseCursor
-
     try:
-        with DatabaseCursor() as cur:
-            cur.execute("""
-                SELECT feature_key FROM role_features WHERE role_id = %s
-            """, (role_id,))
-            return {row[0] for row in cur.fetchall()}
+        rows = QueryExecutor.fetch_all(
+            "SELECT feature_key FROM role_features WHERE role_id = %s", (role_id,)
+        )
+        return {row[0] for row in rows}
     except Exception as e:
         logger.error(f"Erreur get_role_features: {e}")
         return set()
@@ -483,14 +458,12 @@ def get_role_features(role_id: int) -> Set[str]:
 
 def get_user_feature_overrides(user_id: int) -> Dict[str, bool]:
     """Récupère les overrides d'un utilisateur"""
-    from infrastructure.db.configbd import DatabaseCursor
-
     try:
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT feature_key, value FROM user_features WHERE user_id = %s
-            """, (user_id,))
-            return {row['feature_key']: bool(row['value']) for row in cur.fetchall()}
+        rows = QueryExecutor.fetch_all(
+            "SELECT feature_key, value FROM user_features WHERE user_id = %s",
+            (user_id,), dictionary=True
+        )
+        return {row['feature_key']: bool(row['value']) for row in rows}
     except Exception as e:
         logger.error(f"Erreur get_user_feature_overrides: {e}")
         return {}
@@ -507,7 +480,6 @@ def save_role_features(role_id: int, feature_keys: Set[str]) -> tuple[bool, Opti
     Returns:
         (success, error_message)
     """
-    from infrastructure.db.configbd import DatabaseConnection
     from domain.services.admin.auth_service import is_admin, get_current_user
     from infrastructure.logging.optimized_db_logger import log_hist_async
 
@@ -515,15 +487,14 @@ def save_role_features(role_id: int, feature_keys: Set[str]) -> tuple[bool, Opti
         return False, "Seuls les administrateurs peuvent modifier les permissions"
 
     try:
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
+        def _save(cur):
             cur.execute("DELETE FROM role_features WHERE role_id = %s", (role_id,))
             for key in feature_keys:
                 cur.execute(
                     "INSERT INTO role_features (role_id, feature_key) VALUES (%s, %s)",
                     (role_id, key)
                 )
-            cur.close()
+        QueryExecutor.with_transaction(_save)
 
         current_user = get_current_user()
         log_hist_async(
@@ -553,7 +524,6 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
     Returns:
         (success, error_message)
     """
-    from infrastructure.db.configbd import DatabaseConnection
     from domain.services.admin.auth_service import is_admin, get_current_user
     from infrastructure.logging.optimized_db_logger import log_hist_async
     from infrastructure.cache.emac_cache import invalidate_user_cache
@@ -565,8 +535,7 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
     modifier_id = current_user['id'] if current_user else None
 
     try:
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
+        def _save(cur):
             for feature_key, value in overrides.items():
                 if value is None:
                     cur.execute(
@@ -583,7 +552,7 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
                                date_modification = CURRENT_TIMESTAMP""",
                         (user_id, feature_key, value, modifier_id)
                     )
-            cur.close()
+        QueryExecutor.with_transaction(_save)
 
         # SÉCURITÉ: Invalider le cache ET recharger le PermissionManager
         invalidate_user_cache(reload_current_user=True)
@@ -605,7 +574,6 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
 
 def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
     """Supprime tous les overrides d'un utilisateur"""
-    from infrastructure.db.query_executor import QueryExecutor
     from domain.services.admin.auth_service import is_admin, get_current_user
     from infrastructure.logging.optimized_db_logger import log_hist_async
     from infrastructure.cache.emac_cache import invalidate_user_cache
@@ -645,10 +613,9 @@ def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
 def get_all_roles() -> List[Dict]:
     """Récupère tous les rôles avec leurs descriptions."""
     try:
-        from infrastructure.db.configbd import DatabaseCursor
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("SELECT id, nom, description FROM roles ORDER BY nom")
-            return cur.fetchall()
+        return QueryExecutor.fetch_all(
+            "SELECT id, nom, description FROM roles ORDER BY nom", dictionary=True
+        )
     except Exception as e:
         logger.error(f"Erreur get_all_roles: {e}")
         return []
@@ -657,13 +624,10 @@ def get_all_roles() -> List[Dict]:
 def get_admin_role_id() -> Optional[int]:
     """Retourne l'ID du rôle admin."""
     try:
-        from infrastructure.db.configbd import DatabaseCursor
-        with DatabaseCursor() as cur:
-            cur.execute(
-                "SELECT id FROM roles WHERE LOWER(nom) IN ('admin', 'administrateur') LIMIT 1"
-            )
-            row = cur.fetchone()
-            return row[0] if row else None
+        row = QueryExecutor.fetch_one(
+            "SELECT id FROM roles WHERE LOWER(nom) IN ('admin', 'administrateur') LIMIT 1"
+        )
+        return row[0] if row else None
     except Exception as e:
         logger.warning(f"Erreur get_admin_role_id: {e}")
         return None
@@ -672,15 +636,12 @@ def get_admin_role_id() -> Optional[int]:
 def get_user_with_role(user_id: int) -> Optional[Dict]:
     """Récupère un utilisateur avec son rôle."""
     try:
-        from infrastructure.db.configbd import DatabaseCursor
-        with DatabaseCursor(dictionary=True) as cur:
-            cur.execute("""
-                SELECT u.id, u.username, u.nom, u.prenom, u.role_id, r.nom as role_nom
-                FROM utilisateurs u
-                JOIN roles r ON u.role_id = r.id
-                WHERE u.id = %s
-            """, (user_id,))
-            return cur.fetchone()
+        return QueryExecutor.fetch_one("""
+            SELECT u.id, u.username, u.nom, u.prenom, u.role_id, r.nom as role_nom
+            FROM utilisateurs u
+            JOIN roles r ON u.role_id = r.id
+            WHERE u.id = %s
+        """, (user_id,), dictionary=True)
     except Exception as e:
         logger.error(f"Erreur get_user_with_role: {e}")
         return None

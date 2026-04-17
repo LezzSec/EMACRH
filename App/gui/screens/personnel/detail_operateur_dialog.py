@@ -11,7 +11,7 @@ logger = get_logger(__name__)
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView, QWidget, QTabWidget,
-    QMessageBox, QScrollArea, QFrame, QGridLayout,
+    QMessageBox, QScrollArea, QFrame, QGridLayout, QToolButton, QMenu, QAction,
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
@@ -166,8 +166,33 @@ class DetailOperateurDialog(QDialog):
 
         actions.addStretch()
 
-        self.export_btn = QPushButton("Exporter le profil")
-        self.export_btn.clicked.connect(self.export_profile)
+        self.export_btn = QToolButton()
+        self.export_btn.setText("Exporter en PDF")
+        self.export_btn.setPopupMode(QToolButton.MenuButtonPopup)
+        self.export_btn.clicked.connect(self.export_profile_pdf)
+        export_menu = QMenu(self)
+        act_pdf = QAction("Exporter en PDF", self)
+        act_pdf.triggered.connect(self.export_profile_pdf)
+        act_xlsx = QAction("Exporter en Excel", self)
+        act_xlsx.triggered.connect(self.export_profile_excel)
+        export_menu.addAction(act_pdf)
+        export_menu.addAction(act_xlsx)
+        self.export_btn.setMenu(export_menu)
+        self.export_btn.setStyleSheet("""
+            QToolButton {
+                background: #0f172a;
+                color: white;
+                border: 1px solid #0f172a;
+                border-radius: 6px;
+                padding: 6px 14px;
+                font-weight: 600;
+            }
+            QToolButton:hover { background: #1e293b; }
+            QToolButton::menu-button {
+                border-left: 1px solid rgba(255,255,255,0.2);
+                width: 18px;
+            }
+        """)
         actions.addWidget(self.export_btn)
 
         self.close_btn = QPushButton("Fermer")
@@ -289,32 +314,6 @@ class DetailOperateurDialog(QDialog):
     # ------------------------------------------------------------------
     # Export
     # ------------------------------------------------------------------
-
-    def export_profile(self):
-        """Demande le format puis lance PDF ou Excel."""
-        dlg = QDialog(self)
-        dlg.setWindowTitle("Exporter le profil")
-        dlg.setMinimumWidth(360)
-        v = QVBoxLayout(dlg)
-        v.addWidget(QLabel("Choisir le format d'export :"))
-        btns = QHBoxLayout()
-        b_pdf    = QPushButton("PDF")
-        b_xlsx   = QPushButton("Excel")
-        b_cancel = QPushButton("Annuler")
-        b_pdf.clicked.connect(lambda: (setattr(dlg, "_choice", "pdf"), dlg.accept()))
-        b_xlsx.clicked.connect(lambda: (setattr(dlg, "_choice", "xlsx"), dlg.accept()))
-        b_cancel.clicked.connect(dlg.reject)
-        btns.addStretch(1)
-        for b in (b_pdf, b_xlsx, b_cancel):
-            btns.addWidget(b)
-        v.addLayout(btns)
-
-        if dlg.exec_() != QDialog.Accepted or not getattr(dlg, "_choice", None):
-            return
-        if dlg._choice == "pdf":
-            self.export_profile_pdf()
-        else:
-            self.export_profile_excel()
 
     def export_profile_pdf(self):
         """Collecte données + chemin via QFileDialog, délègue au service PDF."""

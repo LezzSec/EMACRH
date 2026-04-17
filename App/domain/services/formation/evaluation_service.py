@@ -501,17 +501,14 @@ def importer_ancienne_polyvalence(operateur_id: int, poste_id: int, niveau: int,
     - INSERT/UPDATE dans polyvalence
     """
     try:
-        from infrastructure.db.configbd import DatabaseConnection
-        with DatabaseConnection() as conn:
-            cur = conn.cursor()
-            cur.execute("""
+        QueryExecutor.execute_transaction([
+            ("""
                 INSERT INTO historique_polyvalence
                 (personnel_id, poste_id, action_type, nouveau_niveau,
                  nouvelle_date_evaluation, commentaire, date_action)
                 VALUES (%s, %s, 'IMPORT_MANUEL', %s, %s, %s, NOW())
-            """, (operateur_id, poste_id, niveau, date_eval, commentaire or None))
-
-            cur.execute("""
+            """, (operateur_id, poste_id, niveau, date_eval, commentaire or None)),
+            ("""
                 INSERT INTO polyvalence
                 (personnel_id, poste_id, niveau, date_evaluation, prochaine_evaluation)
                 VALUES (%s, %s, %s, %s, %s)
@@ -519,7 +516,8 @@ def importer_ancienne_polyvalence(operateur_id: int, poste_id: int, niveau: int,
                     niveau = VALUES(niveau),
                     date_evaluation = VALUES(date_evaluation),
                     prochaine_evaluation = VALUES(prochaine_evaluation)
-            """, (operateur_id, poste_id, niveau, date_eval, date_prochaine))
+            """, (operateur_id, poste_id, niveau, date_eval, date_prochaine)),
+        ])
 
         from infrastructure.logging.optimized_db_logger import log_hist
         log_hist(
