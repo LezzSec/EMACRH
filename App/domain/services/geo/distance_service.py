@@ -1,13 +1,22 @@
 # -*- coding: utf-8 -*-
 """
-Service de calcul de distance routière entre un domicile et l'entreprise.
+Service de calcul de distance routière domicile-entreprise.
 
-Utilise OpenRouteService (clé API gratuite jusqu'à 2000 requêtes/jour).
-Fallback sur OSRM public (router.project-osrm.org) si la clé n'est pas définie.
+Calcule deux distances :
+  1. Mairie : mairie commune personnel (OSM) → mairie commune entreprise
+     Affichée à l'utilisateur sur la fiche individuelle.
+  2. Commune : centroïde commune personnel (geo.api.gouv.fr) →
+     centroïde commune entreprise
+     Utilisée pour statistiques agrégées et exports RH.
 
-Lecture de la config :
-  - EMAC_COMPANY_LAT, EMAC_COMPANY_LON : coordonnées de l'entreprise
-  - EMAC_ORS_API_KEY (optionnel) : clé OpenRouteService
+L'adresse exacte du personnel N'EST JAMAIS géocodée (RGPD-friendly).
+Seuls CP + ville sont utilisés pour résoudre la commune.
+
+APIs :
+  - geo.api.gouv.fr : code INSEE + centroïde commune (gratuit, illimité)
+  - overpass-api.de : coordonnées mairie via tag amenity=townhall (gratuit)
+  - OpenRouteService : distance routière (clé gratuite, 2000 req/jour)
+  - OSRM public : fallback routing sans clé
 """
 
 import os
@@ -21,108 +30,250 @@ from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-_TIMEOUT = 8  # secondes — les APIs de routing peuvent être plus lentes que le géocodage
+_TIMEOUT_SHORT = 5       # APIs rapides (geo.api.gouv.fr)
+_TIMEOUT_LONG = 25       # Overpass peut throttler
 _ORS_URL = "https://api.openrouteservice.org/v2/directions/driving-car"
 _OSRM_URL = "https://router.project-osrm.org/route/v1/driving"
+_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
-# Cache de session : adresses dont le géocodage OU le routing a échoué.
-# Évite de retenter en boucle les adresses invalides dans la même session.
-# Vidé automatiquement au redémarrage de l'app.
-_failed_addresses: set = set()
+# ═══════════════════════════════════════════════════════════════
+# Cache de session — garde-fous anti-surconsommation
+# ═══════════════════════════════════════════════════════════════
 
-
-def _normalize_address(adresse: str, cp: str, ville: str) -> str:
-    """Normalise une adresse pour la comparaison (lowercase, strip, espaces)."""
-    parts = [s.strip().lower() for s in (adresse or "", cp or "", ville or "") if s]
-    return " ".join(parts)
+_failed_communes: set[str] = set()
+_mairie_cache: dict[str, tuple[float, float]] = {}
 
 
-def is_address_known_failed(full_address: str) -> bool:
-    """Retourne True si cette adresse a déjà échoué dans cette session."""
-    return full_address.strip().lower() in _failed_addresses
+def _commune_key(cp: str, ville: str) -> str:
+    return f"{(cp or '').strip()}|{(ville or '').strip().lower()}"
 
 
-def mark_address_failed(full_address: str) -> None:
-    """Marque une adresse comme ayant échoué (pour ne pas retenter)."""
-    _failed_addresses.add(full_address.strip().lower())
+def is_commune_known_failed(cp: str, ville: str) -> bool:
+    return _commune_key(cp, ville) in _failed_communes
 
 
-def clear_failed_addresses_cache() -> None:
-    """Vide le cache (utile pour un retry manuel utilisateur)."""
-    _failed_addresses.clear()
+def mark_commune_failed(cp: str, ville: str) -> None:
+    _failed_communes.add(_commune_key(cp, ville))
 
 
-def _get_company_coords() -> Optional[tuple]:
-    """Retourne (lat, lon) de l'entreprise depuis les variables d'environnement."""
-    lat = os.getenv("EMAC_COMPANY_LAT")
-    lon = os.getenv("EMAC_COMPANY_LON")
-    if not lat or not lon:
-        logger.warning("EMAC_COMPANY_LAT/LON non définis — calcul distance impossible")
+def clear_failed_cache() -> None:
+    _failed_communes.clear()
+    _mairie_cache.clear()
+
+
+# ═══════════════════════════════════════════════════════════════
+# Configuration entreprise
+# ═══════════════════════════════════════════════════════════════
+
+_company_commune_cache: Optional[tuple[float, float]] = None
+_company_mairie_cache: Optional[tuple[float, float]] = None
+
+
+def _get_company_commune_coords() -> Optional[tuple[float, float]]:
+    """Centroïde de la commune de l'entreprise, résolu au premier appel."""
+    global _company_commune_cache
+    if _company_commune_cache is not None:
+        return _company_commune_cache
+
+    code_insee = os.getenv("EMAC_COMPANY_INSEE")
+    if not code_insee:
+        logger.warning("EMAC_COMPANY_INSEE non défini — distance commune impossible")
         return None
-    try:
-        return float(lat), float(lon)
-    except ValueError:
-        logger.error(f"EMAC_COMPANY_LAT/LON invalides : {lat}, {lon}")
-        return None
+
+    coords = get_commune_centroid_by_code(code_insee)
+    if coords:
+        _company_commune_cache = coords
+    return coords
 
 
-def geocode_address(full_address: str) -> Optional[tuple]:
+def _get_company_mairie_coords() -> Optional[tuple[float, float]]:
     """
-    Géocode une adresse française complète en (latitude, longitude).
+    Mairie de l'entreprise.
 
-    Utilise api-adresse.data.gouv.fr (même API que address_service).
+    Priorité :
+      1. Variables EMAC_COMPANY_MAIRIE_LAT/LON (recommandé : évite Overpass)
+      2. Résolution Overpass depuis EMAC_COMPANY_COMMUNE
+      3. Fallback centroïde commune
+    """
+    global _company_mairie_cache
+    if _company_mairie_cache is not None:
+        return _company_mairie_cache
 
-    Args:
-        full_address: Adresse complète, ex: "12 Rue de la Paix 75002 Paris"
+    lat = os.getenv("EMAC_COMPANY_MAIRIE_LAT")
+    lon = os.getenv("EMAC_COMPANY_MAIRIE_LON")
+    if lat and lon:
+        try:
+            _company_mairie_cache = (float(lat), float(lon))
+            return _company_mairie_cache
+        except ValueError:
+            logger.error(f"EMAC_COMPANY_MAIRIE_LAT/LON invalides : {lat}, {lon}")
+
+    commune = os.getenv("EMAC_COMPANY_COMMUNE")
+    if commune:
+        coords = get_mairie_coords(commune)
+        if coords:
+            _company_mairie_cache = coords
+            logger.info(
+                f"Mairie entreprise résolue via Overpass : {coords} "
+                f"(ajouter EMAC_COMPANY_MAIRIE_LAT/LON dans .env pour mettre en cache)"
+            )
+            return coords
+
+    logger.info("Mairie entreprise introuvable — fallback sur centroïde commune")
+    fallback = _get_company_commune_coords()
+    if fallback:
+        _company_mairie_cache = fallback
+    return fallback
+
+
+# ═══════════════════════════════════════════════════════════════
+# Résolution commune (geo.api.gouv.fr)
+# ═══════════════════════════════════════════════════════════════
+
+def get_commune_centroid_by_code(code_insee: str) -> Optional[tuple[float, float]]:
+    """Centroïde d'une commune par code INSEE via geo.api.gouv.fr."""
+    if not code_insee or len(code_insee) != 5:
+        return None
+
+    url = f"https://geo.api.gouv.fr/communes/{code_insee}?fields=centre&format=json"
+    try:
+        with urllib.request.urlopen(url, timeout=_TIMEOUT_SHORT) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        logger.warning(f"Erreur geo.api.gouv.fr (code={code_insee}): {e}")
+        return None
+
+    centre = data.get('centre', {}).get('coordinates', [])
+    if len(centre) != 2:
+        return None
+    return centre[1], centre[0]  # [lon, lat] → (lat, lon)
+
+
+def resolve_commune(cp: str, ville: str) -> Optional[dict]:
+    """
+    Résout une commune à partir de CP + nom de ville.
 
     Returns:
-        (lat, lon) ou None si l'adresse n'est pas trouvée.
+        {'code_insee': '64024', 'nom': 'Anglet', 'lat': 43.4779, 'lon': -1.5177}
+        ou None si non trouvée.
     """
-    if not full_address or len(full_address.strip()) < 5:
+    if not cp or not ville:
         return None
 
     params = urllib.parse.urlencode({
-        'q': full_address,
-        'limit': 1,
+        'codePostal': cp,
+        'fields': 'nom,code,centre',
+        'format': 'json',
     })
-    url = f"https://api-adresse.data.gouv.fr/search/?{params}"
+    url = f"https://geo.api.gouv.fr/communes?{params}"
 
     try:
-        with urllib.request.urlopen(url, timeout=_TIMEOUT) as resp:
+        with urllib.request.urlopen(url, timeout=_TIMEOUT_SHORT) as resp:
             data = json.loads(resp.read().decode('utf-8'))
     except Exception as e:
-        logger.warning(f"Erreur géocodage '{full_address}': {e}")
+        logger.warning(f"Erreur résolution commune CP={cp}: {e}")
         return None
 
-    features = data.get('features', [])
-    if not features:
+    if not data:
         return None
 
-    coords = features[0].get('geometry', {}).get('coordinates', [])
-    if len(coords) != 2:
+    ville_lower = ville.strip().lower()
+    best = None
+    for commune in data:
+        if commune.get('nom', '').strip().lower() == ville_lower:
+            best = commune
+            break
+
+    if best is None:
+        best = data[0]
+        logger.debug(
+            f"Pas de match exact pour '{ville}' dans CP {cp}, "
+            f"fallback sur '{best.get('nom')}'"
+        )
+
+    centre = best.get('centre', {}).get('coordinates', [])
+    if len(centre) != 2:
         return None
 
-    # L'API renvoie [lon, lat] — on inverse pour retourner (lat, lon)
-    return coords[1], coords[0]
+    return {
+        'code_insee': best.get('code', ''),
+        'nom': best.get('nom', ''),
+        'lat': centre[1],
+        'lon': centre[0],
+    }
 
 
-def _compute_route_ors(
-    origin: tuple,
-    destination: tuple,
-    api_key: str
-) -> Optional[tuple]:
+# ═══════════════════════════════════════════════════════════════
+# Résolution mairie (OSM Overpass)
+# ═══════════════════════════════════════════════════════════════
+
+def get_mairie_coords(commune_nom: str, code_insee: str = None) -> Optional[tuple[float, float]]:
     """
-    Calcule la route via OpenRouteService.
+    Retourne (lat, lon) de la mairie d'une commune via OSM Overpass.
 
-    Returns:
-        (distance_km, duree_min) ou None si échec.
+    Args:
+        commune_nom: Nom exact de la commune (ex: 'Anglet')
+        code_insee: Code INSEE pour désambiguïsation (optionnel)
     """
-    origin_str = f"{origin[1]},{origin[0]}"           # lon,lat
-    dest_str = f"{destination[1]},{destination[0]}"    # lon,lat
+    if not commune_nom:
+        return None
+
+    cache_key = code_insee or commune_nom.strip().lower()
+    if cache_key in _mairie_cache:
+        return _mairie_cache[cache_key]
+
+    insee_filter = f'["ref:INSEE"="{code_insee}"]' if code_insee else ''
+    query = f"""
+    [out:json][timeout:20];
+    area["ISO3166-1"="FR"]->.france;
+    (
+      node["amenity"="townhall"]["name"="{commune_nom}"]{insee_filter}(area.france);
+      way["amenity"="townhall"]["name"="{commune_nom}"]{insee_filter}(area.france);
+      relation["amenity"="townhall"]["name"="{commune_nom}"]{insee_filter}(area.france);
+    );
+    out center 1;
+    """.strip()
+
+    try:
+        data = urllib.parse.urlencode({'data': query}).encode('utf-8')
+        req = urllib.request.Request(_OVERPASS_URL, data=data)
+        with urllib.request.urlopen(req, timeout=_TIMEOUT_LONG) as resp:
+            result = json.loads(resp.read().decode('utf-8'))
+    except Exception as e:
+        logger.warning(f"Erreur Overpass (mairie '{commune_nom}'): {e}")
+        return None
+
+    elements = result.get('elements', [])
+    if not elements:
+        logger.debug(f"Pas de townhall OSM pour '{commune_nom}'")
+        return None
+
+    el = elements[0]
+    if el.get('type') == 'node':
+        lat, lon = el.get('lat'), el.get('lon')
+    else:
+        center = el.get('center', {})
+        lat, lon = center.get('lat'), center.get('lon')
+
+    if lat is None or lon is None:
+        return None
+
+    _mairie_cache[cache_key] = (lat, lon)
+    return lat, lon
+
+
+# ═══════════════════════════════════════════════════════════════
+# Calcul de distance routière (ORS + fallback OSRM)
+# ═══════════════════════════════════════════════════════════════
+
+def _compute_route_ors(origin, destination, api_key):
+    """Calcul via OpenRouteService. Retourne (distance_km, duree_min)."""
+    origin_str = f"{origin[1]},{origin[0]}"
+    dest_str = f"{destination[1]},{destination[0]}"
     url = f"{_ORS_URL}?api_key={api_key}&start={origin_str}&end={dest_str}"
 
     try:
-        with urllib.request.urlopen(url, timeout=_TIMEOUT) as resp:
+        with urllib.request.urlopen(url, timeout=_TIMEOUT_SHORT) as resp:
             data = json.loads(resp.read().decode('utf-8'))
     except Exception as e:
         logger.warning(f"Erreur ORS: {e}")
@@ -131,33 +282,20 @@ def _compute_route_ors(
     features = data.get('features', [])
     if not features:
         return None
-
     summary = features[0].get('properties', {}).get('summary', {})
-    distance_m = summary.get('distance')
-    duration_s = summary.get('duration')
-    if distance_m is None or duration_s is None:
+    d_m, d_s = summary.get('distance'), summary.get('duration')
+    if d_m is None or d_s is None:
         return None
+    return round(d_m / 1000, 2), round(d_s / 60)
 
-    return round(distance_m / 1000, 2), round(duration_s / 60)
 
-
-def _compute_route_osrm(
-    origin: tuple,
-    destination: tuple
-) -> Optional[tuple]:
-    """
-    Calcule la route via le serveur public OSRM (fallback sans clé).
-
-    Serveur public sans SLA — pour usage de développement uniquement.
-
-    Returns:
-        (distance_km, duree_min) ou None si échec.
-    """
+def _compute_route_osrm(origin, destination):
+    """Calcul via OSRM public (fallback). Retourne (distance_km, duree_min)."""
     coords = f"{origin[1]},{origin[0]};{destination[1]},{destination[0]}"
     url = f"{_OSRM_URL}/{coords}?overview=false"
 
     try:
-        with urllib.request.urlopen(url, timeout=_TIMEOUT) as resp:
+        with urllib.request.urlopen(url, timeout=_TIMEOUT_SHORT) as resp:
             data = json.loads(resp.read().decode('utf-8'))
     except Exception as e:
         logger.warning(f"Erreur OSRM: {e}")
@@ -166,105 +304,93 @@ def _compute_route_osrm(
     routes = data.get('routes', [])
     if not routes:
         return None
-
-    distance_m = routes[0].get('distance')
-    duration_s = routes[0].get('duration')
-    if distance_m is None or duration_s is None:
+    d_m, d_s = routes[0].get('distance'), routes[0].get('duration')
+    if d_m is None or d_s is None:
         return None
+    return round(d_m / 1000, 2), round(d_s / 60)
 
-    return round(distance_m / 1000, 2), round(duration_s / 60)
 
-
-def compute_distance_to_company(
-    lat: float,
-    lon: float
-) -> Optional[dict]:
-    """
-    Calcule la distance routière entre un domicile et l'entreprise.
-
-    Utilise ORS si EMAC_ORS_API_KEY est défini, sinon fallback OSRM.
-
-    Args:
-        lat: Latitude du domicile
-        lon: Longitude du domicile
-
-    Returns:
-        {
-            'distance_km': 12.45,
-            'duree_min': 18,
-            'calcule_at': datetime,
-        }
-        ou None si calcul impossible.
-    """
-    company = _get_company_coords()
-    if company is None:
-        return None
-
+def _compute_route(origin, destination):
+    """Calcul de route avec ORS si clé définie, sinon OSRM."""
     api_key = os.getenv("EMAC_ORS_API_KEY")
     if api_key:
-        result = _compute_route_ors((lat, lon), company, api_key)
-    else:
-        logger.debug("EMAC_ORS_API_KEY non défini — fallback OSRM public")
-        result = _compute_route_osrm((lat, lon), company)
-
-    if result is None:
-        return None
-
-    distance_km, duree_min = result
-    return {
-        'distance_km': distance_km,
-        'duree_min': duree_min,
-        'calcule_at': datetime.now(),
-    }
+        result = _compute_route_ors(origin, destination, api_key)
+        if result:
+            return result
+        logger.warning("ORS a échoué — fallback OSRM")
+    return _compute_route_osrm(origin, destination)
 
 
-def compute_distance_from_address(full_address: str) -> Optional[dict]:
+# ═══════════════════════════════════════════════════════════════
+# Fonction principale : calcul des deux distances
+# ═══════════════════════════════════════════════════════════════
+
+def compute_distances_for_commune(cp: str, ville: str) -> Optional[dict]:
     """
-    Fonction de haut niveau : prend une adresse textuelle, géocode, calcule la distance.
+    Calcule les deux distances (mairie + commune) pour une commune donnée.
 
     Args:
-        full_address: Adresse complète, ex: "12 Rue de la Paix 75002 Paris"
+        cp: Code postal du personnel
+        ville: Nom de la commune du personnel
 
     Returns:
         {
-            'latitude': 48.8688,
-            'longitude': 2.3320,
-            'distance_km': 12.45,
-            'duree_min': 18,
-            'calcule_at': datetime,
+            'code_insee_commune': '75102',
+            'commune_lat': 48.8692, 'commune_lon': 2.3413,
+            'distance_commune_km': 11.80, 'duree_trajet_commune_min': 16,
+            'mairie_lat': 48.8634, 'mairie_lon': 2.3388,
+            'distance_mairie_km': 12.10, 'duree_trajet_mairie_min': 17,
+            'distance_calculee_at': datetime,
         }
-        ou None si échec (géocodage ou routing).
+        ou None si aucune distance n'a pu être calculée.
     """
-    if not full_address or len(full_address.strip()) < 5:
+    if not cp or not ville:
         return None
 
-    # Garde-fou : adresse déjà identifiée comme échouée cette session
-    if is_address_known_failed(full_address):
-        logger.debug(f"Adresse déjà en échec, skip : '{full_address}'")
+    if is_commune_known_failed(cp, ville):
+        logger.debug(f"Commune en échec connu, skip : {cp} {ville}")
         return None
 
-    coords = geocode_address(full_address)
-    if coords is None:
-        logger.info(f"Géocodage échoué pour '{full_address}'")
-        mark_address_failed(full_address)
+    commune = resolve_commune(cp, ville)
+    if commune is None:
+        logger.info(f"Commune introuvable pour CP={cp}, ville='{ville}'")
+        mark_commune_failed(cp, ville)
         return None
 
-    lat, lon = coords
-    distance = compute_distance_to_company(lat, lon)
-
-    if distance is None:
-        # Géocodage OK mais routing KO : on retourne les coords quand même,
-        # mais on NE marque PAS comme échouée (le routing peut marcher plus tard).
-        return {
-            'latitude': lat,
-            'longitude': lon,
-            'distance_km': None,
-            'duree_min': None,
-            'calcule_at': datetime.now(),
-        }
-
-    return {
-        'latitude': lat,
-        'longitude': lon,
-        **distance,
+    result = {
+        'code_insee_commune': commune['code_insee'],
+        'commune_lat': commune['lat'],
+        'commune_lon': commune['lon'],
+        'distance_commune_km': None,
+        'duree_trajet_commune_min': None,
+        'mairie_lat': None,
+        'mairie_lon': None,
+        'distance_mairie_km': None,
+        'duree_trajet_mairie_min': None,
+        'distance_calculee_at': datetime.now(),
     }
+
+    any_success = False
+
+    company_commune = _get_company_commune_coords()
+    if company_commune:
+        commune_coords = (commune['lat'], commune['lon'])
+        route = _compute_route(commune_coords, company_commune)
+        if route:
+            result['distance_commune_km'], result['duree_trajet_commune_min'] = route
+            any_success = True
+
+    mairie = get_mairie_coords(commune['nom'], commune['code_insee'])
+    if mairie:
+        result['mairie_lat'], result['mairie_lon'] = mairie
+        company_mairie = _get_company_mairie_coords()
+        if company_mairie:
+            route = _compute_route(mairie, company_mairie)
+            if route:
+                result['distance_mairie_km'], result['duree_trajet_mairie_min'] = route
+                any_success = True
+
+    if not any_success:
+        logger.warning(f"Aucune distance calculée pour {cp} {ville}")
+
+    return result

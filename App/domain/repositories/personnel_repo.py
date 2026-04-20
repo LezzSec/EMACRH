@@ -610,6 +610,54 @@ class PersonnelRepository(BaseRepository[Personnel]):
         )
 
     @classmethod
+    def get_adresse_and_distances(cls, personnel_id: int) -> Optional[Dict[str, Any]]:
+        """
+        Retourne CP + ville + données de distance existantes.
+        Utilisé pour détecter si la commune a changé avant recalcul.
+        """
+        from infrastructure.db.query_executor import QueryExecutor
+        return QueryExecutor.fetch_one(
+            """SELECT cp_adresse, ville_adresse,
+                      code_insee_commune, distance_commune_km, distance_mairie_km
+               FROM personnel_infos WHERE personnel_id = %s""",
+            (personnel_id,),
+            dictionary=True,
+        )
+
+    @classmethod
+    def update_distances(
+        cls,
+        personnel_id: int,
+        code_insee_commune: Optional[str],
+        commune_lat: Optional[float],
+        commune_lon: Optional[float],
+        distance_commune_km: Optional[float],
+        duree_trajet_commune_min: Optional[int],
+        mairie_lat: Optional[float],
+        mairie_lon: Optional[float],
+        distance_mairie_km: Optional[float],
+        duree_trajet_mairie_min: Optional[int],
+    ) -> None:
+        """Met à jour toutes les données de distance (mairie + commune)."""
+        from infrastructure.db.query_executor import QueryExecutor
+        QueryExecutor.execute_write(
+            """UPDATE personnel_infos
+               SET code_insee_commune = %s,
+                   commune_lat = %s, commune_lon = %s,
+                   distance_commune_km = %s, duree_trajet_commune_min = %s,
+                   mairie_lat = %s, mairie_lon = %s,
+                   distance_mairie_km = %s, duree_trajet_mairie_min = %s,
+                   distance_calculee_at = NOW()
+               WHERE personnel_id = %s""",
+            (code_insee_commune, commune_lat, commune_lon,
+             distance_commune_km, duree_trajet_commune_min,
+             mairie_lat, mairie_lon,
+             distance_mairie_km, duree_trajet_mairie_min,
+             personnel_id),
+            return_lastrowid=False,
+        )
+
+    @classmethod
     def update_distance_domicile(
         cls,
         personnel_id: int,

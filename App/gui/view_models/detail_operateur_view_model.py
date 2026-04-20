@@ -110,6 +110,18 @@ class DetailOperateurViewModel(QObject):
         _pi = PersonnelRepository.get_personnel_infos(self.operateur_id)
         row_data = [_pi] if _pi else []
 
+        # Colonnes techniques à ne pas afficher telles quelles dans la fiche
+        _SKIP_KEYS = frozenset({
+            "personnel_id", "date_entree",
+            # Anciennes colonnes GPS (approche géocodage adresse)
+            "latitude", "longitude", "distance_domicile_km", "duree_trajet_min",
+            # Nouvelles colonnes internes / stats (affichées via trajet formaté)
+            "code_insee_commune",
+            "commune_lat", "commune_lon", "distance_commune_km", "duree_trajet_commune_min",
+            "mairie_lat", "mairie_lon", "distance_mairie_km", "duree_trajet_mairie_min",
+            "distance_calculee_at",
+        })
+
         personal_items = []
         if row_data:
             data = row_data[0]
@@ -121,7 +133,7 @@ class DetailOperateurViewModel(QObject):
                 )
                 personal_items.append(("Date d'entrée", date_entree_str))
             for key, val in data.items():
-                if key in ("personnel_id", "date_entree"):
+                if key in _SKIP_KEYS:
                     continue
                 label = _format_column_name(key)
                 value = (
@@ -130,6 +142,13 @@ class DetailOperateurViewModel(QObject):
                 )
                 if value is not None:
                     personal_items.append((label, value))
+
+            # Affichage formaté du trajet domicile-travail (distance mairie)
+            d_mairie = data.get('distance_mairie_km')
+            if d_mairie is not None:
+                t = data.get('duree_trajet_mairie_min')
+                trajet_str = f"{d_mairie} km (~{t} min)" if t else f"{d_mairie} km"
+                personal_items.append(("Trajet domicile-travail", trajet_str))
 
         if not personal_items:
             personal_items.append(("Information", "Aucune information complémentaire enregistrée"))

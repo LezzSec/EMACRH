@@ -16,7 +16,7 @@ pip install -r requirements.txt
 cd config && configure_db.bat
 
 # 3. Lancement
-cd .. && py -m core.gui.main_qt
+cd .. && py -m gui.main_qt
 ```
 
 ### Utilisateurs (réseau)
@@ -36,6 +36,7 @@ Double-clic sur EMAC.exe (depuis le partage réseau)
 | Connecteur DB | mysql-connector-python |
 | Sécurité | bcrypt, Fernet |
 | Exports | openpyxl, reportlab, pandas |
+| Géolocalisation | geo.api.gouv.fr, OSM Overpass, OSRM |
 | Compilation | PyInstaller |
 | Python | 3.12 |
 
@@ -45,22 +46,35 @@ Double-clic sur EMAC.exe (depuis le partage réseau)
 
 ```
 App/
-├── core/
-│   ├── db/               # Pool de connexions, QueryExecutor
-│   ├── services/         # Logique métier, logging, permissions
-│   ├── repositories/     # Accès données, pagination
-│   ├── gui/              # Interface PyQt5
-│   ├── utils/            # date_format, logging_config, config_crypter…
-│   └── models.py         # DTOs / dataclasses
+├── domain/                   # Logique métier
+│   ├── repositories/         # Accès données (Repository pattern)
+│   └── services/             # Services par domaine (rh, geo, planning…)
 │
-├── config/               # .env.example, configure_db.bat
-├── database/             # Schéma SQL, migrations (~40), backups
-├── scripts/              # Scripts maintenance et migration
-├── tests/                # Tests unitaires et d'intégration
-├── logs/                 # emac.log + crash.log  (Git ignore)
-├── .env                  # Configuration locale  (Git ignore)
+├── infrastructure/           # Couche technique
+│   ├── db/                   # Pool MySQL, QueryExecutor
+│   ├── logging/              # log_hist / log_hist_async
+│   ├── cache/                # emac_cache
+│   ├── config/
+│   └── security/
+│
+├── application/              # Cas d'utilisation transverses
+│   └── permission_manager.py # Permissions / features (singleton)
+│
+├── gui/                      # Interface PyQt5
+│   ├── main_qt.py            # Fenêtre principale
+│   ├── components/           # Widgets réutilisables
+│   ├── screens/              # Écrans par domaine
+│   ├── view_models/
+│   └── workers/              # DbWorker, threads
+│
+├── config/                   # .env.example, configure_db.bat
+├── database/                 # Schéma SQL, migrations (~45), backups
+├── scripts/                  # Scripts maintenance et migration
+├── tests/                    # Tests unitaires et d'intégration
+├── logs/                     # emac.log + crash.log  (Git ignore)
+├── .env                      # Configuration locale  (Git ignore)
 ├── requirements.txt
-└── run_emac.vbs          # Lanceur Windows
+└── run_emac.vbs              # Lanceur Windows
 ```
 
 [Structure détaillée](../docs/STRUCTURE.md)
@@ -90,6 +104,7 @@ EMAC_DB_NAME=emac_db
 | Table | Description |
 |-------|-------------|
 | `personnel` | Employés (nom, matricule, statut) |
+| `personnel_infos` | Infos complémentaires (adresse, commune, distance) |
 | `postes` | Postes de travail |
 | `atelier` | Ateliers (contiennent des postes) |
 | `polyvalence` | Compétences employé×poste (niveaux 1–4) |
@@ -115,6 +130,7 @@ Migrations : [database/migrations/](database/migrations/)
 - Contrats — CDI/CDD/intérim, alertes renouvellement
 - Documents — GED intégrée, templates, expiration
 - RH intégré — vue unifiée par domaine (contrat, médical, vie salarié…)
+- Distance domicile — calcul distance commune/mairie entreprise via OSM (RGPD-friendly)
 - Permissions — rôles + features granulaires par utilisateur
 - Audit — historique complet de toutes les actions
 
@@ -126,16 +142,16 @@ Migrations : [database/migrations/](database/migrations/)
 
 - **Encodage** : UTF-8 + `# -*- coding: utf-8 -*-`
 - **Langue UI** : Français
-- **Dates affichage** : `format_date()` / `format_datetime()` depuis `core/utils/date_format.py`
-- **Logging** : `log_hist()` depuis `core/services/optimized_db_logger.py`
-- **Accès DB** : `QueryExecutor` (jamais `mysql.connector.connect()` direct)
-- **GUI → DB** : toujours via `core/services/` ou `core/repositories/`
+- **Dates affichage** : `format_date()` / `format_datetime()` depuis `domain/services/`
+- **Logging** : `log_hist()` / `log_hist_async()` depuis `infrastructure/logging/optimized_db_logger.py`
+- **Accès DB** : `QueryExecutor` depuis `infrastructure/db/query_executor.py` (jamais `mysql.connector.connect()` direct)
+- **GUI → DB** : toujours via `domain/services/` ou `domain/repositories/` — jamais d'accès DB direct dans `gui/`
 
 ### Ajouter une fonctionnalité
 
-1. Service dans `core/services/` (hériter de `CRUDService` si CRUD)
-2. Dialog dans `core/gui/` (hériter de `EmacFormDialog`)
-3. Intégrer dans `main_qt.py`
+1. Service dans `domain/services/` (hériter de `CRUDService` si CRUD)
+2. Dialog dans `gui/screens/` (hériter de `EmacFormDialog`)
+3. Intégrer dans `gui/main_qt.py`
 4. Tests dans `tests/`
 
 [Guide complet](../CLAUDE.md)
@@ -145,7 +161,7 @@ Migrations : [database/migrations/](database/migrations/)
 ## Tests
 
 ```bash
-py tests/run_all_tests.py
+py -m pytest tests/
 ```
 
 ---
@@ -180,4 +196,4 @@ build_optimized.bat
 
 ---
 
-**v3.0** · 2026-03-17 · Production
+**v3.1** · 2026-04-20 · Production

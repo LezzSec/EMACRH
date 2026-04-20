@@ -255,80 +255,79 @@ class EditInfosGeneralesDialog(EmacFormDialog):
 
     def _compute_distance_if_needed(self, saved_data: dict):
         """
-        Déclenche le calcul de distance UNIQUEMENT si l'adresse a changé
-        ET qu'aucun calcul n'est déjà en cours.
+        Déclenche le calcul des deux distances (mairie + commune) UNIQUEMENT si
+        la commune (CP + ville) a changé ET qu'aucun calcul n'est déjà en cours.
         """
         from gui.workers.db_worker import DbWorker, DbThreadPool
         from domain.services.geo.distance_service import (
-            compute_distance_from_address,
-            is_address_known_failed,
+            compute_distances_for_commune,
+            is_commune_known_failed,
         )
         from domain.repositories.personnel_repo import PersonnelRepository
 
-        # Garde-fou 1 : calcul déjà en cours pour ce dialog ?
         if self._distance_computing:
             logger.debug("Calcul distance déjà en cours, skip")
             return
 
-        adresse = saved_data.get('adresse1', '').strip()
         cp = saved_data.get('cp_adresse', '').strip()
         ville = saved_data.get('ville_adresse', '').strip()
 
-        if not (adresse and cp and ville):
+        if not (cp and ville):
             return
 
-        full_address = f"{adresse} {cp} {ville}"
         personnel_id = self.operateur_id
 
-        # Garde-fou 2 : adresse déjà en échec cette session ?
-        if is_address_known_failed(full_address):
-            logger.debug(f"Adresse en échec connu, pas de retry : '{full_address}'")
+        # Garde-fou : commune déjà en échec cette session ?
+        if is_commune_known_failed(cp, ville):
+            logger.debug(f"Commune en échec connu, pas de retry : {cp} {ville}")
             return
 
-        # Garde-fou 3 : l'adresse a-t-elle vraiment changé ?
-        existing = PersonnelRepository.get_adresse_and_coords(personnel_id)
+        # La commune a-t-elle changé depuis le dernier calcul ?
+        existing = PersonnelRepository.get_adresse_and_distances(personnel_id)
         if existing:
-            old_signature = (
-                (existing.get('adresse1') or '').strip().lower(),
-                (existing.get('cp_adresse') or '').strip().lower(),
+            old = (
+                (existing.get('cp_adresse') or '').strip(),
                 (existing.get('ville_adresse') or '').strip().lower(),
             )
-            new_signature = (adresse.lower(), cp.lower(), ville.lower())
-            if new_signature == old_signature and existing.get('distance_domicile_km') is not None:
-                logger.debug(f"Adresse inchangée pour #{personnel_id}, pas de recalcul")
+            new = (cp, ville.lower())
+            already_calculated = existing.get('distance_commune_km') is not None
+            if old == new and already_calculated:
+                logger.debug(f"Commune inchangée pour #{personnel_id}, skip")
                 return
 
         self._distance_computing = True
 
         def compute(progress_callback=None):
-            result = compute_distance_from_address(full_address)
+            result = compute_distances_for_commune(cp, ville)
             if result is None:
                 return None
-            PersonnelRepository.update_distance_domicile(
+            PersonnelRepository.update_distances(
                 personnel_id=personnel_id,
-                latitude=result.get('latitude'),
-                longitude=result.get('longitude'),
-                distance_km=result.get('distance_km'),
-                duree_min=result.get('duree_min'),
+                code_insee_commune=result['code_insee_commune'],
+                commune_lat=result['commune_lat'],
+                commune_lon=result['commune_lon'],
+                distance_commune_km=result['distance_commune_km'],
+                duree_trajet_commune_min=result['duree_trajet_commune_min'],
+                mairie_lat=result['mairie_lat'],
+                mairie_lon=result['mairie_lon'],
+                distance_mairie_km=result['distance_mairie_km'],
+                duree_trajet_mairie_min=result['duree_trajet_mairie_min'],
             )
             return result
 
         def on_success(result):
             self._distance_computing = False
-            if result and result.get('distance_km') is not None:
+            if result:
+                d_mairie = result.get('distance_mairie_km')
+                d_commune = result.get('distance_commune_km')
                 logger.info(
-                    f"Distance calculée pour personnel #{personnel_id}: "
-                    f"{result['distance_km']} km, {result['duree_min']} min"
-                )
-            elif result:
-                logger.info(
-                    f"Géocodage OK mais routing KO pour #{personnel_id}, "
-                    f"coords sauvegardées sans distance"
+                    f"Distances calculées pour #{personnel_id}: "
+                    f"mairie={d_mairie} km, commune={d_commune} km"
                 )
 
         def on_error(err):
             self._distance_computing = False
-            logger.warning(f"Calcul distance échoué pour #{personnel_id}: {err}")
+            logger.warning(f"Calcul distances échoué pour #{personnel_id}: {err}")
 
         worker = DbWorker(compute)
         worker.signals.result.connect(on_success)
