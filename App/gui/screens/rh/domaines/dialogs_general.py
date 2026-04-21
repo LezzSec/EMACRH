@@ -269,8 +269,8 @@ class EditInfosGeneralesDialog(EmacFormDialog):
             logger.debug("Calcul distance déjà en cours, skip")
             return
 
-        cp = saved_data.get('cp_adresse', '').strip()
-        ville = saved_data.get('ville_adresse', '').strip()
+        cp = (saved_data.get('cp_adresse') or '').strip()
+        ville = (saved_data.get('ville_adresse') or '').strip()
 
         if not (cp and ville):
             return

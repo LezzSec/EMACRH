@@ -215,7 +215,7 @@ class DetailHistoriqueDialog(QDialog):
         layout.setSpacing(16)
 
         # En-tête
-        action = row_data.get("action", "").upper()
+        action = (row_data.get("action") or "").upper()
         icon, color, bg_color = get_action_icon_and_color(action)
 
         header = QLabel(f"{icon} Détails de l'action : {action}")

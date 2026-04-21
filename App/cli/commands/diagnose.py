@@ -23,7 +23,7 @@ _CRITICAL_INDEXES = [
     ("personnel",   "statut",               "idx_personnel_statut"),
     ("personnel",   "nom",                  "idx_personnel_nom"),
     ("polyvalence", "prochaine_evaluation",  "idx_poly_prochaine_eval"),
-    ("polyvalence", "operateur_id",          "idx_poly_operateur"),
+    ("polyvalence", "personnel_id",          "idx_poly_operateur"),
     ("polyvalence", "poste_id",              "idx_poly_poste"),
     ("contrat",     "personnel_id",          "idx_contrat_personnel"),
     ("contrat",     "date_fin",              "idx_contrat_date_fin"),

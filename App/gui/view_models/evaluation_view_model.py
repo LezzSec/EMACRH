@@ -170,7 +170,7 @@ class EvaluationViewModel(QObject):
         try:
             poly_info = get_polyvalence_par_id(poly_id)
             ancien_niveau = poly_info['niveau'] if poly_info else None
-            operateur_id = poly_info['personnel_id'] if poly_info else None
+            operateur_id = (poly_info.get('personnel_id') or poly_info.get('operateur_id')) if poly_info else None
             poste_id = poly_info['poste_id'] if poly_info else None
 
             if not mettre_a_jour_evaluation(poly_id, nouveau_niveau, date_eval, prochaine_eval):
@@ -201,7 +201,7 @@ class EvaluationViewModel(QObject):
         try:
             poly_info = get_polyvalence_par_id(poly_id)
             niveau = nouveau_niveau or (poly_info['niveau'] if poly_info else 1)
-            operateur_id = poly_info['personnel_id'] if poly_info else None
+            operateur_id = (poly_info.get('personnel_id') or poly_info.get('operateur_id')) if poly_info else None
             poste_id = poly_info['poste_id'] if poly_info else None
 
             jours = _JOURS_PAR_NIVEAU.get(niveau, 30)

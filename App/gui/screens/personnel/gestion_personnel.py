@@ -276,7 +276,7 @@ class GestionPersonnelDialog(QDialog):
         self.table.setRowCount(0)
 
         for data in self.all_data:
-            statut = data.get("statut", "").upper()
+            statut = (data.get("statut") or "").upper()
             row = self.table.rowCount()
             self.table.insertRow(row)
 
@@ -421,7 +421,7 @@ class GestionPersonnelDialog(QDialog):
             )
 
             for data in all_matching:
-                statut = data.get("statut", "").upper()
+                statut = (data.get("statut") or "").upper()
                 row_data = [
                     data.get("nom", ""),
                     data.get("prenom", ""),
@@ -455,7 +455,7 @@ class GestionPersonnelDialog(QDialog):
                 for cell in column:
                     try:
                         if len(str(cell.value)) > max_length:
-                            max_length = len(cell.value)
+                            max_length = len(str(cell.value))
                     except Exception:
                         pass
                 ws.column_dimensions[column_letter].width = min(max_length + 2, 30)

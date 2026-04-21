@@ -326,7 +326,7 @@ class DetailOperateurDialog(QDialog):
                 from domain.repositories.personnel_repo import PersonnelRepository
                 row = PersonnelRepository.get_info_basique(self.vm.operateur_id)
             except Exception:
-                pass
+                logger.debug("Impossible de charger info_basique pour operateur_id=%s", self.vm.operateur_id, exc_info=True)
 
             nom       = row['nom']       if row else self.vm.nom
             prenom    = row['prenom']    if row else self.vm.prenom
@@ -367,7 +367,7 @@ class DetailOperateurDialog(QDialog):
                 from domain.repositories.personnel_repo import PersonnelRepository
                 row = PersonnelRepository.get_info_basique(self.vm.operateur_id)
             except Exception:
-                pass
+                logger.debug("Impossible de charger info_basique pour operateur_id=%s", self.vm.operateur_id, exc_info=True)
 
             nom       = row['nom']       if row else self.vm.nom
             prenom    = row['prenom']    if row else self.vm.prenom
@@ -545,10 +545,11 @@ class DetailOperateurDialog(QDialog):
     def _open_contract_management(self):
         """Ouvre la Gestion RH sur l'onglet Contrat."""
         from gui.screens.rh.gestion_rh_dialog import GestionRHDialog
-        from domain.services.rh.rh_service import DomaineRH
-        dialog = GestionRHDialog(self)
-        dialog._selectionner_operateur_par_id(self.vm.operateur_id)
-        dialog._on_domaine_change(DomaineRH.CONTRAT.value)
+        from gui.view_models.gestion_rh_view_model import DomaineRH
+        dialog = GestionRHDialog(self, preselect_personnel_id=self.vm.operateur_id)
+        dialog._vm.operateur_loaded.connect(
+            lambda _: dialog._on_domaine_change(DomaineRH.CONTRAT.value)
+        )
         dialog.exec_()
         # Recharger le profil après fermeture
         worker = DbWorker(self.vm.load_all)

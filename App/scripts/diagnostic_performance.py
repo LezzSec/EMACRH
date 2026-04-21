@@ -198,7 +198,7 @@ REQUETES = [
                SUM(CASE WHEN poly.niveau = 3 THEN 1 ELSE 0 END) AS n3,
                SUM(CASE WHEN poly.niveau = 4 THEN 1 ELSE 0 END) AS n4
         FROM personnel p
-        LEFT JOIN polyvalence poly ON p.id = poly.operateur_id
+        LEFT JOIN polyvalence poly ON p.id = poly.personnel_id
         LEFT JOIN contrat ct ON ct.personnel_id = p.id AND ct.actif = 1
         WHERE p.statut = 'ACTIF'
         GROUP BY p.id, p.nom, p.prenom, p.matricule, p.numposte, p.statut, ct.type_contrat
@@ -212,7 +212,7 @@ REQUETES = [
         SELECT p.id, pers.nom, pos.poste_code, p.niveau, p.prochaine_evaluation,
                DATEDIFF(CURDATE(), p.prochaine_evaluation) AS jours_retard
         FROM polyvalence p
-        JOIN personnel pers ON p.operateur_id = pers.id
+        JOIN personnel pers ON p.personnel_id = pers.id
         JOIN postes pos ON p.poste_id = pos.id
         WHERE pers.statut = 'ACTIF'
           AND p.prochaine_evaluation < CURDATE()
@@ -226,7 +226,7 @@ REQUETES = [
         SELECT h.id, h.date_time, h.action, h.table_name, h.utilisateur,
                CONCAT(p.prenom, ' ', p.nom) AS op_name
         FROM historique h
-        LEFT JOIN personnel p ON h.operateur_id = p.id
+        LEFT JOIN personnel p ON h.personnel_id = p.id
         WHERE h.date_time >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
         ORDER BY h.date_time DESC, h.id DESC
         LIMIT 100 OFFSET 0

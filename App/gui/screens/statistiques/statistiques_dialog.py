@@ -548,7 +548,7 @@ class StatistiquesDialog(QDialog):
             ("21 – 40 km", int(distances.get('de_21_a_40') or 0)),
             ("> 40 km",    int(distances.get('plus_40km') or 0)),
         ]
-        max_tr = max((v for _, v in tranches), default=1)
+        max_tr = max((v or 0 for _, v in tranches), default=1) or 1
         tr_colors = [_COLORS['green'], _COLORS['blue'], _COLORS['teal'], _COLORS['orange'], _COLORS['purple']]
         for (label, value), color in zip(tranches, tr_colors):
             layout.addWidget(_BarRow(label, value, max_tr, color))

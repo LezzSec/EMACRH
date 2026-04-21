@@ -365,7 +365,7 @@ class ContractFormDialog(EmacFormDialog):
         # Opérateur
         if self.is_edit_mode:
             contract = ContratServiceCRUD.get_by_id(self.contract_id)
-            operateur_id = contract['operateur_id']
+            operateur_id = contract.get('operateur_id') or contract.get('personnel_id')
         else:
             operateur_id = self.operator_combo.currentData()
 

@@ -696,11 +696,11 @@ class GestionAlertesRHDialog(QDialog):
         if pid:
             from gui.screens.rh.gestion_rh_dialog import GestionRHDialog
             from domain.services.rh.rh_service import DomaineRH
-            dialog = GestionRHDialog(parent=self)
+            dialog = GestionRHDialog(parent=self, preselect_personnel_id=pid)
             dialog.data_changed.connect(self._on_sub_dialog_changed)
-            dialog._selectionner_operateur_par_id(pid)
-            # Naviguer directement vers l'onglet Contrats
-            dialog._on_domaine_change(DomaineRH.CONTRAT.value)
+            dialog._vm.operateur_loaded.connect(
+                lambda _: dialog._on_domaine_change(DomaineRH.CONTRAT.value)
+            )
             dialog.exec_()
 
     def _on_view_personnel_detail(self, alert: Alert):

@@ -100,7 +100,7 @@ def _fetch_polyvalence_summary(statut: Optional[str]) -> Dict[str, Dict]:
             ROUND(AVG(po.niveau), 1)       AS niveau_moyen,
             MAX(po.date_evaluation)        AS derniere_evaluation
         FROM personnel p
-        LEFT JOIN polyvalence po ON po.operateur_id = p.id
+        LEFT JOIN polyvalence po ON po.personnel_id = p.id
         {where}
         GROUP BY p.id, p.matricule
         """,

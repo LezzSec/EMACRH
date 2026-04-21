@@ -17,6 +17,9 @@ reportlab==4.2.2
 # Sécurité - Système d'authentification
 bcrypt==4.1.2
 
+# Sécurité - Chiffrement configuration
+cryptography>=42.0.0
+
 # Variables d'environnement
 python-dotenv==1.0.0
 
