@@ -73,7 +73,8 @@ class QueryExecutor:
             with DatabaseCursor(dictionary=dictionary) as cur:
                 cur.execute(query, params or ())
                 result = cur.fetchall()
-                logger.debug(f"fetch_all: {len(result)} lignes récupérées")
+                if len(result) > 100:
+                    logger.info(f"fetch_all: {len(result)} lignes récupérées (requête volumineuse)")
                 return result
         except Exception as e:
             logger.error(f"Erreur fetch_all: {e}", exc_info=True)
@@ -107,7 +108,6 @@ class QueryExecutor:
             with DatabaseCursor(dictionary=dictionary) as cur:
                 cur.execute(query, params or ())
                 result = cur.fetchone()
-                logger.debug(f"fetch_one: {'trouvé' if result else 'non trouvé'}")
                 return result
         except Exception as e:
             logger.error(f"Erreur fetch_one: {e}", exc_info=True)
@@ -187,7 +187,7 @@ class QueryExecutor:
                     # Auto-commit géré par le context manager DatabaseConnection
                     if return_lastrowid and 'INSERT' in query.upper():
                         result = cur.lastrowid
-                        logger.debug(f"execute_write: INSERT réussi, ID={result}")
+                        logger.info(f"execute_write INSERT: ID={result}")
                         return result
                     else:
                         affected = cur.rowcount

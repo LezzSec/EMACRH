@@ -213,6 +213,10 @@ class EditMobiliteDialog(EmacFormDialog):
         self.methode_combo = QComboBox()
         for val in self.METHODES:
             self.methode_combo.addItem(self.METHODES_LABELS[val], val)
+        methode_actuelle = self.mobilite.get('methode_calcul', 'manuel')
+        idx = self.methode_combo.findData(methode_actuelle)
+        if idx >= 0:
+            self.methode_combo.setCurrentIndex(idx)
         form.addRow("Méthode de calcul :", self.methode_combo)
 
         self.date_effet = QDateEdit()
@@ -226,6 +230,25 @@ class EditMobiliteDialog(EmacFormDialog):
         form.addRow("Date d'effet :", self.date_effet)
 
         self.content_layout.addLayout(form)
+
+        # Bouton recalcul distance
+        from PyQt5.QtWidgets import QPushButton, QHBoxLayout, QWidget, QLabel as _QLabel
+        recalc_widget = QWidget()
+        recalc_layout = QHBoxLayout(recalc_widget)
+        recalc_layout.setContentsMargins(0, 4, 0, 0)
+        self._recalc_btn = QPushButton("Recalculer la distance (OSM)")
+        self._recalc_btn.setStyleSheet(
+            "QPushButton { background: #f0f9ff; color: #0369a1; border: 1px solid #7dd3fc; "
+            "border-radius: 4px; padding: 4px 10px; font-size: 12px; }"
+            "QPushButton:hover { background: #e0f2fe; }"
+            "QPushButton:disabled { background: #f1f5f9; color: #94a3b8; border-color: #cbd5e1; }"
+        )
+        self._recalc_btn.clicked.connect(self._recalculer_distance)
+        self._recalc_status = _QLabel("")
+        self._recalc_status.setStyleSheet("font-size: 11px; color: #64748b;")
+        recalc_layout.addWidget(self._recalc_btn)
+        recalc_layout.addWidget(self._recalc_status, 1)
+        self.content_layout.addWidget(recalc_widget)
 
         # Aperçu de la prime calculée
         from PyQt5.QtWidgets import QLabel
@@ -257,6 +280,56 @@ class EditMobiliteDialog(EmacFormDialog):
             self._apercu.setVisible(True)
         else:
             self._apercu.setVisible(False)
+
+    def _recalculer_distance(self):
+        from gui.workers.db_worker import DbWorker
+        from domain.services.geo.distance_service import compute_distances_for_commune
+
+        cp = self.cp.text().strip() or self.mobilite.get('cp_depart', '')
+        ville = self.ville.text().strip() or self.mobilite.get('ville_depart', '')
+
+        if not cp or not ville:
+            self._recalc_status.setText("Renseignez le code postal et la ville d'abord.")
+            self._recalc_status.setStyleSheet("font-size: 11px; color: #dc2626;")
+            return
+
+        self._recalc_btn.setEnabled(False)
+        self._recalc_status.setText("Calcul en cours...")
+        self._recalc_status.setStyleSheet("font-size: 11px; color: #64748b;")
+
+        DbWorker(
+            lambda: compute_distances_for_commune(cp, ville),
+            self._on_recalc_result,
+            self._on_recalc_error,
+        )
+
+    def _on_recalc_result(self, result):
+        self._recalc_btn.setEnabled(True)
+        if result is None:
+            self._recalc_status.setText("Commune introuvable — vérifiez CP et ville.")
+            self._recalc_status.setStyleSheet("font-size: 11px; color: #dc2626;")
+            return
+
+        dist = result.get('distance_mairie_km') or result.get('distance_commune_km')
+        duree = result.get('duree_trajet_mairie_min') or result.get('duree_trajet_commune_min')
+        if dist is None:
+            self._recalc_status.setText("Distance non calculable (API indisponible).")
+            self._recalc_status.setStyleSheet("font-size: 11px; color: #d97706;")
+            return
+
+        self.distance.setValue(float(dist))
+        duree_txt = f" ({duree} min)" if duree else ""
+        self._recalc_status.setText(f"Mis à jour : {dist} km{duree_txt}")
+        self._recalc_status.setStyleSheet("font-size: 11px; color: #16a34a;")
+        self._update_apercu()
+
+    def _on_recalc_error(self, error_msg):
+        from infrastructure.logging.logging_config import get_logger
+        get_logger(__name__).error(f"Recalcul distance échoué : {error_msg}")
+        self._recalc_btn.setEnabled(True)
+        self._recalc_status.setText(f"Erreur : {error_msg}")
+        self._recalc_status.setStyleSheet("font-size: 11px; color: #dc2626;")
+        self._recalc_status.setToolTip(str(error_msg))
 
     def validate(self):
         if self.distance.value() <= 0:

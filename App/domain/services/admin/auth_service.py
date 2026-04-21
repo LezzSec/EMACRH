@@ -57,6 +57,52 @@ def _log_failed_attempt(username: str, reason: str) -> None:
         logger.debug(f"Impossible de logger la tentative échouée: {e}")
 
 
+# Constantes rate limiting
+_RATE_LIMIT_WINDOW_MINUTES = 15
+_RATE_LIMIT_MAX_PER_USERNAME = 5
+_RATE_LIMIT_MAX_PER_IP = 10
+
+
+def _check_rate_limit(username: str, ip_address: str) -> Tuple[bool, int, str]:
+    """
+    Vérifie si la tentative de connexion doit être bloquée.
+
+    Returns:
+        (blocked, seconds_to_wait, reason)
+    """
+    try:
+        from datetime import timedelta
+        window_start = datetime.now() - timedelta(minutes=_RATE_LIMIT_WINDOW_MINUTES)
+
+        row = QueryExecutor.fetch_one(
+            """SELECT
+                 SUM(CASE WHEN username = %s THEN 1 ELSE 0 END) AS by_user,
+                 SUM(CASE WHEN ip_address = %s THEN 1 ELSE 0 END) AS by_ip
+               FROM logs_tentatives_connexion
+               WHERE attempt_time >= %s""",
+            (username, ip_address, window_start),
+            dictionary=True,
+        )
+        by_user = int(row['by_user'] or 0) if row else 0
+        by_ip = int(row['by_ip'] or 0) if row else 0
+
+        if by_user >= _RATE_LIMIT_MAX_PER_USERNAME:
+            return True, _RATE_LIMIT_WINDOW_MINUTES * 60, (
+                f"Trop de tentatives échouées pour ce compte. "
+                f"Réessayez dans {_RATE_LIMIT_WINDOW_MINUTES} minutes."
+            )
+        if by_ip >= _RATE_LIMIT_MAX_PER_IP:
+            return True, _RATE_LIMIT_WINDOW_MINUTES * 60, (
+                f"Trop de tentatives échouées depuis ce poste. "
+                f"Réessayez dans {_RATE_LIMIT_WINDOW_MINUTES} minutes."
+            )
+        return False, 0, ""
+    except Exception as e:
+        # En cas d'erreur SQL on NE bloque PAS (disponibilité > sécurité stricte ici)
+        logger.warning(f"check_rate_limit a échoué, bypass: {e}")
+        return False, 0, ""
+
+
 # =============================================================================
 # VALIDATION MOT DE PASSE
 # =============================================================================
@@ -116,8 +162,9 @@ class UserSession:
     _session_id = None
     _last_activity = None
 
-    # Timeout de session en minutes
-    SESSION_TIMEOUT_MINUTES = 30
+    # Timeout de session en minutes (configurable via EMAC_SESSION_TIMEOUT_MINUTES)
+    import os as _os
+    SESSION_TIMEOUT_MINUTES = int(_os.getenv('EMAC_SESSION_TIMEOUT_MINUTES', '30'))
 
     def __new__(cls):
         if cls._instance is None:
@@ -220,6 +267,15 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
         tuple: (succès, message d'erreur si échec)
     """
     try:
+        # ─── Rate limiting pré-check ─────────────────────────────────────────
+        client_ip = _get_client_ip()
+        blocked, _wait, reason = _check_rate_limit(username, client_ip)
+        if blocked:
+            _log_failed_attempt(username, "rate_limited")
+            logger.warning(f"Login bloqué (rate limit): user={username}, ip={client_ip}")
+            return False, reason
+        # ─────────────────────────────────────────────────────────────────────
+
         # Transaction mixte read+write (SELECT dict → INSERT → UPDATE) :
         # DatabaseConnection directe requise ici — ne pas convertir en QueryExecutor.
         with DatabaseConnection() as conn:
@@ -244,16 +300,19 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
 
             if not rows:
                 cur.close()
+                _log_failed_attempt(username, "user_not_found")
                 return False, "Nom d'utilisateur ou mot de passe incorrect"
 
             user = rows[0]
 
             if not user['actif']:
                 cur.close()
+                _log_failed_attempt(username, "account_inactive")
                 return False, "Ce compte est désactivé. Contactez un administrateur."
 
             if not verify_password(password, user['password_hash']):
                 cur.close()
+                _log_failed_attempt(username, "wrong_password")
                 return False, "Nom d'utilisateur ou mot de passe incorrect"
 
             # Construire le dictionnaire des permissions effectives (rôle + overrides)
@@ -266,7 +325,6 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
                         'suppression': bool(row['suppression']) if row['suppression'] is not None else False
                     }
 
-            client_ip = _get_client_ip()
             cur.execute(
                 "INSERT INTO logs_connexion (utilisateur_id, date_connexion, ip_address) VALUES (%s, %s, %s)",
                 (user['id'], datetime.now(), client_ip)

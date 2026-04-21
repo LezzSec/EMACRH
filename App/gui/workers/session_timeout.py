@@ -25,6 +25,7 @@ Date: 2026-02-04
 """
 
 import logging
+import os
 from datetime import datetime, timedelta
 
 from PyQt5.QtCore import QObject, QTimer, pyqtSignal, Qt, QEvent
@@ -33,7 +34,7 @@ from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton, QHBoxLayo
 logger = logging.getLogger(__name__)
 
 # Configuration du timeout (en minutes)
-SESSION_TIMEOUT_MINUTES = 30  # Déconnexion après 30 minutes d'inactivité
+SESSION_TIMEOUT_MINUTES = int(os.getenv('EMAC_SESSION_TIMEOUT_MINUTES', '30'))  # Déconnexion après inactivité
 WARNING_BEFORE_MINUTES = 5    # Avertissement 5 minutes avant
 CHECK_INTERVAL_SECONDS = 30   # Vérification toutes les 30 secondes
 

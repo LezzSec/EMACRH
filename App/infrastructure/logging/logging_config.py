@@ -21,9 +21,14 @@ Configuration:
     - PROD: WARNING level, logs vers fichier uniquement
 
 Fichier de log: logs/emac.log (rotation à 10 MB, 5 backups)
+
+Pour activer temporairement le DEBUG complet :
+    set EMAC_LOG_LEVEL=DEBUG   (Windows)
+    EMAC_LOG_LEVEL=DEBUG python main.py   (Linux)
 """
 
 import logging
+import os
 import sys
 import threading
 from pathlib import Path
@@ -38,7 +43,7 @@ _LOG_FORMAT = '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s'
 _LOG_FORMAT_DETAILED = '%(asctime)s | %(levelname)-8s | %(name)s | [%(user_id)s] [%(screen)s] | %(message)s'
 _DATE_FORMAT = '%Y-%m-%d %H:%M:%S'
 
-_BACKUP_COUNT = 30  # 30 jours de logs conservés
+_BACKUP_COUNT = 14  # 14 jours de logs conservés (au-delà : risque disque sur postes)
 _LOG_FILENAME = 'emac.log'
 
 _initialized = False
@@ -170,10 +175,15 @@ def setup_logging(production_mode: bool = False) -> None:
 
     _production_mode = production_mode
 
+    # Override via variable d'environnement (utile pour debug ponctuel)
+    # Usage: EMAC_LOG_LEVEL=DEBUG python main.py
+    env_level = os.getenv('EMAC_LOG_LEVEL', '').upper()
+    level_override = getattr(logging, env_level, None) if env_level else None
+
     # Niveau de log selon le mode
-    root_level = logging.WARNING if production_mode else logging.DEBUG
-    console_level = logging.WARNING if production_mode else logging.INFO
-    file_level = logging.INFO if production_mode else logging.DEBUG
+    root_level = level_override or (logging.WARNING if production_mode else logging.DEBUG)
+    console_level = level_override or (logging.WARNING if production_mode else logging.INFO)
+    file_level = level_override or logging.INFO  # toujours INFO dans le fichier, même en dev
 
     # Configurer le root logger
     root_logger = logging.getLogger()
@@ -217,6 +227,31 @@ def setup_logging(production_mode: bool = False) -> None:
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('mysql.connector').setLevel(logging.WARNING)
     logging.getLogger('PIL').setLevel(logging.WARNING)
+
+    # Réduire le bruit des modules internes trop verbeux
+    # alert_service : ~13 000 lignes DEBUG/jour (logue chaque personnel individuellement)
+    # query_executor : ~10 000 lignes DEBUG/jour ("fetch_all: 0 lignes récupérées")
+    # event_rule_service : ~5 800 lignes DEBUG/jour (logue chaque condition évaluée)
+    # event_bus : ~2 000 lignes DEBUG/jour (logue chaque souscription/émission)
+    logging.getLogger('domain.services.admin.alert_service').setLevel(logging.INFO)
+    logging.getLogger('infrastructure.db.query_executor').setLevel(logging.INFO)
+    logging.getLogger('application.event_rule_service').setLevel(logging.INFO)
+    logging.getLogger('application.event_bus').setLevel(logging.INFO)
+    logging.getLogger('application.document_trigger_service').setLevel(logging.INFO)
+
+    # Nettoyage défensif des logs orphelins (si _BACKUP_COUNT a été réduit)
+    try:
+        from datetime import datetime as _dt, timedelta
+        cutoff = _dt.now() - timedelta(days=_BACKUP_COUNT)
+        for log_file in logs_dir.glob('emac.log.*'):
+            try:
+                if log_file.stat().st_mtime < cutoff.timestamp():
+                    log_file.unlink()
+            except Exception:
+                pass
+    except Exception as e:
+        startup_logger = logging.getLogger('emac.startup')
+        startup_logger.debug(f"Nettoyage logs orphelins échoué: {e}")
 
     _initialized = True
 
