@@ -101,15 +101,18 @@ def fetch_historique(
         where.append("action = %s")
         params.append(sql_action)
 
-    if search_text:
+    if search_text and len(search_text) >= 4:
+        where.append(
+            "(MATCH(action, description) AGAINST (%s IN BOOLEAN MODE) "
+            "OR CAST(personnel_id AS CHAR) LIKE %s "
+            "OR CAST(poste_id AS CHAR) LIKE %s)"
+        )
+        params += [f"+{search_text}*", f"%{search_text}%", f"%{search_text}%"]
+    elif search_text:
         like = f"%{search_text}%"
         where.append(
-            "("
-            "action LIKE %s OR "
-            "description LIKE %s OR "
-            "CAST(personnel_id AS CHAR) LIKE %s OR "
-            "CAST(poste_id AS CHAR) LIKE %s"
-            ")"
+            "(action LIKE %s OR description LIKE %s "
+            "OR CAST(personnel_id AS CHAR) LIKE %s OR CAST(poste_id AS CHAR) LIKE %s)"
         )
         params += [like, like, like, like]
 
@@ -181,12 +184,18 @@ def _build_historique_where(
         where.append(f"table_name IN ({placeholders})")
         params.extend(table_names)
 
-    if search_text:
+    if search_text and len(search_text) >= 4:
+        where.append(
+            "(MATCH(action, description) AGAINST (%s IN BOOLEAN MODE) "
+            "OR CAST(personnel_id AS CHAR) LIKE %s "
+            "OR CAST(poste_id AS CHAR) LIKE %s)"
+        )
+        params += [f"+{search_text}*", f"%{search_text}%", f"%{search_text}%"]
+    elif search_text:
         like = f"%{search_text}%"
         where.append(
-            "(action LIKE %s OR description LIKE %s OR "
-            "CAST(personnel_id AS CHAR) LIKE %s OR "
-            "CAST(poste_id AS CHAR) LIKE %s)"
+            "(action LIKE %s OR description LIKE %s "
+            "OR CAST(personnel_id AS CHAR) LIKE %s OR CAST(poste_id AS CHAR) LIKE %s)"
         )
         params += [like, like, like, like]
 

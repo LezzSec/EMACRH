@@ -195,8 +195,26 @@ def get_cached_types_contrat() -> List[str]:
     return ['CDI', 'CDD', 'Intérim', 'Apprentissage', 'Stage']
 
 
+@cached(ttl=CacheTTL.MEDIUM, namespace='static', key_prefix='categories_documents:all')
+def get_cached_categories_documents() -> List[Dict]:
+    """Cache les catégories de documents (liste quasi-statique, TTL 10 min)."""
+    return QueryExecutor.fetch_all(
+        "SELECT id, nom, description FROM categories_documents ORDER BY nom",
+        dictionary=True
+    )
+
+
+@cached(ttl=CacheTTL.MEDIUM, namespace='static', key_prefix='competences_catalogue:all')
+def get_cached_competences_catalogue() -> List[Dict]:
+    """Cache le catalogue des compétences (liste quasi-statique, TTL 10 min)."""
+    return QueryExecutor.fetch_all(
+        "SELECT id, intitule, categorie, duree_validite_mois FROM competences_catalogue ORDER BY intitule",
+        dictionary=True
+    )
+
+
 def invalidate_static_lists_cache():
-    """Invalide tout le cache des listes statiques"""
+    """Invalide tout le cache des listes statiques (roles, ateliers, types_contrat, catégories, compétences)."""
     cache = CacheManager.get_instance()
     cache.invalidate_namespace('static')
 
@@ -347,6 +365,8 @@ def warm_up_cache():
     get_cached_roles()
     get_cached_ateliers()
     get_cached_types_contrat()
+    get_cached_categories_documents()
+    get_cached_competences_catalogue()
 
     # Charger les postes actifs
     get_cached_postes_actifs()

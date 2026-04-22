@@ -6,7 +6,7 @@
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QLabel, QLineEdit
 )
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QTimer
 from PyQt5.QtGui import QFont
 from gui.components.ui_theme import EmacButton, EmacCard
 from domain.services.admin.auth_service import authenticate_user
@@ -20,13 +20,17 @@ class LoginDialog(QDialog):
         self.setWindowTitle("EMAC - Connexion")
         self.setModal(True)
 
-        # Définir une taille par défaut mais permettre le redimensionnement
         self.resize(450, 550)
         self.setMinimumSize(400, 450)
 
+        self._countdown_seconds = 0
+        self._countdown_timer = QTimer(self)
+        self._countdown_timer.setInterval(1000)
+        self._countdown_timer.timeout.connect(self._tick_countdown)
+        self._rate_limit_message = ""
+
         self.setup_ui()
 
-        # Variable pour stocker le succès de la connexion
         self.login_successful = False
 
     def setup_ui(self):
@@ -133,15 +137,18 @@ class LoginDialog(QDialog):
         self.login_button.setText("Connexion en cours...")
 
         # Tentative d'authentification
-        success, error_message = authenticate_user(username, password)
+        success, error_message, wait_seconds = authenticate_user(username, password)
 
         if success:
             self.login_successful = True
-            self.accept()  # Fermer le dialogue avec succès
+            self.accept()
         else:
-            self.show_error(error_message or "Erreur de connexion")
-            self.login_button.setEnabled(True)
-            self.login_button.setText("Se connecter")
+            if wait_seconds > 0:
+                self._start_countdown(error_message or "Accès temporairement bloqué.", wait_seconds)
+            else:
+                self.show_error(error_message or "Erreur de connexion")
+                self.login_button.setEnabled(True)
+                self.login_button.setText("Se connecter")
             self.password_input.clear()
             self.password_input.setFocus()
 
@@ -149,14 +156,46 @@ class LoginDialog(QDialog):
         """Affiche un message d'erreur"""
         self.error_label.setText(message)
         self.error_label.show()
-
-        # Animer légèrement le champ d'erreur (optionnel)
         self.error_label.setStyleSheet("""
             color: #d32f2f;
             padding: 8px;
             background-color: #ffebee;
             border-radius: 4px;
             border-left: 3px solid #d32f2f;
+        """)
+
+    def _start_countdown(self, base_message: str, seconds: int):
+        """Lance le compte à rebours de blocage."""
+        self._rate_limit_message = base_message
+        self._countdown_seconds = seconds
+        self._update_countdown_label()
+        self.login_button.setEnabled(False)
+        self._countdown_timer.start()
+
+    def _tick_countdown(self):
+        self._countdown_seconds -= 1
+        if self._countdown_seconds <= 0:
+            self._countdown_timer.stop()
+            self.error_label.hide()
+            self.login_button.setEnabled(True)
+            self.login_button.setText("Se connecter")
+        else:
+            self._update_countdown_label()
+
+    def _update_countdown_label(self):
+        mins, secs = divmod(self._countdown_seconds, 60)
+        if mins > 0:
+            time_str = f"{mins} min {secs:02d} s"
+        else:
+            time_str = f"{self._countdown_seconds} s"
+        self.error_label.setText(f"{self._rate_limit_message}\nRéessayez dans : {time_str}")
+        self.error_label.show()
+        self.error_label.setStyleSheet("""
+            color: #e65100;
+            padding: 8px;
+            background-color: #fff3e0;
+            border-radius: 4px;
+            border-left: 3px solid #e65100;
         """)
 
     def keyPressEvent(self, event):

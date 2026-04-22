@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QLabel, QScrollArea, QComboBox,
-    QVBoxLayout, QHBoxLayout, QGridLayout, QMessageBox, QEvent,
+    QVBoxLayout, QHBoxLayout, QGridLayout, QMessageBox,
 )
-from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtCore import Qt, QTimer, QEvent
 
 from infrastructure.logging.logging_config import get_logger
 from gui.components.emac_ui_kit import show_error_message

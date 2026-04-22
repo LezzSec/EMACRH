@@ -205,79 +205,91 @@ def add_formation_batch(
         if not categorie_formation_id:
             logger.warning("Catégorie 'Diplômes et formations' introuvable - documents ne seront pas ajoutés")
 
-    for i, personnel_id in enumerate(personnel_ids):
-        _emit_progress(
-            progress_callback,
-            int((i / total) * 100),
-            f"Traitement {i + 1}/{total}..."
+    # Batch INSERT — 1 round-trip au lieu de N
+    _emit_progress(progress_callback, 10, f"Insertion de {total} formations...")
+    params_list = [
+        (
+            pid,
+            formation_data.get('intitule'),
+            formation_data.get('organisme'),
+            formation_data.get('date_debut'),
+            formation_data.get('date_fin'),
+            formation_data.get('duree_heures'),
+            formation_data.get('statut', 'Planifiée'),
+            formation_data.get('certificat_obtenu', False),
+            formation_data.get('cout'),
+            formation_data.get('commentaire'),
         )
+        for pid in personnel_ids
+    ]
+    try:
+        QueryExecutor.execute_many("""
+            INSERT INTO formation (
+                personnel_id, intitule, organisme, date_debut, date_fin,
+                duree_heures, statut, certificat_obtenu, cout, commentaire
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, params_list)
+        nb_success = total
+        details = [{'personnel_id': pid, 'status': 'SUCCES'} for pid in personnel_ids]
+    except Exception as e:
+        nb_errors = total
+        error_msg = str(e)
+        logger.error(f"Erreur formation batch (execute_many): {e}")
+        details = [{'personnel_id': pid, 'status': 'ERREUR', 'error': error_msg} for pid in personnel_ids]
 
+    # Documents + batch details — re-fetch les IDs insérés si nécessaire
+    if nb_success > 0 and (doc_service or batch_id):
         try:
-            # Insérer la formation
-            formation_id = QueryExecutor.execute_write("""
-                INSERT INTO formation (
-                    personnel_id, intitule, organisme, date_debut, date_fin,
-                    duree_heures, statut, certificat_obtenu, cout, commentaire
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                personnel_id,
-                formation_data.get('intitule'),
-                formation_data.get('organisme'),
-                formation_data.get('date_debut'),
-                formation_data.get('date_fin'),
-                formation_data.get('duree_heures'),
-                formation_data.get('statut', 'Planifiée'),
-                formation_data.get('certificat_obtenu', False),
-                formation_data.get('cout'),
-                formation_data.get('commentaire')
-            ), return_lastrowid=True)
+            ph = ','.join(['%s'] * len(personnel_ids))
+            inserted = QueryExecutor.fetch_all(
+                f"""SELECT id, personnel_id FROM formation
+                    WHERE personnel_id IN ({ph}) AND date_debut = %s AND intitule = %s
+                    ORDER BY id DESC""",
+                tuple(personnel_ids) + (formation_data.get('date_debut'), formation_data.get('intitule')),
+                dictionary=True
+            )
+            # On prend l'ID le plus récent par personnel (ORDER BY id DESC, premier hit)
+            id_map = {}
+            for row in inserted:
+                pid = row['personnel_id']
+                if pid not in id_map:
+                    id_map[pid] = row['id']
 
-            # Ajouter le document si fourni
-            if doc_service and document_path and categorie_formation_id:
-                try:
-                    success, message, document_id = doc_service.add_document(
-                        personnel_id=personnel_id,
-                        categorie_id=categorie_formation_id,
-                        fichier_source=document_path,
-                        nom_affichage=f"Attestation - {formation_data.get('intitule', 'Formation')}",
-                        notes=f"Document associé à la formation du {formation_data.get('date_debut')}",
-                        uploaded_by=created_by or "Système"
-                    )
+            for i, pid in enumerate(personnel_ids):
+                formation_id = id_map.get(pid)
+                if not formation_id:
+                    continue
 
-                    if success and document_id:
-                        # Lier le document à la formation
-                        QueryExecutor.execute_write(
-                            "UPDATE documents SET formation_id = %s WHERE id = %s",
-                            (formation_id, document_id)
+                details[i]['record_id'] = formation_id
+
+                if doc_service and document_path and categorie_formation_id:
+                    _emit_progress(progress_callback, 50 + int((i / total) * 50), f"Document {i + 1}/{total}...")
+                    try:
+                        success, message, document_id = doc_service.add_document(
+                            personnel_id=pid,
+                            categorie_id=categorie_formation_id,
+                            fichier_source=document_path,
+                            nom_affichage=f"Attestation - {formation_data.get('intitule', 'Formation')}",
+                            notes=f"Document associé à la formation du {formation_data.get('date_debut')}",
+                            uploaded_by=created_by or "Système"
                         )
-                        logger.debug(f"Document {document_id} lié à la formation {formation_id}")
-                    else:
-                        logger.warning(f"Échec ajout document pour formation {formation_id}: {message}")
-                except Exception as doc_error:
-                    logger.error(f"Erreur ajout document pour formation {formation_id}: {doc_error}")
+                        if success and document_id:
+                            QueryExecutor.execute_write(
+                                "UPDATE documents SET formation_id = %s WHERE id = %s",
+                                (formation_id, document_id)
+                            )
+                        else:
+                            logger.warning(f"Échec ajout document pour formation {formation_id}: {message}")
+                    except Exception as doc_error:
+                        logger.error(f"Erreur ajout document pour formation {formation_id}: {doc_error}")
 
-            nb_success += 1
-
-            details.append({
-                'personnel_id': personnel_id,
-                'status': 'SUCCES',
-                'record_id': formation_id
-            })
-
-            if batch_id:
-                add_batch_detail(batch_id, personnel_id, 'SUCCES', formation_id)
-
+                if batch_id:
+                    add_batch_detail(batch_id, pid, 'SUCCES', formation_id)
         except Exception as e:
-            nb_errors += 1
-            error_msg = str(e)
-            details.append({
-                'personnel_id': personnel_id,
-                'status': 'ERREUR',
-                'error': error_msg
-            })
-            if batch_id:
-                add_batch_detail(batch_id, personnel_id, 'ERREUR', error_message=error_msg)
-            logger.error(f"Erreur formation batch pour personnel {personnel_id}: {e}")
+            logger.error(f"Erreur re-fetch formations pour documents/batch: {e}")
+    elif nb_errors > 0 and batch_id:
+        for pid in personnel_ids:
+            add_batch_detail(batch_id, pid, 'ERREUR', error_message=error_msg)
 
     # Finaliser le batch
     if batch_id:
@@ -374,72 +386,84 @@ def add_absence_batch(
         absence_data.get('demi_journee_fin', 'JOURNEE')
     )
 
-    for i, personnel_id in enumerate(personnel_ids):
-        _emit_progress(
-            progress_callback,
-            int((i / total) * 100),
-            f"Traitement {i + 1}/{total}..."
+    # Batch INSERT — 1 round-trip au lieu de N
+    _emit_progress(progress_callback, 10, f"Insertion de {total} absences...")
+    abs_params_list = [
+        (
+            pid,
+            type_absence_id,
+            absence_data.get('date_debut'),
+            absence_data.get('date_fin'),
+            absence_data.get('demi_journee_debut', 'JOURNEE'),
+            absence_data.get('demi_journee_fin', 'JOURNEE'),
+            nb_jours,
+            absence_data.get('motif', ''),
+            absence_data.get('statut', 'EN_ATTENTE'),
         )
+        for pid in personnel_ids
+    ]
+    try:
+        QueryExecutor.execute_many("""
+            INSERT INTO demande_absence
+            (personnel_id, type_absence_id, date_debut, date_fin,
+             demi_journee_debut, demi_journee_fin, nb_jours, motif, statut)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+        """, abs_params_list)
+        nb_success = total
+        details = [{'personnel_id': pid, 'status': 'SUCCES'} for pid in personnel_ids]
+    except Exception as e:
+        nb_errors = total
+        error_msg = str(e)
+        logger.error(f"Erreur absence batch (execute_many): {e}")
+        details = [{'personnel_id': pid, 'status': 'ERREUR', 'error': error_msg} for pid in personnel_ids]
 
+    # Documents — re-fetch les IDs insérés si justificatif fourni
+    if nb_success > 0 and (doc_service or batch_id):
         try:
-            demande_id = QueryExecutor.execute_write("""
-                INSERT INTO demande_absence
-                (personnel_id, type_absence_id, date_debut, date_fin,
-                 demi_journee_debut, demi_journee_fin, nb_jours, motif, statut)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                personnel_id,
-                type_absence_id,
-                absence_data.get('date_debut'),
-                absence_data.get('date_fin'),
-                absence_data.get('demi_journee_debut', 'JOURNEE'),
-                absence_data.get('demi_journee_fin', 'JOURNEE'),
-                nb_jours,
-                absence_data.get('motif', ''),
-                absence_data.get('statut', 'EN_ATTENTE')
-            ), return_lastrowid=True)
+            ph = ','.join(['%s'] * len(personnel_ids))
+            inserted = QueryExecutor.fetch_all(
+                f"""SELECT id, personnel_id FROM demande_absence
+                    WHERE personnel_id IN ({ph}) AND date_debut = %s AND type_absence_id = %s
+                    ORDER BY id DESC""",
+                tuple(personnel_ids) + (absence_data.get('date_debut'), type_absence_id),
+                dictionary=True
+            )
+            id_map = {}
+            for row in inserted:
+                pid = row['personnel_id']
+                if pid not in id_map:
+                    id_map[pid] = row['id']
 
-            # Ajouter le justificatif si fourni
-            if doc_service and document_path and categorie_admin_id:
-                try:
-                    success, message, document_id = doc_service.add_document(
-                        personnel_id=personnel_id,
-                        categorie_id=categorie_admin_id,
-                        fichier_source=document_path,
-                        nom_affichage=f"Justificatif absence - {type_absence_code}",
-                        notes=f"Justificatif pour absence du {absence_data.get('date_debut')} au {absence_data.get('date_fin')}",
-                        uploaded_by=created_by or "Système"
-                    )
+            for i, pid in enumerate(personnel_ids):
+                demande_id = id_map.get(pid)
+                if not demande_id:
+                    continue
 
-                    if not success:
-                        logger.warning(f"Échec ajout justificatif pour absence {demande_id}: {message}")
-                    else:
-                        logger.debug(f"Justificatif {document_id} ajouté pour absence {demande_id}")
-                except Exception as doc_error:
-                    logger.error(f"Erreur ajout justificatif pour absence {demande_id}: {doc_error}")
+                details[i]['record_id'] = demande_id
 
-            nb_success += 1
+                if doc_service and document_path and categorie_admin_id:
+                    _emit_progress(progress_callback, 50 + int((i / total) * 50), f"Document {i + 1}/{total}...")
+                    try:
+                        success, message, document_id = doc_service.add_document(
+                            personnel_id=pid,
+                            categorie_id=categorie_admin_id,
+                            fichier_source=document_path,
+                            nom_affichage=f"Justificatif absence - {type_absence_code}",
+                            notes=f"Justificatif pour absence du {absence_data.get('date_debut')} au {absence_data.get('date_fin')}",
+                            uploaded_by=created_by or "Système"
+                        )
+                        if not success:
+                            logger.warning(f"Échec ajout justificatif pour absence {demande_id}: {message}")
+                    except Exception as doc_error:
+                        logger.error(f"Erreur ajout justificatif pour absence {demande_id}: {doc_error}")
 
-            details.append({
-                'personnel_id': personnel_id,
-                'status': 'SUCCES',
-                'record_id': demande_id
-            })
-
-            if batch_id:
-                add_batch_detail(batch_id, personnel_id, 'SUCCES', demande_id)
-
+                if batch_id:
+                    add_batch_detail(batch_id, pid, 'SUCCES', demande_id)
         except Exception as e:
-            nb_errors += 1
-            error_msg = str(e)
-            details.append({
-                'personnel_id': personnel_id,
-                'status': 'ERREUR',
-                'error': error_msg
-            })
-            if batch_id:
-                add_batch_detail(batch_id, personnel_id, 'ERREUR', error_message=error_msg)
-            logger.error(f"Erreur absence batch pour personnel {personnel_id}: {e}")
+            logger.error(f"Erreur re-fetch absences pour documents/batch: {e}")
+    elif nb_errors > 0 and batch_id:
+        for pid in personnel_ids:
+            add_batch_detail(batch_id, pid, 'ERREUR', error_message=error_msg)
 
     # Finaliser le batch
     if batch_id:
@@ -508,71 +532,83 @@ def add_visite_batch(
         if not categorie_medical_id:
             logger.warning("Catégorie 'Certificats médicaux' introuvable - documents ne seront pas ajoutés")
 
-    for i, personnel_id in enumerate(personnel_ids):
-        _emit_progress(
-            progress_callback,
-            int((i / total) * 100),
-            f"Traitement {i + 1}/{total}..."
+    # Batch INSERT — 1 round-trip au lieu de N
+    _emit_progress(progress_callback, 10, f"Insertion de {total} visites médicales...")
+    visite_params_list = [
+        (
+            pid,
+            visite_data.get('date_visite'),
+            visite_data.get('type_visite', 'Périodique'),
+            visite_data.get('resultat'),
+            visite_data.get('restrictions'),
+            visite_data.get('medecin'),
+            visite_data.get('commentaire'),
+            visite_data.get('prochaine_visite'),
         )
+        for pid in personnel_ids
+    ]
+    try:
+        QueryExecutor.execute_many("""
+            INSERT INTO medical_visite (
+                personnel_id, date_visite, type_visite, resultat,
+                restrictions, medecin, commentaire, prochaine_visite
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+        """, visite_params_list)
+        nb_success = total
+        details = [{'personnel_id': pid, 'status': 'SUCCES'} for pid in personnel_ids]
+    except Exception as e:
+        nb_errors = total
+        error_msg = str(e)
+        logger.error(f"Erreur visite batch (execute_many): {e}")
+        details = [{'personnel_id': pid, 'status': 'ERREUR', 'error': error_msg} for pid in personnel_ids]
 
+    # Documents — re-fetch les IDs insérés si fiche fournie
+    if nb_success > 0 and (doc_service or batch_id):
         try:
-            visite_id = QueryExecutor.execute_write("""
-                INSERT INTO medical_visite (
-                    personnel_id, date_visite, type_visite, resultat,
-                    restrictions, medecin, commentaire, prochaine_visite
-                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (
-                personnel_id,
-                visite_data.get('date_visite'),
-                visite_data.get('type_visite', 'Périodique'),
-                visite_data.get('resultat'),
-                visite_data.get('restrictions'),
-                visite_data.get('medecin'),
-                visite_data.get('commentaire'),
-                visite_data.get('prochaine_visite')
-            ), return_lastrowid=True)
+            ph = ','.join(['%s'] * len(personnel_ids))
+            inserted = QueryExecutor.fetch_all(
+                f"""SELECT id, personnel_id FROM medical_visite
+                    WHERE personnel_id IN ({ph}) AND date_visite = %s AND type_visite = %s
+                    ORDER BY id DESC""",
+                tuple(personnel_ids) + (visite_data.get('date_visite'), visite_data.get('type_visite', 'Périodique')),
+                dictionary=True
+            )
+            id_map = {}
+            for row in inserted:
+                pid = row['personnel_id']
+                if pid not in id_map:
+                    id_map[pid] = row['id']
 
-            # Ajouter le document médical si fourni
-            if doc_service and document_path and categorie_medical_id:
-                try:
-                    success, message, document_id = doc_service.add_document(
-                        personnel_id=personnel_id,
-                        categorie_id=categorie_medical_id,
-                        fichier_source=document_path,
-                        nom_affichage=f"Fiche aptitude - {visite_data.get('type_visite', 'Visite')}",
-                        notes=f"Document pour visite {visite_data.get('type_visite')} du {visite_data.get('date_visite')}",
-                        uploaded_by=created_by or "Système"
-                    )
+            for i, pid in enumerate(personnel_ids):
+                visite_id = id_map.get(pid)
+                if not visite_id:
+                    continue
 
-                    if not success:
-                        logger.warning(f"Échec ajout document médical pour visite {visite_id}: {message}")
-                    else:
-                        logger.debug(f"Document médical {document_id} ajouté pour visite {visite_id}")
-                except Exception as doc_error:
-                    logger.error(f"Erreur ajout document médical pour visite {visite_id}: {doc_error}")
+                details[i]['record_id'] = visite_id
 
-            nb_success += 1
+                if doc_service and document_path and categorie_medical_id:
+                    _emit_progress(progress_callback, 50 + int((i / total) * 50), f"Document {i + 1}/{total}...")
+                    try:
+                        success, message, document_id = doc_service.add_document(
+                            personnel_id=pid,
+                            categorie_id=categorie_medical_id,
+                            fichier_source=document_path,
+                            nom_affichage=f"Fiche aptitude - {visite_data.get('type_visite', 'Visite')}",
+                            notes=f"Document pour visite {visite_data.get('type_visite')} du {visite_data.get('date_visite')}",
+                            uploaded_by=created_by or "Système"
+                        )
+                        if not success:
+                            logger.warning(f"Échec ajout document médical pour visite {visite_id}: {message}")
+                    except Exception as doc_error:
+                        logger.error(f"Erreur ajout document médical pour visite {visite_id}: {doc_error}")
 
-            details.append({
-                'personnel_id': personnel_id,
-                'status': 'SUCCES',
-                'record_id': visite_id
-            })
-
-            if batch_id:
-                add_batch_detail(batch_id, personnel_id, 'SUCCES', visite_id)
-
+                if batch_id:
+                    add_batch_detail(batch_id, pid, 'SUCCES', visite_id)
         except Exception as e:
-            nb_errors += 1
-            error_msg = str(e)
-            details.append({
-                'personnel_id': personnel_id,
-                'status': 'ERREUR',
-                'error': error_msg
-            })
-            if batch_id:
-                add_batch_detail(batch_id, personnel_id, 'ERREUR', error_message=error_msg)
-            logger.error(f"Erreur visite batch pour personnel {personnel_id}: {e}")
+            logger.error(f"Erreur re-fetch visites pour documents/batch: {e}")
+    elif nb_errors > 0 and batch_id:
+        for pid in personnel_ids:
+            add_batch_detail(batch_id, pid, 'ERREUR', error_message=error_msg)
 
     # Finaliser le batch
     if batch_id:
@@ -689,90 +725,80 @@ def add_competence_batch(
         if not categorie_formation_id:
             logger.warning("Catégorie 'Diplômes et formations' introuvable - attestations ne seront pas ajoutées")
 
-    for i, personnel_id in enumerate(personnel_ids):
-        _emit_progress(
-            progress_callback,
-            int((i / total) * 100),
-            f"Traitement {i + 1}/{total}..."
+    # Batch UPSERT — 1 round-trip au lieu de 3×N (SELECT + INSERT/UPDATE par personne)
+    # Pré-requis : UNIQUE KEY uk_personnel_competence (personnel_id, competence_id) — migration 052
+    _emit_progress(progress_callback, 10, f"Assignation de {total} compétences...")
+    comp_params_list = [
+        (
+            pid,
+            competence_id,
+            competence_data.get('date_acquisition'),
+            competence_data.get('date_expiration'),
+            competence_data.get('commentaire'),
         )
+        for pid in personnel_ids
+    ]
+    try:
+        QueryExecutor.execute_many("""
+            INSERT INTO personnel_competences
+            (personnel_id, competence_id, date_acquisition, date_expiration, commentaire)
+            VALUES (%s, %s, %s, %s, %s)
+            ON DUPLICATE KEY UPDATE
+              date_acquisition = VALUES(date_acquisition),
+              date_expiration  = VALUES(date_expiration),
+              commentaire      = VALUES(commentaire)
+        """, comp_params_list)
+        nb_success = total
+        details = [{'personnel_id': pid, 'status': 'SUCCES'} for pid in personnel_ids]
+    except Exception as e:
+        nb_errors = total
+        error_msg = str(e)
+        logger.error(f"Erreur compétence batch (execute_many): {e}")
+        details = [{'personnel_id': pid, 'status': 'ERREUR', 'error': error_msg} for pid in personnel_ids]
 
+    # Documents — re-fetch les IDs si attestation fournie
+    if nb_success > 0 and (doc_service or batch_id):
         try:
-            # Vérifier si déjà assignée (pour éviter les doublons)
-            existing = QueryExecutor.fetch_one("""
-                SELECT id FROM personnel_competences
-                WHERE personnel_id = %s AND competence_id = %s
-            """, (personnel_id, competence_id), dictionary=True)
+            ph = ','.join(['%s'] * len(personnel_ids))
+            inserted = QueryExecutor.fetch_all(
+                f"""SELECT id, personnel_id FROM personnel_competences
+                    WHERE personnel_id IN ({ph}) AND competence_id = %s""",
+                tuple(personnel_ids) + (competence_id,),
+                dictionary=True
+            )
+            id_map = {row['personnel_id']: row['id'] for row in inserted}
 
-            if existing:
-                # Mettre à jour au lieu de créer
-                QueryExecutor.execute_write("""
-                    UPDATE personnel_competences
-                    SET date_acquisition = %s, date_expiration = %s, commentaire = %s
-                    WHERE personnel_id = %s AND competence_id = %s
-                """, (
-                    competence_data.get('date_acquisition'),
-                    competence_data.get('date_expiration'),
-                    competence_data.get('commentaire'),
-                    personnel_id,
-                    competence_id
-                ))
-                record_id = existing['id']
-            else:
-                # Créer une nouvelle assignation
-                record_id = QueryExecutor.execute_write("""
-                    INSERT INTO personnel_competences
-                    (personnel_id, competence_id, date_acquisition, date_expiration, commentaire)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (
-                    personnel_id,
-                    competence_id,
-                    competence_data.get('date_acquisition'),
-                    competence_data.get('date_expiration'),
-                    competence_data.get('commentaire')
-                ), return_lastrowid=True)
+            for i, pid in enumerate(personnel_ids):
+                record_id = id_map.get(pid)
+                if not record_id:
+                    continue
 
-            # Ajouter l'attestation de compétence si fournie
-            if doc_service and document_path and categorie_formation_id:
-                try:
-                    success, message, document_id = doc_service.add_document(
-                        personnel_id=personnel_id,
-                        categorie_id=categorie_formation_id,
-                        fichier_source=document_path,
-                        nom_affichage=f"Attestation - {competence_libelle}",
-                        notes=f"Attestation pour compétence acquise le {competence_data.get('date_acquisition')}",
-                        date_expiration=competence_data.get('date_expiration'),
-                        uploaded_by=created_by or "Système"
-                    )
+                details[i]['record_id'] = record_id
 
-                    if not success:
-                        logger.warning(f"Échec ajout attestation pour compétence {record_id}: {message}")
-                    else:
-                        logger.debug(f"Attestation {document_id} ajoutée pour compétence {record_id}")
-                except Exception as doc_error:
-                    logger.error(f"Erreur ajout attestation pour compétence {record_id}: {doc_error}")
+                if doc_service and document_path and categorie_formation_id:
+                    _emit_progress(progress_callback, 50 + int((i / total) * 50), f"Document {i + 1}/{total}...")
+                    try:
+                        success, message, document_id = doc_service.add_document(
+                            personnel_id=pid,
+                            categorie_id=categorie_formation_id,
+                            fichier_source=document_path,
+                            nom_affichage=f"Attestation - {competence_libelle}",
+                            notes=f"Attestation pour compétence acquise le {competence_data.get('date_acquisition')}",
+                            date_expiration=competence_data.get('date_expiration'),
+                            uploaded_by=created_by or "Système"
+                        )
+                        if not success:
+                            logger.warning(f"Échec ajout attestation pour compétence {record_id}: {message}")
+                    except Exception as doc_error:
+                        logger.error(f"Erreur ajout attestation pour compétence {record_id}: {doc_error}")
 
-            nb_success += 1
-
-            details.append({
-                'personnel_id': personnel_id,
-                'status': 'SUCCES',
-                'record_id': record_id
-            })
-
-            if batch_id:
-                add_batch_detail(batch_id, personnel_id, 'SUCCES', record_id)
-
+                if batch_id:
+                    add_batch_detail(batch_id, pid, 'SUCCES', record_id)
         except Exception as e:
-            nb_errors += 1
-            error_msg = str(e)
-            details.append({
-                'personnel_id': personnel_id,
-                'status': 'ERREUR',
-                'error': error_msg
-            })
-            if batch_id:
-                add_batch_detail(batch_id, personnel_id, 'ERREUR', error_message=error_msg)
-            logger.error(f"Erreur compétence batch pour personnel {personnel_id}: {e}")
+            logger.error(f"Erreur re-fetch compétences pour documents/batch: {e}")
+    elif nb_errors > 0 and batch_id:
+        for pid in personnel_ids:
+            add_batch_detail(batch_id, pid, 'ERREUR', error_message=error_msg)
 
     # Finaliser le batch
     if batch_id:

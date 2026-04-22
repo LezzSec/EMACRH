@@ -419,51 +419,66 @@ class GrillesService:
         """
         from application.permission_manager import require
         require("production.grilles.edit")
+
+        if not modifications:
+            return 0
+
+        # 1. Pré-charger tous les existants en 1 requête (évite N SELECT)
+        pairs = [(op_id, p_id) for op_id, p_id, *_ in modifications]
+        placeholders = ','.join(['(%s, %s)'] * len(pairs))
+        flat_params = tuple(v for pair in pairs for v in pair)
+        existing_rows = QueryExecutor.fetch_all(
+            f"SELECT personnel_id, poste_id, niveau FROM polyvalence "
+            f"WHERE (personnel_id, poste_id) IN ({placeholders})",
+            flat_params, dictionary=True
+        )
+        existing_map = {(r['personnel_id'], r['poste_id']): r['niveau'] for r in existing_rows}
+
+        # 2. Batch REPLACE — 1 requête au lieu de N
+        replace_params = [
+            (op_id, p_id, int(niveau) if niveau else None)
+            for op_id, p_id, niveau, *_ in modifications
+        ]
+        try:
+            QueryExecutor.execute_many(
+                "REPLACE INTO polyvalence (personnel_id, poste_id, niveau) VALUES (%s, %s, %s)",
+                replace_params
+            )
+        except Exception as e:
+            logger.error(f"Erreur REPLACE batch polyvalence: {e}")
+            return 0
+
+        # 3. Logs historique individuels (audit obligatoire)
+        try:
+            from domain.services.admin.auth_service import get_current_user
+            current_user = get_current_user()
+            utilisateur = None
+            if current_user:
+                utilisateur = current_user.get('username') or \
+                    f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip()
+        except Exception:
+            utilisateur = None
+
         count = 0
         for operateur_id, poste_id, new_niveau_str, operateur_nom, poste_code in modifications:
             try:
-                # Vérifier ancienne valeur
-                existing = QueryExecutor.fetch_one("""
-                    SELECT niveau FROM polyvalence
-                    WHERE personnel_id = %s AND poste_id = %s
-                """, (operateur_id, poste_id), dictionary=True)
-
-                old_niveau = existing.get('niveau') if existing else None
-                action = 'UPDATE' if existing else 'INSERT'
                 new_niveau_int = int(new_niveau_str) if new_niveau_str else None
-
-                QueryExecutor.execute_write(
-                    "REPLACE INTO polyvalence (personnel_id, poste_id, niveau) VALUES (%s, %s, %s)",
-                    (operateur_id, poste_id, new_niveau_int)
-                )
-
-                try:
-                    from domain.services.admin.auth_service import get_current_user
-                    current_user = get_current_user()
-                    utilisateur = None
-                    if current_user:
-                        utilisateur = current_user.get('username') or \
-                            f"{current_user.get('prenom', '')} {current_user.get('nom', '')}".strip()
-
-                    changes = {}
-                    if old_niveau != new_niveau_int:
-                        changes["niveau"] = {"old": old_niveau, "new": new_niveau_int}
-
-                    description = json.dumps({
-                        "operateur": operateur_nom,
-                        "poste": poste_code,
-                        "changes": changes,
-                        "type": "ajout" if action == 'INSERT' else "modification"
-                    }, ensure_ascii=False)
-
-                    log_hist(action, "polyvalence", None, description,
-                             operateur_id=operateur_id, poste_id=poste_id, utilisateur=utilisateur)
-                except Exception as e:
-                    logger.warning(f"Erreur logging batch: {e}")
-
+                old_niveau = existing_map.get((operateur_id, poste_id))
+                action = 'UPDATE' if old_niveau is not None else 'INSERT'
+                changes = {}
+                if old_niveau != new_niveau_int:
+                    changes["niveau"] = {"old": old_niveau, "new": new_niveau_int}
+                description = json.dumps({
+                    "operateur": operateur_nom,
+                    "poste": poste_code,
+                    "changes": changes,
+                    "type": "ajout" if action == 'INSERT' else "modification"
+                }, ensure_ascii=False)
+                log_hist(action, "polyvalence", None, description,
+                         operateur_id=operateur_id, poste_id=poste_id, utilisateur=utilisateur)
                 count += 1
             except Exception as e:
-                logger.error(f"Erreur modification batch ({operateur_id}, {poste_id}): {e}")
+                logger.warning(f"Erreur logging batch ({operateur_id}, {poste_id}): {e}")
 
         return count
 

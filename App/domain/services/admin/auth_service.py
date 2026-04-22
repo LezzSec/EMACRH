@@ -57,22 +57,44 @@ def _log_failed_attempt(username: str, reason: str) -> None:
         logger.debug(f"Impossible de logger la tentative échouée: {e}")
 
 
-# Constantes rate limiting
-_RATE_LIMIT_WINDOW_MINUTES = 15
-_RATE_LIMIT_MAX_PER_USERNAME = 5
-_RATE_LIMIT_MAX_PER_IP = 10
+# Paliers de blocage progressifs : (nb_tentatives, durée_blocage_minutes)
+# Palier 1 : 5 erreurs → 1 minute ; Palier 2 : 10 erreurs → 5 minutes
+_RATE_LIMIT_TIERS = [(5, 1), (10, 5)]
+# Fenêtre de recherche : assez large pour couvrir le palier le plus long
+_RATE_LIMIT_SEARCH_WINDOW_MINUTES = 60
+
+
+def _remaining_seconds_for_tier(column_filter: str, value: str, nth: int, lockout_minutes: int) -> int:
+    """
+    Calcule les secondes restantes avant expiration du blocage pour un palier donné.
+    Trouve la Nème tentative la plus récente et vérifie si lockout_minutes n'est pas encore écoulé.
+    """
+    from datetime import timedelta
+    window_start = datetime.now() - timedelta(minutes=_RATE_LIMIT_SEARCH_WINDOW_MINUTES)
+    rows = QueryExecutor.fetch_all(
+        f"SELECT attempt_time FROM logs_tentatives_connexion"
+        f" WHERE {column_filter} = %s AND attempt_time >= %s"
+        f" ORDER BY attempt_time DESC",
+        (value, window_start),
+    )
+    if not rows or len(rows) < nth:
+        return 0
+    nth_attempt = rows[nth - 1][0] if isinstance(rows[nth - 1], (list, tuple)) else rows[nth - 1]['attempt_time']
+    expires = nth_attempt + timedelta(minutes=lockout_minutes)
+    remaining = int((expires - datetime.now()).total_seconds())
+    return max(0, remaining)
 
 
 def _check_rate_limit(username: str, ip_address: str) -> Tuple[bool, int, str]:
     """
-    Vérifie si la tentative de connexion doit être bloquée.
+    Vérifie si la tentative de connexion doit être bloquée (paliers progressifs).
 
     Returns:
         (blocked, seconds_to_wait, reason)
     """
     try:
         from datetime import timedelta
-        window_start = datetime.now() - timedelta(minutes=_RATE_LIMIT_WINDOW_MINUTES)
+        window_start = datetime.now() - timedelta(minutes=_RATE_LIMIT_SEARCH_WINDOW_MINUTES)
 
         row = QueryExecutor.fetch_one(
             """SELECT
@@ -86,16 +108,17 @@ def _check_rate_limit(username: str, ip_address: str) -> Tuple[bool, int, str]:
         by_user = int(row['by_user'] or 0) if row else 0
         by_ip = int(row['by_ip'] or 0) if row else 0
 
-        if by_user >= _RATE_LIMIT_MAX_PER_USERNAME:
-            return True, _RATE_LIMIT_WINDOW_MINUTES * 60, (
-                f"Trop de tentatives échouées pour ce compte. "
-                f"Réessayez dans {_RATE_LIMIT_WINDOW_MINUTES} minutes."
-            )
-        if by_ip >= _RATE_LIMIT_MAX_PER_IP:
-            return True, _RATE_LIMIT_WINDOW_MINUTES * 60, (
-                f"Trop de tentatives échouées depuis ce poste. "
-                f"Réessayez dans {_RATE_LIMIT_WINDOW_MINUTES} minutes."
-            )
+        # Évaluation du palier le plus élevé applicable (de haut en bas)
+        for (threshold, lockout_min) in reversed(_RATE_LIMIT_TIERS):
+            if by_user >= threshold:
+                wait = _remaining_seconds_for_tier('username', username, threshold, lockout_min)
+                if wait > 0:
+                    return True, wait, "Trop de tentatives échouées pour ce compte."
+            if by_ip >= threshold:
+                wait = _remaining_seconds_for_tier('ip_address', ip_address, threshold, lockout_min)
+                if wait > 0:
+                    return True, wait, "Trop de tentatives échouées depuis ce poste."
+
         return False, 0, ""
     except Exception as e:
         # En cas d'erreur SQL on NE bloque PAS (disponibilité > sécurité stricte ici)
@@ -107,6 +130,100 @@ def _check_rate_limit(username: str, ip_address: str) -> Tuple[bool, int, str]:
 # VALIDATION MOT DE PASSE
 # =============================================================================
 
+# Mots de passe courants qui passent les règles de complexité mais sont triviaux.
+# La normalisation leet-speak (voir _normalize_password) élargit la couverture.
+_COMMON_PASSWORDS: frozenset = frozenset({
+    # Variantes EMAC (application)
+    "emac", "emac1", "emac12", "emac123", "emac1234", "emac12345",
+    "emac2024", "emac2025", "emac2026",
+    "emacadmin", "emacuser", "emacpass", "emacgestion",
+    # Génériques FR très utilisés
+    "motdepasse", "mdp", "password", "passw0rd", "p@ssword", "p@ssw0rd",
+    "azerty", "azertyui", "azerty123", "azerty1234",
+    "qwerty", "qwerty123", "qwerty1234",
+    "admin", "admin123", "admin1234", "administrateur",
+    "bonjour", "bienvenue", "bienvenu",
+    "123456", "1234567", "12345678", "123456789",
+    "abcdefgh", "abcd1234",
+    # Patterns clavier
+    "qsdfgh", "wxcvbn", "azertyuiop", "qsdfghjklm",
+    "aaaaaa", "aaaaaaa", "aaaaaaaa",
+    "zzzzzz", "zzzzzzz", "zzzzzzzz",
+    # Prénoms courants FR
+    "thomas", "nicolas", "alexandre", "jean", "pierre", "marie", "sophie",
+    "julien", "antoine", "maxime", "kevin", "jeremy", "romain", "quentin",
+    "camille", "sarah", "laura", "pauline", "chloe", "lea", "manon",
+    "lucas", "hugo", "mathieu", "clement", "florian", "baptiste", "guillaume",
+    # Noms de famille courants FR
+    "martin", "dupont", "bernard", "richard", "durand", "leroy", "moreau",
+    "simon", "laurent", "lefebvre", "michel", "garcia", "david", "bertrand",
+    # Mois / jours
+    "janvier", "fevrier", "mars", "avril", "mai", "juin",
+    "juillet", "aout", "septembre", "octobre", "novembre", "decembre",
+    "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
+    # Couleurs
+    "rouge", "bleu", "vert", "noir", "blanc", "jaune", "orange", "violet",
+    "gris", "rose", "marron",
+    # Animaux
+    "chien", "chat", "cheval", "lapin", "tigre", "lion", "loup", "aigle",
+    "requin", "cobra", "viper", "falcon", "eagle",
+    # Sports / culture populaire FR
+    "football", "arsenal", "psg", "paris", "marseille", "lyon", "bordeaux",
+    "nantes", "lille", "strasbourg", "rennes", "monaco",
+    "mbappé", "mbappe", "zidane", "platini", "henry", "benzema",
+    "ronaldo", "messi", "neymar",
+    # Mots du quotidien trop prévisibles
+    "soleil", "chocolat", "amour", "secret", "securite", "secure",
+    "vacances", "famille", "maison", "travail", "bureau", "entreprise",
+    "voiture", "moto", "musique", "cinema", "voyage", "nature", "montagne",
+    "plage", "mer", "ocean", "riviere", "foret", "jardin", "fleur",
+    "bonheur", "liberte", "espoir", "courage", "force", "puissance",
+    "argent", "richesse", "success", "winner", "champion", "victoire",
+    "numero", "premier", "dernier", "nouveau", "facile", "simple",
+    "important", "special", "unique", "super", "mega", "ultra", "hyper",
+    # Anglais courants
+    "welcome", "letmein", "monkey", "dragon", "master", "superman",
+    "batman", "iloveyou", "sunshine", "princess", "shadow",
+    "trustno1", "access", "login", "test", "guest", "hello", "world",
+    "cheese", "coffee", "server", "network", "computer", "internet",
+    "baseball", "soccer", "hockey", "jordan", "ranger", "hunter",
+    "killer", "hacker", "manager", "office", "windows", "android",
+    "apple", "google", "amazon", "facebook", "twitter", "instagram",
+    "samsung", "iphone", "macbook",
+})
+
+# Substitutions leet-speak inversées pour normaliser avant la vérification
+_LEET_TABLE = str.maketrans({
+    '0': 'o', '1': 'i', '3': 'e', '4': 'a',
+    '5': 's', '7': 't', '@': 'a', '$': 's', '!': 'i',
+})
+
+
+def _normalize_password(password: str) -> str:
+    """Normalise un mot de passe pour détecter les variantes leet-speak."""
+    return re.sub(r'[^a-z]', '', password.lower().translate(_LEET_TABLE))
+
+
+def _is_common_password(password: str) -> bool:
+    """Vérifie si le mot de passe (ou sa base normalisée) est dans la wordlist."""
+    lower = password.lower()
+    normalized = _normalize_password(password)
+
+    for word in _COMMON_PASSWORDS:
+        if lower == word:
+            return True
+        # Vérifie si le mot de base constitue l'essentiel du mot de passe normalisé
+        if word and normalized == word:
+            return True
+        # Variantes : mot + séquence de chiffres (ex: "emac123" → base "emac")
+        if word and re.fullmatch(rf'{re.escape(word)}[\d!@#$%^&*_\-+=.]*', lower):
+            return True
+        if word and re.fullmatch(rf'[\d!@#$%^&*_\-+=.]*{re.escape(word)}[\d!@#$%^&*_\-+=.]*', normalized):
+            return True
+
+    return False
+
+
 def validate_password(password: str) -> Tuple[bool, str]:
     """
     Valide la complexité d'un mot de passe.
@@ -117,6 +234,7 @@ def validate_password(password: str) -> Tuple[bool, str]:
     - Au moins une minuscule
     - Au moins un chiffre
     - Au moins un caractère spécial
+    - Non présent dans la wordlist des mots de passe courants
 
     Args:
         password: Mot de passe à valider
@@ -138,6 +256,9 @@ def validate_password(password: str) -> Tuple[bool, str]:
 
     if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;\'`~]', password):
         return False, "Le mot de passe doit contenir au moins un caractère spécial (!@#$%^&*...)."
+
+    if _is_common_password(password):
+        return False, "Ce mot de passe est trop courant ou trop prévisible. Choisissez-en un plus original."
 
     return True, ""
 
@@ -255,7 +376,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 
 @monitor_login_time
-def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]]:
+def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str], int]:
     """
     Authentifie un utilisateur.
 
@@ -264,16 +385,16 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
         password: Mot de passe en clair
 
     Returns:
-        tuple: (succès, message d'erreur si échec)
+        tuple: (succès, message d'erreur si échec, secondes_à_attendre)
     """
     try:
         # ─── Rate limiting pré-check ─────────────────────────────────────────
         client_ip = _get_client_ip()
-        blocked, _wait, reason = _check_rate_limit(username, client_ip)
+        blocked, wait_seconds, reason = _check_rate_limit(username, client_ip)
         if blocked:
             _log_failed_attempt(username, "rate_limited")
             logger.warning(f"Login bloqué (rate limit): user={username}, ip={client_ip}")
-            return False, reason
+            return False, reason, wait_seconds
         # ─────────────────────────────────────────────────────────────────────
 
         # Transaction mixte read+write (SELECT dict → INSERT → UPDATE) :
@@ -301,19 +422,19 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
             if not rows:
                 cur.close()
                 _log_failed_attempt(username, "user_not_found")
-                return False, "Nom d'utilisateur ou mot de passe incorrect"
+                return False, "Nom d'utilisateur ou mot de passe incorrect", 0
 
             user = rows[0]
 
             if not user['actif']:
                 cur.close()
                 _log_failed_attempt(username, "account_inactive")
-                return False, "Ce compte est désactivé. Contactez un administrateur."
+                return False, "Ce compte est désactivé. Contactez un administrateur.", 0
 
             if not verify_password(password, user['password_hash']):
                 cur.close()
                 _log_failed_attempt(username, "wrong_password")
-                return False, "Nom d'utilisateur ou mot de passe incorrect"
+                return False, "Nom d'utilisateur ou mot de passe incorrect", 0
 
             # Construire le dictionnaire des permissions effectives (rôle + overrides)
             permissions = {}
@@ -363,11 +484,11 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
             utilisateur=username
         )
 
-        return True, None
+        return True, None, 0
 
     except Exception as e:
         logger.error(f"Erreur lors de l'authentification: {e}")
-        return False, "Erreur de connexion. Veuillez réessayer ou contacter un administrateur."
+        return False, "Erreur de connexion. Veuillez réessayer ou contacter un administrateur.", 0
 
 
 def logout_user():

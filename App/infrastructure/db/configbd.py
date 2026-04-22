@@ -113,7 +113,7 @@ def _get_db_config() -> dict:
 
     # Paramètres pool (optionnels)
     pool_name = os.getenv("EMAC_DB_POOL_NAME", "emac_pool")
-    pool_size = _env_int("EMAC_DB_POOL_SIZE", 5)  # Pool de 5 connexions (bon équilibre)
+    pool_size = _env_int("EMAC_DB_POOL_SIZE", 10)  # Défaut raisonnable — monter à 15-20 si > 5 workers GUI
 
     # Charset/collation (si tu veux les forcer)
     charset = os.getenv("EMAC_DB_CHARSET", os.getenv("DB_CHARSET", "utf8mb4"))

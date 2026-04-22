@@ -15,41 +15,23 @@ logger = get_logger(__name__)
 # ---------------------------------------------------------------------------
 
 def get_resume() -> dict:
-    """Retourne les KPIs globaux : effectif actif, évaluations en retard,
-    contrats expirant dans 30j, absences en attente ce mois."""
+    """KPIs globaux — 1 seule requête au lieu de 5."""
     try:
-        effectif_actif = QueryExecutor.fetch_scalar(
-            "SELECT COUNT(*) FROM personnel WHERE statut = 'ACTIF'"
-        ) or 0
-
-        evals_retard = QueryExecutor.fetch_scalar(
-            "SELECT COUNT(*) FROM polyvalence WHERE prochaine_evaluation < CURDATE()"
-        ) or 0
-
-        contrats_30j = QueryExecutor.fetch_scalar(
-            """SELECT COUNT(*) FROM contrat
-               WHERE actif = 1 AND date_fin IS NOT NULL
-               AND date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)"""
-        ) or 0
-
-        absences_mois = QueryExecutor.fetch_scalar(
-            """SELECT COUNT(*) FROM demande_absence
-               WHERE MONTH(date_debut) = MONTH(CURDATE())
-               AND YEAR(date_debut) = YEAR(CURDATE())
-               AND statut = 'VALIDEE'"""
-        ) or 0
-
-        mobilite_actifs = QueryExecutor.fetch_scalar(
-            "SELECT COUNT(*) FROM personnel_mobilite WHERE actif = 1 AND date_fin IS NULL"
-        ) or 0
-
-        return {
-            "effectif_actif": effectif_actif,
-            "evals_retard": evals_retard,
-            "contrats_30j": contrats_30j,
-            "absences_mois": absences_mois,
-            "mobilite_actifs": mobilite_actifs,
-        }
+        row = QueryExecutor.fetch_one("""
+            SELECT
+              (SELECT COUNT(*) FROM personnel WHERE statut = 'ACTIF') AS effectif_actif,
+              (SELECT COUNT(*) FROM polyvalence WHERE prochaine_evaluation < CURDATE()) AS evals_retard,
+              (SELECT COUNT(*) FROM contrat
+                 WHERE actif = 1 AND date_fin IS NOT NULL
+                 AND date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)) AS contrats_30j,
+              (SELECT COUNT(*) FROM demande_absence
+                 WHERE MONTH(date_debut) = MONTH(CURDATE())
+                 AND YEAR(date_debut) = YEAR(CURDATE())
+                 AND statut = 'VALIDEE') AS absences_mois,
+              (SELECT COUNT(*) FROM personnel_mobilite
+                 WHERE actif = 1 AND date_fin IS NULL) AS mobilite_actifs
+        """, dictionary=True)
+        return {k: int(v or 0) for k, v in (row or {}).items()}
     except Exception as e:
         logger.exception(f"get_resume: {e}")
         return {}
