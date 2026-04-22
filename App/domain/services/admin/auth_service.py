@@ -15,6 +15,7 @@ SÉCURITÉ:
 import bcrypt
 import re
 import logging
+import os
 import socket
 from datetime import datetime
 
@@ -26,6 +27,25 @@ from infrastructure.db.query_executor import QueryExecutor
 from infrastructure.config.performance_monitor import monitor_login_time, monitor_query
 from infrastructure.cache.emac_cache import get_cached_roles
 from infrastructure.logging.optimized_db_logger import log_hist_async
+
+
+# =============================================================================
+# CONFIGURATION BCRYPT
+# =============================================================================
+# Cost par défaut : 12 (2^12 = 4096 itérations ~250ms sur CPU moderne).
+# À augmenter tous les 2-3 ans. Valeur configurable via EMAC_BCRYPT_COST.
+# IMPORTANT : tout bump de cette valeur déclenche un rehash automatique
+# au prochain login réussi des comptes concernés.
+_BCRYPT_COST = int(os.getenv('EMAC_BCRYPT_COST', '12'))
+
+# Garde-fous : cost < 10 est non-sûr, > 15 rend le login insupportable
+if not 10 <= _BCRYPT_COST <= 15:
+    import logging as _logging_guard
+    _logging_guard.getLogger(__name__).warning(
+        f"EMAC_BCRYPT_COST={_BCRYPT_COST} hors plage recommandée [10-15]. "
+        f"Valeur corrigée à 12."
+    )
+    _BCRYPT_COST = 12
 
 
 def _get_client_ip() -> str:
@@ -204,18 +224,50 @@ def _normalize_password(password: str) -> str:
     return re.sub(r'[^a-z]', '', password.lower().translate(_LEET_TABLE))
 
 
+_COMMON_PASSWORDS_CACHE: Optional[set] = None
+
+
 def _is_common_password(password: str) -> bool:
-    """Vérifie si le mot de passe (ou sa base normalisée) est dans la wordlist."""
+    """
+    Vérifie si un mot de passe figure dans la wordlist des plus courants.
+
+    Double vérification :
+    1. Fichier config/common_passwords.txt (~10 000 MDP, source SecLists) — case-insensitive
+    2. Frozenset in-memory avec détection leet-speak (variantes normalisées)
+    """
+    global _COMMON_PASSWORDS_CACHE
+
+    if _COMMON_PASSWORDS_CACHE is None:
+        try:
+            from pathlib import Path
+            base = Path(__file__).resolve().parents[3]  # …/services/admin → App/
+            wordlist_path = base / "config" / "common_passwords.txt"
+            if wordlist_path.exists():
+                with open(wordlist_path, encoding='utf-8', errors='ignore') as f:
+                    _COMMON_PASSWORDS_CACHE = {
+                        line.strip().lower() for line in f if line.strip()
+                    }
+                logger.info(f"Wordlist chargée : {len(_COMMON_PASSWORDS_CACHE)} MDP courants")
+            else:
+                logger.warning(f"Wordlist introuvable : {wordlist_path} — check fichier désactivé")
+                _COMMON_PASSWORDS_CACHE = set()
+        except Exception as e:
+            logger.error(f"Erreur chargement wordlist : {e}")
+            _COMMON_PASSWORDS_CACHE = set()
+
     lower = password.lower()
     normalized = _normalize_password(password)
 
+    # Check fichier (10k mots)
+    if lower in _COMMON_PASSWORDS_CACHE:
+        return True
+
+    # Check frozenset in-memory avec leet-speak
     for word in _COMMON_PASSWORDS:
         if lower == word:
             return True
-        # Vérifie si le mot de base constitue l'essentiel du mot de passe normalisé
         if word and normalized == word:
             return True
-        # Variantes : mot + séquence de chiffres (ex: "emac123" → base "emac")
         if word and re.fullmatch(rf'{re.escape(word)}[\d!@#$%^&*_\-+=.]*', lower):
             return True
         if word and re.fullmatch(rf'[\d!@#$%^&*_\-+=.]*{re.escape(word)}[\d!@#$%^&*_\-+=.]*', normalized):
@@ -224,41 +276,42 @@ def _is_common_password(password: str) -> bool:
     return False
 
 
-def validate_password(password: str) -> Tuple[bool, str]:
+def validate_password(password: str, check_common: bool = True) -> Tuple[bool, str]:
     """
-    Valide la complexité d'un mot de passe.
+    Valide la robustesse d'un mot de passe (NIST SP 800-63B compatible).
 
-    Règles:
-    - Minimum 8 caractères
-    - Au moins une majuscule
-    - Au moins une minuscule
-    - Au moins un chiffre
-    - Au moins un caractère spécial
-    - Non présent dans la wordlist des mots de passe courants
+    Règles (2026+) :
+    - Minimum 12 caractères
+    - Au moins 2 types de caractères distincts parmi : minuscules, majuscules, chiffres, spéciaux
+    - Pas dans la liste des 10 000 mots de passe les plus courants
 
-    Args:
-        password: Mot de passe à valider
-
-    Returns:
-        (is_valid, error_message)
+    La complexité artificielle (1 maj + 1 chiffre + 1 spécial) est relâchée
+    car elle pousse à des patterns prévisibles ("Password1!" reste faible).
     """
-    if len(password) < 8:
-        return False, "Le mot de passe doit contenir au moins 8 caractères."
+    if len(password) < 12:
+        return False, "Le mot de passe doit contenir au moins 12 caractères."
 
-    if not re.search(r'[A-Z]', password):
-        return False, "Le mot de passe doit contenir au moins une majuscule."
+    types = 0
+    if re.search(r'[a-z]', password):
+        types += 1
+    if re.search(r'[A-Z]', password):
+        types += 1
+    if re.search(r'\d', password):
+        types += 1
+    if re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;\'`~ /]', password):
+        types += 1
 
-    if not re.search(r'[a-z]', password):
-        return False, "Le mot de passe doit contenir au moins une minuscule."
+    if types < 2:
+        return False, (
+            "Le mot de passe doit combiner au moins 2 types de caractères "
+            "parmi : minuscules, majuscules, chiffres, caractères spéciaux."
+        )
 
-    if not re.search(r'\d', password):
-        return False, "Le mot de passe doit contenir au moins un chiffre."
-
-    if not re.search(r'[!@#$%^&*(),.?":{}|<>_\-+=\[\]\\;\'`~]', password):
-        return False, "Le mot de passe doit contenir au moins un caractère spécial (!@#$%^&*...)."
-
-    if _is_common_password(password):
-        return False, "Ce mot de passe est trop courant ou trop prévisible. Choisissez-en un plus original."
+    if check_common and _is_common_password(password):
+        return False, (
+            "Ce mot de passe fait partie des plus courants et est facile à deviner. "
+            "Choisissez une phrase de passe ou un mot de passe unique."
+        )
 
     return True, ""
 
@@ -266,12 +319,13 @@ def validate_password(password: str) -> Tuple[bool, str]:
 def get_password_requirements() -> str:
     """Retourne les exigences de mot de passe pour affichage UI"""
     return (
-        "Le mot de passe doit contenir:\n"
-        "• Au moins 8 caractères\n"
-        "• Une lettre majuscule\n"
-        "• Une lettre minuscule\n"
-        "• Un chiffre\n"
-        "• Un caractère spécial (!@#$%...)"
+        "Le mot de passe doit :\n"
+        "• Contenir au moins 12 caractères\n"
+        "• Combiner au moins 2 types parmi : minuscules, majuscules, chiffres, caractères spéciaux\n"
+        "• Ne pas figurer dans la liste des mots de passe les plus courants\n"
+        "\n"
+        "Conseil : une phrase de passe comme « piano bleu vendredi 42 » est "
+        "plus sûre qu'un mot complexe comme « P@ssw0rd! »."
     )
 
 
@@ -360,9 +414,9 @@ class UserSession:
         return int(remaining.total_seconds() / 60)
 
 
-def hash_password(password: str) -> str:
-    """Hash un mot de passe avec bcrypt"""
-    salt = bcrypt.gensalt()
+def hash_password(password: str, rounds: Optional[int] = None) -> str:
+    """Hash un mot de passe avec bcrypt au cost configuré."""
+    salt = bcrypt.gensalt(rounds=rounds if rounds is not None else _BCRYPT_COST)
     return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
 
 
@@ -371,8 +425,31 @@ def verify_password(password: str, password_hash: str) -> bool:
     try:
         return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
     except Exception:
-        # Erreur silencieuse pour ne pas révéler d'informations
         return False
+
+
+def _extract_bcrypt_cost(password_hash: str) -> Optional[int]:
+    """
+    Extrait le cost d'un hash bcrypt.
+    Format : $2b$12$<salt+hash> → parts[2] = '12'
+    """
+    try:
+        if not password_hash or not password_hash.startswith('$2'):
+            return None
+        parts = password_hash.split('$')
+        if len(parts) < 4:
+            return None
+        return int(parts[2])
+    except (ValueError, IndexError):
+        return None
+
+
+def _password_needs_rehash(password_hash: str) -> bool:
+    """Retourne True si le hash doit être régénéré (cost actuel < cost cible)."""
+    current_cost = _extract_bcrypt_cost(password_hash)
+    if current_cost is None:
+        return True
+    return current_cost < _BCRYPT_COST
 
 
 @monitor_login_time
@@ -405,7 +482,8 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
             cur.execute("""
                 SELECT
                     u.id, u.username, u.password_hash, u.nom, u.prenom,
-                    u.role_id, u.actif, r.nom as role_nom,
+                    u.role_id, u.actif, u.password_needs_upgrade,
+                    r.nom as role_nom,
                     p.module,
                     COALESCE(pu.lecture, p.lecture) as lecture,
                     COALESCE(pu.ecriture, p.ecriture) as ecriture,
@@ -436,6 +514,22 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
                 _log_failed_attempt(username, "wrong_password")
                 return False, "Nom d'utilisateur ou mot de passe incorrect", 0
 
+            # ─── Rehash transparent si le cost est dépassé ───────────────────
+            if _password_needs_rehash(user['password_hash']):
+                try:
+                    new_hash = hash_password(password)
+                    cur.execute(
+                        "UPDATE utilisateurs SET password_hash = %s WHERE id = %s",
+                        (new_hash, user['id'])
+                    )
+                    logger.info(
+                        f"Rehash bcrypt pour {username} : "
+                        f"{_extract_bcrypt_cost(user['password_hash'])} → {_BCRYPT_COST}"
+                    )
+                except Exception as e:
+                    logger.warning(f"Échec rehash bcrypt pour {username}: {e}")
+            # ─────────────────────────────────────────────────────────────────
+
             # Construire le dictionnaire des permissions effectives (rôle + overrides)
             permissions = {}
             for row in rows:
@@ -464,7 +558,8 @@ def authenticate_user(username: str, password: str) -> tuple[bool, Optional[str]
             'nom': user['nom'],
             'prenom': user['prenom'],
             'role_id': user['role_id'],
-            'role_nom': user['role_nom']
+            'role_nom': user['role_nom'],
+            'password_needs_upgrade': bool(user.get('password_needs_upgrade', False)),
         }
 
         UserSession.set_user(user_data, permissions, session_id)
@@ -681,7 +776,9 @@ def create_user(username: str, password: str, nom: str, prenom: str, role_id: in
 
         password_hash = hash_password(password)
         new_id = QueryExecutor.execute_write(
-            "INSERT INTO utilisateurs (username, password_hash, nom, prenom, role_id) VALUES (%s, %s, %s, %s, %s)",
+            """INSERT INTO utilisateurs
+               (username, password_hash, nom, prenom, role_id, password_needs_upgrade, password_changed_at)
+               VALUES (%s, %s, %s, %s, %s, 0, NOW())""",
             (username, password_hash, nom, prenom, role_id)
         )
 
@@ -767,14 +864,20 @@ def change_password(user_id: int, new_password: str) -> tuple[bool, Optional[str
     if not current_user:
         return False, "Aucun utilisateur connecté"
 
-    # Seul l'admin ou l'utilisateur lui-même peut changer le mot de passe
     if not is_admin() and current_user['id'] != user_id:
         return False, "Vous ne pouvez pas modifier ce mot de passe"
+
+    # Validation de la politique (12+ chars, 2 types, wordlist)
+    is_valid, error_msg = validate_password(new_password)
+    if not is_valid:
+        return False, error_msg
 
     try:
         password_hash = hash_password(new_password)
         QueryExecutor.execute_write(
-            "UPDATE utilisateurs SET password_hash = %s WHERE id = %s",
+            """UPDATE utilisateurs
+               SET password_hash = %s, password_needs_upgrade = 0, password_changed_at = NOW()
+               WHERE id = %s""",
             (password_hash, user_id), return_lastrowid=False
         )
 

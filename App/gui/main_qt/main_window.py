@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QLabel, QScrollArea, QComboBox,
-    QVBoxLayout, QHBoxLayout, QGridLayout, QMessageBox,
+    QVBoxLayout, QHBoxLayout, QGridLayout, QMessageBox, QToolButton,
 )
 from PyQt5.QtCore import Qt, QTimer, QEvent
+from PyQt5.QtGui import QPixmap, QPainter, QColor, QPen
 
 from infrastructure.logging.logging_config import get_logger
 from gui.components.emac_ui_kit import show_error_message
@@ -122,6 +123,25 @@ class MainWindow(
         header_layout.setContentsMargins(0, 0, 0, 8)
         header_layout.setSpacing(12)
 
+        logo_lbl = QLabel()
+        logo_lbl.setFixedSize(38, 38)
+        logo_px = QPixmap(38, 38)
+        logo_px.fill(Qt.transparent)
+        p = QPainter(logo_px)
+        p.setRenderHint(QPainter.Antialiasing)
+        p.setBrush(Qt.NoBrush)
+        pen = QPen(QColor('#2563eb'))
+        pen.setWidth(2)
+        pen.setCapStyle(Qt.RoundCap)
+        p.setPen(pen)
+        p.drawEllipse(7, 7, 8, 8)
+        p.drawArc(3, 17, 16, 10, 0, 180 * 16)
+        p.drawEllipse(18, 9, 10, 10)
+        p.drawArc(14, 20, 17, 11, 0, 180 * 16)
+        p.end()
+        logo_lbl.setPixmap(logo_px)
+        header_layout.addWidget(logo_lbl, 0, Qt.AlignVCenter)
+
         title_layout = QVBoxLayout()
         title_layout.setSpacing(2)
         h1 = QLabel("Gestion du Personnel")
@@ -177,16 +197,30 @@ class MainWindow(
         r1.addWidget(b1)
         self.rows.addLayout(r1)
 
-        r_quit = QHBoxLayout()
-        bq = EmacButton("Quitter", 'ghost')
-        bq.clicked.connect(self.close)
-        r_quit.addWidget(bq)
-        self.rows.addLayout(r_quit)
-
         self.actions_wrap.body.addLayout(self.rows)
         right.addWidget(self.actions_wrap)
 
         root.addLayout(right, 0, 1)
+
+        quit_btn = QToolButton()
+        quit_btn.setText("⏻")
+        quit_btn.setToolTip("Quitter l'application")
+        quit_btn.clicked.connect(self.close)
+        quit_btn.setFixedSize(28, 28)
+        quit_btn.setStyleSheet("""
+            QToolButton {
+                color: #9ca3af;
+                font-size: 16px;
+                background: transparent;
+                border: none;
+                border-radius: 6px;
+            }
+            QToolButton:hover {
+                color: #ef4444;
+                background: #fef2f2;
+            }
+        """)
+        root.addWidget(quit_btn, 2, 1, Qt.AlignBottom | Qt.AlignRight)
 
         QTimer.singleShot(0, self.bootstrap_async)
 
@@ -194,6 +228,130 @@ class MainWindow(
         self.load_user_and_permissions_async()
         self.populate_filters_async()
         self._init_document_trigger_service()
+        QTimer.singleShot(200, self._check_password_upgrade_required)
+
+    def _check_password_upgrade_required(self):
+        """Force le changement de MDP si le flag password_needs_upgrade est levé (politique 12+)."""
+        from domain.services.admin.auth_service import UserSession, get_password_requirements, logout_user
+
+        user = UserSession.get_user()
+        if not user or not user.get('password_needs_upgrade'):
+            return
+
+        QMessageBox.warning(
+            self,
+            "Mise à jour du mot de passe requise",
+            "La politique de sécurité a évolué. Votre mot de passe actuel "
+            "ne respecte plus les nouvelles exigences.\n\n"
+            + get_password_requirements()
+            + "\n\nVeuillez choisir un nouveau mot de passe pour continuer."
+        )
+
+        try:
+            from gui.screens.admin.user_management import ChangePasswordDialog
+            dialog = ChangePasswordDialog(user_id=user['id'], parent=self)
+        except (ImportError, TypeError):
+            dialog = self._build_simple_change_password_dialog(user['id'])
+
+        if dialog is None or dialog.exec_() != dialog.Accepted:
+            logout_user()
+            self.close()
+            return
+
+        user['password_needs_upgrade'] = False
+
+    def _build_simple_change_password_dialog(self, user_id: int):
+        """Dialogue minimal de changement de MDP si ChangePasswordDialog n'est pas disponible."""
+        from PyQt5.QtWidgets import QDialog, QFormLayout, QLineEdit, QPushButton, QDialogButtonBox
+        from domain.services.admin.auth_service import change_password
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Nouveau mot de passe")
+        dlg.setMinimumWidth(480)
+        layout = QFormLayout(dlg)
+        layout.setContentsMargins(24, 24, 24, 24)
+        layout.setSpacing(10)
+
+        req_lbl = QLabel("12 caractères min · 2 types de caractères · pas de mot de passe courant")
+        req_lbl.setStyleSheet("font-size: 11px; color: #6b7280; padding: 4px 0;")
+        req_lbl.setWordWrap(True)
+        layout.addRow("", req_lbl)
+
+        pwd_row = QWidget()
+        pwd_row_layout = QHBoxLayout(pwd_row)
+        pwd_row_layout.setContentsMargins(0, 0, 0, 0)
+        pwd_row_layout.setSpacing(4)
+        pwd_input = QLineEdit()
+        pwd_input.setEchoMode(QLineEdit.Password)
+        pwd_input.setMinimumHeight(36)
+        pwd_row_layout.addWidget(pwd_input)
+        toggle1 = QPushButton("Voir")
+        toggle1.setFixedSize(52, 36)
+        toggle1.setCheckable(True)
+        toggle1.setStyleSheet("font-size: 12px; border-radius: 8px;")
+        toggle1.toggled.connect(lambda on: pwd_input.setEchoMode(QLineEdit.Normal if on else QLineEdit.Password))
+        toggle1.toggled.connect(lambda on: toggle1.setText("Cacher" if on else "Voir"))
+        pwd_row_layout.addWidget(toggle1)
+        layout.addRow("Nouveau mot de passe :", pwd_row)
+
+        pwd2_row = QWidget()
+        pwd2_row_layout = QHBoxLayout(pwd2_row)
+        pwd2_row_layout.setContentsMargins(0, 0, 0, 0)
+        pwd2_row_layout.setSpacing(4)
+        pwd2_input = QLineEdit()
+        pwd2_input.setEchoMode(QLineEdit.Password)
+        pwd2_input.setMinimumHeight(36)
+        pwd2_row_layout.addWidget(pwd2_input)
+        toggle2 = QPushButton("Voir")
+        toggle2.setFixedSize(52, 36)
+        toggle2.setCheckable(True)
+        toggle2.setStyleSheet("font-size: 12px; border-radius: 8px;")
+        toggle2.toggled.connect(lambda on: pwd2_input.setEchoMode(QLineEdit.Normal if on else QLineEdit.Password))
+        toggle2.toggled.connect(lambda on: toggle2.setText("Cacher" if on else "Voir"))
+        pwd2_row_layout.addWidget(toggle2)
+        layout.addRow("Confirmation :", pwd2_row)
+
+        match_lbl = QLabel("")
+        match_lbl.setStyleSheet("font-size: 11px;")
+
+        def _update_match():
+            p1, p2 = pwd_input.text(), pwd2_input.text()
+            if not p2:
+                match_lbl.setText("")
+                return
+            if p1 == p2:
+                match_lbl.setText("Les mots de passe correspondent")
+                match_lbl.setStyleSheet("font-size: 11px; color: #059669;")
+            else:
+                match_lbl.setText("Ne correspondent pas")
+                match_lbl.setStyleSheet("font-size: 11px; color: #dc2626;")
+
+        pwd_input.textChanged.connect(_update_match)
+        pwd2_input.textChanged.connect(_update_match)
+        layout.addRow("", match_lbl)
+
+        err_lbl = QLabel("")
+        err_lbl.setStyleSheet("color: #dc2626; font-size: 12px; padding: 4px 0;")
+        err_lbl.setWordWrap(True)
+        layout.addRow(err_lbl)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        layout.addRow(buttons)
+
+        def on_ok():
+            p1, p2 = pwd_input.text(), pwd2_input.text()
+            if p1 != p2:
+                err_lbl.setText("Les mots de passe ne correspondent pas.")
+                return
+            ok, msg = change_password(user_id, p1)
+            if ok:
+                dlg.accept()
+            else:
+                err_lbl.setText(msg or "Erreur lors du changement.")
+
+        buttons.accepted.connect(on_ok)
+        buttons.rejected.connect(dlg.reject)
+        return dlg
 
     def eventFilter(self, source, event):
         if self.drawer is not None and self.is_drawer_open and event.type() == QEvent.MouseButtonPress:

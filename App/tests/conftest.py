@@ -303,8 +303,8 @@ def reset_and_mock_permissions():
         for module_path in _MODULES_WITH_REQUIRE:
             try:
                 stack.enter_context(patch(f'{module_path}.require', mock_require))
-            except AttributeError:
-                # Le module n'a pas 'require' (peut-être pas encore importé)
+            except (AttributeError, ModuleNotFoundError, ImportError):
+                # Le module n'a pas 'require' ou n'existe pas encore
                 pass
 
         yield mock_require

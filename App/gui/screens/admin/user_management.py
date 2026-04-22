@@ -272,30 +272,61 @@ class AddUserDialog(QDialog):
 
         form_layout.addSpacing(8)
 
-        # Mot de passe
         label2 = QLabel("Mot de passe *")
         label2.setStyleSheet("font-size: 14px; font-weight: 500;")
         form_layout.addWidget(label2)
+        pwd_row = QHBoxLayout()
+        pwd_row.setSpacing(6)
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setPlaceholderText("8+ caractères, majuscule, chiffre, spécial")
+        self.password_input.setPlaceholderText("12+ caractères, 2 types de caractères")
         self.password_input.setMinimumHeight(38)
         self.password_input.setStyleSheet("font-size: 14px; padding: 6px;")
         self.password_input.setToolTip(get_password_requirements())
-        form_layout.addWidget(self.password_input)
+        self.password_input.textChanged.connect(self._update_match_label)
+        pwd_row.addWidget(self.password_input)
+        self._toggle_pwd = QPushButton("Voir")
+        self._toggle_pwd.setFixedSize(58, 38)
+        self._toggle_pwd.setCheckable(True)
+        self._toggle_pwd.setStyleSheet("font-size: 12px; border-radius: 8px;")
+        self._toggle_pwd.toggled.connect(
+            lambda on: self.password_input.setEchoMode(QLineEdit.Normal if on else QLineEdit.Password)
+        )
+        self._toggle_pwd.toggled.connect(lambda on: self._toggle_pwd.setText("Cacher" if on else "Voir"))
+        pwd_row.addWidget(self._toggle_pwd)
+        form_layout.addLayout(pwd_row)
+        req_hint = QLabel("12 caractères min · 2 types : minuscules, majuscules, chiffres, spéciaux")
+        req_hint.setStyleSheet("font-size: 11px; color: #6b7280;")
+        req_hint.setWordWrap(True)
+        form_layout.addWidget(req_hint)
 
         form_layout.addSpacing(8)
 
-        # Confirmation mot de passe
         label3 = QLabel("Confirmer le mot de passe *")
         label3.setStyleSheet("font-size: 14px; font-weight: 500;")
         form_layout.addWidget(label3)
+        conf_row = QHBoxLayout()
+        conf_row.setSpacing(6)
         self.password_confirm_input = QLineEdit()
         self.password_confirm_input.setEchoMode(QLineEdit.Password)
         self.password_confirm_input.setPlaceholderText("Retapez le mot de passe")
         self.password_confirm_input.setMinimumHeight(38)
         self.password_confirm_input.setStyleSheet("font-size: 14px; padding: 6px;")
-        form_layout.addWidget(self.password_confirm_input)
+        self.password_confirm_input.textChanged.connect(self._update_match_label)
+        conf_row.addWidget(self.password_confirm_input)
+        self._toggle_conf = QPushButton("Voir")
+        self._toggle_conf.setFixedSize(58, 38)
+        self._toggle_conf.setCheckable(True)
+        self._toggle_conf.setStyleSheet("font-size: 12px; border-radius: 8px;")
+        self._toggle_conf.toggled.connect(
+            lambda on: self.password_confirm_input.setEchoMode(QLineEdit.Normal if on else QLineEdit.Password)
+        )
+        self._toggle_conf.toggled.connect(lambda on: self._toggle_conf.setText("Cacher" if on else "Voir"))
+        conf_row.addWidget(self._toggle_conf)
+        form_layout.addLayout(conf_row)
+        self._match_label = QLabel("")
+        self._match_label.setStyleSheet("font-size: 11px; color: #6b7280;")
+        form_layout.addWidget(self._match_label)
 
         form_layout.addSpacing(8)
 
@@ -357,6 +388,19 @@ class AddUserDialog(QDialog):
 
         main_layout.addLayout(buttons_layout)
 
+    def _update_match_label(self):
+        p1 = self.password_input.text()
+        p2 = self.password_confirm_input.text()
+        if not p2:
+            self._match_label.setText("")
+            return
+        if p1 == p2:
+            self._match_label.setText("Les mots de passe correspondent")
+            self._match_label.setStyleSheet("font-size: 11px; color: #059669;")
+        else:
+            self._match_label.setText("Les mots de passe ne correspondent pas")
+            self._match_label.setStyleSheet("font-size: 11px; color: #dc2626;")
+
     def create_user(self):
         """Crée un nouvel utilisateur"""
         username = self.username_input.text().strip()
@@ -398,8 +442,8 @@ class ChangePasswordDialog(QDialog):
         self.user_id = user_id
         self.setWindowTitle("Changer le mot de passe")
         self.setModal(True)
-        self.resize(500, 350)
-        self.setMinimumSize(450, 300)
+        self.resize(520, 480)
+        self.setMinimumSize(460, 400)
 
         self.setup_ui()
 
@@ -415,23 +459,39 @@ class ChangePasswordDialog(QDialog):
         title.setStyleSheet("font-size: 18px; font-weight: bold; margin-bottom: 10px;")
         main_layout.addWidget(title)
 
-        # Champs
         card = EmacCard()
         form_layout = card.body
         form_layout.setSpacing(12)
 
-        # Label avec meilleure visibilité
         label1 = QLabel("Nouveau mot de passe *")
         label1.setStyleSheet("font-size: 14px; font-weight: 500; margin-top: 5px;")
         form_layout.addWidget(label1)
 
+        pwd_row = QHBoxLayout()
+        pwd_row.setSpacing(6)
         self.password_input = QLineEdit()
         self.password_input.setEchoMode(QLineEdit.Password)
-        self.password_input.setPlaceholderText("8+ caractères, majuscule, chiffre, spécial")
+        self.password_input.setPlaceholderText("12+ caractères, 2 types de caractères")
         self.password_input.setMinimumHeight(40)
         self.password_input.setStyleSheet("font-size: 14px; padding: 8px;")
         self.password_input.setToolTip(get_password_requirements())
-        form_layout.addWidget(self.password_input)
+        self.password_input.textChanged.connect(self._update_match_label)
+        pwd_row.addWidget(self.password_input)
+        self._toggle_pwd = QPushButton("Voir")
+        self._toggle_pwd.setFixedSize(58, 40)
+        self._toggle_pwd.setCheckable(True)
+        self._toggle_pwd.setStyleSheet("font-size: 12px; border-radius: 8px;")
+        self._toggle_pwd.toggled.connect(
+            lambda on: self.password_input.setEchoMode(QLineEdit.Normal if on else QLineEdit.Password)
+        )
+        self._toggle_pwd.toggled.connect(lambda on: self._toggle_pwd.setText("Cacher" if on else "Voir"))
+        pwd_row.addWidget(self._toggle_pwd)
+        form_layout.addLayout(pwd_row)
+
+        req_hint = QLabel("12 caractères min · 2 types : minuscules, majuscules, chiffres, spéciaux")
+        req_hint.setStyleSheet("font-size: 11px; color: #6b7280; margin-top: 2px;")
+        req_hint.setWordWrap(True)
+        form_layout.addWidget(req_hint)
 
         form_layout.addSpacing(10)
 
@@ -439,18 +499,33 @@ class ChangePasswordDialog(QDialog):
         label2.setStyleSheet("font-size: 14px; font-weight: 500; margin-top: 5px;")
         form_layout.addWidget(label2)
 
+        conf_row = QHBoxLayout()
+        conf_row.setSpacing(6)
         self.password_confirm_input = QLineEdit()
         self.password_confirm_input.setEchoMode(QLineEdit.Password)
         self.password_confirm_input.setPlaceholderText("Retapez le mot de passe")
         self.password_confirm_input.setMinimumHeight(40)
         self.password_confirm_input.setStyleSheet("font-size: 14px; padding: 8px;")
-        form_layout.addWidget(self.password_confirm_input)
+        self.password_confirm_input.textChanged.connect(self._update_match_label)
+        conf_row.addWidget(self.password_confirm_input)
+        self._toggle_conf = QPushButton("Voir")
+        self._toggle_conf.setFixedSize(58, 40)
+        self._toggle_conf.setCheckable(True)
+        self._toggle_conf.setStyleSheet("font-size: 12px; border-radius: 8px;")
+        self._toggle_conf.toggled.connect(
+            lambda on: self.password_confirm_input.setEchoMode(QLineEdit.Normal if on else QLineEdit.Password)
+        )
+        self._toggle_conf.toggled.connect(lambda on: self._toggle_conf.setText("Cacher" if on else "Voir"))
+        conf_row.addWidget(self._toggle_conf)
+        form_layout.addLayout(conf_row)
+
+        self._match_label = QLabel("")
+        self._match_label.setStyleSheet("font-size: 11px; color: #6b7280; margin-top: 2px;")
+        form_layout.addWidget(self._match_label)
 
         main_layout.addWidget(card)
-
         main_layout.addSpacing(10)
 
-        # Boutons
         buttons_layout = QHBoxLayout()
         buttons_layout.setSpacing(10)
 
@@ -467,6 +542,19 @@ class ChangePasswordDialog(QDialog):
         buttons_layout.addWidget(save_btn)
 
         main_layout.addLayout(buttons_layout)
+
+    def _update_match_label(self):
+        p1 = self.password_input.text()
+        p2 = self.password_confirm_input.text()
+        if not p2:
+            self._match_label.setText("")
+            return
+        if p1 == p2:
+            self._match_label.setText("Les mots de passe correspondent")
+            self._match_label.setStyleSheet("font-size: 11px; color: #059669; margin-top: 2px;")
+        else:
+            self._match_label.setText("Les mots de passe ne correspondent pas")
+            self._match_label.setStyleSheet("font-size: 11px; color: #dc2626; margin-top: 2px;")
 
     def save_password(self):
         """Enregistre le nouveau mot de passe"""

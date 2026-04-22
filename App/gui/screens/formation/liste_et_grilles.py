@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Grille de polyvalence — dialogue principal.
 Orchestre GrillesViewModel, GrillesFilterDialog et les services d'export.
@@ -584,9 +584,54 @@ class GrillesDialog(QDialog):
         toolbar.addStretch()
 
         self.export_btn = QToolButton()
-        self.export_btn.setText("Exporter \u25bc")
+        self.export_btn.setText("Exporter ▾")
         self.export_btn.setPopupMode(QToolButton.InstantPopup)
+        self.export_btn.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self.export_btn.setStyleSheet("""
+            QToolButton {
+                background: #ffffff;
+                border: 1px solid #e5e7eb;
+                border-radius: 10px;
+                padding: 8px 16px;
+                font-size: 14px;
+                color: #111827;
+                font-family: 'Segoe UI', Roboto, Arial;
+            }
+            QToolButton:hover {
+                border-color: #d1d5db;
+                background: #f8fafc;
+            }
+            QToolButton:pressed {
+                background: #f3f4f6;
+            }
+            QToolButton::menu-indicator { width: 0; }
+        """)
         export_menu = QMenu(self)
+        export_menu.setStyleSheet("""
+            QMenu {
+                background: #ffffff;
+                border: 1px solid #e5e7eb;
+                border-radius: 10px;
+                padding: 6px;
+                font-family: 'Segoe UI', Roboto, Arial;
+                font-size: 14px;
+                color: #111827;
+            }
+            QMenu::item {
+                padding: 9px 20px 9px 14px;
+                border-radius: 6px;
+                color: #111827;
+            }
+            QMenu::item:selected {
+                background: #eff6ff;
+                color: #2563eb;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #e5e7eb;
+                margin: 4px 10px;
+            }
+        """)
         act_xlsx_current = QAction("Excel \u2014 vue actuelle (filtres appliqu\u00e9s)", self)
         act_xlsx_current.triggered.connect(lambda: self._export_direct("xlsx", current=True))
         export_menu.addAction(act_xlsx_current)
