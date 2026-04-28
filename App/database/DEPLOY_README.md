@@ -1,218 +1,132 @@
-# Guide de Déploiement Incrémental - EMAC
+# Déploiement base de données EMAC
 
-## Objectif
+Ce document décrit les options de déploiement DB. Pour les nouvelles évolutions, privilégier le CLI de migrations plutôt que l'ancien script incrémental.
 
-Ce guide explique comment déployer les **nouvelles tables** du système de gestion des utilisateurs sur le serveur de production **SANS ÉCRASER** les données existantes.
+## Méthode recommandée : migrations CLI
 
-## ✅ Ce qui sera ajouté
+Depuis `App/` :
 
-Le script de déploiement ajoute uniquement :
-
-### Nouvelles Tables
-- `roles` - Rôles utilisateurs (admin, gestion_production, gestion_rh)
-- `utilisateurs` - Comptes utilisateurs avec authentification
-- `permissions` - Permissions par rôle et module
-- `logs_connexion` - Historique des connexions/déconnexions
-
-### Modifications de Tables Existantes
-- Ajout de colonnes dans `historique` :
-  - `utilisateur` (varchar 100)
-  - `table_name` (varchar 100)
-  - `record_id` (int)
-
-## ⚠️ Garanties de Sécurité
-
-Le script utilise :
-- ✅ `CREATE TABLE IF NOT EXISTS` - Ne crée que si la table n'existe pas
-- ✅ `INSERT IGNORE` - N'insère que si les données n'existent pas déjà
-- ✅ Vérification des colonnes avant ajout - Pas de doublon possible
-- ❌ **AUCUN `DROP TABLE`** - Jamais de suppression
-- ❌ **AUCUN `DELETE`** - Jamais d'effacement de données
-- ❌ **AUCUN `TRUNCATE`** - Jamais de vidage de tables
-
-## Méthode 1 : Déploiement Automatique (Recommandé)
-
-### Étapes
-
-1. **Ouvrir un terminal** dans le dossier `App/database/`
-   ```bash
-   cd c:\Users\tlahirigoyen\Desktop\PROJET\EMAC\App\database
-   ```
-
-2. **Exécuter le script de déploiement**
-   ```bash
-   deploy_to_server.bat
-   ```
-
-3. **Suivre les instructions** :
-   - Entrer l'hôte MySQL (ex: `localhost` ou IP du serveur)
-   - Entrer l'utilisateur (ex: `root`)
-   - Entrer le nom de la base de données (ex: `emac_db`)
-   - Entrer le mot de passe (sera masqué)
-   - Confirmer le déploiement
-
-4. **Vérifier le résultat** :
-   - Le script affiche un message de succès
-   - Les nouvelles tables sont listées
-
-### Exemple de Session
-
-```
-============================================================================
-EMAC - Déploiement incrémental de la base de données
-============================================================================
-
-Hôte MySQL (ex: localhost ou IP serveur): localhost
-Utilisateur MySQL (ex: root): root
-Nom de la base de données (ex: emac_db): emac_db
-
-Entrez le mot de passe MySQL (il sera masqué):
-************
-
-Confirmer le déploiement? (O/N): O
-
-Déploiement en cours...
-
-============================================================================
-SUCCES: Déploiement terminé avec succès!
-============================================================================
-
-Les nouvelles tables ont été créées:
- [OK] roles
- [OK] utilisateurs
- [OK] permissions
- [OK] logs_connexion
-
-Utilisateur admin créé:
- - Username: admin
- - Mot de passe: admin123
- - IMPORTANT: Changez ce mot de passe dès la première connexion!
+```bash
+python -m cli migrate --status
+python -m cli migrate --apply-all
 ```
 
-## Méthode 2 : Déploiement Manuel
+Le CLI :
 
-Si le script automatique ne fonctionne pas :
+- crée la table `schema_migrations` si nécessaire ;
+- détecte les fichiers `NNN_*.sql` dans `database/migrations/` ;
+- applique uniquement les migrations absentes ;
+- trace les migrations par nom de fichier complet.
 
-### Via MySQL Command Line
+Avant production :
+
+```bash
+mysqldump -u gestionrh -p emac_db > App/database/backups/emac_db_avant_migration.sql
+```
+
+## Initialiser une base déjà préparée
+
+Si la base contient déjà le schéma mais que `schema_migrations` n'est pas renseignée :
+
+```bash
+python -m cli migrate --mark-applied-all
+python -m cli migrate --status
+```
+
+À utiliser avec prudence : cette commande marque les migrations comme appliquées sans exécuter leur SQL.
+
+## Ancienne méthode : script incrémental
+
+Les fichiers suivants sont conservés pour compatibilité historique :
+
+```
+App/database/
+├── deploy_incremental.sql
+├── deploy_to_server.bat
+└── DEPLOY_README.md
+```
+
+Ils concernent surtout l'ancien déploiement initial des tables utilisateurs/permissions. Pour l'application actuelle, vérifier d'abord si une migration numérotée couvre déjà le besoin.
+
+Lancement manuel legacy depuis `App/database/` :
+
+```bash
+deploy_to_server.bat
+```
+
+Ou :
 
 ```bash
 mysql -h localhost -u root -p emac_db < deploy_incremental.sql
 ```
 
-### Via phpMyAdmin
+## Configuration application
 
-1. Se connecter à phpMyAdmin
-2. Sélectionner la base de données `emac_db`
-3. Aller dans l'onglet **Importer**
-4. Choisir le fichier `deploy_incremental.sql`
-5. Cliquer sur **Exécuter**
+La connexion applicative est lue depuis `App/.env` par `infrastructure/db/configbd.py` :
 
-### Via MySQL Workbench
-
-1. Ouvrir MySQL Workbench
-2. Se connecter au serveur
-3. Menu **File** → **Open SQL Script**
-4. Sélectionner `deploy_incremental.sql`
-5. Cliquer sur **Execute** (éclair )
-
-## Compte Admin par Défaut
-
-Après le déploiement, un compte admin est créé :
-
-- **Username** : `admin`
-- **Mot de passe** : `admin123`
-
-⚠️ **IMPORTANT** : Changez ce mot de passe dès la première connexion !
-
-## Créer un Nouvel EXE
-
-Une fois la base de données déployée, créer l'exécutable :
-
-```bash
-cd App
-pyinstaller --onefile --windowed --name EMAC --icon=icon.ico core/gui/main_qt.py
+```env
+EMAC_DB_HOST=127.0.0.1
+EMAC_DB_PORT=3306
+EMAC_DB_USER=gestionrh
+EMAC_DB_PASSWORD=votre_mot_de_passe
+EMAC_DB_NAME=emac_db
 ```
 
-L'EXE sera dans le dossier `dist/`
+Ne jamais stocker de mot de passe réel dans ce fichier README.
 
-## Vérification Post-Déploiement
-
-### Vérifier que les tables existent
+## Vérifications post-déploiement
 
 ```sql
 USE emac_db;
-SHOW TABLES LIKE '%utilisateurs%';
-SHOW TABLES LIKE '%roles%';
-SHOW TABLES LIKE '%permissions%';
-SHOW TABLES LIKE '%logs_connexion%';
+SHOW TABLES LIKE 'schema_migrations';
+SELECT filename, applied_at FROM schema_migrations ORDER BY filename;
+SHOW TABLES LIKE 'utilisateurs';
+SHOW TABLES LIKE 'role_features';
+SHOW TABLES LIKE 'features';
 ```
 
-### Vérifier les données initiales
+Vérifier aussi le lancement applicatif :
 
-```sql
-SELECT * FROM roles;
-SELECT username, nom, prenom, actif FROM utilisateurs;
-SELECT COUNT(*) as nb_permissions FROM permissions;
+```bash
+cd App
+py -m gui.main_qt
 ```
 
-### Vérifier les colonnes de historique
+## Build applicatif
 
-```sql
-DESCRIBE historique;
+Depuis la racine du dépôt :
+
+```bash
+cd build-scripts
+build_optimized.bat
 ```
 
-Vous devriez voir les colonnes `utilisateur`, `table_name`, et `record_id`.
+La sortie attendue est `dist/EMAC/EMAC.exe`.
 
-## 🆘 Dépannage
+## Dépannage
 
-### Erreur : "mysql: command not found"
+### `mysql: command not found`
 
-**Solution** : Ajouter MySQL au PATH ou modifier le script `deploy_to_server.bat` avec le chemin complet de mysql.exe :
+Ajouter le dossier `bin` MySQL au `PATH` ou utiliser le chemin complet de `mysql.exe`.
 
-```batch
-set "MYSQL_CMD=C:\Program Files\MySQL\MySQL Server 8.0\bin\mysql.exe"
-```
+### `Access denied for user`
 
-### Erreur : "Access denied for user"
+Vérifier l'utilisateur, le mot de passe, le host, le port et les droits SQL (`CREATE`, `ALTER`, `INSERT`, `UPDATE`, `SELECT`).
 
-**Solution** : Vérifier :
-- Le nom d'utilisateur et mot de passe
-- Que l'utilisateur a les droits CREATE TABLE et INSERT
-- La connexion au serveur (firewall, port 3306)
+### `Unknown database`
 
-### Erreur : "Unknown database 'emac_db'"
-
-**Solution** : Créer d'abord la base de données :
+Créer la base :
 
 ```sql
 CREATE DATABASE IF NOT EXISTS emac_db
 CHARACTER SET utf8mb4
-COLLATE utf8mb4_0900_ai_ci;
+COLLATE utf8mb4_general_ci;
 ```
 
-### Les tables existent déjà
+### Migration en erreur
 
-✅ **C'est normal !** Le script utilise `IF NOT EXISTS`, donc :
-- Si les tables existent déjà, elles ne seront pas modifiées
-- Si les données existent déjà, elles ne seront pas dupliquées
-- Aucun impact sur les données existantes
-
-## Fichiers Fournis
-
-```
-App/database/
-├── deploy_incremental.sql      # Script SQL sécurisé
-├── deploy_to_server.bat        # Script de déploiement Windows
-└── DEPLOY_README.md            # Ce fichier (guide)
-```
-
-## Support
-
-En cas de problème :
-1. Vérifier les messages d'erreur dans le terminal
-2. Consulter la section Dépannage ci-dessus
-3. Vérifier les logs MySQL : `/var/log/mysql/error.log` (Linux) ou Event Viewer (Windows)
-
----
-
-** Bon déploiement !**
+1. Ne pas relancer à l'aveugle en production.
+2. Lire l'erreur SQL exacte.
+3. Vérifier l'état de `schema_migrations`.
+4. Restaurer la sauvegarde si nécessaire.
+5. Corriger la migration ou appliquer un rollback ciblé.

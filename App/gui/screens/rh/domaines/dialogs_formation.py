@@ -9,7 +9,7 @@ Dialogs de formation :
 
 from PyQt5.QtWidgets import (
     QFormLayout, QLineEdit, QDateEdit, QDoubleSpinBox, QComboBox,
-    QTextEdit, QCheckBox, QHBoxLayout, QLabel
+    QTextEdit, QCheckBox, QHBoxLayout, QLabel, QGroupBox
 )
 from PyQt5.QtCore import QDate
 
@@ -32,11 +32,24 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
         super().__init__(title=title, min_width=480, min_height=min_h, add_title_bar=False, parent=parent)
 
     def init_ui(self):
-        form = QFormLayout()
+        formation_group = QGroupBox("Détails de la formation")
+        form = QFormLayout(formation_group)
         form.setSpacing(12)
 
         self.intitule = QLineEdit(self.formation.get('intitule', '') if self.formation else '')
         form.addRow("Intitulé:", self.intitule)
+
+        self.type_formation = QComboBox()
+        self.type_formation.addItems(['', 'Réglementaire', 'Technique/Perfectionnement', 'Poste'])
+        if self.formation and self.formation.get('type_formation'):
+            idx = self.type_formation.findText(self.formation['type_formation'])
+            if idx >= 0:
+                self.type_formation.setCurrentIndex(idx)
+        form.addRow("Type de formation:", self.type_formation)
+
+        self.code_formation = QLineEdit(str(self.formation.get('code_formation') or '') if self.formation else '')
+        self.code_formation.setPlaceholderText("Code catalogue ou tranche, si connu")
+        form.addRow("Code formation:", self.code_formation)
 
         self.organisme = QLineEdit(self.formation.get('organisme', '') if self.formation else '')
         form.addRow("Organisme:", self.organisme)
@@ -84,6 +97,14 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
             self.duree.setValue(float(self.formation['duree_heures']))
         form.addRow("Durée:", self.duree)
 
+        self.cout = QDoubleSpinBox()
+        self.cout.setRange(0, 999999)
+        self.cout.setDecimals(2)
+        self.cout.setSuffix(" €")
+        if self.formation and self.formation.get('cout'):
+            self.cout.setValue(float(self.formation['cout']))
+        form.addRow("Coût pédagogique:", self.cout)
+
         self.statut_combo = QComboBox()
         self.statut_combo.addItems(['Planifiée', 'En cours', 'Terminée', 'Annulée'])
         if self.formation and self.formation.get('statut'):
@@ -103,10 +124,9 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
             self.commentaire.setText(self.formation['commentaire'])
         form.addRow("Commentaire:", self.commentaire)
 
-        self.content_layout.addLayout(form)
+        self.content_layout.addWidget(formation_group)
 
-        if not self.is_edit:
-            self._ajouter_section_justificatif_facultatif("Diplômes et formations")
+        self._ajouter_section_justificatif_facultatif("Diplômes et formations")
 
     def _ajouter_section_justificatif_facultatif(self, categorie_nom_hint: str = ""):
         """Section justificatif facultative — peut être ajouté ultérieurement."""
@@ -161,12 +181,20 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
     def validate(self):
         if not self.intitule.text().strip():
             return False, "L'intitulé est obligatoire"
+        if self.date_fin.date() < self.date_debut.date():
+            return False, "La date de fin doit être postérieure ou égale à la date de début"
+        code = self.code_formation.text().strip()
+        if code and not code.isdigit():
+            return False, "Le code formation doit être numérique"
         return True, ""
 
     def save_to_db(self):
         date_fin = self.date_fin.date()
+        code = self.code_formation.text().strip()
         data = {
             'intitule': self.intitule.text().strip(),
+            'type_formation': self.type_formation.currentText() or None,
+            'code_formation': int(code) if code else None,
             'organisme': self.organisme.text().strip() or None,
             'lieu': self.lieu.text().strip() or None,
             'formateur': self.formateur.text().strip() or None,
@@ -174,6 +202,7 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
             'date_debut': self.date_debut.date().toPyDate(),
             'date_fin': date_fin.toPyDate() if date_fin.year() > 1900 else None,
             'duree_heures': self.duree.value() if self.duree.value() > 0 else None,
+            'cout': self.cout.value() if self.cout.value() > 0 else None,
             'statut': self.statut_combo.currentText(),
             'certificat_obtenu': self.certificat.isChecked(),
             'commentaire': self.commentaire.toPlainText().strip() or None,
@@ -183,12 +212,26 @@ class EditFormationDialog(JustificatifMixin, EmacFormDialog):
             success, message = update_formation(self.formation['id'], data)
             if success:
                 self._saved_id = self.formation['id']
+                if getattr(self, '_justificatif_path', None):
+                    doc_id = self._sauvegarder_justificatif(
+                        self.operateur_id,
+                        formation_id=self._saved_id,
+                        date_expiration=data.get('date_fin'),
+                    )
+                    if doc_id:
+                        update_formation(self._saved_id, {'document_id': doc_id})
         else:
             success, message, new_id = create_formation(self.operateur_id, data)
             if success:
                 self._saved_id = new_id
                 if getattr(self, '_justificatif_path', None):
-                    self._sauvegarder_justificatif(self.operateur_id)
+                    doc_id = self._sauvegarder_justificatif(
+                        self.operateur_id,
+                        formation_id=new_id,
+                        date_expiration=data.get('date_fin'),
+                    )
+                    if doc_id:
+                        update_formation(new_id, {'document_id': doc_id})
                 else:
                     self._justificatif_manquant = True
 

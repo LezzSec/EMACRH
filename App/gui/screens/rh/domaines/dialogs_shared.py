@@ -15,7 +15,7 @@ class JustificatifMixin:
     À mélanger avec EmacFormDialog : class MonDialog(JustificatifMixin, EmacFormDialog).
     Appeler _ajouter_section_justificatif() dans init_ui(), puis :
       - _valider_justificatif() dans validate()
-      - _sauvegarder_justificatif(operateur_id, categorie_nom) dans save_to_db()
+      - _sauvegarder_justificatif(operateur_id, ...) dans save_to_db()
     """
 
     def _ajouter_section_justificatif(self, categorie_nom_hint: str = "", optionnel: bool = False):
@@ -25,7 +25,7 @@ class JustificatifMixin:
         self._justificatif_categorie_nom = categorie_nom_hint
 
         titre = "Document justificatif (optionnel)" if optionnel else "Document justificatif (obligatoire)"
-        group = QGroupBox(f"📎 {titre}")
+        group = QGroupBox(titre)
         if optionnel:
             group.setStyleSheet("""
                 QGroupBox {
@@ -106,14 +106,22 @@ class JustificatifMixin:
             return False, "Un document justificatif est obligatoire pour cette saisie."
         return True, ""
 
-    def _sauvegarder_justificatif(self, operateur_id: int):
+    def _sauvegarder_justificatif(
+        self,
+        operateur_id: int,
+        formation_id: int = None,
+        contrat_id: int = None,
+        declaration_id: int = None,
+        date_expiration=None,
+        notes: str = None,
+    ):
         """
         Upload le justificatif en document DMS après création du record.
         Cherche la catégorie dont le nom contient self._justificatif_categorie_nom.
         """
         path = getattr(self, '_justificatif_path', None)
         if not path:
-            return
+            return None
         import os
         from domain.services.documents.document_service import DocumentService
         from domain.services.admin.auth_service import get_current_user
@@ -136,18 +144,25 @@ class JustificatifMixin:
 
         try:
             doc_service = DocumentService()
-            doc_service.add_document(
+            success, _, document_id = doc_service.add_document(
                 personnel_id=operateur_id,
                 categorie_id=categorie_id,
                 fichier_source=path,
                 nom_affichage=nom_affichage,
+                date_expiration=date_expiration,
+                notes=notes,
                 uploaded_by=uploaded_by,
+                formation_id=formation_id,
+                contrat_id=contrat_id,
+                declaration_id=declaration_id,
             )
+            return document_id if success else None
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(
                 f"Justificatif non sauvegardé pour operateur {operateur_id}: {e}"
             )
+        return None
 
 
 class ConsulterDetailDialog:

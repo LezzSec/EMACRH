@@ -47,8 +47,8 @@ def create_mutuelle(personnel_id: int, data: Dict) -> Tuple[bool, str, Optional[
             INSERT INTO mutuelle
                 (personnel_id, statut_adhesion, due_signee, type_formule,
                  situation_familiale, type_dispense, justificatif_validite,
-                 organisme, numero_adherent, date_adhesion, date_fin, commentaire)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                 organisme, numero_adherent, regime, date_adhesion, date_fin, commentaire)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             """,
             (
                 personnel_id,
@@ -60,6 +60,7 @@ def create_mutuelle(personnel_id: int, data: Dict) -> Tuple[bool, str, Optional[
                 data.get('justificatif_validite') or None,
                 data.get('organisme') or None,
                 data.get('numero_adherent') or None,
+                data.get('regime') or None,
                 data.get('date_adhesion') or None,
                 data.get('date_fin') or None,
                 data.get('commentaire') or None,
@@ -91,6 +92,7 @@ def update_mutuelle(record_id: int, data: Dict) -> Tuple[bool, str]:
                 justificatif_validite = %s,
                 organisme            = %s,
                 numero_adherent      = %s,
+                regime               = %s,
                 date_adhesion        = %s,
                 date_fin             = %s,
                 commentaire          = %s
@@ -105,6 +107,7 @@ def update_mutuelle(record_id: int, data: Dict) -> Tuple[bool, str]:
                 data.get('justificatif_validite') or None,
                 data.get('organisme') or None,
                 data.get('numero_adherent') or None,
+                data.get('regime') or None,
                 data.get('date_adhesion') or None,
                 data.get('date_fin') or None,
                 data.get('commentaire') or None,

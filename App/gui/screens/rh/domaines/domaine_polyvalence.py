@@ -33,6 +33,23 @@ class DomainePolyvalence(DomaineWidget):
             atelier = poly.get('atelier_nom') or 'Sans atelier'
             ateliers.setdefault(atelier, []).append(poly)
 
+        card_resume = EmacCard("Résumé polyvalence")
+        resume_layout = QHBoxLayout()
+        nb_docs = sum(len(poly.get('documents', [])) for poly in polyvalences)
+        niveau_max = max([poly.get('niveau') or 0 for poly in polyvalences] or [0])
+        for label, valeur in [
+            ("Postes suivis", len(polyvalences)),
+            ("Ateliers", len(ateliers)),
+            ("Niveau max", niveau_max if niveau_max else "-"),
+            ("Dossiers lisibles", nb_docs),
+        ]:
+            badge = QLabel(f"<b>{label}</b><br/>{valeur}")
+            badge.setStyleSheet("background: #f1f5f9; color: #475569; padding: 8px 14px; border-radius: 6px;")
+            resume_layout.addWidget(badge)
+        resume_layout.addStretch()
+        card_resume.body.addLayout(resume_layout)
+        self._layout.addWidget(card_resume)
+
         for atelier_nom, postes in ateliers.items():
             card = EmacCard(atelier_nom)
 
@@ -56,6 +73,11 @@ class DomainePolyvalence(DomaineWidget):
                     " border-radius: 4px; padding: 2px 8px; font-size: 12px;"
                 )
                 poste_row.addWidget(badge_niv)
+
+                if poly.get('date_evaluation'):
+                    lbl_eval = QLabel(f"  Dernière éval : {self._format_date(poly['date_evaluation'])}")
+                    lbl_eval.setStyleSheet("color: #6b7280; font-size: 11px;")
+                    poste_row.addWidget(lbl_eval)
 
                 if poly.get('prochaine_evaluation'):
                     lbl_date = QLabel(f"  Prochaine éval : {self._format_date(poly['prochaine_evaluation'])}")

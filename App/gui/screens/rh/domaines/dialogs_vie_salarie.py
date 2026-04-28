@@ -8,7 +8,8 @@ Dialogs vie du salarié :
 """
 
 from PyQt5.QtWidgets import (
-    QFormLayout, QComboBox, QDateEdit, QTextEdit, QDoubleSpinBox, QCheckBox
+    QFormLayout, QComboBox, QDateEdit, QTextEdit, QDoubleSpinBox, QCheckBox,
+    QGroupBox, QLabel
 )
 from PyQt5.QtCore import QDate
 
@@ -30,11 +31,12 @@ class EditSanctionDialog(JustificatifMixin, EmacFormDialog):
         self.sanction = sanction
         self.is_edit = sanction is not None
         title = "Modifier la sanction" if self.is_edit else "Nouvelle sanction"
-        min_h = 400 if self.is_edit else 540
-        super().__init__(title=title, min_width=450, min_height=min_h, add_title_bar=False, parent=parent)
+        min_h = 460 if self.is_edit else 600
+        super().__init__(title=title, min_width=500, min_height=min_h, add_title_bar=False, parent=parent)
 
     def init_ui(self):
-        form = QFormLayout()
+        group = QGroupBox("Sanction disciplinaire")
+        form = QFormLayout(group)
         form.setSpacing(10)
 
         self.date_sanction = QDateEdit()
@@ -45,7 +47,7 @@ class EditSanctionDialog(JustificatifMixin, EmacFormDialog):
             self.date_sanction.setDate(QDate(d.year, d.month, d.day))
         else:
             self.date_sanction.setDate(QDate.currentDate())
-        form.addRow("Date:", self.date_sanction)
+        form.addRow("Date :", self.date_sanction)
 
         self.type_combo = QComboBox()
         self.type_combo.addItems(get_types_sanction())
@@ -53,7 +55,7 @@ class EditSanctionDialog(JustificatifMixin, EmacFormDialog):
             idx = self.type_combo.findText(self.sanction['type_sanction'])
             if idx >= 0:
                 self.type_combo.setCurrentIndex(idx)
-        form.addRow("Type:", self.type_combo)
+        form.addRow("Type :", self.type_combo)
 
         self.duree = QDoubleSpinBox()
         self.duree.setRange(0, 30)
@@ -61,22 +63,23 @@ class EditSanctionDialog(JustificatifMixin, EmacFormDialog):
         self.duree.setSuffix(" jours")
         if self.is_edit and self.sanction.get('duree_jours'):
             self.duree.setValue(self.sanction['duree_jours'])
-        form.addRow("Durée (mise à pied):", self.duree)
+        form.addRow("Durée :", self.duree)
 
         self.motif = QTextEdit()
-        self.motif.setMaximumHeight(80)
+        self.motif.setMaximumHeight(90)
         self.motif.setPlaceholderText("Motif de la sanction")
         if self.is_edit:
             self.motif.setText(self.sanction.get('motif') or '')
-        form.addRow("Motif:", self.motif)
+        form.addRow("Motif :", self.motif)
 
         self.commentaire = QTextEdit()
-        self.commentaire.setMaximumHeight(60)
+        self.commentaire.setMaximumHeight(70)
+        self.commentaire.setPlaceholderText("Suivi, contexte, décision communiquée...")
         if self.is_edit:
             self.commentaire.setText(self.sanction.get('commentaire') or '')
-        form.addRow("Commentaire:", self.commentaire)
+        form.addRow("Commentaire :", self.commentaire)
 
-        self.content_layout.addLayout(form)
+        self.content_layout.addWidget(group)
 
         if not self.is_edit:
             self._ajouter_section_justificatif("Sanctions disciplinaires")
@@ -102,7 +105,7 @@ class EditSanctionDialog(JustificatifMixin, EmacFormDialog):
         else:
             success, message, _ = create_sanction(self.operateur_id, data)
             if success:
-                self._sauvegarder_justificatif(self.operateur_id)
+                self._sauvegarder_justificatif(self.operateur_id, notes="Justificatif sanction disciplinaire")
 
         if not success:
             raise Exception(message)
@@ -113,42 +116,46 @@ class EditControleAlcoolDialog(EmacFormDialog):
 
     def __init__(self, operateur_id: int, parent=None):
         self.operateur_id = operateur_id
-        super().__init__(title="Nouveau contrôle d'alcoolémie", min_width=400, min_height=350, add_title_bar=False, parent=parent)
+        super().__init__(title="Nouveau contrôle d'alcoolémie", min_width=440, min_height=390, add_title_bar=False, parent=parent)
 
     def init_ui(self):
-        form = QFormLayout()
+        group = QGroupBox("Contrôle d'alcoolémie")
+        form = QFormLayout(group)
         form.setSpacing(10)
 
         self.date_controle = QDateEdit()
         self.date_controle.setCalendarPopup(True)
         self.date_controle.setDisplayFormat("dd/MM/yyyy")
         self.date_controle.setDate(QDate.currentDate())
-        form.addRow("Date:", self.date_controle)
+        form.addRow("Date :", self.date_controle)
 
         self.resultat_combo = QComboBox()
         self.resultat_combo.addItems(['Négatif', 'Positif'])
         self.resultat_combo.currentTextChanged.connect(self._on_resultat_change)
-        form.addRow("Résultat:", self.resultat_combo)
+        form.addRow("Résultat :", self.resultat_combo)
 
         self.taux = QDoubleSpinBox()
         self.taux.setRange(0, 5)
         self.taux.setDecimals(2)
         self.taux.setSuffix(" g/L")
         self.taux.setEnabled(False)
-        form.addRow("Taux:", self.taux)
+        form.addRow("Taux :", self.taux)
 
         self.type_combo = QComboBox()
         self.type_combo.addItems(['Aléatoire', 'Ciblé', 'Accident'])
-        form.addRow("Type de contrôle:", self.type_combo)
+        form.addRow("Type de contrôle :", self.type_combo)
 
         self.commentaire = QTextEdit()
-        self.commentaire.setMaximumHeight(60)
-        form.addRow("Commentaire:", self.commentaire)
+        self.commentaire.setMaximumHeight(80)
+        self.commentaire.setPlaceholderText("Contexte, observation ou suite donnée")
+        form.addRow("Commentaire :", self.commentaire)
 
-        self.content_layout.addLayout(form)
+        self.content_layout.addWidget(group)
 
     def _on_resultat_change(self, text):
         self.taux.setEnabled(text == 'Positif')
+        if text != 'Positif':
+            self.taux.setValue(0)
 
     def save_to_db(self):
         from datetime import datetime
@@ -171,31 +178,33 @@ class EditTestSalivaireDialog(EmacFormDialog):
 
     def __init__(self, operateur_id: int, parent=None):
         self.operateur_id = operateur_id
-        super().__init__(title="Nouveau test salivaire", min_width=400, min_height=300, add_title_bar=False, parent=parent)
+        super().__init__(title="Nouveau test salivaire", min_width=440, min_height=350, add_title_bar=False, parent=parent)
 
     def init_ui(self):
-        form = QFormLayout()
+        group = QGroupBox("Test salivaire")
+        form = QFormLayout(group)
         form.setSpacing(10)
 
         self.date_test = QDateEdit()
         self.date_test.setCalendarPopup(True)
         self.date_test.setDisplayFormat("dd/MM/yyyy")
         self.date_test.setDate(QDate.currentDate())
-        form.addRow("Date:", self.date_test)
+        form.addRow("Date :", self.date_test)
 
         self.resultat_combo = QComboBox()
         self.resultat_combo.addItems(['Négatif', 'Positif', 'Non concluant'])
-        form.addRow("Résultat:", self.resultat_combo)
+        form.addRow("Résultat :", self.resultat_combo)
 
         self.type_combo = QComboBox()
         self.type_combo.addItems(['Aléatoire', 'Ciblé', 'Accident'])
-        form.addRow("Type de contrôle:", self.type_combo)
+        form.addRow("Type de contrôle :", self.type_combo)
 
         self.commentaire = QTextEdit()
-        self.commentaire.setMaximumHeight(60)
-        form.addRow("Commentaire:", self.commentaire)
+        self.commentaire.setMaximumHeight(80)
+        self.commentaire.setPlaceholderText("Contexte, observation ou suite donnée")
+        form.addRow("Commentaire :", self.commentaire)
 
-        self.content_layout.addLayout(form)
+        self.content_layout.addWidget(group)
 
     def save_to_db(self):
         from datetime import datetime
@@ -212,7 +221,7 @@ class EditTestSalivaireDialog(EmacFormDialog):
             raise Exception(message)
 
 
-class EditEntretienDialog(EmacFormDialog):
+class EditEntretienDialog(JustificatifMixin, EmacFormDialog):
     """Formulaire pour ajouter/modifier un entretien professionnel."""
 
     def __init__(self, operateur_id: int, entretien: dict = None, parent=None):
@@ -220,11 +229,12 @@ class EditEntretienDialog(EmacFormDialog):
         self.entretien = entretien
         self.is_edit = entretien is not None
         title = "Modifier l'entretien" if self.is_edit else "Nouvel entretien"
-        super().__init__(title=title, min_width=500, min_height=500, add_title_bar=False, parent=parent)
+        super().__init__(title=title, min_width=560, min_height=700, add_title_bar=False, parent=parent)
 
     def init_ui(self):
-        form = QFormLayout()
-        form.setSpacing(10)
+        contexte_group = QGroupBox("Contexte de l'entretien")
+        contexte_form = QFormLayout(contexte_group)
+        contexte_form.setSpacing(10)
 
         self.date_entretien = QDateEdit()
         self.date_entretien.setCalendarPopup(True)
@@ -234,7 +244,7 @@ class EditEntretienDialog(EmacFormDialog):
             self.date_entretien.setDate(QDate(d.year, d.month, d.day))
         else:
             self.date_entretien.setDate(QDate.currentDate())
-        form.addRow("Date:", self.date_entretien)
+        contexte_form.addRow("Date :", self.date_entretien)
 
         self.type_combo = QComboBox()
         self.type_combo.addItems(get_types_entretien())
@@ -242,7 +252,7 @@ class EditEntretienDialog(EmacFormDialog):
             idx = self.type_combo.findText(self.entretien['type_entretien'])
             if idx >= 0:
                 self.type_combo.setCurrentIndex(idx)
-        form.addRow("Type:", self.type_combo)
+        contexte_form.addRow("Type :", self.type_combo)
 
         self.manager_combo = QComboBox()
         self.manager_combo.addItem("-- Sélectionner --", None)
@@ -254,38 +264,71 @@ class EditEntretienDialog(EmacFormDialog):
                 if self.manager_combo.itemData(i) == self.entretien['manager_id']:
                     self.manager_combo.setCurrentIndex(i)
                     break
-        form.addRow("Manager:", self.manager_combo)
-
-        self.objectifs_atteints = QTextEdit()
-        self.objectifs_atteints.setMaximumHeight(60)
-        self.objectifs_atteints.setPlaceholderText("Évaluation des objectifs précédents")
-        if self.is_edit:
-            self.objectifs_atteints.setText(self.entretien.get('objectifs_atteints') or '')
-        form.addRow("Objectifs atteints:", self.objectifs_atteints)
-
-        self.objectifs_fixes = QTextEdit()
-        self.objectifs_fixes.setMaximumHeight(60)
-        self.objectifs_fixes.setPlaceholderText("Objectifs pour la période à venir")
-        if self.is_edit:
-            self.objectifs_fixes.setText(self.entretien.get('objectifs_fixes') or '')
-        form.addRow("Objectifs fixés:", self.objectifs_fixes)
-
-        self.besoins_formation = QTextEdit()
-        self.besoins_formation.setMaximumHeight(50)
-        if self.is_edit:
-            self.besoins_formation.setText(self.entretien.get('besoins_formation') or '')
-        form.addRow("Besoins formation:", self.besoins_formation)
+        contexte_form.addRow("Manager :", self.manager_combo)
 
         self.prochaine_date = QDateEdit()
         self.prochaine_date.setCalendarPopup(True)
         self.prochaine_date.setDisplayFormat("dd/MM/yyyy")
         self.prochaine_date.setSpecialValueText("Non définie")
+        self.prochaine_date.setMinimumDate(QDate(1900, 1, 1))
         if self.is_edit and self.entretien.get('prochaine_date'):
             d = self.entretien['prochaine_date']
             self.prochaine_date.setDate(QDate(d.year, d.month, d.day))
-        form.addRow("Prochain entretien:", self.prochaine_date)
+        else:
+            self.prochaine_date.setDate(QDate(1900, 1, 1))
+        contexte_form.addRow("Prochain entretien :", self.prochaine_date)
+        self.content_layout.addWidget(contexte_group)
 
-        self.content_layout.addLayout(form)
+        bilan_group = QGroupBox("Bilan et objectifs")
+        bilan_form = QFormLayout(bilan_group)
+        bilan_form.setSpacing(10)
+
+        self.objectifs_atteints = QTextEdit()
+        self.objectifs_atteints.setMaximumHeight(70)
+        self.objectifs_atteints.setPlaceholderText("Évaluation des objectifs précédents")
+        if self.is_edit:
+            self.objectifs_atteints.setText(self.entretien.get('objectifs_atteints') or '')
+        bilan_form.addRow("Objectifs atteints :", self.objectifs_atteints)
+
+        self.objectifs_fixes = QTextEdit()
+        self.objectifs_fixes.setMaximumHeight(70)
+        self.objectifs_fixes.setPlaceholderText("Objectifs pour la période à venir")
+        if self.is_edit:
+            self.objectifs_fixes.setText(self.entretien.get('objectifs_fixes') or '')
+        bilan_form.addRow("Objectifs fixés :", self.objectifs_fixes)
+
+        self.besoins_formation = QTextEdit()
+        self.besoins_formation.setMaximumHeight(60)
+        self.besoins_formation.setPlaceholderText("Formations, accompagnements ou habilitations à prévoir")
+        if self.is_edit:
+            self.besoins_formation.setText(self.entretien.get('besoins_formation') or '')
+        bilan_form.addRow("Besoins formation :", self.besoins_formation)
+
+        self.souhaits_evolution = QTextEdit()
+        self.souhaits_evolution.setMaximumHeight(60)
+        self.souhaits_evolution.setPlaceholderText("Souhaits d'évolution exprimés")
+        if self.is_edit:
+            self.souhaits_evolution.setText(self.entretien.get('souhaits_evolution') or '')
+        bilan_form.addRow("Souhaits évolution :", self.souhaits_evolution)
+        self.content_layout.addWidget(bilan_group)
+
+        commentaires_group = QGroupBox("Commentaires")
+        commentaires_form = QFormLayout(commentaires_group)
+
+        self.commentaire_salarie = QTextEdit()
+        self.commentaire_salarie.setMaximumHeight(60)
+        if self.is_edit:
+            self.commentaire_salarie.setText(self.entretien.get('commentaire_salarie') or '')
+        commentaires_form.addRow("Salarié :", self.commentaire_salarie)
+
+        self.commentaire_manager = QTextEdit()
+        self.commentaire_manager.setMaximumHeight(60)
+        if self.is_edit:
+            self.commentaire_manager.setText(self.entretien.get('commentaire_manager') or '')
+        commentaires_form.addRow("Manager :", self.commentaire_manager)
+        self.content_layout.addWidget(commentaires_group)
+
+        self._ajouter_section_justificatif("Entretiens professionnels", optionnel=True)
 
     def save_to_db(self):
         prochaine = self.prochaine_date.date()
@@ -296,6 +339,9 @@ class EditEntretienDialog(EmacFormDialog):
             'objectifs_atteints': self.objectifs_atteints.toPlainText().strip() or None,
             'objectifs_fixes': self.objectifs_fixes.toPlainText().strip() or None,
             'besoins_formation': self.besoins_formation.toPlainText().strip() or None,
+            'souhaits_evolution': self.souhaits_evolution.toPlainText().strip() or None,
+            'commentaire_salarie': self.commentaire_salarie.toPlainText().strip() or None,
+            'commentaire_manager': self.commentaire_manager.toPlainText().strip() or None,
             'prochaine_date': prochaine.toPyDate() if prochaine.year() > 1900 else None,
         }
 
@@ -303,6 +349,13 @@ class EditEntretienDialog(EmacFormDialog):
             success, message = update_entretien(self.entretien['id'], data)
         else:
             success, message, _ = create_entretien(self.operateur_id, data)
+
+        if success:
+            self._sauvegarder_justificatif(
+                self.operateur_id,
+                date_expiration=data.get('prochaine_date'),
+                notes=f"Compte rendu entretien {data.get('type_entretien')}",
+            )
 
         if not success:
             raise Exception(message)

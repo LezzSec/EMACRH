@@ -85,7 +85,7 @@ class RhHeaderWidget(QWidget):
             layout.addWidget(btn)
             self.boutons_domaines[domaine['code']] = btn
 
-        self.btn_archives = QPushButton("📦 Archives")
+        self.btn_archives = QPushButton("Archives")
         self.btn_archives.setCheckable(True)
         self.btn_archives.setCursor(Qt.PointingHandCursor)
         self.btn_archives.setStyleSheet("""
@@ -136,7 +136,7 @@ class RhHeaderWidget(QWidget):
 
     def update_archives_count(self, n: int):
         if n > 0:
-            self.btn_archives.setText(f"📦 Archives ({n})")
+            self.btn_archives.setText(f"Archives ({n})")
             self.btn_archives.setVisible(True)
         else:
             self.btn_archives.setVisible(False)

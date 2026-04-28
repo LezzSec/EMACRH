@@ -40,44 +40,34 @@ class DomaineContrat(DomaineWidget):
                     alert = EmacAlert(f"Contrat expire dans {jours} jour(s)", variant="warning")
                 self._layout.addWidget(alert)
 
-            card = EmacCard("Contrat Actif")
+            card = EmacCard("Contrat actif")
 
             header = QHBoxLayout()
             header.addStretch()
             btn_consult = EmacButton("Consulter", variant="ghost")
-            btn_consult.clicked.connect(lambda checked, c=contrat: ConsulterDetailDialog(
-                "Détail du contrat", [
-                    ("Type", c.get('type_contrat')),
-                    ("Date début", self._format_date(c.get('date_debut'))),
-                    ("Date fin", self._format_date(c.get('date_fin')) or "Indéterminée"),
-                    ("Jours restants", c.get('jours_restants')),
-                    ("ETP", c.get('etp', 1.0)),
-                    ("Catégorie", c.get('categorie')),
-                    ("Emploi", c.get('emploi')),
-                    ("Commentaire", c.get('commentaire')),
-                ], self))
+            btn_consult.clicked.connect(
+                lambda checked, c=contrat: ConsulterDetailDialog(
+                    "Détail du contrat",
+                    self._detail_fields(c),
+                    self,
+                )
+            )
             header.addWidget(btn_consult)
+
             btn_edit = EmacButton("Modifier", variant="ghost")
             btn_edit.setVisible(can("rh.contrats.edit"))
             btn_edit.clicked.connect(lambda: self._edit_contrat(contrat))
             header.addWidget(btn_edit)
             card.body.addLayout(header)
 
+            infos = self._summary_fields(contrat, jours)
             grid = QGridLayout()
             grid.setSpacing(12)
-            infos = [
-                ("Type", contrat.get('type_contrat', '-')),
-                ("Date début", self._format_date(contrat.get('date_debut'))),
-                ("Date fin", self._format_date(contrat.get('date_fin')) or "Indéterminée"),
-                ("Jours restants", str(jours) if jours else "N/A"),
-                ("ETP", str(contrat.get('etp', 1.0))),
-                ("Catégorie", contrat.get('categorie', '-')),
-                ("Emploi", contrat.get('emploi', '-')),
-            ]
             for i, (label, valeur) in enumerate(infos):
                 row, col = divmod(i, 2)
                 lbl = QLabel(f"<b>{label}</b><br/>{valeur}")
                 lbl.setStyleSheet("padding: 8px; background: #f9fafb; border-radius: 6px;")
+                lbl.setWordWrap(True)
                 grid.addWidget(lbl, row, col)
             card.body.addLayout(grid)
 
@@ -112,6 +102,51 @@ class DomaineContrat(DomaineWidget):
             alert = EmacAlert("Aucun contrat actif", variant="info")
             self._layout.addWidget(alert)
 
+    def _detail_fields(self, c: dict) -> list:
+        return [
+            ("Type", c.get('type_contrat')),
+            ("Date début", self._format_date(c.get('date_debut'))),
+            ("Date fin", self._format_date(c.get('date_fin')) or "Indéterminée"),
+            ("Jours restants", c.get('jours_restants')),
+            ("ETP", c.get('etp', 1.0)),
+            ("Catégorie", c.get('categorie')),
+            ("Échelon", c.get('echelon')),
+            ("Emploi", c.get('emploi')),
+            ("Salaire brut", self._format_money(c.get('salaire'))),
+            ("Tuteur / école", self._format_tuteur(c)),
+            ("Organisme", self._format_organisme(c)),
+            ("Autorisation travail", c.get('numero_autorisation_travail')),
+            ("Limite autorisation", self._format_date(c.get('date_limite_autorisation'))),
+            ("Commentaire", c.get('commentaire')),
+        ]
+
+    def _summary_fields(self, contrat: dict, jours) -> list:
+        infos = [
+            ("Type", contrat.get('type_contrat', '-')),
+            ("Date début", self._format_date(contrat.get('date_debut'))),
+            ("Date fin", self._format_date(contrat.get('date_fin')) or "Indéterminée"),
+            ("Jours restants", str(jours) if jours is not None else "N/A"),
+            ("ETP", str(contrat.get('etp', 1.0))),
+            ("Catégorie", contrat.get('categorie', '-') or '-'),
+            ("Échelon", contrat.get('echelon') or '-'),
+            ("Emploi", contrat.get('emploi') or '-'),
+            ("Salaire brut", self._format_money(contrat.get('salaire'))),
+        ]
+
+        type_contrat = contrat.get('type_contrat')
+        if type_contrat in ('Apprentissage', 'Stagiaire', 'CIFRE'):
+            infos.append(("Tuteur / école", self._format_tuteur(contrat)))
+        if type_contrat == 'Intérimaire':
+            infos.append(("ETT", contrat.get('nom_ett') or '-'))
+        if type_contrat == 'Mise à disposition GE':
+            infos.append(("Groupement employeur", contrat.get('nom_ge') or '-'))
+        if type_contrat == 'Etranger hors UE':
+            infos.append(("Autorisation travail", contrat.get('numero_autorisation_travail') or '-'))
+            if contrat.get('date_limite_autorisation'):
+                infos.append(("Limite autorisation", self._format_date(contrat.get('date_limite_autorisation'))))
+
+        return infos
+
     def _build_doc_row(self, doc: dict) -> QFrame:
         """Construit une ligne de document avec bouton Ouvrir."""
         row_widget = QFrame()
@@ -126,12 +161,15 @@ class DomaineContrat(DomaineWidget):
         row_layout.setContentsMargins(8, 6, 8, 6)
         row_layout.setSpacing(8)
 
+        details = f"Ajouté le {self._format_date(doc.get('date_upload'))}"
+        if doc.get('date_expiration'):
+            details += f" - expire le {self._format_date(doc.get('date_expiration'))}"
         info = QLabel(
             f"<b>{doc.get('nom_affichage', '-')}</b>"
-            f"<span style='color:#6b7280; font-size:11px;'>"
-            f"  •  Ajouté le {self._format_date(doc.get('date_upload'))}</span>"
+            f"<span style='color:#6b7280; font-size:11px;'>  -  {details}</span>"
         )
         info.setStyleSheet("background: transparent;")
+        info.setWordWrap(True)
         row_layout.addWidget(info, 1)
 
         doc_id = doc.get('id')
@@ -140,6 +178,30 @@ class DomaineContrat(DomaineWidget):
         row_layout.addWidget(btn_ouvrir)
 
         return row_widget
+
+    def _format_money(self, value) -> str:
+        if value in (None, ''):
+            return '-'
+        try:
+            return f"{float(value):,.2f} €".replace(",", " ").replace(".", ",")
+        except (TypeError, ValueError):
+            return str(value)
+
+    def _format_tuteur(self, contrat: dict) -> str:
+        parts = [contrat.get('prenom_tuteur'), contrat.get('nom_tuteur')]
+        nom = " ".join([p for p in parts if p])
+        ecole = contrat.get('ecole')
+        if nom and ecole:
+            return f"{nom} ({ecole})"
+        return nom or ecole or '-'
+
+    def _format_organisme(self, contrat: dict) -> str:
+        type_contrat = contrat.get('type_contrat')
+        if type_contrat == 'Intérimaire':
+            return contrat.get('nom_ett') or '-'
+        if type_contrat == 'Mise à disposition GE':
+            return contrat.get('nom_ge') or '-'
+        return '-'
 
     def _add_contrat(self):
         if not self._operateur:

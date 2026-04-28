@@ -2,7 +2,7 @@
 """
 Domaine RH : Formations.
 """
-from PyQt5.QtWidgets import QDialog, QLabel, QHBoxLayout, QFrame, QMessageBox
+from PyQt5.QtWidgets import QDialog, QLabel, QHBoxLayout, QVBoxLayout, QFrame, QMessageBox
 from PyQt5.QtCore import Qt
 
 from gui.components.ui_theme import EmacCard, EmacButton
@@ -20,7 +20,7 @@ class DomaineFormation(DomaineWidget):
         self._layout.addWidget(btn_add, alignment=Qt.AlignLeft)
 
         stats = donnees.get('statistiques', {})
-        card_stats = EmacCard("Statistiques Formations")
+        card_stats = EmacCard("Statistiques formations")
         stats_layout = QHBoxLayout()
         for label, key in [
             ("Total", 'total'), ("Terminées", 'terminees'), ("En cours", 'en_cours'),
@@ -39,16 +39,53 @@ class DomaineFormation(DomaineWidget):
             for form in formations:
                 frame = QFrame()
                 frame.setStyleSheet("QFrame { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; }")
-                row = QHBoxLayout(frame)
-                row.setContentsMargins(12, 10, 12, 10)
+                wrapper = QVBoxLayout(frame)
+                wrapper.setContentsMargins(12, 10, 12, 10)
+                wrapper.setSpacing(8)
+
+                row = QHBoxLayout()
                 row.setSpacing(8)
-                info_text = f"{form.get('intitule', 'N/A')} - {form.get('statut', 'N/A')}"
-                if form.get('date_debut'):
-                    info_text += f" ({self._format_date(form.get('date_debut'))})"
-                lbl = QLabel(info_text)
-                lbl.setStyleSheet("background: transparent;")
-                row.addWidget(lbl)
-                row.addStretch()
+                info = QVBoxLayout()
+                info.setSpacing(3)
+
+                title = QLabel(f"<b>{form.get('intitule', 'N/A')}</b>")
+                title.setStyleSheet("background: transparent;")
+                info.addWidget(title)
+
+                meta = []
+                if form.get('type_formation'):
+                    meta.append(form['type_formation'])
+                if form.get('statut'):
+                    meta.append(form['statut'])
+                if form.get('organisme'):
+                    meta.append(form['organisme'])
+                subtitle = QLabel(" - ".join(meta) or "-")
+                subtitle.setStyleSheet("color: #64748b; font-size: 12px; background: transparent;")
+                info.addWidget(subtitle)
+
+                dates = f"{self._format_date(form.get('date_debut'))} au {self._format_date(form.get('date_fin'))}"
+                extras = []
+                if form.get('duree_heures'):
+                    extras.append(f"{form['duree_heures']} h")
+                if form.get('certificat_obtenu'):
+                    extras.append("certificat obtenu")
+                if form.get('cout'):
+                    extras.append(self._format_money(form.get('cout')))
+                detail = QLabel(f"{dates}{' - ' + ' - '.join(extras) if extras else ''}")
+                detail.setStyleSheet("color: #475569; font-size: 12px; background: transparent;")
+                info.addWidget(detail)
+
+                if form.get('objectif'):
+                    objectif = form['objectif']
+                    if len(objectif) > 130:
+                        objectif = objectif[:130] + "..."
+                    objectif_lbl = QLabel(objectif)
+                    objectif_lbl.setWordWrap(True)
+                    objectif_lbl.setStyleSheet("color: #475569; font-size: 12px; background: transparent;")
+                    info.addWidget(objectif_lbl)
+
+                row.addLayout(info, 1)
+
                 btn_consult = EmacButton("Consulter", variant="ghost")
                 btn_consult.clicked.connect(lambda checked, f=form: ConsulterFormationDialog(f, self))
                 row.addWidget(btn_consult)
@@ -60,10 +97,28 @@ class DomaineFormation(DomaineWidget):
                 btn_delete.setVisible(can("rh.formations.delete"))
                 btn_delete.clicked.connect(lambda checked, f=form: self._delete_formation(f))
                 row.addWidget(btn_delete)
+                wrapper.addLayout(row)
+
+                docs_form = self._documents_for_entity(documents, 'formation_id', form.get('id'))
+                if docs_form:
+                    docs_label = QLabel(f"Document(s) associé(s) : {len(docs_form)}")
+                    docs_label.setStyleSheet("color: #475569; font-size: 11px; font-weight: 600;")
+                    wrapper.addWidget(docs_label)
+                    for doc in docs_form:
+                        wrapper.addWidget(self._build_document_row(doc))
+
                 card_list.body.addWidget(frame)
         else:
             card_list.body.addWidget(QLabel("Aucune formation enregistrée"))
         self._layout.addWidget(card_list)
+
+    def _format_money(self, value) -> str:
+        if value in (None, ''):
+            return '-'
+        try:
+            return f"{float(value):,.2f} €".replace(",", " ").replace(".", ",")
+        except (TypeError, ValueError):
+            return str(value)
 
     def _add_formation(self):
         if not self._operateur:
@@ -72,10 +127,10 @@ class DomaineFormation(DomaineWidget):
         if dialog.exec_() == QDialog.Accepted:
             if getattr(dialog, '_justificatif_manquant', False):
                 QMessageBox.information(
-                    self, "Rappel — Document justificatif",
+                    self, "Rappel - Document justificatif",
                     "La formation a été enregistrée.\n\n"
                     "N'oubliez pas d'ajouter le document justificatif "
-                    "(attestation, certificat…) dès qu'il sera disponible, "
+                    "(attestation, certificat...) dès qu'il sera disponible, "
                     "via l'onglet Documents du profil salarié."
                 )
             if getattr(dialog, '_saved_id', None):

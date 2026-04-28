@@ -21,10 +21,8 @@ class DomaineCompetences(DomaineWidget):
         self._layout.addWidget(btn_add, alignment=Qt.AlignLeft)
 
         stats = donnees.get('statistiques', {})
-
         if stats.get('expirees', 0) > 0:
             self._layout.addWidget(EmacAlert(f"{stats['expirees']} compétence(s) expirée(s) !", variant="error"))
-
         if stats.get('expire_bientot_30j', 0) > 0:
             self._layout.addWidget(EmacAlert(
                 f"{stats['expire_bientot_30j']} compétence(s) expirant dans les 30 jours", variant="warning"
@@ -32,9 +30,15 @@ class DomaineCompetences(DomaineWidget):
 
         card_stats = EmacCard("Statistiques")
         stats_layout = QHBoxLayout()
-        for label, key in [("Valides", 'valides'), ("Expirées", 'expirees'), ("Total", 'total')]:
+        for label, key in [
+            ("Valides", 'valides'),
+            ("Permanentes", 'permanentes'),
+            ("À renouveler 90j", 'expire_bientot_90j'),
+            ("Expirées", 'expirees'),
+            ("Total", 'total'),
+        ]:
             badge = QLabel(f"{label}: {stats.get(key, 0)}")
-            badge.setStyleSheet("background: #f1f5f9; color: #475569; padding: 8px 16px; border-radius: 6px; font-size: 13px;")
+            badge.setStyleSheet("background: #f1f5f9; color: #475569; padding: 8px 14px; border-radius: 6px; font-size: 13px;")
             stats_layout.addWidget(badge)
         stats_layout.addStretch()
         card_stats.body.addLayout(stats_layout)
@@ -58,52 +62,73 @@ class DomaineCompetences(DomaineWidget):
                     indicator, color = "!", "#f97316"
                 elif statut == 'attention':
                     indicator, color = "~", "#eab308"
+                elif statut == 'permanent':
+                    indicator, color = "∞", "#2563eb"
                 else:
                     indicator, color = "O", "#22c55e"
 
                 status_label = QLabel(indicator)
                 status_label.setStyleSheet(f"color: {color}; font-weight: bold; font-size: 14px; background: transparent;")
-                status_label.setFixedWidth(20)
+                status_label.setFixedWidth(24)
                 row.addWidget(status_label)
 
                 info_layout = QVBoxLayout()
-                info_layout.setSpacing(2)
+                info_layout.setSpacing(3)
 
                 libelle = comp.get('libelle', 'N/A')
                 if comp.get('categorie'):
                     libelle = f"{libelle} [{comp['categorie']}]"
-                label_nom = QLabel(libelle)
-                label_nom.setStyleSheet("font-weight: 500; background: transparent;")
+                label_nom = QLabel(f"<b>{libelle}</b>")
+                label_nom.setStyleSheet("background: transparent;")
                 info_layout.addWidget(label_nom)
 
-                date_text = f"Acquis le: {self._format_date(comp.get('date_acquisition'))}"
+                date_text = f"Acquise le {self._format_date(comp.get('date_acquisition'))}"
                 if comp.get('date_expiration'):
-                    date_text += f" - Expire le: {self._format_date(comp['date_expiration'])}"
+                    date_text += f" - expire le {self._format_date(comp['date_expiration'])}"
                 else:
-                    date_text += " - Permanent"
+                    date_text += " - permanente"
                 label_dates = QLabel(date_text)
                 label_dates.setStyleSheet("color: #64748b; font-size: 12px;")
                 info_layout.addWidget(label_dates)
 
-                if statut in ('expire_bientot', 'attention', 'expiree') and comp.get('statut_label'):
-                    label_statut = QLabel(comp['statut_label'])
-                    label_statut.setStyleSheet(f"color: {color}; font-size: 11px; font-style: italic;")
+                detail_bits = []
+                if comp.get('code'):
+                    detail_bits.append(f"Code : {comp['code']}")
+                if comp.get('duree_validite_mois'):
+                    detail_bits.append(f"Validité catalogue : {comp['duree_validite_mois']} mois")
+                if comp.get('statut_label'):
+                    detail_bits.append(comp['statut_label'])
+                if detail_bits:
+                    label_statut = QLabel(" - ".join(detail_bits))
+                    label_statut.setStyleSheet(f"color: {color}; font-size: 11px;")
                     info_layout.addWidget(label_statut)
 
-                row.addLayout(info_layout)
-                row.addStretch()
+                doc = self._document_for_competence(comp, documents)
+                if doc:
+                    doc_lbl = QLabel(f"Justificatif : {doc.get('nom_affichage', '-')}")
+                    doc_lbl.setStyleSheet("color: #475569; font-size: 11px;")
+                    info_layout.addWidget(doc_lbl)
+
+                row.addLayout(info_layout, 1)
 
                 btn_consult = EmacButton("Consulter", variant="ghost")
-                btn_consult.clicked.connect(lambda checked, c=comp: ConsulterDetailDialog(
+                btn_consult.clicked.connect(lambda checked, c=comp, d=doc: ConsulterDetailDialog(
                     "Détail de la compétence", [
                         ("Libellé", c.get('libelle')),
+                        ("Code", c.get('code')),
                         ("Catégorie", c.get('categorie')),
                         ("Date d'acquisition", self._format_date(c.get('date_acquisition'))),
                         ("Date d'expiration", self._format_date(c.get('date_expiration')) or "Permanente"),
                         ("Statut", c.get('statut_label') or c.get('statut')),
+                        ("Justificatif", d.get('nom_affichage') if d else None),
                         ("Commentaire", c.get('commentaire')),
                     ], self))
                 row.addWidget(btn_consult)
+
+                if doc:
+                    btn_doc = EmacButton("Ouvrir doc.", variant="ghost")
+                    btn_doc.clicked.connect(lambda checked, did=doc.get('id'): self._vm.ouvrir_document(did))
+                    row.addWidget(btn_doc)
 
                 btn_edit = EmacButton("Modifier", variant="outline")
                 btn_edit.setVisible(can("rh.competences.edit"))
@@ -120,6 +145,15 @@ class DomaineCompetences(DomaineWidget):
             card_list.body.addWidget(QLabel("Aucune compétence assignée"))
 
         self._layout.addWidget(card_list)
+
+    def _document_for_competence(self, competence: dict, documents: list):
+        document_id = competence.get('document_id')
+        if not document_id:
+            return None
+        for doc in documents or []:
+            if doc.get('id') == document_id:
+                return doc
+        return None
 
     def _add_competence(self):
         if not self._operateur:

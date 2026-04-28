@@ -389,8 +389,8 @@ def create_accident(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
                    personnel_id, date_accident, heure_accident, jour_semaine,
                    lieu_accident, horaires, circonstances, siege_lesions, nature_lesions,
                    avec_arret, date_reconnaissance_at, date_debut_arret,
-                   date_fin_arret_initial, commentaire
-               ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                   date_fin_arret_initial, nb_jours_absence, commentaire
+               ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 operateur_id,
                 data.get('date_accident'),
@@ -405,6 +405,7 @@ def create_accident(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[
                 data.get('date_reconnaissance_at'),
                 data.get('date_debut_arret'),
                 data.get('date_fin_arret_initial'),
+                data.get('nb_jours_absence'),
                 data.get('commentaire')
             )
         )
@@ -429,7 +430,8 @@ def update_accident(accident_id: int, data: Dict) -> Tuple[bool, str]:
                    date_accident = %s, heure_accident = %s, jour_semaine = %s,
                    lieu_accident = %s, horaires = %s, circonstances = %s, siege_lesions = %s,
                    nature_lesions = %s, avec_arret = %s, date_reconnaissance_at = %s,
-                   date_debut_arret = %s, date_fin_arret_initial = %s, commentaire = %s
+                   date_debut_arret = %s, date_fin_arret_initial = %s,
+                   nb_jours_absence = %s, commentaire = %s
                WHERE id = %s""",
             (
                 data.get('date_accident'),
@@ -444,6 +446,7 @@ def update_accident(accident_id: int, data: Dict) -> Tuple[bool, str]:
                 data.get('date_reconnaissance_at'),
                 data.get('date_debut_arret'),
                 data.get('date_fin_arret_initial'),
+                data.get('nb_jours_absence'),
                 data.get('commentaire'),
                 accident_id
             ),

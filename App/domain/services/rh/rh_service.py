@@ -96,7 +96,7 @@ def rechercher_operateurs(
     limit: int = 50
 ) -> List[Dict]:
     """
-    ✅ REFACTORISÉ: Utilise QueryExecutor au lieu de with DatabaseCursor.
+    REFACTORISÉ: Utilise QueryExecutor au lieu de with DatabaseCursor.
 
     Recherche des opérateurs par nom, prénom ou matricule.
 
@@ -114,13 +114,13 @@ def rechercher_operateurs(
 
 def get_operateur_by_id(operateur_id: int) -> Optional[Dict]:
     """
-    ✅ REFACTORISÉ: Utilise PersonnelService.get_by_id().
+    REFACTORISÉ: Utilise PersonnelService.get_by_id().
 
     AVANT: 15 lignes
     APRÈS: 8 lignes (-47%)
     """
     try:
-        # ✅ Utiliser le service CRUD existant
+        # Utiliser le service CRUD existant
         personnel = PersonnelService.get_by_id(operateur_id)
 
         if personnel:
@@ -159,7 +159,7 @@ def get_donnees_domaine(
     domaine: DomaineRH
 ) -> Dict[str, Any]:
     """
-    ✅ REFACTORISÉ: Utilise QueryExecutor pour toutes les requêtes.
+    REFACTORISÉ: Utilise QueryExecutor pour toutes les requêtes.
 
     Récupère les données d'un domaine RH pour un opérateur.
 
@@ -195,12 +195,12 @@ def get_donnees_domaine(
 
 def _get_donnees_general(operateur_id: int) -> Dict:
     """
-    ✅ REFACTORISÉ: Utilise QueryExecutor.
+    REFACTORISÉ: Utilise QueryExecutor.
     Retourne un dict plat fusionnant personnel + personnel_infos,
     avec age et anciennete calculés.
     """
     try:
-        # ✅ Récupérer infos personnel
+        # Récupérer infos personnel
         personnel = PersonnelService.get_by_id(operateur_id)
         if not personnel:
             return {}
@@ -294,13 +294,15 @@ def _get_donnees_formation(operateur_id: int) -> Dict:
         'total': len(formations),
         'terminees': len(terminees),
         'en_cours': len(en_cours),
+        'planifiees': len([f for f in formations if f.get('statut') == 'Planifiée']),
+        'avec_certificat': len([f for f in formations if f.get('certificat_obtenu')]),
     }
     return {'formations': formations, 'statistiques': statistiques}
 
 
 def _get_donnees_declaration(operateur_id: int) -> Dict:
     """
-    ✅ REFACTORISÉ: Utilise QueryExecutor.
+    REFACTORISÉ: Utilise QueryExecutor.
 
     AVANT: 30 lignes
     APRÈS: 15 lignes
@@ -427,18 +429,18 @@ def _get_donnees_polyvalence(operateur_id: int) -> Dict:
 
 def create_contrat(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """
-    ✅ REFACTORISÉ: Utilise ContratServiceCRUD.create().
+    REFACTORISÉ: Utilise ContratServiceCRUD.create().
 
     AVANT: 35 lignes (validation + INSERT + log_hist + gestion erreurs)
     APRÈS: 10 lignes (-71%)
     """
     require('rh.contrats.edit')
     try:
-        # ✅ Validation métier (si nécessaire)
+        # Validation métier (si nécessaire)
         if data.get('date_fin') and data['date_fin'] < data.get('date_debut'):
             return False, "La date de fin doit être postérieure à la date de début", None
 
-        # ✅ Utiliser ContratServiceCRUD.create_contract()
+        # Utiliser ContratServiceCRUD.create_contract()
         # Gère la désactivation du contrat précédent + logging automatique
         return ContratServiceCRUD.create_contract({
             'personnel_id': operateur_id,
@@ -452,19 +454,19 @@ def create_contrat(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[i
 
 def update_contrat(contrat_id: int, data: Dict) -> Tuple[bool, str]:
     """
-    ✅ REFACTORISÉ: Utilise ContratServiceCRUD.update().
+    REFACTORISÉ: Utilise ContratServiceCRUD.update().
 
     AVANT: 30 lignes
     APRÈS: 8 lignes (-73%)
     """
     require('rh.contrats.edit')
     try:
-        # ✅ Validation métier (si nécessaire)
+        # Validation métier (si nécessaire)
         if data.get('date_fin') and data.get('date_debut'):
             if data['date_fin'] < data['date_debut']:
                 return False, "La date de fin doit être postérieure à la date de début"
 
-        # ✅ Utiliser ContratServiceCRUD.update()
+        # Utiliser ContratServiceCRUD.update()
         return ContratServiceCRUD.update(
             record_id=contrat_id,
             **data
@@ -477,14 +479,14 @@ def update_contrat(contrat_id: int, data: Dict) -> Tuple[bool, str]:
 
 def delete_contrat(contrat_id: int) -> Tuple[bool, str]:
     """
-    ✅ REFACTORISÉ: Utilise ContratServiceCRUD.delete().
+    REFACTORISÉ: Utilise ContratServiceCRUD.delete().
 
     AVANT: 20 lignes
     APRÈS: 8 lignes (-60%)
     """
     require('rh.contrats.delete')
     try:
-        # ✅ Soft delete (marquer comme inactif)
+        # Soft delete (marquer comme inactif)
         return ContratServiceCRUD.delete(
             record_id=contrat_id,
             soft_delete=True,
@@ -502,14 +504,14 @@ def delete_contrat(contrat_id: int) -> Tuple[bool, str]:
 
 def create_formation(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional[int]]:
     """
-    ✅ REFACTORISÉ: Utilise FormationServiceCRUD.create().
+    REFACTORISÉ: Utilise FormationServiceCRUD.create().
 
     AVANT: 35 lignes
     APRÈS: 8 lignes (-77%)
     """
     require('rh.formations.edit')
     try:
-        # ✅ Utiliser FormationServiceCRUD.create()
+        # Utiliser FormationServiceCRUD.create()
         return FormationServiceCRUD.create(
             personnel_id=operateur_id,
             **data
@@ -522,14 +524,14 @@ def create_formation(operateur_id: int, data: Dict) -> Tuple[bool, str, Optional
 
 def update_formation(formation_id: int, data: Dict) -> Tuple[bool, str]:
     """
-    ✅ REFACTORISÉ: Utilise FormationServiceCRUD.update().
+    REFACTORISÉ: Utilise FormationServiceCRUD.update().
 
     AVANT: 30 lignes
     APRÈS: 8 lignes (-73%)
     """
     require('rh.formations.edit')
     try:
-        # ✅ Utiliser FormationServiceCRUD.update()
+        # Utiliser FormationServiceCRUD.update()
         return FormationServiceCRUD.update(
             record_id=formation_id,
             **data
@@ -542,14 +544,14 @@ def update_formation(formation_id: int, data: Dict) -> Tuple[bool, str]:
 
 def delete_formation(formation_id: int) -> Tuple[bool, str]:
     """
-    ✅ REFACTORISÉ: Utilise FormationServiceCRUD.delete().
+    REFACTORISÉ: Utilise FormationServiceCRUD.delete().
 
     AVANT: 20 lignes
     APRÈS: 8 lignes (-60%)
     """
     require('rh.formations.delete')
     try:
-        # ✅ Hard delete
+        # Hard delete
         return FormationServiceCRUD.delete(record_id=formation_id)
 
     except Exception as e:
@@ -563,7 +565,7 @@ def delete_formation(formation_id: int) -> Tuple[bool, str]:
 
 def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
     """
-    ✅ REFACTORISÉ: Utilise QueryExecutor.execute_write().
+    REFACTORISÉ: Utilise QueryExecutor.execute_write().
 
     Mise à jour des informations générales d'un opérateur.
 
@@ -607,7 +609,7 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
         if infos_data:
             PersonnelRepository.upsert_infos(operateur_id, infos_data)
 
-        # ✅ Logging manuel (pour l'instant, en attendant PersonnelService.update())
+        # Logging manuel (pour l'instant, en attendant PersonnelService.update())
         from infrastructure.logging.optimized_db_logger import log_hist
         log_hist(
             action="UPDATE_INFOS_GENERALES",

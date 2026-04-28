@@ -9,6 +9,7 @@ Dialogs médicaux :
 from PyQt5.QtWidgets import (
     QFormLayout, QComboBox, QDateEdit, QTimeEdit, QTextEdit, QLineEdit,
     QCheckBox, QDoubleSpinBox, QLabel, QHBoxLayout, QWidget,
+    QGroupBox,
 )
 from PyQt5.QtCore import QDate, QTime
 
@@ -32,7 +33,8 @@ class EditVisiteDialog(JustificatifMixin, EmacFormDialog):
         super().__init__(title=title, min_width=450, min_height=590, add_title_bar=False, parent=parent)
 
     def init_ui(self):
-        form = QFormLayout()
+        visite_group = QGroupBox("Visite médicale et aptitude")
+        form = QFormLayout(visite_group)
         form.setSpacing(10)
 
         self.date_visite = QDateEdit()
@@ -98,7 +100,7 @@ class EditVisiteDialog(JustificatifMixin, EmacFormDialog):
             self.commentaire.setText(self.visite.get('commentaire') or '')
         form.addRow("Commentaire:", self.commentaire)
 
-        self.content_layout.addLayout(form)
+        self.content_layout.addWidget(visite_group)
 
         self._ajouter_section_justificatif("Certificats médicaux", optionnel=True)
 
@@ -123,8 +125,12 @@ class EditVisiteDialog(JustificatifMixin, EmacFormDialog):
             success, message = update_visite(self.visite['id'], data)
         else:
             success, message, _ = create_visite(self.operateur_id, data)
-            if success:
-                self._sauvegarder_justificatif(self.operateur_id)
+
+        if success:
+            self._sauvegarder_justificatif(
+                self.operateur_id,
+                date_expiration=data.get('prochaine_visite'),
+            )
 
         if not success:
             raise Exception(message)
@@ -142,7 +148,8 @@ class EditAccidentDialog(JustificatifMixin, EmacFormDialog):
         super().__init__(title=title, min_width=500, min_height=min_h, add_title_bar=False, parent=parent)
 
     def init_ui(self):
-        form = QFormLayout()
+        accident_group = QGroupBox("Accident et arrêt de travail")
+        form = QFormLayout(accident_group)
         form.setSpacing(10)
 
         self.date_accident = QDateEdit()
@@ -222,7 +229,7 @@ class EditAccidentDialog(JustificatifMixin, EmacFormDialog):
             self.commentaire.setText(self.accident.get('commentaire') or '')
         form.addRow("Commentaire:", self.commentaire)
 
-        self.content_layout.addLayout(form)
+        self.content_layout.addWidget(accident_group)
 
         if not self.is_edit:
             self._ajouter_section_justificatif("Documents médicaux")
@@ -287,7 +294,8 @@ class EditValiditeDialog(JustificatifMixin, EmacFormDialog):
         )
 
     def init_ui(self):
-        form = QFormLayout()
+        validite_group = QGroupBox(f"Validité {self.type_validite}")
+        form = QFormLayout(validite_group)
         form.setSpacing(10)
 
         self.date_debut = QDateEdit()
@@ -344,7 +352,7 @@ class EditValiditeDialog(JustificatifMixin, EmacFormDialog):
             self.commentaire.setText(self.validite.get('commentaire') or '')
         form.addRow("Commentaire:", self.commentaire)
 
-        self.content_layout.addLayout(form)
+        self.content_layout.addWidget(validite_group)
         self._ajouter_section_justificatif(self.type_validite, optionnel=True)
 
     def _on_permanent_toggled(self, checked: bool):
@@ -376,7 +384,12 @@ class EditValiditeDialog(JustificatifMixin, EmacFormDialog):
         else:
             success, message, _ = create_validite(self.operateur_id, data)
 
+        if success:
+            self._sauvegarder_justificatif(
+                self.operateur_id,
+                date_expiration=data.get('date_fin'),
+                notes=f"Justificatif {self.type_validite}",
+            )
+
         if not success:
             raise Exception(message)
-
-        self._sauvegarder_justificatif(self.operateur_id)

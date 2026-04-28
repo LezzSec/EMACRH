@@ -792,7 +792,34 @@ class PersonnelRepository(BaseRepository[Personnel]):
 
         where_sql = " AND ".join(where_clauses) if where_clauses else "1=1"
 
-        # Requête principale avec stats polyvalence + contrat actif
+        # Requete de comptage sur personnel seulement : pas de JOIN inutile.
+        count_query = f"""
+            SELECT COUNT(*) as total
+            FROM personnel p
+            WHERE {where_sql}
+        """
+        count_row = QueryExecutor.fetch_one(count_query, tuple(params), dictionary=True)
+        total = count_row['total'] if count_row else 0
+
+        # Couper d'abord la page sur les IDs personnel, puis enrichir seulement
+        # ces lignes avec contrat et statistiques polyvalence.
+        ids_query = f"""
+            SELECT p.id
+            FROM personnel p
+            WHERE {where_sql}
+            ORDER BY p.nom, p.prenom, p.id
+            LIMIT %s OFFSET %s
+        """
+        id_rows = QueryExecutor.fetch_all(
+            ids_query,
+            tuple(params + [limit, offset]),
+            dictionary=True,
+        )
+        page_ids = [row['id'] for row in id_rows]
+        if not page_ids:
+            return [], total
+
+        placeholders = ", ".join(["%s"] * len(page_ids))
         query = f"""
             SELECT
                 p.id,
@@ -802,30 +829,43 @@ class PersonnelRepository(BaseRepository[Personnel]):
                 p.numposte,
                 UPPER(p.statut) AS statut,
                 ct.type_contrat,
-                COUNT(poly.id) AS nb_postes,
-                SUM(CASE WHEN poly.niveau = 1 THEN 1 ELSE 0 END) AS n1,
-                SUM(CASE WHEN poly.niveau = 2 THEN 1 ELSE 0 END) AS n2,
-                SUM(CASE WHEN poly.niveau = 3 THEN 1 ELSE 0 END) AS n3,
-                SUM(CASE WHEN poly.niveau = 4 THEN 1 ELSE 0 END) AS n4
+                COALESCE(poly_stats.nb_postes, 0) AS nb_postes,
+                COALESCE(poly_stats.n1, 0) AS n1,
+                COALESCE(poly_stats.n2, 0) AS n2,
+                COALESCE(poly_stats.n3, 0) AS n3,
+                COALESCE(poly_stats.n4, 0) AS n4
             FROM personnel p
-            LEFT JOIN polyvalence poly ON p.id = poly.personnel_id
-            LEFT JOIN contrat ct ON ct.personnel_id = p.id AND ct.actif = 1
-            WHERE {where_sql}
-            GROUP BY p.id, p.nom, p.prenom, p.matricule, p.numposte, p.statut, ct.type_contrat
-            ORDER BY p.nom, p.prenom
-            LIMIT %s OFFSET %s
+            LEFT JOIN (
+                SELECT
+                    personnel_id,
+                    COUNT(*) AS nb_postes,
+                    SUM(CASE WHEN niveau = 1 THEN 1 ELSE 0 END) AS n1,
+                    SUM(CASE WHEN niveau = 2 THEN 1 ELSE 0 END) AS n2,
+                    SUM(CASE WHEN niveau = 3 THEN 1 ELSE 0 END) AS n3,
+                    SUM(CASE WHEN niveau = 4 THEN 1 ELSE 0 END) AS n4
+                FROM polyvalence
+                WHERE personnel_id IN ({placeholders})
+                GROUP BY personnel_id
+            ) poly_stats ON poly_stats.personnel_id = p.id
+            LEFT JOIN (
+                SELECT c.personnel_id, c.type_contrat
+                FROM contrat c
+                JOIN (
+                    SELECT personnel_id, MAX(id) AS id
+                    FROM contrat
+                    WHERE actif = 1
+                      AND personnel_id IN ({placeholders})
+                    GROUP BY personnel_id
+                ) active_ct ON active_ct.id = c.id
+            ) ct ON ct.personnel_id = p.id
+            WHERE p.id IN ({placeholders})
+            ORDER BY p.nom, p.prenom, p.id
         """
-        params_data = params + [limit, offset]
 
-        # Requête de comptage
-        count_query = f"""
-            SELECT COUNT(DISTINCT p.id) as total
-            FROM personnel p
-            WHERE {where_sql}
-        """
-
-        rows = QueryExecutor.fetch_all(query, tuple(params_data), dictionary=True)
-        count_row = QueryExecutor.fetch_one(count_query, tuple(params), dictionary=True)
-        total = count_row['total'] if count_row else 0
+        rows = QueryExecutor.fetch_all(
+            query,
+            tuple(page_ids + page_ids + page_ids),
+            dictionary=True,
+        )
         return rows, total
 

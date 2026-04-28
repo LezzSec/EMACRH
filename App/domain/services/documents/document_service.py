@@ -51,7 +51,10 @@ class DocumentService:
         nom_affichage: str = None,
         date_expiration: date = None,
         notes: str = None,
-        uploaded_by: str = "Systeme"
+        uploaded_by: str = "Systeme",
+        formation_id: int = None,
+        contrat_id: int = None,
+        declaration_id: int = None,
     ) -> Tuple[bool, str, Optional[int]]:
         """
         Ajoute un document pour un operateur (stocke en BLOB dans la base).
@@ -64,6 +67,9 @@ class DocumentService:
             date_expiration: Date d'expiration (optionnel)
             notes: Notes sur le document
             uploaded_by: Nom de l'utilisateur qui uploade
+            formation_id: Formation liee (optionnel)
+            contrat_id: Contrat lie (optionnel)
+            declaration_id: Declaration liee (optionnel)
 
         Returns:
             (succes, message, document_id)
@@ -108,15 +114,18 @@ class DocumentService:
 
             document_id = QueryExecutor.execute_write(
                 """INSERT INTO documents (
-                    personnel_id, categorie_id, nom_fichier, nom_affichage,
+                    personnel_id, categorie_id, formation_id, contrat_id, declaration_id,
+                    nom_fichier, nom_affichage,
                     chemin_fichier, contenu_fichier, stockage_type,
                     type_mime, taille_octets, date_expiration,
                     notes, uploaded_by
                 ) VALUES (
-                    %s, %s, %s, %s, %s, %s, 'BLOB', %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, 'BLOB',
+                    %s, %s, %s, %s, %s
                 )""",
                 (
-                    personnel_id, categorie_id, nom_fichier_clean, nom_affichage,
+                    personnel_id, categorie_id, formation_id, contrat_id, declaration_id,
+                    nom_fichier_clean, nom_affichage,
                     nom_fichier_clean,
                     contenu_fichier,
                     type_mime, taille_octets, date_expiration,

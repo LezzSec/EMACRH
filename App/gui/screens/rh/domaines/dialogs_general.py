@@ -31,7 +31,8 @@ class EditInfosGeneralesDialog(EmacFormDialog):
         )
 
     def init_ui(self):
-        form = QFormLayout()
+        infos_group = QGroupBox("Informations personnelles et coordonnées")
+        form = QFormLayout(infos_group)
         form.setSpacing(12)
 
         # --- Section Identité ---
@@ -63,18 +64,24 @@ class EditInfosGeneralesDialog(EmacFormDialog):
         self.date_naissance.setCalendarPopup(True)
         self.date_naissance.setDisplayFormat("dd/MM/yyyy")
         self.date_naissance.setSpecialValueText("Non renseignée")
+        self.date_naissance.setMinimumDate(QDate(1900, 1, 1))
         if self.donnees.get('date_naissance'):
             d = self.donnees['date_naissance']
             self.date_naissance.setDate(QDate(d.year, d.month, d.day))
+        else:
+            self.date_naissance.setDate(QDate(1900, 1, 1))
         form.addRow("Date de naissance:", self.date_naissance)
 
         self.date_entree = QDateEdit()
         self.date_entree.setCalendarPopup(True)
         self.date_entree.setDisplayFormat("dd/MM/yyyy")
         self.date_entree.setSpecialValueText("Non renseignée")
+        self.date_entree.setMinimumDate(QDate(1900, 1, 1))
         if self.donnees.get('date_entree'):
             d = self.donnees['date_entree']
             self.date_entree.setDate(QDate(d.year, d.month, d.day))
+        else:
+            self.date_entree.setDate(QDate(1900, 1, 1))
         form.addRow("Date d'entrée:", self.date_entree)
 
         self.nationalite = QLineEdit(self.donnees.get('nationalite') or '')
@@ -113,6 +120,7 @@ class EditInfosGeneralesDialog(EmacFormDialog):
         self.pays_adresse = QLineEdit(self.donnees.get('pays_adresse') or '')
         self.pays_adresse.setPlaceholderText("Ex: France")
         form.addRow("Pays:", self.pays_adresse)
+        self.content_layout.addWidget(infos_group)
 
         # --- Section Situation professionnelle ---
         profil_group = QGroupBox("Situation professionnelle")
@@ -160,7 +168,6 @@ class EditInfosGeneralesDialog(EmacFormDialog):
         naissance_layout.addRow("Pays:", self.pays_naissance)
 
         self.content_layout.addWidget(naissance_group)
-        self.content_layout.addLayout(form)
 
     def _geo_from_cp(self, text: str):
         """Déclenché à chaque frappe dans le CP. Remplit Ville+Pays dès 5 chiffres.

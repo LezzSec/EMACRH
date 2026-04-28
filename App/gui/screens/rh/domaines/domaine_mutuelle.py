@@ -15,6 +15,12 @@ from .domaine_base import DomaineWidget
 _STATUT_LABELS = {'ADHERENT': 'Adhérent', 'DISPENSE': 'Dispensé', 'NON_COUVERT': 'Non couvert'}
 _STATUT_COLORS = {'ADHERENT': '#16a34a', 'DISPENSE': '#d97706', 'NON_COUVERT': '#6b7280'}
 _REGIME_LABELS = {'INDIVIDUEL': 'Individuel', 'FAMILLE': 'Famille', 'ISOLE_ENFANT': 'Isolé + enfant(s)'}
+_FORMULE_LABELS = {'SIMPLE': 'Simple', 'TURBO': 'Turbo'}
+_SITUATION_LABELS = {'ISOLE': 'Isolé', 'DUO': 'Duo', 'FAMILLE': 'Famille'}
+
+
+def _label(mapping: dict, value):
+    return mapping.get(value, value)
 
 
 class DomaineMutuelle(DomaineWidget):
@@ -36,22 +42,20 @@ class DomaineMutuelle(DomaineWidget):
         btn_bar.setContentsMargins(0, 0, 0, 8)
         if mutuelle:
             btn_consult = EmacButton("Consulter", variant="ghost")
-            btn_consult.clicked.connect(lambda checked=False, m=mutuelle: ConsulterDetailDialog(
-                "Détail de la mutuelle", [
-                    ("Statut", m.get('statut_adhesion')),
-                    ("Motif de dispense", m.get('type_dispense')),
-                    ("Organisme", m.get('organisme')),
-                    ("N° adhérent", m.get('numero_adherent')),
-                    ("Régime", m.get('regime')),
-                    ("Date d'adhésion", self._format_date(m.get('date_adhesion'))),
-                    ("Date de fin", self._format_date(m.get('date_fin'))),
-                    ("Commentaire", m.get('commentaire')),
-                ], self))
+            btn_consult.clicked.connect(
+                lambda checked=False, m=mutuelle: ConsulterDetailDialog(
+                    "Détail de la mutuelle",
+                    self._detail_fields(m),
+                    self,
+                )
+            )
             btn_bar.addWidget(btn_consult)
+
             btn_edit = EmacButton("Modifier", variant="outline")
             btn_edit.setVisible(can("rh.mutuelle.edit"))
             btn_edit.clicked.connect(lambda: self._edit_mutuelle(mutuelle))
             btn_bar.addWidget(btn_edit)
+
             btn_del = EmacButton("Supprimer", variant="danger")
             btn_del.setVisible(can("rh.mutuelle.edit"))
             btn_del.clicked.connect(lambda: self._delete_mutuelle(mutuelle))
@@ -72,32 +76,19 @@ class DomaineMutuelle(DomaineWidget):
                 f"<b>Statut :</b> <span style='color:{color};font-weight:600'>{label_statut}</span>"
             ))
 
-            grid = QGridLayout()
-            grid.setSpacing(12)
-            infos = []
-            if statut == 'DISPENSE' and mutuelle.get('type_dispense'):
-                infos.append(("Motif de dispense", mutuelle['type_dispense']))
-            if statut == 'ADHERENT':
-                if mutuelle.get('organisme'):
-                    infos.append(("Organisme", mutuelle['organisme']))
-                if mutuelle.get('numero_adherent'):
-                    infos.append(("N° adhérent", mutuelle['numero_adherent']))
-                if mutuelle.get('regime'):
-                    infos.append(("Régime", _REGIME_LABELS.get(mutuelle['regime'], mutuelle['regime'])))
-            if mutuelle.get('date_adhesion'):
-                infos.append(("Date d'adhésion", self._format_date(mutuelle['date_adhesion'])))
-            if mutuelle.get('date_fin'):
-                infos.append(("Date de fin", self._format_date(mutuelle['date_fin'])))
-            if mutuelle.get('commentaire'):
-                infos.append(("Commentaire", mutuelle['commentaire']))
-
-            for i, (lbl_txt, val) in enumerate(infos):
-                r, c = divmod(i, 2)
-                lbl = QLabel(f"<b>{lbl_txt}</b><br/>{val}")
-                lbl.setStyleSheet("padding: 8px 12px; background: #f0f4f8; border: 1px solid #cbd5e1; border-radius: 6px;")
-                lbl.setWordWrap(True)
-                grid.addWidget(lbl, r, c)
+            infos = self._summary_fields(mutuelle)
             if infos:
+                grid = QGridLayout()
+                grid.setSpacing(12)
+                for i, (lbl_txt, val) in enumerate(infos):
+                    r, c = divmod(i, 2)
+                    lbl = QLabel(f"<b>{lbl_txt}</b><br/>{val}")
+                    lbl.setStyleSheet(
+                        "padding: 8px 12px; background: #f0f4f8; "
+                        "border: 1px solid #cbd5e1; border-radius: 6px;"
+                    )
+                    lbl.setWordWrap(True)
+                    grid.addWidget(lbl, r, c)
                 card.body.addLayout(grid)
         else:
             no_data = QLabel("Aucune information mutuelle enregistrée.")
@@ -113,11 +104,15 @@ class DomaineMutuelle(DomaineWidget):
             table.setHorizontalHeaderLabels(["Statut", "Organisme", "Régime", "Début", "Fin"])
             table.setRowCount(len(historique))
             hh = table.horizontalHeader()
-            hh.setSectionResizeMode(0, QHeaderView.Fixed); table.setColumnWidth(0, 110)
+            hh.setSectionResizeMode(0, QHeaderView.Fixed)
+            table.setColumnWidth(0, 110)
             hh.setSectionResizeMode(1, QHeaderView.Stretch)
-            hh.setSectionResizeMode(2, QHeaderView.Fixed); table.setColumnWidth(2, 120)
-            hh.setSectionResizeMode(3, QHeaderView.Fixed); table.setColumnWidth(3, 90)
-            hh.setSectionResizeMode(4, QHeaderView.Fixed); table.setColumnWidth(4, 90)
+            hh.setSectionResizeMode(2, QHeaderView.Fixed)
+            table.setColumnWidth(2, 120)
+            hh.setSectionResizeMode(3, QHeaderView.Fixed)
+            table.setColumnWidth(3, 90)
+            hh.setSectionResizeMode(4, QHeaderView.Fixed)
+            table.setColumnWidth(4, 90)
             table.setAlternatingRowColors(True)
             table.setEditTriggers(QAbstractItemView.NoEditTriggers)
             table.setSelectionBehavior(QAbstractItemView.SelectRows)
@@ -131,6 +126,54 @@ class DomaineMutuelle(DomaineWidget):
                 table.setItem(row_idx, 4, QTableWidgetItem(self._format_date(rec.get('date_fin'))))
             card_hist.body.addWidget(table)
             self._layout.addWidget(card_hist)
+
+    def _detail_fields(self, m: dict) -> list:
+        return [
+            ("Statut", _label(_STATUT_LABELS, m.get('statut_adhesion'))),
+            ("Motif de dispense", m.get('type_dispense')),
+            ("Validité justificatif", self._format_date(m.get('justificatif_validite'))),
+            ("Organisme", m.get('organisme')),
+            ("N° adhérent", m.get('numero_adherent')),
+            ("Régime", _label(_REGIME_LABELS, m.get('regime'))),
+            ("Formule", _label(_FORMULE_LABELS, m.get('type_formule'))),
+            ("Situation familiale", _label(_SITUATION_LABELS, m.get('situation_familiale'))),
+            ("DUE signée", "Oui" if m.get('due_signee') else "Non"),
+            ("Date d'adhésion", self._format_date(m.get('date_adhesion'))),
+            ("Date de fin", self._format_date(m.get('date_fin'))),
+            ("Commentaire", m.get('commentaire')),
+        ]
+
+    def _summary_fields(self, mutuelle: dict) -> list:
+        statut = mutuelle.get('statut_adhesion', 'NON_COUVERT')
+        infos = []
+
+        if statut == 'DISPENSE':
+            if mutuelle.get('type_dispense'):
+                infos.append(("Motif de dispense", mutuelle['type_dispense']))
+            if mutuelle.get('justificatif_validite'):
+                infos.append(("Validité justificatif", self._format_date(mutuelle['justificatif_validite'])))
+
+        if statut == 'ADHERENT':
+            if mutuelle.get('organisme'):
+                infos.append(("Organisme", mutuelle['organisme']))
+            if mutuelle.get('numero_adherent'):
+                infos.append(("N° adhérent", mutuelle['numero_adherent']))
+            if mutuelle.get('regime'):
+                infos.append(("Régime", _label(_REGIME_LABELS, mutuelle['regime'])))
+            if mutuelle.get('type_formule'):
+                infos.append(("Formule", _label(_FORMULE_LABELS, mutuelle['type_formule'])))
+            if mutuelle.get('situation_familiale'):
+                infos.append(("Situation familiale", _label(_SITUATION_LABELS, mutuelle['situation_familiale'])))
+            infos.append(("DUE signée", "Oui" if mutuelle.get('due_signee') else "Non"))
+
+        if mutuelle.get('date_adhesion'):
+            infos.append(("Date d'adhésion", self._format_date(mutuelle['date_adhesion'])))
+        if mutuelle.get('date_fin'):
+            infos.append(("Date de fin", self._format_date(mutuelle['date_fin'])))
+        if mutuelle.get('commentaire'):
+            infos.append(("Commentaire", mutuelle['commentaire']))
+
+        return infos
 
     def _add_mutuelle(self):
         if not self._operateur:

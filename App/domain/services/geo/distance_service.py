@@ -30,11 +30,12 @@ from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-_TIMEOUT_SHORT = 5       # APIs rapides (geo.api.gouv.fr)
-_TIMEOUT_LONG = 25       # Overpass peut throttler
+_TIMEOUT_SHORT = 12      # APIs rapides — 12 s pour absorber les SSL handshakes lents
+_TIMEOUT_LONG = 25       # Routing OSRM/ORS
 _ORS_URL = "https://api.openrouteservice.org/v2/directions/driving-car"
 _OSRM_URL = "https://router.project-osrm.org/route/v1/driving"
-_OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+_NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+_NOMINATIM_UA = "EMAC-RH/1.0 (application interne entreprise)"
 
 # ═══════════════════════════════════════════════════════════════
 # Cache de session — garde-fous anti-surconsommation
@@ -70,10 +71,25 @@ _company_mairie_cache: Optional[tuple[float, float]] = None
 
 
 def _get_company_commune_coords() -> Optional[tuple[float, float]]:
-    """Centroïde de la commune de l'entreprise, résolu au premier appel."""
+    """
+    Centroïde de la commune de l'entreprise.
+
+    Priorité :
+      1. EMAC_COMPANY_LAT/LON (coordonnées directes — recommandé, évite INSEE erroné)
+      2. EMAC_COMPANY_INSEE → geo.api.gouv.fr
+    """
     global _company_commune_cache
     if _company_commune_cache is not None:
         return _company_commune_cache
+
+    lat = os.getenv("EMAC_COMPANY_LAT")
+    lon = os.getenv("EMAC_COMPANY_LON")
+    if lat and lon:
+        try:
+            _company_commune_cache = (float(lat), float(lon))
+            return _company_commune_cache
+        except ValueError:
+            logger.error(f"EMAC_COMPANY_LAT/LON invalides : {lat}, {lon}")
 
     code_insee = os.getenv("EMAC_COMPANY_INSEE")
     if not code_insee:
@@ -204,16 +220,22 @@ def resolve_commune(cp: str, ville: str) -> Optional[dict]:
 
 
 # ═══════════════════════════════════════════════════════════════
-# Résolution mairie (OSM Overpass)
+# Résolution mairie (Nominatim OSM)
 # ═══════════════════════════════════════════════════════════════
 
-def get_mairie_coords(commune_nom: str, code_insee: str = None) -> Optional[tuple[float, float]]:
+def get_mairie_coords(
+    commune_nom: str,
+    code_insee: str = None,
+    hint_lat: float = None,
+    hint_lon: float = None,
+) -> Optional[tuple[float, float]]:
     """
-    Retourne (lat, lon) de la mairie d'une commune via OSM Overpass.
+    Retourne (lat, lon) de la mairie d'une commune via Nominatim (OSM).
 
     Args:
-        commune_nom: Nom exact de la commune (ex: 'Anglet')
-        code_insee: Code INSEE pour désambiguïsation (optionnel)
+        commune_nom: Nom de la commune (ex: 'Mauléon-Licharre')
+        code_insee: Non utilisé, conservé pour compatibilité
+        hint_lat/hint_lon: Centroïde de la commune — restreint la recherche via viewbox
     """
     if not commune_nom:
         return None
@@ -222,40 +244,36 @@ def get_mairie_coords(commune_nom: str, code_insee: str = None) -> Optional[tupl
     if cache_key in _mairie_cache:
         return _mairie_cache[cache_key]
 
-    insee_filter = f'["ref:INSEE"="{code_insee}"]' if code_insee else ''
-    query = f"""
-    [out:json][timeout:20];
-    area["ISO3166-1"="FR"]->.france;
-    (
-      node["amenity"="townhall"]["name"="{commune_nom}"]{insee_filter}(area.france);
-      way["amenity"="townhall"]["name"="{commune_nom}"]{insee_filter}(area.france);
-      relation["amenity"="townhall"]["name"="{commune_nom}"]{insee_filter}(area.france);
-    );
-    out center 1;
-    """.strip()
+    params = {
+        'amenity': 'townhall',
+        'city': commune_nom,
+        'country': 'France',
+        'format': 'json',
+        'limit': '1',
+    }
+    if hint_lat is not None and hint_lon is not None:
+        buf = 0.3
+        # Nominatim viewbox : lon_min,lat_max,lon_max,lat_min
+        params['viewbox'] = f"{hint_lon - buf},{hint_lat + buf},{hint_lon + buf},{hint_lat - buf}"
+        params['bounded'] = '1'
 
+    url = f"{_NOMINATIM_URL}?{urllib.parse.urlencode(params)}"
     try:
-        data = urllib.parse.urlencode({'data': query}).encode('utf-8')
-        req = urllib.request.Request(_OVERPASS_URL, data=data)
-        with urllib.request.urlopen(req, timeout=_TIMEOUT_LONG) as resp:
-            result = json.loads(resp.read().decode('utf-8'))
+        req = urllib.request.Request(url, headers={'User-Agent': _NOMINATIM_UA})
+        with urllib.request.urlopen(req, timeout=_TIMEOUT_SHORT) as resp:
+            data = json.loads(resp.read().decode('utf-8'))
     except Exception as e:
-        logger.warning(f"Erreur Overpass (mairie '{commune_nom}'): {e}")
+        logger.warning(f"Erreur Nominatim (mairie '{commune_nom}'): {e}")
         return None
 
-    elements = result.get('elements', [])
-    if not elements:
-        logger.debug(f"Pas de townhall OSM pour '{commune_nom}'")
+    if not data:
+        logger.debug(f"Pas de townhall Nominatim pour '{commune_nom}'")
         return None
 
-    el = elements[0]
-    if el.get('type') == 'node':
-        lat, lon = el.get('lat'), el.get('lon')
-    else:
-        center = el.get('center', {})
-        lat, lon = center.get('lat'), center.get('lon')
-
-    if lat is None or lon is None:
+    place = data[0]
+    try:
+        lat, lon = float(place['lat']), float(place['lon'])
+    except (KeyError, ValueError):
         return None
 
     _mairie_cache[cache_key] = (lat, lon)
@@ -273,7 +291,7 @@ def _compute_route_ors(origin, destination, api_key):
     url = f"{_ORS_URL}?api_key={api_key}&start={origin_str}&end={dest_str}"
 
     try:
-        with urllib.request.urlopen(url, timeout=_TIMEOUT_SHORT) as resp:
+        with urllib.request.urlopen(url, timeout=_TIMEOUT_LONG) as resp:
             data = json.loads(resp.read().decode('utf-8'))
     except Exception as e:
         logger.warning(f"Erreur ORS: {e}")
@@ -295,7 +313,7 @@ def _compute_route_osrm(origin, destination):
     url = f"{_OSRM_URL}/{coords}?overview=false"
 
     try:
-        with urllib.request.urlopen(url, timeout=_TIMEOUT_SHORT) as resp:
+        with urllib.request.urlopen(url, timeout=_TIMEOUT_LONG) as resp:
             data = json.loads(resp.read().decode('utf-8'))
     except Exception as e:
         logger.warning(f"Erreur OSRM: {e}")
@@ -312,6 +330,7 @@ def _compute_route_osrm(origin, destination):
 
 def _compute_route(origin, destination):
     """Calcul de route avec ORS si clé définie, sinon OSRM."""
+    logger.info(f"Route: origin=(lat={origin[0]:.5f}, lon={origin[1]:.5f}) → dest=(lat={destination[0]:.5f}, lon={destination[1]:.5f})")
     api_key = os.getenv("EMAC_ORS_API_KEY")
     if api_key:
         result = _compute_route_ors(origin, destination, api_key)
@@ -380,7 +399,10 @@ def compute_distances_for_commune(cp: str, ville: str) -> Optional[dict]:
             result['distance_commune_km'], result['duree_trajet_commune_min'] = route
             any_success = True
 
-    mairie = get_mairie_coords(commune['nom'], commune['code_insee'])
+    mairie = get_mairie_coords(
+        commune['nom'], commune['code_insee'],
+        hint_lat=commune['lat'], hint_lon=commune['lon'],
+    )
     if mairie:
         result['mairie_lat'], result['mairie_lon'] = mairie
         company_mairie = _get_company_mairie_coords()

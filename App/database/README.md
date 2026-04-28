@@ -1,72 +1,85 @@
 # Base de données EMAC
 
-Ce répertoire contient tous les fichiers liés à la base de données MySQL de l'application EMAC.
+Ce dossier regroupe les schémas, migrations, diagnostics et scripts de déploiement liés à la base EMAC.
 
 ## Structure
 
 ```
 database/
-├── schema/        # Schémas de base de données
-├── migrations/    # Scripts de migration
-└── backups/       # Sauvegardes SQL
+├── schema/                 # Schémas de référence
+├── migrations/             # Migrations SQL suivies par le CLI
+│   ├── archive/            # Anciennes migrations conservées pour historique
+│   └── rollback/           # Scripts de rollback ciblés
+├── diagnostics/            # Requêtes de diagnostic/performance
+├── backups/                # Sauvegardes locales, ignorées par Git
+├── deploy_incremental.sql  # Ancien script de déploiement incrémental
+├── deploy_to_server.bat    # Assistant Windows legacy
+└── DEPLOY_README.md
 ```
 
-## Schémas
+## Schémas de référence
 
-### schema/bddemac.sql
-Schéma principal de la base de données contenant :
-- Tables de personnel (personnel, operateurs)
-- Tables de postes et ateliers
-- Tables de polyvalence et évaluations
-- Tables de contrats
-- Tables d'historique et logs
-- Tables d'absences et congés
+- `schema/emac_structure_mariadb.sql` : structure actuelle de référence.
+- `schema/historique_polyvalence.sql` : schéma historique lié à la polyvalence.
+
+Les anciens dumps SQL présents à la racine du dossier servent d'historique ou de support de reprise. Pour l'évolution courante, privilégier les migrations.
 
 ## Migrations
 
-### migrations/schema_absences_conges.sql
-Migration pour ajouter la gestion des absences et congés.
+Les migrations actives sont dans `migrations/` et suivent le format `NNN_description.sql`. Elles sont suivies en base dans la table `schema_migrations` par nom de fichier complet.
 
-Pour appliquer une migration :
-```bash
-mysql -u root emac_db < App/database/migrations/schema_absences_conges.sql
-```
-
-## Sauvegardes
-
-Le dossier `backups/` contient les sauvegardes SQL horodatées :
-- bddserver.sql
-- bddserver2.sql
-- bddserver3.sql
-- bddserver4.sql
-- bddserver9.sql
-- bddserver11.sql
-- bddserver12.sql
-- dumpemacbdd.sql
-
-### Restaurer une sauvegarde
+Commandes depuis `App/` :
 
 ```bash
-# Créer une nouvelle base de données
-mysql -u root -e "CREATE DATABASE emac_db_restore CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
-
-# Restaurer depuis une sauvegarde
-mysql -u root emac_db_restore < App/database/backups/bddserver12.sql
+python -m cli migrate --status
+python -m cli migrate --apply-all
+python -m cli migrate --apply 054_password_upgrade_flag.sql
+python -m cli migrate --mark-applied-all
 ```
 
-### Créer une nouvelle sauvegarde
+Les dernières migrations présentes sont :
 
-```bash
-mysqldump -u root emac_db > App/database/backups/bddserver_$(date +%Y%m%d).sql
-```
+- `052_unique_personnel_competences.sql`
+- `053_fulltext_historique.sql`
+- `054_password_upgrade_flag.sql`
+
+Voir [migrations/README.md](migrations/README.md) et [migrations/MIGRATION_LOG.md](migrations/MIGRATION_LOG.md).
 
 ## Configuration de connexion
 
-La configuration de connexion se trouve dans [App/core/db/configbd.py](../core/db/configbd.py).
+Le code de connexion est dans `App/infrastructure/db/configbd.py`.
 
-**Configuration actuelle :**
-- Host: 192.168.1.128
-- User: gestionrh
-- Database: emac_db
-- Port: 3306
-- Charset: utf8mb4
+La configuration se fait via `App/.env` :
+
+```env
+EMAC_DB_HOST=127.0.0.1
+EMAC_DB_PORT=3306
+EMAC_DB_USER=gestionrh
+EMAC_DB_PASSWORD=votre_mot_de_passe
+EMAC_DB_NAME=emac_db
+```
+
+Ne documenter aucun mot de passe réel dans ce dossier.
+
+## Sauvegarde et restauration
+
+Créer une sauvegarde :
+
+```bash
+mysqldump -u gestionrh -p emac_db > App/database/backups/emac_db_YYYYMMDD.sql
+```
+
+Restaurer dans une base dédiée :
+
+```bash
+mysql -u root -p -e "CREATE DATABASE emac_db_restore CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+mysql -u root -p emac_db_restore < App/database/backups/emac_db_YYYYMMDD.sql
+```
+
+## Bonnes pratiques
+
+- Créer une migration SQL pour toute évolution de schéma.
+- Rendre les migrations idempotentes quand c'est possible.
+- Ne pas renommer une migration déjà appliquée en production.
+- Tester `python -m cli migrate --status` avant un déploiement.
+- Sauvegarder la base avant toute migration structurelle.

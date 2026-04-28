@@ -1,199 +1,139 @@
-# EMAC — Application
+# EMAC - Application
 
-Application PyQt5 de bureau pour la gestion RH et polyvalence en milieu industriel.
-
----
-
-## Démarrage rapide
-
-### Développeurs
-
-```bash
-# 1. Dépendances
-pip install -r requirements.txt
-
-# 2. Configuration base de données
-cd config && configure_db.bat
-
-# 3. Lancement
-cd .. && py -m gui.main_qt
-```
-
-### Utilisateurs (réseau)
-
-```
-Double-clic sur EMAC.exe (depuis le partage réseau)
-```
-
----
+Application PyQt5 de bureau pour la gestion RH, la polyvalence et les processus administratifs en environnement industriel.
 
 ## Technologies
 
 | Couche | Technologie |
-|--------|-------------|
+|---|---|
 | Interface | PyQt5 5.15 |
-| Base de données | MySQL 8.0 |
-| Connecteur DB | mysql-connector-python |
-| Sécurité | bcrypt, Fernet |
-| Exports | openpyxl, reportlab, pandas |
-| Géolocalisation | geo.api.gouv.fr, OSM Overpass, OSRM |
-| Compilation | PyInstaller |
+| Base de données | MySQL / MariaDB |
+| Connecteur DB | `mysql-connector-python` |
+| Sécurité | `bcrypt`, `cryptography`, permissions granulaires |
+| Exports | `openpyxl`, `reportlab` |
+| Géolocalisation | `geo.api.gouv.fr`, Overpass, OSRM/OpenRouteService |
+| Packaging | PyInstaller |
 | Python | 3.12 |
 
----
+## Lancement
+
+Depuis ce dossier :
+
+```bash
+pip install -r requirements.txt
+py -m gui.main_qt
+```
+
+Ou via le lanceur Windows :
+
+```text
+run_emac.vbs
+```
+
+En production, l'utilisateur lance `EMAC.exe` depuis le dossier ou partage réseau préparé.
 
 ## Structure
 
 ```
 App/
-├── domain/                   # Logique métier
-│   ├── repositories/         # Accès données (Repository pattern)
-│   └── services/             # Services par domaine (rh, geo, planning…)
-│
-├── infrastructure/           # Couche technique
-│   ├── db/                   # Pool MySQL, QueryExecutor
-│   ├── logging/              # log_hist / log_hist_async
-│   ├── cache/                # emac_cache
-│   ├── config/
-│   └── security/
-│
-├── application/              # Cas d'utilisation transverses
-│   └── permission_manager.py # Permissions / features (singleton)
-│
-├── gui/                      # Interface PyQt5
-│   ├── main_qt.py            # Fenêtre principale
-│   ├── components/           # Widgets réutilisables
-│   ├── screens/              # Écrans par domaine
-│   ├── view_models/
-│   └── workers/              # DbWorker, threads
-│
-├── config/                   # .env.example, configure_db.bat
-├── database/                 # Schéma SQL, migrations (~45), backups
-├── scripts/                  # Scripts maintenance et migration
-├── tests/                    # Tests unitaires et d'intégration
-├── logs/                     # emac.log + crash.log  (Git ignore)
-├── .env                      # Configuration locale  (Git ignore)
-├── requirements.txt
-└── run_emac.vbs              # Lanceur Windows
+├── main.py                         # Point d'entrée avec login puis fenêtre principale
+├── __main__.py
+├── application/                    # Permissions, event bus, triggers documents
+├── cli/                            # Commandes CLI, dont migrations
+├── config/                         # .env.example et configure_db.bat
+├── database/                       # Schémas, migrations, déploiement
+├── domain/
+│   ├── models.py
+│   ├── repositories/               # Accès données orienté domaine
+│   └── services/                   # Services métier RH, formation, planning...
+├── gui/
+│   ├── main_qt.py                  # Bootstrap GUI
+│   ├── main_qt/                    # MainWindow découpée
+│   ├── components/                 # UI kit, dialogs, thème
+│   ├── screens/                    # Écrans par domaine
+│   ├── view_models/                # État et logique de présentation
+│   └── workers/                    # Threads / chargement asynchrone
+├── infrastructure/
+│   ├── db/                         # Pool DB, QueryExecutor
+│   ├── cache/                      # Cache applicatif
+│   ├── config/                     # Chemins, dates, monitoring
+│   ├── logging/                    # Logs applicatifs et audit
+│   └── security/                   # Sécurité config, hors secret réel
+├── scripts/                        # Scripts de maintenance
+├── templates/                      # Modèles bureautiques
+└── tests/                          # Unitaires, intégration, smoke
 ```
-
-[Structure détaillée](../docs/STRUCTURE.md)
-
----
 
 ## Configuration
 
-Le mot de passe DB **ne doit pas** être dans le code source.
-Créer `App/.env` :
+Le mot de passe DB n'est pas dans le code source. Créer `App/.env` :
 
 ```env
-EMAC_DB_HOST=localhost
-EMAC_DB_USER=root
+EMAC_DB_HOST=127.0.0.1
+EMAC_DB_PORT=3306
+EMAC_DB_USER=gestionrh
 EMAC_DB_PASSWORD=votre_mot_de_passe
 EMAC_DB_NAME=emac_db
+EMAC_DB_POOL_SIZE=10
 ```
 
-> `.env` est dans `.gitignore` — ne jamais commiter.
+Variables optionnelles pour la distance domicile :
 
-[Guide complet](config/README.md)
+```env
+EMAC_COMPANY_INSEE=00000
+EMAC_COMPANY_COMMUNE=Votre commune
+EMAC_COMPANY_LAT=00.0000
+EMAC_COMPANY_LON=0.0000
+EMAC_COMPANY_MAIRIE_LAT=00.0000
+EMAC_COMPANY_MAIRIE_LON=0.0000
+OPENROUTESERVICE_API_KEY=
+```
 
----
+## Conventions de développement
 
-## Base de données
-
-| Table | Description |
-|-------|-------------|
-| `personnel` | Employés (nom, matricule, statut) |
-| `personnel_infos` | Infos complémentaires (adresse, commune, distance) |
-| `postes` | Postes de travail |
-| `atelier` | Ateliers (contiennent des postes) |
-| `polyvalence` | Compétences employé×poste (niveaux 1–4) |
-| `historique` | Audit trail global |
-| `historique_polyvalence` | Historique polyvalence |
-| `contrats` | CDI, CDD, intérim |
-| `absences` | Congés, RTT, maladie |
-| `documents` | GED (upload, catégorie, expiration) |
-| `users` | Comptes applicatifs (bcrypt) |
-| `features` | Permissions granulaires |
-
-Schéma : [database/schema/bddemac.sql](database/schema/bddemac.sql)
-Migrations : [database/migrations/](database/migrations/)
-
----
+- Imports actuels : `infrastructure.*`, `domain.*`, `application.*`, `gui.*`.
+- Accès DB : utiliser `QueryExecutor` ou les repositories/services.
+- GUI : éviter le SQL direct dans les écrans ; passer par les services ou view models.
+- Dates : utiliser les helpers de formatage du projet.
+- Audit : utiliser les services de logging existants.
+- Permissions : passer par `application.permission_manager`.
+- Secrets : ne jamais commiter `.env`, `.env.encrypted` ni clé de chiffrement réelle.
 
 ## Fonctionnalités
 
-- Personnel — fiches, matricules, statuts
-- Polyvalence — matrice compétences, 4 niveaux, historique
-- Évaluations — planification auto, alertes échéances
-- Absences — congés, RTT, maladie, planning visuel
-- Contrats — CDI/CDD/intérim, alertes renouvellement
-- Documents — GED intégrée, templates, expiration
-- RH intégré — vue unifiée par domaine (contrat, médical, vie salarié…)
-- Distance domicile — calcul distance commune/mairie entreprise via OSM (RGPD-friendly)
-- Permissions — rôles + features granulaires par utilisateur
-- Audit — historique complet de toutes les actions
+- Personnel, fiches salariés et données complémentaires.
+- Polyvalence, grilles, niveaux, évaluations et historique.
+- Formation, catalogue, besoins par poste, attestations.
+- Contrats, absences, congés, planning et régularisation.
+- RH intégré : médical, mutuelle, mobilité, déclarations, compétences, vie salarié.
+- Documents RH, templates, expiration et règles automatiques.
+- Distance domicile par commune/mairie, approche RGPD-friendly.
+- Administration : utilisateurs, rôles, permissions, modules.
+- Audit : historique applicatif, connexions et tentatives échouées.
 
----
+## Base de données
 
-## Développement
+```bash
+python -m cli migrate --status
+python -m cli migrate --apply-all
+```
 
-### Conventions
-
-- **Encodage** : UTF-8 + `# -*- coding: utf-8 -*-`
-- **Langue UI** : Français
-- **Dates affichage** : `format_date()` / `format_datetime()` depuis `domain/services/`
-- **Logging** : `log_hist()` / `log_hist_async()` depuis `infrastructure/logging/optimized_db_logger.py`
-- **Accès DB** : `QueryExecutor` depuis `infrastructure/db/query_executor.py` (jamais `mysql.connector.connect()` direct)
-- **GUI → DB** : toujours via `domain/services/` ou `domain/repositories/` — jamais d'accès DB direct dans `gui/`
-
-### Ajouter une fonctionnalité
-
-1. Service dans `domain/services/` (hériter de `CRUDService` si CRUD)
-2. Dialog dans `gui/screens/` (hériter de `EmacFormDialog`)
-3. Intégrer dans `gui/main_qt.py`
-4. Tests dans `tests/`
-
-[Guide complet](../CLAUDE.md)
-
----
+Les migrations actives vont jusqu'à `054_password_upgrade_flag.sql`. Le suivi se fait dans `schema_migrations` par nom de fichier.
 
 ## Tests
 
 ```bash
-py -m pytest tests/
+python -m pytest tests/ -v
+python -m pytest tests/ -v -m "not integration"
 ```
 
----
+Voir [tests/README_TESTS.md](tests/README_TESTS.md).
 
 ## Compilation
+
+Depuis la racine du dépôt :
 
 ```bash
 cd build-scripts
 build_optimized.bat
-# → dist/EMAC/EMAC.exe
 ```
-
----
-
-## Dépannage
-
-| Problème | Solution |
-|----------|----------|
-| `ModuleNotFoundError` | `pip install -r requirements.txt` |
-| `Can't connect to MySQL` | Vérifier `App/.env` et que MySQL est démarré |
-| `.exe ne démarre pas` | Vérifier que `_internal/` est présent et `App/.env` existe |
-| `Access Denied` MySQL | Vérifier les permissions de l'utilisateur dans MySQL |
-| Logs introuvables | `App/logs/emac.log` et `App/logs/crash.log` |
-
----
-
-## Logs
-
-- Développement : `App/logs/emac.log`
-- Crash : `App/logs/crash.log`
-- Production : `dist/EMAC/logs/`
-
----
-
-**v3.1** · 2026-04-20 · Production

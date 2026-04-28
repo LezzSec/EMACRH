@@ -47,39 +47,261 @@ def get_historique_mobilite(personnel_id: int) -> List[Dict]:
     )
 
 
-def get_prime_courante(personnel_id: int) -> Optional[Dict]:
-    """
-    Retourne la prime et le taux IK applicables aujourd'hui pour le salarié,
-    en passant par la vue v_personnel_prime_mobilite.
-    """
+def _distance_prime_source(personnel_id: int) -> Optional[Dict]:
+    """Retourne la distance à utiliser pour la prime mobilité."""
+    row = QueryExecutor.fetch_one(
+        """
+        SELECT
+            p.id AS personnel_id, p.nom, p.prenom, p.matricule,
+            pm.id AS mobilite_id, pm.mode_transport, pm.distance_km, pm.cv_fiscaux,
+            pm.ville_depart, pm.cp_depart, pm.date_effet AS date_effet_distance,
+            'personnel_mobilite' AS source_distance
+        FROM personnel p
+        JOIN personnel_mobilite pm
+          ON pm.personnel_id = p.id
+         AND pm.actif = 1
+         AND pm.date_fin IS NULL
+         AND pm.date_effet <= CURDATE()
+        WHERE p.id = %s AND UPPER(COALESCE(p.statut, '')) = 'ACTIF'
+        ORDER BY pm.date_effet DESC, pm.id DESC
+        LIMIT 1
+        """,
+        (personnel_id,),
+        dictionary=True,
+    )
+    if row and row.get('distance_km') is not None:
+        return row
+
     return QueryExecutor.fetch_one(
-        "SELECT * FROM v_personnel_prime_mobilite WHERE personnel_id = %s",
+        """
+        SELECT
+            p.id AS personnel_id, p.nom, p.prenom, p.matricule,
+            NULL AS mobilite_id,
+            'voiture' AS mode_transport,
+            COALESCE(pi.distance_mairie_km, pi.distance_commune_km, pi.distance_domicile_km) AS distance_km,
+            pv.cv_fiscaux AS cv_fiscaux,
+            pi.ville_adresse AS ville_depart,
+            pi.cp_adresse AS cp_depart,
+            pi.distance_calculee_at AS date_effet_distance,
+            CASE
+              WHEN pi.distance_mairie_km IS NOT NULL THEN 'personnel_infos.distance_mairie_km'
+              WHEN pi.distance_commune_km IS NOT NULL THEN 'personnel_infos.distance_commune_km'
+              WHEN pi.distance_domicile_km IS NOT NULL THEN 'personnel_infos.distance_domicile_km'
+              ELSE NULL
+            END AS source_distance
+        FROM personnel p
+        LEFT JOIN personnel_infos pi ON pi.personnel_id = p.id
+        LEFT JOIN personnel_vehicule pv
+          ON pv.personnel_id = p.id
+         AND pv.actif = 1
+         AND pv.date_fin IS NULL
+        WHERE p.id = %s
+          AND UPPER(COALESCE(p.statut, '')) = 'ACTIF'
+          AND COALESCE(pi.distance_mairie_km, pi.distance_commune_km, pi.distance_domicile_km) IS NOT NULL
+        ORDER BY pv.date_debut DESC, pv.id DESC
+        LIMIT 1
+        """,
         (personnel_id,),
         dictionary=True,
     )
 
 
-def get_toutes_primes_actives() -> List[Dict]:
-    """Retourne la prime applicable pour tous les salariés actifs (vue complète)."""
+def get_prime_courante(personnel_id: int) -> Optional[Dict]:
+    """Retourne la prime et le taux IK applicables aujourd'hui, sans dépendre de la vue SQL."""
+    src = _distance_prime_source(personnel_id)
+    if not src or src.get('distance_km') is None:
+        return None
+
+    distance = float(src['distance_km'])
+    prime = calculer_prime(distance)
+    ik = calculer_ik(int(src['cv_fiscaux'])) if src.get('cv_fiscaux') else None
+
+    return {
+        **src,
+        'prime_journaliere': prime.get('taux_journalier') if prime else None,
+        'palier_libelle': prime.get('description') if prime else None,
+        'date_effet_bareme': prime.get('date_effet') if prime else None,
+        'ik_taux_km': ik.get('taux_km') if ik else None,
+        'ik_libelle': ik.get('description') if ik else None,
+    }
+
+
+def _get_baremes_prime_applicables(reference_date: date) -> List[Dict]:
+    """Retourne les paliers applicables a une date, tries du plus recent au plus ancien."""
     return QueryExecutor.fetch_all(
-        "SELECT * FROM v_personnel_prime_mobilite ORDER BY nom, prenom",
+        """
+        SELECT taux_journalier, description, date_effet, distance_min_km, distance_max_km
+        FROM mobilite_palier
+        WHERE actif = 1
+          AND date_effet <= %s
+          AND (date_fin_effet IS NULL OR date_fin_effet >= %s)
+        ORDER BY date_effet DESC, distance_min_km
+        """,
+        (reference_date, reference_date),
         dictionary=True,
     )
+
+
+def _get_baremes_ik_applicables(reference_date: date) -> List[Dict]:
+    """Retourne les baremes IK applicables a une date, tries du plus recent au plus ancien."""
+    return QueryExecutor.fetch_all(
+        """
+        SELECT taux_km, description, date_effet, cv_min, cv_max
+        FROM mobilite_ik
+        WHERE actif = 1
+          AND date_effet <= %s
+          AND (date_fin_effet IS NULL OR date_fin_effet >= %s)
+        ORDER BY date_effet DESC, cv_min
+        """,
+        (reference_date, reference_date),
+        dictionary=True,
+    )
+
+
+def _match_prime_bareme(distance_km: float, paliers: List[Dict]) -> Optional[Dict]:
+    """Trouve en memoire le palier correspondant a une distance."""
+    if distance_km is None:
+        return None
+
+    distance_palier = normaliser_distance_palier(distance_km)
+    for palier in paliers:
+        distance_min = float(palier['distance_min_km'])
+        distance_max = palier.get('distance_max_km')
+        if distance_palier < distance_min:
+            continue
+        if distance_max is not None and distance_palier > float(distance_max):
+            continue
+        return palier
+    return None
+
+
+def _match_ik_bareme(cv_fiscaux: Optional[int], baremes: List[Dict]) -> Optional[Dict]:
+    """Trouve en memoire le bareme IK correspondant a des CV fiscaux."""
+    if not cv_fiscaux:
+        return None
+
+    cv = int(cv_fiscaux)
+    for bareme in baremes:
+        cv_min = int(bareme['cv_min'])
+        cv_max = bareme.get('cv_max')
+        if cv < cv_min:
+            continue
+        if cv_max is not None and cv > int(cv_max):
+            continue
+        return bareme
+    return None
+
+
+def get_toutes_primes_actives() -> List[Dict]:
+    """Retourne la prime applicable pour tous les salaries actifs."""
+    ref = date.today()
+    paliers = _get_baremes_prime_applicables(ref)
+    baremes_ik = _get_baremes_ik_applicables(ref)
+
+    mobilite_rows = QueryExecutor.fetch_all(
+        """
+        SELECT
+            p.id AS personnel_id, p.nom, p.prenom, p.matricule,
+            pm.id AS mobilite_id, pm.mode_transport, pm.distance_km, pm.cv_fiscaux,
+            pm.ville_depart, pm.cp_depart, pm.date_effet AS date_effet_distance,
+            'personnel_mobilite' AS source_distance
+        FROM personnel p
+        JOIN personnel_mobilite pm
+          ON pm.personnel_id = p.id
+         AND pm.actif = 1
+         AND pm.date_fin IS NULL
+         AND pm.date_effet <= CURDATE()
+        WHERE UPPER(COALESCE(p.statut, '')) = 'ACTIF'
+          AND pm.distance_km IS NOT NULL
+        ORDER BY p.nom, p.prenom, p.id, pm.date_effet DESC, pm.id DESC
+        """,
+        dictionary=True,
+    )
+
+    sources_by_personnel: Dict[int, Dict] = {}
+    for row in mobilite_rows:
+        sources_by_personnel.setdefault(row['personnel_id'], row)
+
+    fallback_rows = QueryExecutor.fetch_all(
+        """
+        SELECT
+            p.id AS personnel_id, p.nom, p.prenom, p.matricule,
+            NULL AS mobilite_id,
+            'voiture' AS mode_transport,
+            COALESCE(pi.distance_mairie_km, pi.distance_commune_km, pi.distance_domicile_km) AS distance_km,
+            pv.cv_fiscaux AS cv_fiscaux,
+            pi.ville_adresse AS ville_depart,
+            pi.cp_adresse AS cp_depart,
+            pi.distance_calculee_at AS date_effet_distance,
+            CASE
+              WHEN pi.distance_mairie_km IS NOT NULL THEN 'personnel_infos.distance_mairie_km'
+              WHEN pi.distance_commune_km IS NOT NULL THEN 'personnel_infos.distance_commune_km'
+              WHEN pi.distance_domicile_km IS NOT NULL THEN 'personnel_infos.distance_domicile_km'
+              ELSE NULL
+            END AS source_distance
+        FROM personnel p
+        LEFT JOIN personnel_infos pi ON pi.personnel_id = p.id
+        LEFT JOIN personnel_vehicule pv
+          ON pv.personnel_id = p.id
+         AND pv.actif = 1
+         AND pv.date_fin IS NULL
+        WHERE UPPER(COALESCE(p.statut, '')) = 'ACTIF'
+          AND COALESCE(pi.distance_mairie_km, pi.distance_commune_km, pi.distance_domicile_km) IS NOT NULL
+        ORDER BY p.nom, p.prenom, p.id, pv.date_debut DESC, pv.id DESC
+        """,
+        dictionary=True,
+    )
+    for row in fallback_rows:
+        sources_by_personnel.setdefault(row['personnel_id'], row)
+
+    result = []
+    rows = sorted(
+        sources_by_personnel.values(),
+        key=lambda r: ((r.get('nom') or ''), (r.get('prenom') or ''), r.get('personnel_id') or 0),
+    )
+    for src in rows:
+        distance = float(src['distance_km'])
+        prime = _match_prime_bareme(distance, paliers)
+        ik = _match_ik_bareme(src.get('cv_fiscaux'), baremes_ik)
+        result.append({
+            **src,
+            'prime_journaliere': prime.get('taux_journalier') if prime else None,
+            'palier_libelle': prime.get('description') if prime else None,
+            'date_effet_bareme': prime.get('date_effet') if prime else None,
+            'ik_taux_km': ik.get('taux_km') if ik else None,
+            'ik_libelle': ik.get('description') if ik else None,
+        })
+    return result
 
 
 # ---------------------------------------------------------------------------
 # Calcul explicite (sans passer par la vue)
 # ---------------------------------------------------------------------------
 
+def normaliser_distance_palier(distance_km: float) -> int:
+    """
+    Retourne le kilomètre entier utilisé pour chercher le palier mobilité.
+
+    La règle métier prend l'unité du kilométrage, sans arrondir au-dessus :
+    6.52 km compte comme 6 km, 13.9 km comme 13 km.
+    """
+    return int(float(distance_km))
+
+
 def calculer_prime(distance_km: float, reference_date: Optional[date] = None) -> Optional[Dict]:
     """
-    Retourne le palier de prime applicable pour une distance donnée
-    à une date de référence (par défaut aujourd'hui).
+    Retourne le palier de prime applicable pour une distance donnée.
 
-    Retourne un dict avec : taux_journalier, description, date_effet
-    ou None si aucun palier ne correspond.
+    Les paliers sont en kilomètres entiers (0-6, 7-13, etc.) alors que
+    les distances calculées peuvent être décimales. On utilise la partie
+    entière de la distance : 6.52 km compte comme 6 km, 13.9 km comme 13 km.
     """
+    if distance_km is None:
+        return None
+
     ref = reference_date or date.today()
+    distance_palier = normaliser_distance_palier(distance_km)
+
     return QueryExecutor.fetch_one(
         """
         SELECT taux_journalier, description, date_effet
@@ -92,10 +314,9 @@ def calculer_prime(distance_km: float, reference_date: Optional[date] = None) ->
         ORDER BY date_effet DESC
         LIMIT 1
         """,
-        (ref, ref, distance_km, distance_km),
+        (ref, ref, distance_palier, distance_palier),
         dictionary=True,
     )
-
 
 def calculer_ik(cv_fiscaux: int, reference_date: Optional[date] = None) -> Optional[Dict]:
     """

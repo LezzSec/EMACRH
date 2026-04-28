@@ -40,6 +40,7 @@ _ENTITE_QUERIES: Dict[str, str] = {
 _DOC_SELECT = """
     SELECT
         d.id, d.personnel_id, d.categorie_id,
+        d.formation_id, d.contrat_id, d.declaration_id,
         d.nom_fichier, d.nom_affichage, d.chemin_fichier,
         d.type_mime, d.taille_octets, d.date_upload,
         d.date_expiration, d.statut, d.notes, d.uploaded_by,

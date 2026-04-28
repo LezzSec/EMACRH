@@ -3,14 +3,14 @@
 Dialogs mobilité : véhicule et distance domicile-entreprise.
 """
 
-from PyQt5.QtWidgets import QFormLayout, QComboBox, QLineEdit, QDateEdit, QSpinBox, QDoubleSpinBox, QTextEdit
+from PyQt5.QtWidgets import QFormLayout, QComboBox, QLineEdit, QDateEdit, QSpinBox, QDoubleSpinBox, QTextEdit, QGroupBox
 from PyQt5.QtCore import QDate
 
 from gui.components.emac_dialog import EmacFormDialog
 from domain.services.rh.mobilite_service import (
     create_vehicule, update_vehicule,
     create_mobilite, update_mobilite,
-    calculer_prime, calculer_ik,
+    calculer_prime, calculer_ik, normaliser_distance_palier,
 )
 
 
@@ -34,7 +34,8 @@ class EditVehiculeDialog(EmacFormDialog):
         super().__init__(title=title, min_width=420, min_height=360, add_title_bar=False, parent=parent)
 
     def init_ui(self):
-        form = QFormLayout()
+        vehicule_group = QGroupBox("Véhicule utilisé")
+        form = QFormLayout(vehicule_group)
         form.setSpacing(10)
 
         self.marque = QLineEdit(self.vehicule.get('marque') or '')
@@ -86,7 +87,7 @@ class EditVehiculeDialog(EmacFormDialog):
         self.notes.setText(self.vehicule.get('notes') or '')
         form.addRow("Notes :", self.notes)
 
-        self.content_layout.addLayout(form)
+        self.content_layout.addWidget(vehicule_group)
 
     def validate(self):
         if self.cv_fiscaux.value() < 1:
@@ -168,7 +169,8 @@ class EditMobiliteDialog(EmacFormDialog):
             banner_layout.addWidget(btn_use)
             self.content_layout.addWidget(banner)
 
-        form = QFormLayout()
+        mobilite_group = QGroupBox("Distance et mode de transport")
+        form = QFormLayout(mobilite_group)
         form.setSpacing(10)
 
         self.distance = QDoubleSpinBox()
@@ -229,7 +231,7 @@ class EditMobiliteDialog(EmacFormDialog):
             self.date_effet.setDate(QDate.currentDate())
         form.addRow("Date d'effet :", self.date_effet)
 
-        self.content_layout.addLayout(form)
+        self.content_layout.addWidget(mobilite_group)
 
         # Bouton recalcul distance
         from PyQt5.QtWidgets import QPushButton, QHBoxLayout, QWidget, QLabel as _QLabel
@@ -268,7 +270,11 @@ class EditMobiliteDialog(EmacFormDialog):
         if dist > 0:
             prime = calculer_prime(dist)
             if prime:
-                lines.append(f"Prime mobilité : <b>{prime['taux_journalier']} €/jour</b>  ({prime['description']})")
+                distance_palier = normaliser_distance_palier(dist)
+                lines.append(
+                    f"Prime mobilité : <b>{prime['taux_journalier']} €/jour</b>  "
+                    f"({prime['description']} — palier calculé sur {distance_palier} km)"
+                )
             else:
                 lines.append("Prime mobilité : aucun palier applicable")
         if cv > 0:
@@ -282,7 +288,7 @@ class EditMobiliteDialog(EmacFormDialog):
             self._apercu.setVisible(False)
 
     def _recalculer_distance(self):
-        from gui.workers.db_worker import DbWorker
+        from gui.workers.db_worker import DbWorker, DbThreadPool
         from domain.services.geo.distance_service import compute_distances_for_commune
 
         cp = self.cp.text().strip() or self.mobilite.get('cp_depart', '')
@@ -297,11 +303,10 @@ class EditMobiliteDialog(EmacFormDialog):
         self._recalc_status.setText("Calcul en cours...")
         self._recalc_status.setStyleSheet("font-size: 11px; color: #64748b;")
 
-        DbWorker(
-            lambda: compute_distances_for_commune(cp, ville),
-            self._on_recalc_result,
-            self._on_recalc_error,
-        )
+        worker = DbWorker(lambda **_: compute_distances_for_commune(cp, ville))
+        worker.signals.result.connect(self._on_recalc_result)
+        worker.signals.error.connect(self._on_recalc_error)
+        DbThreadPool.start(worker)
 
     def _on_recalc_result(self, result):
         self._recalc_btn.setEnabled(True)

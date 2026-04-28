@@ -237,11 +237,15 @@ class DomaineMedical(DomaineWidget):
                 btn_consult.clicked.connect(lambda checked, a=acc: ConsulterDetailDialog(
                     "Détail de l'accident", [
                         ("Date", self._format_date(a.get('date_accident'))),
+                        ("Heure", a.get('heure_accident')),
+                        ("Jour", a.get('jour_semaine')),
+                        ("Lieu / poste", a.get('lieu_accident')),
                         ("Avec arrêt", "Oui" if a.get('avec_arret') else "Non"),
                         ("Nb jours d'absence", a.get('nb_jours_absence')),
                         ("Siège des lésions", a.get('siege_lesions')),
                         ("Nature des lésions", a.get('nature_lesions')),
-                        ("Description", a.get('description')),
+                        ("Circonstances", a.get('circonstances')),
+                        ("Prolongations", a.get('nb_prolongations')),
                         ("Commentaire", a.get('commentaire')),
                     ], self))
                 actions_row.addWidget(btn_consult)

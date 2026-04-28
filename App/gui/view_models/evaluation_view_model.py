@@ -248,19 +248,40 @@ class EvaluationViewModel(QObject):
             poste_code = poste.get('code') if poste else None
             poste_nom = poste.get('nom') if poste else None
 
-            EventBus.emit('polyvalence_niveau_changed', {
+            event_data = {
                 'polyvalence_id': poly_id,
                 'operateur_id': operateur_id,
                 'nom': operateur_nom,
                 'poste_id': poste_id,
                 'poste_code': poste_code,
                 'poste_nom': poste_nom,
-                'ancien_niveau': ancien_niveau,
-                'nouveau_niveau': nouveau_niveau,
+                'old_niveau': ancien_niveau,
+                'new_niveau': nouveau_niveau,
                 'prochaine_evaluation': prochaine_eval,
-                'premier_niveau_1': (
-                    nouveau_niveau == 1 and not has_operateur_deja_eu_niveau_1(operateur_id, poste_id)
-                ),
-            })
+            }
+
+            EventBus.emit('polyvalence.niveau_changed', event_data,
+                          source='EvaluationViewModel.mettre_a_jour_niveau')
+
+            if nouveau_niveau == 1:
+                is_premier = not has_operateur_deja_eu_niveau_1(
+                    operateur_id,
+                    old_niveau=ancien_niveau,
+                    exclude_poste_id=None,
+                )
+                EventBus.emit('polyvalence.niveau_1_reached', {
+                    **event_data, 'niveau': 1, 'is_premier_niveau_1': is_premier,
+                }, source='EvaluationViewModel.mettre_a_jour_niveau')
+
+            if nouveau_niveau == 2 and (ancien_niveau is None or ancien_niveau < 2):
+                EventBus.emit('polyvalence.niveau_2_reached', {
+                    **event_data, 'niveau': 2,
+                }, source='EvaluationViewModel.mettre_a_jour_niveau')
+
+            if nouveau_niveau == 3 and (ancien_niveau is None or ancien_niveau < 3):
+                EventBus.emit('polyvalence.niveau_3_reached', {
+                    **event_data, 'niveau': 3,
+                }, source='EvaluationViewModel.mettre_a_jour_niveau')
+
         except Exception as e:
             logger.warning(f"EventBus non disponible: {e}")

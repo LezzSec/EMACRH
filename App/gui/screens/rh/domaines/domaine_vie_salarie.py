@@ -28,10 +28,14 @@ class DomaineVieSalarie(DomaineWidget):
             self._layout.addWidget(error_card)
             return
 
-        sanctions_data = donnees.get('sanctions', {})
-        alcoolemie_data = donnees.get('alcoolemie', {})
-        salivaire_data = donnees.get('tests_salivaires', {})
-        entretiens_data = donnees.get('entretiens', {})
+        sanctions_list = self._as_list(donnees.get('sanctions_liste') or donnees.get('sanctions'))
+        controles_alcool = self._as_list(donnees.get('controles_alcool_liste') or donnees.get('alcoolemie'))
+        controles_salivaire = self._as_list(donnees.get('tests_salivaires_liste') or donnees.get('tests_salivaires'))
+        entretiens_liste = self._as_list(donnees.get('entretiens_liste') or donnees.get('entretiens'))
+        sanctions_data = self._stats_sanctions(sanctions_list)
+        alcoolemie_data = self._stats_controles(controles_alcool, 'date_controle')
+        salivaire_data = self._stats_controles(controles_salivaire, 'date_test')
+        entretiens_data = self._stats_entretiens(entretiens_liste)
         alertes = donnees.get('alertes', [])
 
         if alertes:
@@ -91,7 +95,6 @@ class DomaineVieSalarie(DomaineWidget):
         card_recap.body.addLayout(recap_layout)
         self._layout.addWidget(card_recap)
 
-        sanctions_list = donnees.get('sanctions_liste', [])
         card_sanctions = EmacCard(f"Sanctions disciplinaires ({len(sanctions_list)})")
         btn_add_sanction = EmacButton("+ Nouvelle sanction", variant="primary")
         btn_add_sanction.setVisible(can("rh.vie_salarie.edit"))
@@ -153,8 +156,6 @@ class DomaineVieSalarie(DomaineWidget):
             card_sanctions.body.addWidget(QLabel("Aucune sanction enregistrée"))
         self._layout.addWidget(card_sanctions)
 
-        controles_alcool = donnees.get('controles_alcool_liste', [])
-        controles_salivaire = donnees.get('tests_salivaires_liste', [])
         card_controles = EmacCard("Contrôles (Alcool / Salivaire)")
         btn_layout_ctrl = QHBoxLayout()
         btn_add_alcool = EmacButton("+ Contrôle alcool", variant="primary")
@@ -174,21 +175,23 @@ class DomaineVieSalarie(DomaineWidget):
         alcool_container.addWidget(QLabel("<b>Alcoolémie</b>"))
         if controles_alcool:
             table_alcool = QTableWidget()
-            table_alcool.setColumnCount(3)
-            table_alcool.setHorizontalHeaderLabels(["Date", "Résultat", "Taux"])
+            table_alcool.setColumnCount(4)
+            table_alcool.setHorizontalHeaderLabels(["Date", "Type", "Résultat", "Taux"])
             table_alcool.setRowCount(len(controles_alcool))
             hh_a = table_alcool.horizontalHeader()
             hh_a.setSectionResizeMode(0, QHeaderView.Fixed); table_alcool.setColumnWidth(0, 95)
             hh_a.setSectionResizeMode(1, QHeaderView.Stretch)
-            hh_a.setSectionResizeMode(2, QHeaderView.Fixed); table_alcool.setColumnWidth(2, 80)
+            hh_a.setSectionResizeMode(2, QHeaderView.Stretch)
+            hh_a.setSectionResizeMode(3, QHeaderView.Fixed); table_alcool.setColumnWidth(3, 80)
             table_alcool.setAlternatingRowColors(True)
             table_alcool.setEditTriggers(QAbstractItemView.NoEditTriggers)
             table_alcool.setSelectionBehavior(QAbstractItemView.SelectRows)
             table_alcool.verticalHeader().setDefaultSectionSize(_ROW_H)
             for row_idx, ctrl in enumerate(controles_alcool):
                 table_alcool.setItem(row_idx, 0, QTableWidgetItem(self._format_date(ctrl.get('date_controle'))))
-                table_alcool.setItem(row_idx, 1, QTableWidgetItem(ctrl.get('resultat', '-')))
-                table_alcool.setItem(row_idx, 2, QTableWidgetItem(f"{ctrl.get('taux')} g/L" if ctrl.get('taux') else '-'))
+                table_alcool.setItem(row_idx, 1, QTableWidgetItem(ctrl.get('type_controle', '-')))
+                table_alcool.setItem(row_idx, 2, QTableWidgetItem(ctrl.get('resultat', '-')))
+                table_alcool.setItem(row_idx, 3, QTableWidgetItem(f"{ctrl.get('taux')} g/L" if ctrl.get('taux') else '-'))
             table_alcool.setFixedHeight(min(len(controles_alcool), 8) * _ROW_H + 32)
             alcool_container.addWidget(table_alcool)
         else:
@@ -199,8 +202,8 @@ class DomaineVieSalarie(DomaineWidget):
         salivaire_container.addWidget(QLabel("<b>Tests salivaires</b>"))
         if controles_salivaire:
             table_salivaire = QTableWidget()
-            table_salivaire.setColumnCount(2)
-            table_salivaire.setHorizontalHeaderLabels(["Date", "Résultat"])
+            table_salivaire.setColumnCount(3)
+            table_salivaire.setHorizontalHeaderLabels(["Date", "Type", "Résultat"])
             table_salivaire.setRowCount(len(controles_salivaire))
             table_salivaire.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
             table_salivaire.setAlternatingRowColors(True)
@@ -209,7 +212,8 @@ class DomaineVieSalarie(DomaineWidget):
             table_salivaire.verticalHeader().setDefaultSectionSize(_ROW_H)
             for row_idx, test in enumerate(controles_salivaire):
                 table_salivaire.setItem(row_idx, 0, QTableWidgetItem(self._format_date(test.get('date_test'))))
-                table_salivaire.setItem(row_idx, 1, QTableWidgetItem(test.get('resultat', '-')))
+                table_salivaire.setItem(row_idx, 1, QTableWidgetItem(test.get('type_controle', '-')))
+                table_salivaire.setItem(row_idx, 2, QTableWidgetItem(test.get('resultat', '-')))
             table_salivaire.setFixedHeight(min(len(controles_salivaire), 8) * _ROW_H + 32)
             salivaire_container.addWidget(table_salivaire)
         else:
@@ -219,7 +223,6 @@ class DomaineVieSalarie(DomaineWidget):
         card_controles.body.addLayout(tables_layout)
         self._layout.addWidget(card_controles)
 
-        entretiens_liste = donnees.get('entretiens_liste', [])
         card_entretiens = EmacCard(f"Entretiens professionnels ({len(entretiens_liste)})")
         btn_add_entretien = EmacButton("+ Nouvel entretien", variant="primary")
         btn_add_entretien.setVisible(can("rh.vie_salarie.edit"))
@@ -259,8 +262,12 @@ class DomaineVieSalarie(DomaineWidget):
                         ("Type", e.get('type_entretien')),
                         ("Manager", e.get('manager_nom')),
                         ("Prochaine date", self._format_date(e.get('prochaine_date'))),
-                        ("Objectifs", e.get('objectifs')),
-                        ("Commentaire", e.get('commentaire')),
+                        ("Objectifs atteints", e.get('objectifs_atteints')),
+                        ("Objectifs fixés", e.get('objectifs_fixes')),
+                        ("Besoins formation", e.get('besoins_formation')),
+                        ("Souhaits évolution", e.get('souhaits_evolution')),
+                        ("Commentaire salarié", e.get('commentaire_salarie')),
+                        ("Commentaire manager", e.get('commentaire_manager')),
                     ], self))
                 btn_layout_inner.addWidget(btn_consult)
                 btn_edit = EmacButton("Modifier", variant="outline")
@@ -278,6 +285,28 @@ class DomaineVieSalarie(DomaineWidget):
         else:
             card_entretiens.body.addWidget(QLabel("Aucun entretien enregistré"))
         self._layout.addWidget(card_entretiens)
+
+    def _stats_sanctions(self, sanctions: list) -> dict:
+        return {
+            'total': len(sanctions),
+            'derniere_sanction': sanctions[0].get('date_sanction') if sanctions else None,
+        }
+
+    def _as_list(self, value) -> list:
+        return value if isinstance(value, list) else []
+
+    def _stats_controles(self, controles: list, date_key: str) -> dict:
+        return {
+            'total': len(controles),
+            'positifs': sum(1 for item in controles if item.get('resultat') == 'Positif'),
+            'dernier': controles[0].get(date_key) if controles else None,
+        }
+
+    def _stats_entretiens(self, entretiens: list) -> dict:
+        dernier_epp = next((e.get('date_entretien') for e in entretiens if e.get('type_entretien') == 'EPP'), None)
+        dernier_eap = next((e.get('date_entretien') for e in entretiens if e.get('type_entretien') == 'EAP'), None)
+        prochain = next((e.get('prochaine_date') for e in entretiens if e.get('prochaine_date')), None)
+        return {'dernier_epp': dernier_epp, 'dernier_eap': dernier_eap, 'prochain': prochain}
 
     def _add_sanction(self):
         if not self._operateur:
