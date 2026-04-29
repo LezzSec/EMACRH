@@ -434,7 +434,7 @@ def has_operateur_deja_eu_niveau_1(
         params.append(exclude_poste_id)
 
     count_other = QueryExecutor.fetch_scalar(
-        f"SELECT COUNT(*) FROM polyvalence WHERE personnel_id = %s{exclude_clause}",
+        f"SELECT COUNT(*) FROM polyvalence WHERE personnel_id = %s AND niveau = 1{exclude_clause}",
         tuple(params),
         default=0,
     )
@@ -443,7 +443,11 @@ def has_operateur_deja_eu_niveau_1(
 
     # 3. Antécédents dans historique_polyvalence (modifications passées)
     count_hist = QueryExecutor.fetch_scalar(
-        "SELECT COUNT(*) FROM historique_polyvalence WHERE personnel_id = %s",
+        """
+        SELECT COUNT(*) FROM historique_polyvalence
+        WHERE personnel_id = %s
+          AND (ancien_niveau = 1 OR nouveau_niveau = 1)
+        """,
         (operateur_id,),
         default=0,
     )

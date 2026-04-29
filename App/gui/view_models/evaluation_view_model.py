@@ -152,14 +152,15 @@ class EvaluationViewModel(QObject):
         nouveau_niveau: int,
         date_eval: Optional[date] = None,
         operateur_nom: str = "",
-    ) -> None:
+        operateur_prenom: str = "",
+    ) -> bool:
         """
         Met à jour le niveau d'une polyvalence et calcule la prochaine évaluation.
         Émet l'événement EventBus si le niveau a changé.
         """
         if nouveau_niveau not in [1, 2, 3, 4]:
             self.error_occurred.emit("Niveau invalide — doit être 1, 2, 3 ou 4.")
-            return
+            return False
 
         if date_eval is None:
             date_eval = date.today()
@@ -175,20 +176,23 @@ class EvaluationViewModel(QObject):
 
             if not mettre_a_jour_evaluation(poly_id, nouveau_niveau, date_eval, prochaine_eval):
                 self.error_occurred.emit("Échec de la mise à jour du niveau.")
-                return
+                return False
 
             self.action_succeeded.emit(
                 f"Niveau mis à jour.\nProchaine évaluation : {prochaine_eval.strftime('%d/%m/%Y')}"
             )
 
-            if ancien_niveau != nouveau_niveau and operateur_id and poste_id:
+            niveau_changed = ancien_niveau != nouveau_niveau and operateur_id and poste_id
+            if niveau_changed:
                 self._emettre_event_niveau_change(
-                    poly_id, operateur_id, poste_id, operateur_nom,
+                    poly_id, operateur_id, poste_id, operateur_nom, operateur_prenom,
                     ancien_niveau, nouveau_niveau, prochaine_eval,
                 )
+            return bool(niveau_changed)
         except Exception as e:
             logger.exception(f"Erreur mise à jour niveau polyvalence {poly_id}: {e}")
             self.error_occurred.emit(str(e))
+            return False
 
     def mettre_a_jour_date(
         self,
@@ -236,7 +240,7 @@ class EvaluationViewModel(QObject):
     # ------------------------------------------------------------------
 
     def _emettre_event_niveau_change(
-        self, poly_id, operateur_id, poste_id, operateur_nom,
+        self, poly_id, operateur_id, poste_id, operateur_nom, operateur_prenom,
         ancien_niveau, nouveau_niveau, prochaine_eval,
     ):
         try:
@@ -245,14 +249,20 @@ class EvaluationViewModel(QObject):
             from domain.services.formation.evaluation_service import has_operateur_deja_eu_niveau_1
 
             poste = PosteRepository.get_by_id(poste_id)
-            poste_code = poste.get('code') if poste else None
-            poste_nom = poste.get('nom') if poste else None
+            if isinstance(poste, dict):
+                poste_code = poste.get('poste_code') or poste.get('code')
+                poste_nom = poste.get('poste_nom') or poste.get('nom') or poste_code
+            else:
+                poste_code = getattr(poste, 'poste_code', None)
+                poste_nom = getattr(poste, 'atelier_nom', None) or poste_code
 
             event_data = {
                 'polyvalence_id': poly_id,
                 'operateur_id': operateur_id,
                 'nom': operateur_nom,
+                'prenom': operateur_prenom,
                 'poste_id': poste_id,
+                'code_poste': poste_code,
                 'poste_code': poste_code,
                 'poste_nom': poste_nom,
                 'old_niveau': ancien_niveau,
@@ -272,15 +282,17 @@ class EvaluationViewModel(QObject):
                 EventBus.emit('polyvalence.niveau_1_reached', {
                     **event_data, 'niveau': 1, 'is_premier_niveau_1': is_premier,
                 }, source='EvaluationViewModel.mettre_a_jour_niveau')
-
-            if nouveau_niveau == 2 and (ancien_niveau is None or ancien_niveau < 2):
+            elif nouveau_niveau == 2:
                 EventBus.emit('polyvalence.niveau_2_reached', {
                     **event_data, 'niveau': 2,
                 }, source='EvaluationViewModel.mettre_a_jour_niveau')
-
-            if nouveau_niveau == 3 and (ancien_niveau is None or ancien_niveau < 3):
+            elif nouveau_niveau == 3:
                 EventBus.emit('polyvalence.niveau_3_reached', {
                     **event_data, 'niveau': 3,
+                }, source='EvaluationViewModel.mettre_a_jour_niveau')
+            elif nouveau_niveau == 4:
+                EventBus.emit('polyvalence.niveau_4_reached', {
+                    **event_data, 'niveau': 4,
                 }, source='EvaluationViewModel.mettre_a_jour_niveau')
 
         except Exception as e:

@@ -63,6 +63,10 @@ class PendingDocument:
     operateur_prenom: str
     event_name: str
     rule_id: int = 0
+    document_type: str = 'template'
+    formation_doc_id: int = 0
+    poste_id: Optional[int] = None
+    niveau: Optional[int] = None
     timestamp: datetime = field(default_factory=datetime.now)
 
     def __repr__(self) -> str:
@@ -142,7 +146,26 @@ class DocumentTriggerService:
             return
 
         # Récupérer les templates correspondants (avec évaluation des conditions)
+        # Priorite des niveaux: a traiter avant la recherche de templates.
+        # Le niveau 4 n'a pas de template, mais il doit quand meme purger
+        # les documents niveau 1-3 encore en attente.
+        import re as _re
+        _m = _re.match(r'polyvalence\.niveau_(\d)_reached', event.name)
+        if _m:
+            new_niv = int(_m.group(1))
+            op_id = event.data.get('operateur_id')
+            if op_id and new_niv > 1:
+                for n in range(1, new_niv):
+                    self._remove_pending_by_event(op_id, f'polyvalence.niveau_{n}_reached')
+            elif op_id and new_niv == 1:
+                self._remove_pending_by_event(op_id, 'polyvalence.niveau_1_reached')
+                logger.debug(
+                    f"niveau_1_reached sur nouveau poste pour op {op_id}: "
+                    f"anciens docs niveau_1 supprimÃ©s de la queue"
+                )
+
         templates = get_matching_templates(event.name, event.data)
+        templates = self._with_niveau_3_poste_templates(event.name, event.data, templates)
 
         if not templates:
             logger.debug(f"Aucun template configuré pour '{event.name}'")
@@ -193,6 +216,48 @@ class DocumentTriggerService:
 
             else:  # SILENT
                 self._log_silent(tpl, operateur_id, event.name)
+
+    @staticmethod
+    def _append_unique_templates(base: List[Dict], extra: List[Dict]) -> List[Dict]:
+        """Fusionne des templates en evitant les doublons par template_id."""
+        result = list(base)
+        seen = {tpl.get('template_id') for tpl in result}
+        for tpl in extra:
+            template_id = tpl.get('template_id')
+            if template_id in seen:
+                continue
+            seen.add(template_id)
+            result.append(tpl)
+        return result
+
+    @classmethod
+    def _get_poste_sheet_templates(cls, event_data: Dict) -> List[Dict]:
+        """
+        Retourne la feuille de poste applicable.
+
+        Les feuilles de poste sont configurees sur polyvalence.created dans la
+        base actuelle. On garde un fallback vers niveau_2 si les regles ont ete
+        rangees la-bas.
+        """
+        poste_templates = get_matching_templates('polyvalence.created', event_data)
+        if poste_templates:
+            return poste_templates
+        return get_matching_templates('polyvalence.niveau_2_reached', event_data)
+
+    @classmethod
+    def _with_niveau_3_poste_templates(
+        cls,
+        event_name: str,
+        event_data: Dict,
+        templates: List[Dict],
+    ) -> List[Dict]:
+        """Au niveau 3, ajoute la feuille de poste en plus du questionnaire."""
+        if event_name != 'polyvalence.niveau_3_reached':
+            return templates
+        return cls._append_unique_templates(
+            templates,
+            cls._get_poste_sheet_templates(event_data),
+        )
 
     def _generate_auto(
         self,
@@ -245,7 +310,7 @@ class DocumentTriggerService:
         nom: str,
         prenom: str,
         event_name: str
-    ):
+    ) -> bool:
         """
         Ajoute un document à la liste des documents en attente.
 
@@ -267,15 +332,51 @@ class DocumentTriggerService:
             rule_id=template.get('rule_id', 0)
         )
 
+        return self._append_pending(pending)
+
+    def _append_pending(self, pending: PendingDocument) -> bool:
+        """Ajoute un document en attente en evitant les doublons."""
         with self._pending_lock:
             # Éviter les doublons
             exists = any(
-                p.template_id == pending.template_id and p.operateur_id == pending.operateur_id
+                p.operateur_id == pending.operateur_id
+                and p.document_type == pending.document_type
+                and (
+                    (p.document_type == 'formation' and p.formation_doc_id == pending.formation_doc_id)
+                    or (p.document_type != 'formation' and p.template_id == pending.template_id)
+                )
                 for p in self._pending_documents
             )
             if not exists:
                 self._pending_documents.append(pending)
-                logger.debug(f"Document en attente ajouté: {template['template_nom']}")
+                logger.debug(f"Document en attente ajoute: {pending.template_nom}")
+                return True
+            return False
+
+    def _add_pending_formation(
+        self,
+        doc: Dict,
+        op_id: int,
+        nom: str,
+        prenom: str,
+        event_name: str
+    ) -> bool:
+        """Ajoute un dossier de formation poste/niveau a la file d'attente."""
+        pending = PendingDocument(
+            template_id=0,
+            template_nom=doc.get('nom_affichage') or doc.get('nom_fichier') or 'Document formation',
+            execution_mode='PROPOSED',
+            operateur_id=op_id,
+            operateur_nom=nom,
+            operateur_prenom=prenom,
+            event_name=event_name,
+            rule_id=0,
+            document_type='formation',
+            formation_doc_id=doc.get('id') or 0,
+            poste_id=doc.get('poste_id'),
+            niveau=doc.get('niveau'),
+        )
+        return self._append_pending(pending)
 
     def _remove_pending_by_event(self, operateur_id: int, event_name: str):
         """
@@ -383,6 +484,40 @@ class DocumentTriggerService:
                 logger.debug("Tous les documents en attente effacés")
 
     @classmethod
+    def add_formation_docs_for_level(
+        cls,
+        operateur_id: int,
+        nom: str,
+        prenom: str,
+        poste_id: int,
+        niveau: int,
+        event_name: str = None,
+    ) -> int:
+        """
+        Ajoute les documents de formation lies au poste/niveau dans la file.
+
+        Ces documents viennent de documents_formation_polyvalence et ne passent
+        pas par document_event_rules.
+        """
+        if not operateur_id or not poste_id or niveau not in (1, 2, 3):
+            return 0
+
+        try:
+            from domain.services.documents.polyvalence_docs_service import get_docs_pour_poste
+            docs = get_docs_pour_poste(poste_id, niveau)
+        except Exception as e:
+            logger.warning(f"Erreur lecture documents formation poste {poste_id}/N{niveau}: {e}")
+            return 0
+
+        instance = cls()
+        added = 0
+        trigger = event_name or f'polyvalence.niveau_{niveau}_reached'
+        for doc in docs:
+            if instance._add_pending_formation(doc, operateur_id, nom, prenom, trigger):
+                added += 1
+        return added
+
+    @classmethod
     def remove_pending(cls, pending: PendingDocument):
         """
         Retire un document spécifique de la liste d'attente.
@@ -396,6 +531,42 @@ class DocumentTriggerService:
                 instance._pending_documents.remove(pending)
             except ValueError:
                 pass  # Pas dans la liste
+
+    @classmethod
+    def _extract_formation_pending(
+        cls,
+        pending: PendingDocument,
+        remove_after: bool = False,
+        action: str = "DOCUMENT_FORMATION_GENERATED",
+    ) -> Tuple[bool, str, Optional[str]]:
+        """Extrait un document de formation BLOB vers un fichier imprimable."""
+        try:
+            from domain.services.documents.polyvalence_docs_service import extraire_vers_fichier_temp
+
+            if not pending.formation_doc_id:
+                return False, "Document formation invalide", None
+
+            path = extraire_vers_fichier_temp(pending.formation_doc_id)
+            if not path:
+                return False, "Document formation introuvable", None
+
+            log_hist(
+                action,
+                "documents_formation_polyvalence",
+                pending.formation_doc_id,
+                f"Document formation '{pending.template_nom}' extrait pour "
+                f"{pending.operateur_prenom} {pending.operateur_nom}",
+                operateur_id=pending.operateur_id
+            )
+
+            if remove_after:
+                cls.remove_pending(pending)
+
+            return True, "Document formation pret", str(path)
+
+        except Exception as e:
+            logger.error(f"Erreur extraction document formation '{pending.template_nom}': {e}", exc_info=True)
+            return False, str(e), None
 
     @classmethod
     def generate_pending(
@@ -414,6 +585,13 @@ class DocumentTriggerService:
             Tuple (success, message, file_path)
         """
         try:
+            if pending.document_type == 'formation':
+                return cls._extract_formation_pending(
+                    pending,
+                    remove_after=True,
+                    action="DOCUMENT_FORMATION_GENERATED",
+                )
+
             success, msg, path = generate_filled_template(
                 template_id=pending.template_id,
                 operateur_nom=pending.operateur_nom,
@@ -484,9 +662,34 @@ class DocumentTriggerService:
                 'new_niveau': niveau,
             }
 
+            if niveau in (1, 2, 3):
+                try:
+                    from domain.services.documents.polyvalence_docs_service import get_docs_pour_poste
+                    for doc in get_docs_pour_poste(poste_id, niveau):
+                        key = ('formation', doc.get('id'), operateur_id)
+                        if key not in seen:
+                            seen.add(key)
+                            result.append(PendingDocument(
+                                template_id=0,
+                                template_nom=doc.get('nom_affichage') or doc.get('nom_fichier') or 'Document formation',
+                                execution_mode='PROPOSED',
+                                operateur_id=operateur_id,
+                                operateur_nom=nom,
+                                operateur_prenom=prenom,
+                                event_name=f'polyvalence.niveau_{niveau}_reached',
+                                document_type='formation',
+                                formation_doc_id=doc.get('id') or 0,
+                                poste_id=poste_id,
+                                niveau=doc.get('niveau'),
+                            ))
+                except Exception as e:
+                    logger.warning(f"Erreur calcul documents formation poste {poste_id}/N{niveau}: {e}")
+
             for event_name in (f'polyvalence.niveau_{niveau}_reached', 'evaluation.completed'):
-                for tpl in get_matching_templates(event_name, event_data):
-                    key = (tpl['template_id'], operateur_id)
+                templates = get_matching_templates(event_name, event_data)
+                templates = cls._with_niveau_3_poste_templates(event_name, event_data, templates)
+                for tpl in templates:
+                    key = ('template', tpl['template_id'], operateur_id)
                     if key not in seen:
                         seen.add(key)
                         result.append(PendingDocument(
@@ -520,6 +723,13 @@ class DocumentTriggerService:
             Tuple (success, message, file_path)
         """
         try:
+            if pending.document_type == 'formation':
+                return cls._extract_formation_pending(
+                    pending,
+                    remove_after=False,
+                    action="DOCUMENT_FORMATION_ON_DEMAND",
+                )
+
             success, msg, path = generate_filled_template(
                 template_id=pending.template_id,
                 operateur_nom=pending.operateur_nom,
@@ -588,6 +798,15 @@ class DocumentTriggerService:
                 'new_niveau': niveau,
             }
 
+            added += cls.add_formation_docs_for_level(
+                operateur_id,
+                nom,
+                prenom,
+                poste_id,
+                niveau,
+                f'polyvalence.niveau_{niveau}_reached',
+            )
+
             events_to_check = [
                 f'polyvalence.niveau_{niveau}_reached',
                 'evaluation.completed',
@@ -595,6 +814,7 @@ class DocumentTriggerService:
 
             for event_name in events_to_check:
                 templates = get_matching_templates(event_name, event_data)
+                templates = cls._with_niveau_3_poste_templates(event_name, event_data, templates)
                 for tpl in templates:
                     instance._add_pending(tpl, operateur_id, nom, prenom, event_name)
                     added += 1

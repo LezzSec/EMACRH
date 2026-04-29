@@ -259,6 +259,7 @@ class DocumentProposalDialog(QDialog):
             'polyvalence.niveau_1_reached': 'Passage niveau 1',
             'polyvalence.niveau_2_reached': 'Passage niveau 2',
             'polyvalence.niveau_3_reached': 'Passage niveau 3',
+            'polyvalence.niveau_4_reached': 'Passage niveau 4',
             'evaluation.completed': 'Évaluation terminée',
             'evaluation.overdue': 'Évaluation en retard',
         }

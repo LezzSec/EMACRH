@@ -34,6 +34,7 @@ class DetailOperateurDialog(QDialog):
         self.operateur_prenom = operateur_prenom
         self._vm = vm or EvaluationViewModel(parent=self)
         self._pending_count: int = 0
+        self._vm_signals_connected = False
 
         self.setWindowTitle(f"Détails - {operateur_prenom} {operateur_nom}")
         self.resize(800, 600)
@@ -119,13 +120,32 @@ class DetailOperateurDialog(QDialog):
         layout.addLayout(btn_layout)
 
         self._connect_viewmodel()
+        self.finished.connect(lambda _result: self._disconnect_viewmodel())
         self._load_data()
 
     def _connect_viewmodel(self):
+        if self._vm_signals_connected:
+            return
         self._vm.detail_loaded.connect(self._on_detail_loaded)
         self._vm.evaluation_count.connect(self._on_count_received)
         self._vm.action_succeeded.connect(self._on_action_succeeded)
         self._vm.error_occurred.connect(self._on_error_occurred)
+        self._vm_signals_connected = True
+
+    def _disconnect_viewmodel(self):
+        if not self._vm_signals_connected:
+            return
+        for signal, slot in (
+            (self._vm.detail_loaded, self._on_detail_loaded),
+            (self._vm.evaluation_count, self._on_count_received),
+            (self._vm.action_succeeded, self._on_action_succeeded),
+            (self._vm.error_occurred, self._on_error_occurred),
+        ):
+            try:
+                signal.disconnect(slot)
+            except (TypeError, RuntimeError):
+                pass
+        self._vm_signals_connected = False
 
     def _on_count_received(self, n: int):
         self._pending_count = n
@@ -391,7 +411,15 @@ class DetailOperateurDialog(QDialog):
                 except ValueError:
                     date_eval = date.today()
 
-            self._vm.mettre_a_jour_niveau(poly_id, new_niveau, date_eval, self.operateur_nom)
+            niveau_changed = self._vm.mettre_a_jour_niveau(
+                poly_id,
+                new_niveau,
+                date_eval,
+                self.operateur_nom,
+                self.operateur_prenom,
+            )
+            if niveau_changed:
+                self._ajouter_documents_formation_en_attente(poly_id, new_niveau)
             return
 
         # === DATE D'ÉVALUATION (colonne 2) ===
@@ -412,6 +440,41 @@ class DetailOperateurDialog(QDialog):
                 pass
 
         self._vm.mettre_a_jour_date(poly_id, new_date, nouveau_niveau)
+
+    def _ajouter_documents_formation_en_attente(self, poly_id: int, niveau: int) -> None:
+        """
+        Ajoute les dossiers de formation poste/niveau a la file d'impression.
+
+        Le dialogue de proposition est ensuite affiche par le debounce global
+        de MainWindow, comme pour les documents issus des regles.
+        """
+        if niveau not in (1, 2, 3):
+            return
+
+        try:
+            from domain.services.formation.evaluation_service import get_polyvalence_par_id
+            from application.document_trigger_service import DocumentTriggerService
+
+            poly = get_polyvalence_par_id(poly_id)
+            poste_id = poly.get('poste_id') if poly else None
+            if not poste_id:
+                return
+
+            added = DocumentTriggerService.add_formation_docs_for_level(
+                operateur_id=self.operateur_id,
+                nom=self.operateur_nom,
+                prenom=self.operateur_prenom,
+                poste_id=poste_id,
+                niveau=niveau,
+                event_name=f'polyvalence.niveau_{niveau}_reached',
+            )
+            if added:
+                logger.info(
+                    f"{added} document(s) formation ajoute(s) a la file "
+                    f"pour operateur {self.operateur_id}, poste {poste_id}, N{niveau}"
+                )
+        except Exception as e:
+            logger.warning(f"Impossible d'ajouter les documents formation a la file: {e}")
 
 
 # --- Délégué pour empêcher l'édition ---

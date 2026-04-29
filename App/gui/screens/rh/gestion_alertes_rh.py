@@ -76,6 +76,10 @@ TYPE_LABELS = {
     TypeAlerte.PERSONNEL_SANS_CONTRAT: "Sans contrat",
     TypeAlerte.PERSONNEL_SANS_COMPETENCES: "Sans competences",
     TypeAlerte.PERSONNEL_NOUVEAU_SANS_AFFECTATION: "Nouveau arrivant",
+    TypeAlerte.PERSONNEL_SANS_MUTUELLE: "Sans mutuelle",
+    TypeAlerte.PERSONNEL_SANS_VISITE: "Sans visite méd.",
+    TypeAlerte.PERSONNEL_SANS_ENTRETIEN: "Sans entretien",
+    "MUTUELLE_EXPIRANT": "Mutuelle expirant",
 }
 
 
@@ -618,11 +622,11 @@ class GestionAlertesRHDialog(QDialog):
     def _fetch_all_alerts(self, progress_callback=None):
         contract_alerts = AlertService.get_all_contract_alerts() if self._can_view_contrats else []
         personnel_alerts = AlertService.get_all_personnel_alerts() if self._can_view_personnel else []
+        rh_alerts = AlertService.get_all_rh_alerts() if self._can_view_personnel else []
 
-        # Deduplication
         seen = set()
         merged = []
-        for alert in contract_alerts + personnel_alerts:
+        for alert in contract_alerts + personnel_alerts + rh_alerts:
             key = (alert.personnel_id, alert.type_alerte)
             if key not in seen:
                 seen.add(key)
@@ -685,23 +689,33 @@ class GestionAlertesRHDialog(QDialog):
     # ------- Actions -------
 
     def _on_view_alert(self, alert: Alert):
-        # Les alertes "sans contrat" doivent ouvrir la gestion RH (contrats), pas les détails polyvalence
-        if alert.categorie == "CONTRAT" or alert.type_alerte == "PERSONNEL_SANS_CONTRAT":
-            self._on_view_contract_detail(alert)
+        from domain.services.rh.rh_service import DomaineRH
+        if alert.categorie == "CONTRAT" or alert.type_alerte == TypeAlerte.PERSONNEL_SANS_CONTRAT:
+            self._open_gestion_rh(alert, DomaineRH.CONTRAT)
+        elif alert.type_alerte in (TypeAlerte.PERSONNEL_SANS_MUTUELLE, "MUTUELLE_EXPIRANT"):
+            self._open_gestion_rh(alert, DomaineRH.MUTUELLE)
+        elif alert.type_alerte == TypeAlerte.PERSONNEL_SANS_VISITE:
+            self._open_gestion_rh(alert, DomaineRH.MEDICAL)
+        elif alert.type_alerte == TypeAlerte.PERSONNEL_SANS_ENTRETIEN:
+            self._open_gestion_rh(alert, DomaineRH.VIE_SALARIE)
         else:
             self._on_view_personnel_detail(alert)
 
-    def _on_view_contract_detail(self, alert: Alert):
+    def _open_gestion_rh(self, alert: Alert, domaine):
         pid = alert.personnel_id
-        if pid:
-            from gui.screens.rh.gestion_rh_dialog import GestionRHDialog
-            from domain.services.rh.rh_service import DomaineRH
-            dialog = GestionRHDialog(parent=self, preselect_personnel_id=pid)
-            dialog.data_changed.connect(self._on_sub_dialog_changed)
-            dialog._vm.operateur_loaded.connect(
-                lambda _: dialog._on_domaine_change(DomaineRH.CONTRAT.value)
-            )
-            dialog.exec_()
+        if not pid:
+            return
+        from gui.screens.rh.gestion_rh_dialog import GestionRHDialog
+        dialog = GestionRHDialog(parent=self, preselect_personnel_id=pid)
+        dialog.data_changed.connect(self._on_sub_dialog_changed)
+        dialog._vm.operateur_loaded.connect(
+            lambda _: dialog._on_domaine_change(domaine.value)
+        )
+        dialog.exec_()
+
+    def _on_view_contract_detail(self, alert: Alert):
+        from domain.services.rh.rh_service import DomaineRH
+        self._open_gestion_rh(alert, DomaineRH.CONTRAT)
 
     def _on_view_personnel_detail(self, alert: Alert):
         pid = alert.personnel_id

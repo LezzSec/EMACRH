@@ -33,6 +33,26 @@ logger = logging.getLogger(__name__)
 class GrillesService:
     """Service métier pour toutes les opérations sur la grille de polyvalence."""
 
+    GRID_EDIT_PERMISSION = "production.grilles.edit"
+    EVALUATION_EDIT_PERMISSION = "production.evaluations.edit"
+
+    @staticmethod
+    def _require_edit_permission() -> None:
+        """Autorise l'edition grille via la permission evaluation existante."""
+        from application.permission_manager import PermissionError, can
+
+        if can(GrillesService.GRID_EDIT_PERMISSION, fresh=True):
+            return
+        if can(GrillesService.EVALUATION_EDIT_PERMISSION, fresh=True):
+            return
+
+        logger.warning(
+            "Permission refusee: %s ou %s requise",
+            GrillesService.GRID_EDIT_PERMISSION,
+            GrillesService.EVALUATION_EDIT_PERMISSION,
+        )
+        raise PermissionError(GrillesService.EVALUATION_EDIT_PERMISSION)
+
     # =========================================================================
     # CHARGEMENT DES DONNÉES
     # =========================================================================
@@ -138,8 +158,7 @@ class GrillesService:
             ValueError: Si le niveau n'est pas un entier valide
             Exception: En cas d'erreur DB
         """
-        from application.permission_manager import require
-        require("production.grilles.edit")
+        GrillesService._require_edit_permission()
         # 1. Lire ancienne valeur
         old_result = QueryExecutor.fetch_one("""
             SELECT niveau, date_evaluation, prochaine_evaluation
@@ -305,13 +324,14 @@ class GrillesService:
                         **event_data, 'niveau': 1,
                         'is_premier_niveau_1': is_premier,
                     }, source='GrillesService.update_polyvalence_from_grille')
-
-                if new_niveau == 2 and (old_niveau is None or old_niveau < 2):
+                elif new_niveau == 2:
                     EventBus.emit('polyvalence.niveau_2_reached', {**event_data, 'niveau': 2},
                                   source='GrillesService.update_polyvalence_from_grille')
-
-                if new_niveau == 3 and (old_niveau is None or old_niveau < 3):
+                elif new_niveau == 3:
                     EventBus.emit('polyvalence.niveau_3_reached', {**event_data, 'niveau': 3},
+                                  source='GrillesService.update_polyvalence_from_grille')
+                elif new_niveau == 4:
+                    EventBus.emit('polyvalence.niveau_4_reached', {**event_data, 'niveau': 4},
                                   source='GrillesService.update_polyvalence_from_grille')
 
         except Exception as e:
@@ -417,8 +437,7 @@ class GrillesService:
         Returns:
             Nombre de modifications réussies
         """
-        from application.permission_manager import require
-        require("production.grilles.edit")
+        GrillesService._require_edit_permission()
 
         if not modifications:
             return 0

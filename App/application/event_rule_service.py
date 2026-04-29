@@ -200,10 +200,10 @@ def evaluate_condition(condition: Optional[Dict], event_data: Dict) -> bool:
     for key, expected in condition.items():
         # Cas spécial: postes (comparaison avec code_poste de l'événement)
         if key == 'postes':
-            code_poste = event_data.get('code_poste') or event_data.get('numposte')
+            code_poste = event_data.get('code_poste') or event_data.get('poste_code') or event_data.get('numposte')
             if code_poste is None:
-                # Pas de poste dans l'événement, condition non applicable
-                continue
+                logger.debug("Condition postes non satisfaite: code_poste absent")
+                return False
 
             # Normaliser: supprimer les zéros initiaux pour comparaison
             # (postes table: "0506", templates: "506" → les deux → "506")

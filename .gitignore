@@ -105,6 +105,10 @@ build-scripts/dist/
 session-reports/
 tests/__pycache__/
 
+# Tests locaux uniquement
+App/tests/
+tests/
+
 # Pytest cache (pattern global récursif)
 **/.pytest_cache/
 .pytest_cache/
@@ -165,12 +169,12 @@ _archive/
 # App/                    - Code source de l'application
 # docs/                   - Documentation du projet
 # build-scripts/          - Scripts de build et analyse
-# tests/                  - Scripts de test
 # README.md               - Documentation principale
 # CLAUDE.md               - Instructions pour Claude Code
 # .gitignore              - Cette configuration
 #
 # À IGNORER
 # session-reports/        - Rapports de sessions de travail (temporaires)
+# App/tests/              - Tests locaux non versionnés
 # temp/                   - Fichiers temporaires de build
 # _archive/               - Fichiers archivés (code mort, documents obsolètes)

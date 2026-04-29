@@ -380,16 +380,25 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                     EventBus.emit('polyvalence.niveau_changed', event_data,
                                  source='PolyvalenceRepository.update_niveau')
 
-                    if nouveau_niveau == 2 and old_niveau < 2:
+                    if nouveau_niveau == 1:
+                        EventBus.emit('polyvalence.niveau_1_reached', {
+                            **event_data,
+                            'niveau': 1, 'is_premier_niveau_1': False
+                        }, source='PolyvalenceRepository.update_niveau')
+                    elif nouveau_niveau == 2:
                         EventBus.emit('polyvalence.niveau_2_reached', {
                             **event_data,
                             'niveau': 2
                         }, source='PolyvalenceRepository.update_niveau')
-
-                    if nouveau_niveau == 3 and old_niveau < 3:
+                    elif nouveau_niveau == 3:
                         EventBus.emit('polyvalence.niveau_3_reached', {
                             **event_data,
                             'niveau': 3
+                        }, source='PolyvalenceRepository.update_niveau')
+                    elif nouveau_niveau == 4:
+                        EventBus.emit('polyvalence.niveau_4_reached', {
+                            **event_data,
+                            'niveau': 4
                         }, source='PolyvalenceRepository.update_niveau')
 
             return True, "Évaluation enregistrée"

@@ -37,6 +37,25 @@ class AlertService:
     get_personnel_sans_entretien = staticmethod(RHAlerts.get_personnel_sans_entretien)
     _get_mutuelles_expirant = staticmethod(RHAlerts._get_mutuelles_expirant)
 
+    @staticmethod
+    def get_all_rh_alerts() -> List[Alert]:
+        """Agrège toutes les alertes RH : mutuelle, visite médicale, entretien."""
+        alerts: List[Alert] = []
+        alerts.extend(RHAlerts.get_personnel_sans_mutuelle())
+        alerts.extend(RHAlerts._get_mutuelles_expirant(30))
+        alerts.extend(RHAlerts.get_personnel_sans_visite_medicale())
+        alerts.extend(RHAlerts.get_personnel_sans_entretien())
+
+        seen: set = set()
+        unique: List[Alert] = []
+        for alert in alerts:
+            key = (alert.personnel_id, alert.type_alerte)
+            if key not in seen:
+                seen.add(key)
+                unique.append(alert)
+
+        return sorted(unique, key=lambda a: a.urgence_ordre)
+
     # --- Délégation Documents ---
     get_all_document_alerts = staticmethod(DocumentAlerts.get_all_document_alerts)
 

@@ -7,7 +7,6 @@ Ils sont lisibles par tous les utilisateurs et administres par les responsables.
 """
 
 import logging
-import tempfile
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 
@@ -156,7 +155,8 @@ def extraire_vers_fichier_temp(doc_id: int) -> Optional[Path]:
         return None
     contenu, nom_fichier, _ = result
 
-    temp_dir = Path(tempfile.gettempdir()) / "emac_formation_poly" / str(doc_id)
+    from domain.services.documents.template_service import get_temp_dir
+    temp_dir = get_temp_dir() / "formation_poly" / str(doc_id)
     temp_dir.mkdir(parents=True, exist_ok=True)
 
     # Nettoyer le nom de fichier
