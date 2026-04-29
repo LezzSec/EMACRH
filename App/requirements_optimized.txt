@@ -17,6 +17,12 @@ reportlab==4.2.2
 # Sécurité - Système d'authentification (UTILISÉ dans auth_service.py)
 bcrypt==4.1.2
 
+# Securite - Chiffrement configuration (utilise dans configbd.py/config_crypter.py)
+cryptography>=42.0.0
+
+# Dates relatives (utilise dans competences_service.py et dialogues RH)
+python-dateutil==2.9.0.post0
+
 # Variables d'environnement (UTILISÉ dans configbd.py)
 python-dotenv==1.0.0
 

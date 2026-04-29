@@ -20,7 +20,7 @@ from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
 
-MIGRATIONS_DIR = Path(__file__).parents[3] / "database" / "migrations"
+MIGRATIONS_DIR = Path(__file__).parents[2] / "database" / "migrations"
 
 _NUMBERED_RE = re.compile(r"^\d{3}_.*\.sql$")
 
@@ -84,12 +84,23 @@ def _execute_sql_file(path: Path) -> None:
     try:
         cur = conn.cursor()
         for stmt in statements:
+            # La connexion cible deja la base configuree dans .env.
+            # Ignorer les USE historiques pour ne pas forcer un schema en dur.
+            if stmt.lower().startswith("use "):
+                continue
+
             try:
                 cur.execute(stmt)
             except Exception as exc:
                 msg = str(exc).lower()
                 # Ignorer les erreurs "déjà existant" pour l'idempotence
-                if any(k in msg for k in ("already exists", "duplicate entry", "can't drop")):
+                if any(k in msg for k in (
+                    "already exists",
+                    "duplicate column",
+                    "duplicate entry",
+                    "duplicate key",
+                    "can't drop",
+                )):
                     continue
                 raise
 

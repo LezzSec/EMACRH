@@ -20,6 +20,9 @@ bcrypt==4.1.2
 # Sécurité - Chiffrement configuration
 cryptography>=42.0.0
 
+# Dates relatives (competences, echeances RH)
+python-dateutil==2.9.0.post0
+
 # Variables d'environnement
 python-dotenv==1.0.0
 

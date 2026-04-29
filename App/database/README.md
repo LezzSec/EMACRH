@@ -33,7 +33,7 @@ Commandes depuis `App/` :
 ```bash
 python -m cli migrate --status
 python -m cli migrate --apply-all
-python -m cli migrate --apply 054_password_upgrade_flag.sql
+python -m cli migrate --apply 056_mutuelle_ui_support.sql
 python -m cli migrate --mark-applied-all
 ```
 
@@ -42,6 +42,8 @@ Les dernières migrations présentes sont :
 - `052_unique_personnel_competences.sql`
 - `053_fulltext_historique.sql`
 - `054_password_upgrade_flag.sql`
+- `055_add_priority_performance_indexes.sql`
+- `056_mutuelle_ui_support.sql`
 
 Voir [migrations/README.md](migrations/README.md) et [migrations/MIGRATION_LOG.md](migrations/MIGRATION_LOG.md).
 

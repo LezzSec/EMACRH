@@ -118,7 +118,7 @@ python -m cli migrate --status
 python -m cli migrate --apply-all
 ```
 
-Les migrations actives vont jusqu'à `054_password_upgrade_flag.sql`. Le suivi se fait dans `schema_migrations` par nom de fichier.
+Les migrations actives vont jusqu'à `056_mutuelle_ui_support.sql`. Le suivi se fait dans `schema_migrations` par nom de fichier.
 
 ## Tests
 
@@ -135,5 +135,5 @@ Depuis la racine du dépôt :
 
 ```bash
 cd build-scripts
-build_optimized.bat
+build_release.bat
 ```

@@ -60,9 +60,9 @@ _MAIN_TABLES = [
 # ---------------------------------------------------------------------------
 
 def _section(title: str) -> None:
-    print(f"\n{'─' * 50}")
+    print(f"\n{'-' * 50}")
     print(f"  {title}")
-    print(f"{'─' * 50}")
+    print(f"{'-' * 50}")
 
 
 def check_db() -> int:
@@ -114,7 +114,7 @@ def check_performance() -> int:
             if (table, idx_name) in existing:
                 print(f"  [OK]  {table}.{column} ({idx_name})")
             else:
-                print(f"  [--]  {table}.{column} ({idx_name})  — MANQUANT")
+                print(f"  [--]  {table}.{column} ({idx_name})  - MANQUANT")
                 errors += 1
 
         if errors == 0:
@@ -155,7 +155,7 @@ def check_views() -> int:
             if view in existing_views:
                 print(f"  [OK]  {view}")
             else:
-                print(f"  [--]  {view}  — MANQUANTE")
+                print(f"  [--]  {view}  - MANQUANTE")
                 errors += 1
 
         if errors == 0:
@@ -163,7 +163,7 @@ def check_views() -> int:
         else:
             print(
                 f"\n  {errors} vue(s) manquante(s). "
-                "Lancez : python -m cli migrate --apply create_all_missing_views.sql"
+                "Lancez : python -m cli migrate --apply 048_create_all_missing_views.sql"
             )
 
     except Exception as exc:
@@ -194,9 +194,9 @@ def run_diagnose(args) -> None:
     if run_all or args.views:
         total_errors += check_views()
 
-    print(f"\n{'─' * 50}")
+    print(f"\n{'-' * 50}")
     if total_errors == 0:
-        print("  Résultat : OK — aucune anomalie détectée.")
+        print("  Resultat : OK - aucune anomalie detectee.")
     else:
-        print(f"  Résultat : {total_errors} anomalie(s) détectée(s).")
+        print(f"  Resultat : {total_errors} anomalie(s) detectee(s).")
     print()

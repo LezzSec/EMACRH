@@ -65,7 +65,7 @@ Le fichier `.env` ne doit jamais être commité.
 
 ## Base de données
 
-Les migrations sont dans `App/database/migrations/` et sont suivies par la table `schema_migrations`, par nom de fichier complet. Les dernières migrations présentes vont jusqu'à `054_password_upgrade_flag.sql`.
+Les migrations sont dans `App/database/migrations/` et sont suivies par la table `schema_migrations`, par nom de fichier complet. Les dernières migrations présentes vont jusqu'à `056_mutuelle_ui_support.sql`.
 
 Commandes utiles :
 
@@ -73,7 +73,7 @@ Commandes utiles :
 cd App
 python -m cli migrate --status
 python -m cli migrate --apply-all
-python -m cli migrate --apply 054_password_upgrade_flag.sql
+python -m cli migrate --apply 056_mutuelle_ui_support.sql
 ```
 
 ## Tests
@@ -90,7 +90,7 @@ La suite contient des tests unitaires sur les services, la sécurité, les permi
 
 ```bash
 cd build-scripts
-build_optimized.bat
+build_release.bat
 ```
 
 La sortie attendue est `dist/EMAC/EMAC.exe`.

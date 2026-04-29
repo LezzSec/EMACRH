@@ -18,7 +18,7 @@ REM Se positionner a la racine du projet (dossier parent de build-scripts\)
 cd /d "%~dp0"
 cd ..
 set "ROOT=%CD%"
-set "SPEC_FILE=build-scripts\specs\EMAC_base.spec"
+set "SPEC_FILE=build-scripts\specs\EMAC_fixed.spec"
 
 echo Racine projet : %ROOT%
 echo Spec          : %SPEC_FILE%
