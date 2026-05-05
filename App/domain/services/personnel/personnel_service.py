@@ -136,3 +136,27 @@ class PersonnelService(CRUDService):
             Nombre de personnels inactifs
         """
         return cls.count(statut='INACTIF')
+
+    @classmethod
+    def save_date_entree(cls, personnel_id: int, date_entree: str) -> bool:
+        """
+        Enregistre la date d'entrée d'un personnel et log l'action dans l'historique.
+
+        Args:
+            personnel_id: ID du personnel
+            date_entree: Date au format 'yyyy-MM-dd'
+
+        Returns:
+            True si succès, False sinon
+        """
+        from domain.repositories.personnel_repo import PersonnelRepository
+        from infrastructure.logging.optimized_db_logger import log_hist
+        result = PersonnelRepository.save_date_entree(personnel_id, date_entree)
+        if result:
+            log_hist(
+                action="AFFECTATION_DATE_ENTREE",
+                table_name="personnel",
+                record_id=personnel_id,
+                description=f"Date d'entrée affectée: {date_entree}",
+            )
+        return result

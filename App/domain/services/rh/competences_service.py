@@ -21,6 +21,7 @@ from infrastructure.db.query_executor import QueryExecutor
 from infrastructure.logging.optimized_db_logger import log_hist
 from application.permission_manager import require
 from infrastructure.logging.logging_config import get_logger
+from infrastructure.cache.emac_cache import get_cached_competences_catalogue, invalidate_static_lists_cache
 
 logger = get_logger(__name__)
 
@@ -50,22 +51,14 @@ def get_all_competences(actif_only: bool = True) -> List[Dict]:
     """
     try:
         if actif_only:
-            return QueryExecutor.fetch_all(
-                """SELECT id, code, libelle, description, categorie,
-                          duree_validite_mois, actif, created_at, updated_at
-                   FROM competences_catalogue
-                   WHERE actif = 1
-                   ORDER BY categorie, libelle""",
-                dictionary=True
-            )
-        else:
-            return QueryExecutor.fetch_all(
-                """SELECT id, code, libelle, description, categorie,
-                          duree_validite_mois, actif, created_at, updated_at
-                   FROM competences_catalogue
-                   ORDER BY categorie, libelle""",
-                dictionary=True
-            )
+            return list(get_cached_competences_catalogue())
+        return QueryExecutor.fetch_all(
+            """SELECT id, code, libelle, description, categorie,
+                      duree_validite_mois, actif, created_at, updated_at
+               FROM competences_catalogue
+               ORDER BY categorie, libelle""",
+            dictionary=True
+        )
     except Exception as e:
         logger.exception(f"Erreur get_all_competences: {e}")
         return []
@@ -102,14 +95,14 @@ def get_categories() -> List[str]:
         Liste des catégories
     """
     try:
-        rows = QueryExecutor.fetch_all(
-            """SELECT DISTINCT categorie
-               FROM competences_catalogue
-               WHERE categorie IS NOT NULL AND actif = 1
-               ORDER BY categorie""",
-            dictionary=True
-        )
-        return [row['categorie'] for row in rows]
+        seen: set = set()
+        result: List[str] = []
+        for comp in get_cached_competences_catalogue():
+            cat = comp.get('categorie')
+            if cat and cat not in seen:
+                seen.add(cat)
+                result.append(cat)
+        return sorted(result)
     except Exception as e:
         logger.exception(f"Erreur get_categories: {e}")
         return []
@@ -155,7 +148,7 @@ def create_competence(
             record_id=competence_id,
             description=f"Compétence '{libelle}' ({code}) créée"
         )
-
+        invalidate_static_lists_cache()
         return True, "Compétence créée avec succès", competence_id
 
     except Exception as e:
@@ -200,7 +193,7 @@ def update_competence(competence_id: int, **kwargs) -> Tuple[bool, str]:
             record_id=competence_id,
             description=f"Compétence ID {competence_id} modifiée: {list(updates.keys())}"
         )
-
+        invalidate_static_lists_cache()
         return True, "Compétence mise à jour"
 
     except Exception as e:
@@ -247,7 +240,7 @@ def delete_competence(competence_id: int) -> Tuple[bool, str]:
             record_id=competence_id,
             description=msg
         )
-
+        invalidate_static_lists_cache()
         return True, msg
 
     except Exception as e:

@@ -273,66 +273,73 @@ class GestionPersonnelDialog(QDialog):
 
     def _render_table(self) -> None:
         """Affiche self.all_data (déjà filtrée côté serveur) dans la table."""
-        self.table.setRowCount(0)
+        rows = self.all_data
+        table = self.table
 
-        for data in self.all_data:
-            statut = (data.get("statut") or "").upper()
-            row = self.table.rowCount()
-            self.table.insertRow(row)
+        table.setUpdatesEnabled(False)
+        table.blockSignals(True)
+        try:
+            table.setRowCount(len(rows))
 
-            # Col 0 : Nom (avec ID et statut en UserRole)
-            nom_item = QTableWidgetItem(data.get("nom", ""))
-            nom_item.setData(Qt.UserRole, data.get("id"))
-            nom_item.setData(Qt.UserRole + 1, statut)
-            self.table.setItem(row, 0, nom_item)
+            for row, data in enumerate(rows):
+                statut = (data.get("statut") or "").upper()
 
-            # Col 1 : Prénom
-            self.table.setItem(row, 1, QTableWidgetItem(data.get("prenom", "")))
+                # Col 0 : Nom (avec ID et statut en UserRole)
+                nom_item = QTableWidgetItem(data.get("nom", ""))
+                nom_item.setData(Qt.UserRole, data.get("id"))
+                nom_item.setData(Qt.UserRole + 1, statut)
+                table.setItem(row, 0, nom_item)
 
-            # Col 2 : Matricule
-            self.table.setItem(row, 2, QTableWidgetItem(data.get("matricule") or "-"))
+                # Col 1 : Prénom
+                table.setItem(row, 1, QTableWidgetItem(data.get("prenom", "")))
 
-            # Col 3 : Type Contrat
-            self.table.setItem(row, 3, QTableWidgetItem(data.get("type_contrat") or "-"))
+                # Col 2 : Matricule
+                table.setItem(row, 2, QTableWidgetItem(data.get("matricule") or "-"))
 
-            # Col 4 : Statut avec couleur
-            statut_item = QTableWidgetItem(statut)
-            statut_item.setTextAlignment(Qt.AlignCenter)
-            if statut == "ACTIF":
-                statut_item.setBackground(QColor("#d1fae5"))
-                statut_item.setForeground(QColor("#065f46"))
-            else:
-                statut_item.setBackground(QColor("#fee2e2"))
-                statut_item.setForeground(QColor("#991b1b"))
-            self.table.setItem(row, 4, statut_item)
+                # Col 3 : Type Contrat
+                table.setItem(row, 3, QTableWidgetItem(data.get("type_contrat") or "-"))
 
-            # Col 5 : Nb Postes
-            self.table.setItem(row, 5, QTableWidgetItem(str(data.get("nb_postes", 0))))
+                # Col 4 : Statut avec couleur
+                statut_item = QTableWidgetItem(statut)
+                statut_item.setTextAlignment(Qt.AlignCenter)
+                if statut == "ACTIF":
+                    statut_item.setBackground(QColor("#d1fae5"))
+                    statut_item.setForeground(QColor("#065f46"))
+                else:
+                    statut_item.setBackground(QColor("#fee2e2"))
+                    statut_item.setForeground(QColor("#991b1b"))
+                table.setItem(row, 4, statut_item)
 
-            # Col 6-9 : Stats polyvalence avec couleurs
-            n1_item = QTableWidgetItem(str(data.get("n1", 0)))
-            n1_item.setBackground(QColor("#fef2f2"))
-            n1_item.setForeground(QColor("#dc2626"))
-            n1_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, 6, n1_item)
+                # Col 5 : Nb Postes
+                table.setItem(row, 5, QTableWidgetItem(str(data.get("nb_postes", 0))))
 
-            n2_item = QTableWidgetItem(str(data.get("n2", 0)))
-            n2_item.setBackground(QColor("#fffbeb"))
-            n2_item.setForeground(QColor("#d97706"))
-            n2_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, 7, n2_item)
+                # Col 6-9 : Stats polyvalence avec couleurs
+                n1_item = QTableWidgetItem(str(data.get("n1", 0)))
+                n1_item.setBackground(QColor("#fef2f2"))
+                n1_item.setForeground(QColor("#dc2626"))
+                n1_item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, 6, n1_item)
 
-            n3_item = QTableWidgetItem(str(data.get("n3", 0)))
-            n3_item.setBackground(QColor("#f0fdf4"))
-            n3_item.setForeground(QColor("#059669"))
-            n3_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, 8, n3_item)
+                n2_item = QTableWidgetItem(str(data.get("n2", 0)))
+                n2_item.setBackground(QColor("#fffbeb"))
+                n2_item.setForeground(QColor("#d97706"))
+                n2_item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, 7, n2_item)
 
-            n4_item = QTableWidgetItem(str(data.get("n4", 0)))
-            n4_item.setBackground(QColor("#eff6ff"))
-            n4_item.setForeground(QColor("#2563eb"))
-            n4_item.setTextAlignment(Qt.AlignCenter)
-            self.table.setItem(row, 9, n4_item)
+                n3_item = QTableWidgetItem(str(data.get("n3", 0)))
+                n3_item.setBackground(QColor("#f0fdf4"))
+                n3_item.setForeground(QColor("#059669"))
+                n3_item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, 8, n3_item)
+
+                n4_item = QTableWidgetItem(str(data.get("n4", 0)))
+                n4_item.setBackground(QColor("#eff6ff"))
+                n4_item.setForeground(QColor("#2563eb"))
+                n4_item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, 9, n4_item)
+        finally:
+            table.blockSignals(False)
+            table.setUpdatesEnabled(True)
 
     # ------------------------------------------------------------------
     # Actions utilisateur

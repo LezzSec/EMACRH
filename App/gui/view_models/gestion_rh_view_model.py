@@ -122,20 +122,28 @@ class GestionRHViewModel(QObject):
 
     def selectionner_operateur(self, operateur_id: int) -> None:
         """
-        Charge et sélectionne un opérateur.
+        Charge et sélectionne un opérateur (asynchrone).
 
         Émet operateur_loaded(dict) en cas de succès.
         """
-        try:
-            operateur = get_operateur_by_id(operateur_id)
+        def fetch(progress_callback=None):
+            return get_operateur_by_id(operateur_id)
+
+        def on_success(operateur):
             if operateur:
                 self._operateur_id = operateur_id
                 self.operateur_loaded.emit(operateur)
             else:
                 self.error_occurred.emit(f"Opérateur {operateur_id} introuvable")
-        except Exception as e:
-            logger.exception(f"Erreur sélection opérateur {operateur_id}: {e}")
-            self.error_occurred.emit(str(e))
+
+        def on_error(err):
+            logger.exception(f"Erreur sélection opérateur {operateur_id}: {err}")
+            self.error_occurred.emit(str(err))
+
+        worker = DbWorker(fetch)
+        worker.signals.result.connect(on_success)
+        worker.signals.error.connect(on_error)
+        DbThreadPool.start(worker)
 
     # ------------------------------------------------------------------
     # Chargement du domaine RH

@@ -58,6 +58,8 @@ class AlertService:
 
     # --- Délégation Documents ---
     get_all_document_alerts = staticmethod(DocumentAlerts.get_all_document_alerts)
+    get_top_document_alerts = staticmethod(DocumentAlerts.get_top)
+    get_document_alert_counts = staticmethod(DocumentAlerts.get_counts)
 
     # --- Agrégation (méthodes propres à la façade) ---
 
@@ -109,17 +111,18 @@ class AlertService:
         counts = {'critiques': 0, 'avertissements': 0, 'infos': 0}
 
         try:
-            counts['critiques'] += QueryExecutor.fetch_scalar(
-                "SELECT COUNT(*) FROM v_contrats_fin_proche WHERE jours_restants < 0", default=0)
-            counts['critiques'] += QueryExecutor.fetch_scalar(
-                "SELECT COUNT(*) FROM v_contrats_fin_proche WHERE jours_restants BETWEEN 0 AND 7", default=0)
-            counts['avertissements'] += QueryExecutor.fetch_scalar(
-                "SELECT COUNT(*) FROM v_contrats_fin_proche WHERE jours_restants BETWEEN 8 AND 30", default=0)
-            counts['avertissements'] += QueryExecutor.fetch_scalar("""
-                SELECT COUNT(*) FROM personnel p
-                LEFT JOIN contrat c ON c.personnel_id = p.id AND c.actif = 1
-                WHERE p.statut = 'ACTIF' AND c.id IS NULL
-            """, default=0)
+            row = QueryExecutor.fetch_one("""
+                SELECT
+                    (SELECT COUNT(*) FROM v_contrats_fin_proche WHERE jours_restants < 0) AS c_expires,
+                    (SELECT COUNT(*) FROM v_contrats_fin_proche WHERE jours_restants BETWEEN 0 AND 7) AS c_urgents,
+                    (SELECT COUNT(*) FROM v_contrats_fin_proche WHERE jours_restants BETWEEN 8 AND 30) AS c_avert,
+                    (SELECT COUNT(*) FROM personnel p
+                     LEFT JOIN contrat c ON c.personnel_id = p.id AND c.actif = 1
+                     WHERE p.statut = 'ACTIF' AND c.id IS NULL) AS sans_contrat
+            """)
+            if row:
+                counts['critiques'] = int(row[0]) + int(row[1])
+                counts['avertissements'] = int(row[2]) + int(row[3])
         except Exception as e:
             logger.exception(f"get_quick_counts: erreur DB — {e}")
 
@@ -129,88 +132,93 @@ class AlertService:
         )
         return counts
 
+    _STARTUP_QUERY = """
+        SELECT
+            (SELECT COUNT(*)
+             FROM polyvalence poly JOIN personnel p ON p.id = poly.personnel_id
+             WHERE poly.prochaine_evaluation < CURDATE() AND p.statut = 'ACTIF'
+            ) AS evaluations_retard,
+            (SELECT COUNT(*) FROM v_contrats_fin_proche WHERE jours_restants < 0
+            ) AS contrats_expires,
+            (SELECT COUNT(*) FROM v_contrats_fin_proche WHERE jours_restants BETWEEN 0 AND 30
+            ) AS contrats_expirant,
+            (SELECT COUNT(*)
+             FROM personnel p LEFT JOIN contrat c ON c.personnel_id = p.id AND c.actif = 1
+             WHERE p.statut = 'ACTIF' AND c.id IS NULL
+            ) AS personnel_sans_contrat,
+            (SELECT COUNT(*)
+             FROM mutuelle m JOIN personnel p ON p.id = m.personnel_id
+             WHERE p.statut = 'ACTIF' AND m.date_fin IS NOT NULL AND m.date_fin < CURDATE()
+            ) AS mutuelles_expirees,
+            (SELECT COUNT(*)
+             FROM mutuelle m JOIN personnel p ON p.id = m.personnel_id
+             WHERE p.statut = 'ACTIF'
+               AND m.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+            ) AS mutuelles_expirant,
+            (SELECT COUNT(DISTINCT mv.personnel_id)
+             FROM medical_visite mv JOIN personnel p ON p.id = mv.personnel_id
+             WHERE p.statut = 'ACTIF' AND mv.prochaine_visite < CURDATE()
+               AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE personnel_id = mv.personnel_id)
+            ) AS visites_retard,
+            (SELECT COUNT(DISTINCT mv.personnel_id)
+             FROM medical_visite mv JOIN personnel p ON p.id = mv.personnel_id
+             WHERE p.statut = 'ACTIF'
+               AND mv.prochaine_visite BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+               AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE personnel_id = mv.personnel_id)
+            ) AS visites_a_planifier,
+            (SELECT COUNT(*)
+             FROM validite v JOIN personnel p ON p.id = v.personnel_id
+             WHERE p.statut = 'ACTIF' AND v.type_validite = 'RQTH'
+               AND v.date_fin IS NOT NULL
+               AND v.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY)
+            ) AS rqth_expirant,
+            (SELECT COUNT(*)
+             FROM validite v JOIN personnel p ON p.id = v.personnel_id
+             WHERE p.statut = 'ACTIF' AND v.type_validite = 'OETH'
+               AND v.date_fin IS NOT NULL
+               AND v.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY)
+            ) AS oeth_expirant,
+            (SELECT COUNT(*)
+             FROM personnel_competences pc JOIN personnel p ON p.id = pc.personnel_id
+             WHERE p.statut = 'ACTIF'
+               AND pc.date_expiration IS NOT NULL AND pc.date_expiration < CURDATE()
+            ) AS competences_expirees,
+            (SELECT COUNT(*)
+             FROM personnel_competences pc JOIN personnel p ON p.id = pc.personnel_id
+             WHERE p.statut = 'ACTIF'
+               AND pc.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+            ) AS competences_expirant,
+            (SELECT COUNT(*)
+             FROM documents d JOIN personnel p ON p.id = d.personnel_id
+             WHERE p.statut = 'ACTIF' AND d.statut = 'expire'
+            ) AS documents_expires,
+            (SELECT COUNT(*)
+             FROM documents d JOIN personnel p ON p.id = d.personnel_id
+             WHERE p.statut = 'ACTIF' AND d.statut = 'actif'
+               AND d.date_expiration IS NOT NULL
+               AND d.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
+            ) AS documents_expirant
+    """
+
+    _STARTUP_KEYS = [
+        'evaluations_retard', 'contrats_expires', 'contrats_expirant',
+        'personnel_sans_contrat', 'mutuelles_expirees', 'mutuelles_expirant',
+        'visites_retard', 'visites_a_planifier', 'rqth_expirant', 'oeth_expirant',
+        'competences_expirees', 'competences_expirant', 'documents_expires', 'documents_expirant',
+    ]
+
     @staticmethod
     def get_startup_summary() -> Dict[str, int]:
         """Résumé détaillé par catégorie pour le popup de démarrage."""
         logger.debug("get_startup_summary: calcul du résumé de démarrage")
-        result = {}
-
-        _queries = {
-            'evaluations_retard': """
-                SELECT COUNT(*) FROM polyvalence poly
-                JOIN personnel p ON p.id = poly.personnel_id
-                WHERE poly.prochaine_evaluation < CURDATE() AND p.statut = 'ACTIF'
-            """,
-            'contrats_expires': "SELECT COUNT(*) FROM v_contrats_fin_proche WHERE jours_restants < 0",
-            'contrats_expirant': "SELECT COUNT(*) FROM v_contrats_fin_proche WHERE jours_restants BETWEEN 0 AND 30",
-            'personnel_sans_contrat': """
-                SELECT COUNT(*) FROM personnel p
-                LEFT JOIN contrat c ON c.personnel_id = p.id AND c.actif = 1
-                WHERE p.statut = 'ACTIF' AND c.id IS NULL
-            """,
-            'mutuelles_expirees': """
-                SELECT COUNT(*) FROM mutuelle m JOIN personnel p ON p.id = m.personnel_id
-                WHERE p.statut = 'ACTIF' AND m.date_fin IS NOT NULL AND m.date_fin < CURDATE()
-            """,
-            'mutuelles_expirant': """
-                SELECT COUNT(*) FROM mutuelle m JOIN personnel p ON p.id = m.personnel_id
-                WHERE p.statut = 'ACTIF'
-                  AND m.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-            """,
-            'visites_retard': """
-                SELECT COUNT(DISTINCT mv.personnel_id) FROM medical_visite mv
-                JOIN personnel p ON p.id = mv.personnel_id
-                WHERE p.statut = 'ACTIF' AND mv.prochaine_visite < CURDATE()
-                  AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE personnel_id = mv.personnel_id)
-            """,
-            'visites_a_planifier': """
-                SELECT COUNT(DISTINCT mv.personnel_id) FROM medical_visite mv
-                JOIN personnel p ON p.id = mv.personnel_id
-                WHERE p.statut = 'ACTIF'
-                  AND mv.prochaine_visite BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-                  AND mv.id = (SELECT MAX(id) FROM medical_visite WHERE personnel_id = mv.personnel_id)
-            """,
-            'rqth_expirant': """
-                SELECT COUNT(*) FROM validite v JOIN personnel p ON p.id = v.personnel_id
-                WHERE p.statut = 'ACTIF' AND v.type_validite = 'RQTH'
-                  AND v.date_fin IS NOT NULL
-                  AND v.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY)
-            """,
-            'oeth_expirant': """
-                SELECT COUNT(*) FROM validite v JOIN personnel p ON p.id = v.personnel_id
-                WHERE p.statut = 'ACTIF' AND v.type_validite = 'OETH'
-                  AND v.date_fin IS NOT NULL
-                  AND v.date_fin BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 90 DAY)
-            """,
-            'competences_expirees': """
-                SELECT COUNT(*) FROM personnel_competences pc JOIN personnel p ON p.id = pc.personnel_id
-                WHERE p.statut = 'ACTIF'
-                  AND pc.date_expiration IS NOT NULL AND pc.date_expiration < CURDATE()
-            """,
-            'competences_expirant': """
-                SELECT COUNT(*) FROM personnel_competences pc JOIN personnel p ON p.id = pc.personnel_id
-                WHERE p.statut = 'ACTIF'
-                  AND pc.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-            """,
-            'documents_expires': """
-                SELECT COUNT(*) FROM documents d JOIN personnel p ON p.id = d.personnel_id
-                WHERE p.statut = 'ACTIF' AND d.statut = 'expire'
-            """,
-            'documents_expirant': """
-                SELECT COUNT(*) FROM documents d JOIN personnel p ON p.id = d.personnel_id
-                WHERE p.statut = 'ACTIF' AND d.statut = 'actif'
-                  AND d.date_expiration IS NOT NULL
-                  AND d.date_expiration BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)
-            """,
-        }
 
         try:
-            for key, query in _queries.items():
-                result[key] = QueryExecutor.fetch_scalar(query, default=0)
+            row = QueryExecutor.fetch_one(AlertService._STARTUP_QUERY, dictionary=True)
+            result = {k: int(row[k]) for k in AlertService._STARTUP_KEYS} if row \
+                else {k: 0 for k in AlertService._STARTUP_KEYS}
         except Exception as e:
             logger.exception(f"get_startup_summary: erreur DB — {e}")
-            for key in _queries:
-                result.setdefault(key, 0)
+            result = {k: 0 for k in AlertService._STARTUP_KEYS}
 
         result['total_critique'] = (
             result['evaluations_retard'] + result['contrats_expires'] +

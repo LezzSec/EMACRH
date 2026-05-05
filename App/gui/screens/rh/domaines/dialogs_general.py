@@ -22,6 +22,8 @@ class EditInfosGeneralesDialog(EmacFormDialog):
         self.operateur_id = operateur_id
         self.donnees = donnees
         self._distance_computing = False
+        self._original_cp = (donnees.get('cp_adresse') or '').strip()
+        self._original_ville = (donnees.get('ville_adresse') or '').strip().lower()
         super().__init__(
             title="Modifier les informations générales",
             min_width=500,
@@ -280,6 +282,10 @@ class EditInfosGeneralesDialog(EmacFormDialog):
         ville = (saved_data.get('ville_adresse') or '').strip()
 
         if not (cp and ville):
+            return
+
+        if cp == self._original_cp and ville.lower() == self._original_ville:
+            logger.debug(f"Adresse inchangée pour #{self.operateur_id}, pas de recalcul")
             return
 
         personnel_id = self.operateur_id

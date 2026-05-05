@@ -206,9 +206,12 @@ def get_cached_categories_documents() -> List[Dict]:
 
 @cached(ttl=CacheTTL.MEDIUM, namespace='static', key_prefix='competences_catalogue:all')
 def get_cached_competences_catalogue() -> List[Dict]:
-    """Cache le catalogue des compétences (liste quasi-statique, TTL 10 min)."""
+    """Cache le catalogue des compétences actives (liste quasi-statique, TTL 10 min)."""
     return QueryExecutor.fetch_all(
-        "SELECT id, intitule, categorie, duree_validite_mois FROM competences_catalogue ORDER BY intitule",
+        """SELECT id, code, libelle, description, categorie, duree_validite_mois, actif
+           FROM competences_catalogue
+           WHERE actif = 1
+           ORDER BY categorie, libelle""",
         dictionary=True
     )
 

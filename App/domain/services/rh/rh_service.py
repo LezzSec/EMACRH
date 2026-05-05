@@ -38,6 +38,7 @@ from domain.repositories.personnel_repo import PersonnelRepository
 from domain.repositories.contrat_repo import ContratRepository
 from domain.repositories.declaration_repo import DeclarationRepository
 from domain.repositories.document_repo import DocumentRepository
+from infrastructure.cache.emac_cache import get_cached_categories_documents
 
 
 # ============================================================
@@ -738,7 +739,7 @@ def get_documents_domaine(
 ) -> List[Dict]:
     """Récupère les documents d'un opérateur pour un domaine donné."""
     try:
-        all_categories = DocumentRepository.get_categories()
+        all_categories = get_cached_categories_documents()
         categories_ids = [
             cat['id'] for cat in all_categories
             if CATEGORIE_TO_DOMAINE.get(cat['nom'], DomaineRH.GENERAL) == domaine
@@ -805,11 +806,11 @@ def get_resume_operateur(operateur_id: int) -> Dict[str, Any]:
 def get_categories_documents() -> List[Dict]:
     """Récupère toutes les catégories de documents avec leur domaine RH associé."""
     try:
-        categories = DocumentRepository.get_categories()
-        for cat in categories:
-            domaine = CATEGORIE_TO_DOMAINE.get(cat['nom'], DomaineRH.GENERAL)
-            cat['domaine_rh'] = domaine.value
-        return categories
+        categories = get_cached_categories_documents()
+        return [
+            dict(cat, domaine_rh=CATEGORIE_TO_DOMAINE.get(cat['nom'], DomaineRH.GENERAL).value)
+            for cat in categories
+        ]
     except Exception as e:
         logger.exception(f"Erreur get_categories_documents: {e}")
         return []

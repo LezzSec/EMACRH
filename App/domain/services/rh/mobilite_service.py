@@ -460,7 +460,7 @@ def update_mobilite(record_id: int, data: Dict) -> Tuple[bool, str]:
                 record_id,
             ),
         )
-        log_hist("MODIFICATION_MOBILITE", f"Mobilité {record_id} modifiée")
+        log_hist(action="MODIFICATION_MOBILITE", table_name="personnel_mobilite", record_id=record_id, description=f"Mobilité {record_id} modifiée")
         return True, "Enregistrement mis à jour"
     except Exception as e:
         logger.exception(f"Erreur update_mobilite: {e}")
@@ -474,7 +474,7 @@ def delete_mobilite(record_id: int) -> Tuple[bool, str]:
         QueryExecutor.execute_write(
             "DELETE FROM personnel_mobilite WHERE id = %s", (record_id,)
         )
-        log_hist("SUPPRESSION_MOBILITE", f"Mobilité {record_id} supprimée")
+        log_hist(action="SUPPRESSION_MOBILITE", table_name="personnel_mobilite", record_id=record_id, description=f"Mobilité {record_id} supprimée")
         return True, "Enregistrement supprimé"
     except Exception as e:
         logger.exception(f"Erreur delete_mobilite: {e}")
@@ -612,7 +612,7 @@ def update_vehicule(record_id: int, data: Dict) -> Tuple[bool, str]:
                 record_id,
             ),
         )
-        log_hist("MODIFICATION_VEHICULE", f"Véhicule {record_id} modifié")
+        log_hist(action="MODIFICATION_VEHICULE", table_name="personnel_vehicule", record_id=record_id, description=f"Véhicule {record_id} modifié")
         return True, "Véhicule mis à jour"
     except Exception as e:
         logger.exception(f"Erreur update_vehicule: {e}")
@@ -626,7 +626,7 @@ def delete_vehicule(record_id: int) -> Tuple[bool, str]:
         QueryExecutor.execute_write(
             "DELETE FROM personnel_vehicule WHERE id = %s", (record_id,)
         )
-        log_hist("SUPPRESSION_VEHICULE", f"Véhicule {record_id} supprimé")
+        log_hist(action="SUPPRESSION_VEHICULE", table_name="personnel_vehicule", record_id=record_id, description=f"Véhicule {record_id} supprimé")
         return True, "Véhicule supprimé"
     except Exception as e:
         logger.exception(f"Erreur delete_vehicule: {e}")

@@ -107,8 +107,8 @@ class MainWindow(
         self.alertes_rh_card.body.addWidget(self.alertes_rh_filter)
         self.alertes_rh_card.body.addWidget(self.alertes_rh_scroll)
 
-        btn_voir_alertes = EmacButton("Gestion RH", variant='ghost')
-        btn_voir_alertes.clicked.connect(self.show_contract_management)
+        btn_voir_alertes = EmacButton("Alertes RH", variant='ghost')
+        btn_voir_alertes.clicked.connect(self.show_alertes_rh)
         self.alertes_rh_card.body.addWidget(btn_voir_alertes)
         self.alertes_rh_card.setVisible(False)
         left.addWidget(self.alertes_rh_card)

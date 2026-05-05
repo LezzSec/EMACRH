@@ -303,22 +303,6 @@ class ManageOperatorsDialog(QDialog):
                 date_entree = self.add_date_entree.date().toString("yyyy-MM-dd")
                 PersonnelRepository.save_date_entree(operateur_id, date_entree)
 
-                # Log création (le repository a déjà loggé, on ajoute le détail RH)
-                log_hist(
-                    action="INSERT",
-                    table_name="personnel",
-                    record_id=operateur_id,
-                    operateur_id=operateur_id,
-                    description=json.dumps({
-                        "operateur": f"{prenom} {nom}",
-                        "matricule": matricule,
-                        "type": "creation_operateur",
-                        "details": f"Création {prenom} {nom} (entrée: {self.add_date_entree.date().toString('dd/MM/yyyy')})",
-                        **({"numposte": "Production"} if is_production else ({"numposte": service_numposte} if service_numposte else {})),
-                    }, ensure_ascii=False),
-                    source="GUI/manage_operateur",
-                )
-
             # Ajouter la polyvalence si demandée
             if add_polyvalence and poste_id:
                 niveau_texte = {

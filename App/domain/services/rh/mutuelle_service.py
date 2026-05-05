@@ -114,7 +114,7 @@ def update_mutuelle(record_id: int, data: Dict) -> Tuple[bool, str]:
                 record_id,
             ),
         )
-        log_hist("MODIFICATION_MUTUELLE", f"Mutuelle {record_id} modifiée")
+        log_hist(action="MODIFICATION_MUTUELLE", table_name="mutuelle", record_id=record_id, description=f"Mutuelle {record_id} modifiée")
         return True, "Enregistrement mis à jour"
     except Exception as e:
         logger.exception(f"Erreur update_mutuelle: {e}")
@@ -126,7 +126,7 @@ def delete_mutuelle(record_id: int) -> Tuple[bool, str]:
     require('rh.mutuelle.edit')
     try:
         QueryExecutor.execute_write("DELETE FROM mutuelle WHERE id = %s", (record_id,))
-        log_hist("SUPPRESSION_MUTUELLE", f"Mutuelle {record_id} supprimée")
+        log_hist(action="SUPPRESSION_MUTUELLE", table_name="mutuelle", record_id=record_id, description=f"Mutuelle {record_id} supprimée")
         return True, "Enregistrement supprimé"
     except Exception as e:
         logger.exception(f"Erreur delete_mutuelle: {e}")

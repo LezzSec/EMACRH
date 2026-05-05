@@ -157,6 +157,13 @@ class EditControleAlcoolDialog(EmacFormDialog):
         if text != 'Positif':
             self.taux.setValue(0)
 
+    def validate(self):
+        if self.date_controle.date() > QDate.currentDate():
+            return False, "La date du contrôle ne peut pas être dans le futur."
+        if self.resultat_combo.currentText() == 'Positif' and self.taux.value() <= 0:
+            return False, "Veuillez saisir le taux d'alcoolémie pour un résultat positif."
+        return True, ""
+
     def save_to_db(self):
         from datetime import datetime
         date_val = self.date_controle.date().toPyDate()
@@ -205,6 +212,11 @@ class EditTestSalivaireDialog(EmacFormDialog):
         form.addRow("Commentaire :", self.commentaire)
 
         self.content_layout.addWidget(group)
+
+    def validate(self):
+        if self.date_test.date() > QDate.currentDate():
+            return False, "La date du test ne peut pas être dans le futur."
+        return True, ""
 
     def save_to_db(self):
         from datetime import datetime
@@ -329,6 +341,12 @@ class EditEntretienDialog(JustificatifMixin, EmacFormDialog):
         self.content_layout.addWidget(commentaires_group)
 
         self._ajouter_section_justificatif("Entretiens professionnels", optionnel=True)
+
+    def validate(self):
+        prochaine = self.prochaine_date.date()
+        if prochaine.year() > 1900 and prochaine <= self.date_entretien.date():
+            return False, "La date du prochain entretien doit être postérieure à la date de l'entretien."
+        return True, ""
 
     def save_to_db(self):
         prochaine = self.prochaine_date.date()

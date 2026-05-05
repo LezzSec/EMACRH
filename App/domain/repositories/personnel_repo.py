@@ -249,9 +249,9 @@ class PersonnelRepository(BaseRepository[Personnel]):
 
             new_id = QueryExecutor.with_transaction(_do_create)
 
-            from infrastructure.logging.optimized_db_logger import log_hist
-            log_hist("CREATE", "personnel", new_id,
-                    f"Création: {data.get('nom')} {data.get('prenom')}")
+            from infrastructure.logging.optimized_db_logger import log_hist_async
+            log_hist_async("CREATE", "personnel", new_id,
+                           f"Création: {data.get('nom')} {data.get('prenom')}")
 
             from application.event_bus import EventBus
             EventBus.emit('personnel.created', {
@@ -307,9 +307,9 @@ class PersonnelRepository(BaseRepository[Personnel]):
         try:
             QueryExecutor.execute_write(query, values)
 
-            from infrastructure.logging.optimized_db_logger import log_hist
-            log_hist("UPDATE", "personnel", id,
-                    f"Mise à jour: {list(update_data.keys())}")
+            from infrastructure.logging.optimized_db_logger import log_hist_async
+            log_hist_async("UPDATE", "personnel", id,
+                           f"Mise à jour: {list(update_data.keys())}")
 
             return True, "Employé mis à jour avec succès"
 

@@ -15,7 +15,7 @@ from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont, QColor
 
 from domain.repositories.personnel_repo import PersonnelRepository
-from infrastructure.logging.optimized_db_logger import log_hist
+from domain.services.personnel.personnel_service import PersonnelService
 from gui.components.emac_ui_kit import show_error_message
 
 
@@ -210,14 +210,7 @@ class AffecterDatesEntreeDialog(QDialog):
                 return
 
             try:
-                PersonnelRepository.save_date_entree(operateur_id, date_entree)
-
-                log_hist(
-                    "AFFECTATION_DATE_ENTREE",
-                    f"Date d'entrée affectée: {date_display}",
-                    operateur_id,
-                    None
-                )
+                PersonnelService.save_date_entree(operateur_id, date_entree)
 
                 QMessageBox.information(
                     self,

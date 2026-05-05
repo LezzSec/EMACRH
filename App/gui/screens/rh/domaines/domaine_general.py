@@ -12,6 +12,16 @@ from .dialogs_mobilite import EditVehiculeDialog, EditMobiliteDialog
 from domain.services.rh.mobilite_service import delete_vehicule
 
 
+def _format_numero_ss(value) -> str:
+    """Formate un numéro de sécurité sociale en groupes lisibles : 1 93 09 64 102 355 94"""
+    if not value:
+        return '-'
+    clean = str(value).replace(' ', '')
+    if len(clean) != 15 or not clean.isdigit():
+        return str(value)
+    return f"{clean[0]} {clean[1:3]} {clean[3:5]} {clean[5:7]} {clean[7:10]} {clean[10:13]} {clean[13:15]}"
+
+
 class DomaineGeneral(DomaineWidget):
 
     def _build(self, donnees: dict, documents: list):
@@ -70,7 +80,7 @@ class DomaineGeneral(DomaineWidget):
             ("Nationalité", val('nationalite')),
             ("Catégorie", categorie_display),
             ("Service / Poste", val('numposte')),
-            ("N° Sécurité Sociale", val('numero_ss')),
+            ("N° Sécurité Sociale", _format_numero_ss(donnees.get('numero_ss'))),
             ("Date de naissance", self._format_date(donnees.get('date_naissance'))),
             ("Lieu de naissance", lieu_naissance),
             ("Âge", f"{donnees.get('age')} ans" if donnees.get('age') else '-'),

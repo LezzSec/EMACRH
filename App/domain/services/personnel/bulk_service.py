@@ -10,7 +10,7 @@ pour les opérations unitaires, et ajoute le tracking batch.
 from typing import List, Dict, Tuple, Optional, Callable, Any
 
 from infrastructure.db.query_executor import QueryExecutor
-from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist_async
 from application.permission_manager import require
 from domain.services.documents.document_service import DocumentService
 from infrastructure.logging.logging_config import get_logger
@@ -127,6 +127,21 @@ def add_batch_detail(
         """, (batch_id, personnel_id, status, record_id, error_message))
     except Exception as e:
         logger.error(f"Erreur add_batch_detail: {e}")
+
+
+def _insert_batch_details(rows: list) -> None:
+    """Insère plusieurs détails batch en un seul round-trip."""
+    if not rows:
+        return
+    try:
+        QueryExecutor.execute_many(
+            "INSERT INTO batch_operation_details "
+            "(batch_id, personnel_id, status, record_id, error_message) "
+            "VALUES (%s, %s, %s, %s, %s)",
+            rows
+        )
+    except Exception as e:
+        logger.error(f"Erreur _insert_batch_details: {e}")
 
 
 def complete_batch_operation(
@@ -255,6 +270,7 @@ def add_formation_batch(
                 if pid not in id_map:
                     id_map[pid] = row['id']
 
+            _batch_details: list = []
             for i, pid in enumerate(personnel_ids):
                 formation_id = id_map.get(pid)
                 if not formation_id:
@@ -284,19 +300,20 @@ def add_formation_batch(
                         logger.error(f"Erreur ajout document pour formation {formation_id}: {doc_error}")
 
                 if batch_id:
-                    add_batch_detail(batch_id, pid, 'SUCCES', formation_id)
+                    _batch_details.append((batch_id, pid, 'SUCCES', formation_id, None))
+            if batch_id and _batch_details:
+                _insert_batch_details(_batch_details)
         except Exception as e:
             logger.error(f"Erreur re-fetch formations pour documents/batch: {e}")
     elif nb_errors > 0 and batch_id:
-        for pid in personnel_ids:
-            add_batch_detail(batch_id, pid, 'ERREUR', error_message=error_msg)
+        _insert_batch_details([(batch_id, pid, 'ERREUR', None, error_msg) for pid in personnel_ids])
 
     # Finaliser le batch
     if batch_id:
         complete_batch_operation(batch_id, nb_success, nb_errors)
 
     # Log historique
-    log_hist(
+    log_hist_async(
         action="FORMATION_BATCH",
         table_name="formation",
         description=f"Formation '{formation_data.get('intitule')}' assignée à {nb_success} personnes ({nb_errors} erreurs)"
@@ -434,6 +451,7 @@ def add_absence_batch(
                 if pid not in id_map:
                     id_map[pid] = row['id']
 
+            _batch_details: list = []
             for i, pid in enumerate(personnel_ids):
                 demande_id = id_map.get(pid)
                 if not demande_id:
@@ -458,19 +476,20 @@ def add_absence_batch(
                         logger.error(f"Erreur ajout justificatif pour absence {demande_id}: {doc_error}")
 
                 if batch_id:
-                    add_batch_detail(batch_id, pid, 'SUCCES', demande_id)
+                    _batch_details.append((batch_id, pid, 'SUCCES', demande_id, None))
+            if batch_id and _batch_details:
+                _insert_batch_details(_batch_details)
         except Exception as e:
             logger.error(f"Erreur re-fetch absences pour documents/batch: {e}")
     elif nb_errors > 0 and batch_id:
-        for pid in personnel_ids:
-            add_batch_detail(batch_id, pid, 'ERREUR', error_message=error_msg)
+        _insert_batch_details([(batch_id, pid, 'ERREUR', None, error_msg) for pid in personnel_ids])
 
     # Finaliser le batch
     if batch_id:
         complete_batch_operation(batch_id, nb_success, nb_errors)
 
     # Log historique
-    log_hist(
+    log_hist_async(
         action="ABSENCE_BATCH",
         table_name="demande_absence",
         description=f"Absence '{type_absence_code}' assignée à {nb_success} personnes ({nb_errors} erreurs)"
@@ -579,6 +598,7 @@ def add_visite_batch(
                 if pid not in id_map:
                     id_map[pid] = row['id']
 
+            _batch_details: list = []
             for i, pid in enumerate(personnel_ids):
                 visite_id = id_map.get(pid)
                 if not visite_id:
@@ -603,19 +623,20 @@ def add_visite_batch(
                         logger.error(f"Erreur ajout document médical pour visite {visite_id}: {doc_error}")
 
                 if batch_id:
-                    add_batch_detail(batch_id, pid, 'SUCCES', visite_id)
+                    _batch_details.append((batch_id, pid, 'SUCCES', visite_id, None))
+            if batch_id and _batch_details:
+                _insert_batch_details(_batch_details)
         except Exception as e:
             logger.error(f"Erreur re-fetch visites pour documents/batch: {e}")
     elif nb_errors > 0 and batch_id:
-        for pid in personnel_ids:
-            add_batch_detail(batch_id, pid, 'ERREUR', error_message=error_msg)
+        _insert_batch_details([(batch_id, pid, 'ERREUR', None, error_msg) for pid in personnel_ids])
 
     # Finaliser le batch
     if batch_id:
         complete_batch_operation(batch_id, nb_success, nb_errors)
 
     # Log historique
-    log_hist(
+    log_hist_async(
         action="VISITE_MEDICALE_BATCH",
         table_name="medical_visite",
         description=f"Visite '{visite_data.get('type_visite')}' assignée à {nb_success} personnes ({nb_errors} erreurs)"
@@ -768,6 +789,7 @@ def add_competence_batch(
             )
             id_map = {row['personnel_id']: row['id'] for row in inserted}
 
+            _batch_details: list = []
             for i, pid in enumerate(personnel_ids):
                 record_id = id_map.get(pid)
                 if not record_id:
@@ -793,19 +815,20 @@ def add_competence_batch(
                         logger.error(f"Erreur ajout attestation pour compétence {record_id}: {doc_error}")
 
                 if batch_id:
-                    add_batch_detail(batch_id, pid, 'SUCCES', record_id)
+                    _batch_details.append((batch_id, pid, 'SUCCES', record_id, None))
+            if batch_id and _batch_details:
+                _insert_batch_details(_batch_details)
         except Exception as e:
             logger.error(f"Erreur re-fetch compétences pour documents/batch: {e}")
     elif nb_errors > 0 and batch_id:
-        for pid in personnel_ids:
-            add_batch_detail(batch_id, pid, 'ERREUR', error_message=error_msg)
+        _insert_batch_details([(batch_id, pid, 'ERREUR', None, error_msg) for pid in personnel_ids])
 
     # Finaliser le batch
     if batch_id:
         complete_batch_operation(batch_id, nb_success, nb_errors)
 
     # Log historique
-    log_hist(
+    log_hist_async(
         action="COMPETENCE_BATCH",
         table_name="personnel_competences",
         description=f"Compétence '{competence_libelle}' assignée à {nb_success} personnes ({nb_errors} erreurs)"

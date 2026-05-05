@@ -105,6 +105,14 @@ class EditVisiteDialog(JustificatifMixin, EmacFormDialog):
         self._ajouter_section_justificatif("Certificats médicaux", optionnel=True)
 
     def validate(self):
+        if self.date_visite.date() > QDate.currentDate():
+            return False, "La date de visite ne peut pas être dans le futur."
+        prochaine = self.prochaine_visite.date()
+        if prochaine.year() > 1900 and prochaine < self.date_visite.date():
+            return False, "La date de prochaine visite doit être postérieure à la date de visite."
+        convocation = self.date_prochaine_convocation.date()
+        if convocation.year() > 1900 and convocation < QDate.currentDate():
+            return False, "La date de prochaine convocation doit être dans le futur."
         return True, ""
 
     def save_to_db(self):

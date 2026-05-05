@@ -19,8 +19,9 @@ Usage:
 """
 
 import re
-from typing import Any, Dict, List, Optional, Tuple, Union
-from infrastructure.db.configbd import DatabaseConnection, DatabaseCursor
+from contextlib import contextmanager
+from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
+from infrastructure.db.configbd import DatabaseConnection, DatabaseCursor, get_connection
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -70,7 +71,7 @@ class QueryExecutor:
             >>> print(personnel[0]['nom'])
         """
         try:
-            with DatabaseCursor(dictionary=dictionary) as cur:
+            with DatabaseCursor(dictionary=dictionary, auto_commit=False) as cur:
                 cur.execute(query, params or ())
                 result = cur.fetchall()
                 if len(result) > 100:
@@ -105,7 +106,7 @@ class QueryExecutor:
             ... )
         """
         try:
-            with DatabaseCursor(dictionary=dictionary) as cur:
+            with DatabaseCursor(dictionary=dictionary, auto_commit=False) as cur:
                 cur.execute(query, params or ())
                 result = cur.fetchone()
                 return result
@@ -136,7 +137,7 @@ class QueryExecutor:
             >>> max_id = QueryExecutor.fetch_scalar("SELECT MAX(id) FROM personnel", default=0)
         """
         try:
-            with DatabaseCursor() as cur:
+            with DatabaseCursor(auto_commit=False) as cur:
                 cur.execute(query, params or ())
                 result = cur.fetchone()
                 return result[0] if result else default
@@ -389,4 +390,94 @@ class QueryExecutor:
             return QueryExecutor.fetch_scalar(query, params, default=0)
         except Exception as e:
             logger.error(f"Erreur count: {e}", exc_info=True)
+            raise
+
+    @staticmethod
+    @contextmanager
+    def batch() -> Iterator['_BatchExecutor']:
+        """
+        Contexte de lecture groupée : partage une seule connexion pour plusieurs
+        requêtes SELECT consécutives, évitant N acquisitions de pool.
+
+        Usage:
+            with QueryExecutor.batch() as q:
+                rows   = q.fetch_all("SELECT ...", dictionary=True)
+                total  = q.fetch_scalar("SELECT COUNT(*) FROM ...")
+                one    = q.fetch_one("SELECT ... WHERE id = %s", (uid,))
+        """
+        conn = get_connection()
+        executor = _BatchExecutor(conn)
+        try:
+            yield executor
+        finally:
+            executor._close_cursors()
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+class _BatchExecutor:
+    """Exécute plusieurs requêtes de lecture sur une connexion unique."""
+
+    def __init__(self, conn) -> None:
+        self._conn = conn
+        self._cursors: Dict[bool, Any] = {}
+
+    def _cur(self, dictionary: bool):
+        if dictionary not in self._cursors:
+            self._cursors[dictionary] = self._conn.cursor(dictionary=dictionary)
+        return self._cursors[dictionary]
+
+    def _close_cursors(self) -> None:
+        for cur in self._cursors.values():
+            try:
+                cur.close()
+            except Exception:
+                pass
+
+    def fetch_all(
+        self,
+        query: str,
+        params: Optional[Tuple] = None,
+        dictionary: bool = False,
+    ) -> List[Union[Tuple, Dict]]:
+        try:
+            cur = self._cur(dictionary)
+            cur.execute(query, params or ())
+            result = cur.fetchall()
+            if len(result) > 100:
+                logger.info(f"batch.fetch_all: {len(result)} lignes (requête volumineuse)")
+            return result
+        except Exception as e:
+            logger.error(f"Erreur batch.fetch_all: {e}", exc_info=True)
+            raise
+
+    def fetch_one(
+        self,
+        query: str,
+        params: Optional[Tuple] = None,
+        dictionary: bool = False,
+    ) -> Optional[Union[Tuple, Dict]]:
+        try:
+            cur = self._cur(dictionary)
+            cur.execute(query, params or ())
+            return cur.fetchone()
+        except Exception as e:
+            logger.error(f"Erreur batch.fetch_one: {e}", exc_info=True)
+            raise
+
+    def fetch_scalar(
+        self,
+        query: str,
+        params: Optional[Tuple] = None,
+        default: Any = None,
+    ) -> Any:
+        try:
+            cur = self._cur(False)
+            cur.execute(query, params or ())
+            row = cur.fetchone()
+            return row[0] if row else default
+        except Exception as e:
+            logger.error(f"Erreur batch.fetch_scalar: {e}", exc_info=True)
             raise

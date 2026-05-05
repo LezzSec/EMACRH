@@ -200,8 +200,10 @@ class DashboardMixin:
     def _fetch_alertes_rh(self, type_doc_filter, progress_callback=None):
         from domain.services.admin.alert_service import AlertService
         try:
-            alertes = AlertService.get_all_document_alerts(type_doc=type_doc_filter or None, jours=30)
-            return {"alertes": alertes}
+            top, total = AlertService.get_top_document_alerts(
+                n=10, type_doc=type_doc_filter or None, jours=30
+            )
+            return {"top": top, "total": total}
         except Exception as e:
             logger.error(f"Erreur dans _fetch_alertes_rh: {e}", exc_info=True)
             raise
@@ -219,9 +221,10 @@ class DashboardMixin:
             "SANS_ENTRETIEN": "Sans entretien",
         }
         try:
-            alertes = payload.get("alertes", [])
+            top = payload.get("top", [])
+            total = payload.get("total", 0)
             self.alertes_rh_list.clear()
-            for a in alertes:
+            for a in top:
                 date_txt = ""
                 if a.date_echeance:
                     date_txt = format_date(a.date_echeance) if hasattr(a.date_echeance, 'strftime') else str(a.date_echeance)
@@ -231,8 +234,12 @@ class DashboardMixin:
                 item = QListWidgetItem(label)
                 item.setData(Qt.UserRole, a.personnel_id)
                 self.alertes_rh_list.addItem(item)
-            if not alertes:
+            if not top:
                 self.alertes_rh_list.addItem("Aucun document à renouveler")
+            elif total > len(top):
+                footer = QListWidgetItem(f"… {total} alertes au total")
+                footer.setData(Qt.UserRole, None)
+                self.alertes_rh_list.addItem(footer)
         except Exception as e:
             logger.error(f"Erreur dans _apply_alertes_rh_to_ui: {e}", exc_info=True)
 

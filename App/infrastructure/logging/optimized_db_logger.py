@@ -241,25 +241,27 @@ class OptimizedDBLogger:
                         entry.get('table_name'),
                         str(entry.get('record_id')) if entry.get('record_id') is not None else None,
                         entry.get('utilisateur'),
-                        entry.get('description')
+                        entry.get('description'),
+                        entry.get('operateur_id'),
+                        entry.get('poste_id'),
                     ))
 
                 # INSERT multiple (1 requête pour N logs)
-                placeholders = ', '.join(['(NOW(), %s, %s, %s, %s, %s)'] * len(values))
+                placeholders = ', '.join(['(NOW(), %s, %s, %s, %s, %s, %s, %s)'] * len(values))
                 flat_values = [item for row in values for item in row]
 
                 query = f"""
                     INSERT INTO historique
-                        (date_time, action, table_name, record_id, utilisateur, description)
+                        (date_time, action, table_name, record_id, utilisateur, description,
+                         personnel_id, poste_id)
                     VALUES {placeholders}
                 """
 
                 cur.execute(query, flat_values)
                 cur.close()
 
-        except Exception:
-            # En cas d'erreur, ne pas casser le flux - erreur silencieuse
-            pass
+        except Exception as e:
+            _logger.warning(f"Erreur _flush_batch (batch de {len(batch)} logs perdu): {e}")
 
     def log(
         self,
@@ -269,7 +271,9 @@ class OptimizedDBLogger:
         description: Optional[str] = None,
         details: Any = None,
         source: Optional[str] = None,
-        utilisateur: Optional[str] = None
+        utilisateur: Optional[str] = None,
+        operateur_id: Optional[int] = None,
+        poste_id: Optional[int] = None,
     ):
         """
         Log une action dans la table historique (async, non-bloquant).
@@ -282,6 +286,8 @@ class OptimizedDBLogger:
             details: Détails (dict ou string)
             source: Source de l'action
             utilisateur: Nom d'utilisateur
+            operateur_id: ID de l'opérateur concerné
+            poste_id: ID du poste concerné
         """
         try:
             self.queue.put_nowait({
@@ -292,6 +298,8 @@ class OptimizedDBLogger:
                 'details': details,
                 'source': source,
                 'utilisateur': utilisateur,
+                'operateur_id': operateur_id,
+                'poste_id': poste_id,
                 'timestamp': time.time()
             })
         except Exception:
@@ -350,7 +358,9 @@ def log_hist_async(
     description: Optional[str] = None,
     details: Any = None,
     source: Optional[str] = None,
-    utilisateur: Optional[str] = None
+    utilisateur: Optional[str] = None,
+    operateur_id: Optional[int] = None,
+    poste_id: Optional[int] = None,
 ):
     """
     Log une action dans la table historique (async, optimisé).
@@ -395,7 +405,9 @@ def log_hist_async(
         description=description,
         details=details,
         source=source,
-        utilisateur=utilisateur
+        utilisateur=utilisateur,
+        operateur_id=operateur_id,
+        poste_id=poste_id,
     )
 
 

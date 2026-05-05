@@ -7,6 +7,7 @@ Centralise toute la logique de connexion à la base de données.
 
 import os
 import sys
+import time
 import logging
 from pathlib import Path
 
@@ -19,6 +20,9 @@ logger = logging.getLogger(__name__)
 
 _connection_pool = None
 _env_loaded = False
+_last_activity: float = 0.0
+# Ping only when the app has been idle longer than this (covers PC-sleep reconnect).
+_PING_IDLE_S: int = 300
 
 
 def _load_env_once() -> None:
@@ -190,23 +194,29 @@ def get_connection():
     Retourne une connexion depuis le pool avec vérification de la santé.
     IMPORTANT : pense à conn.close() après usage (ça la rend au pool).
 
+    Le ping n'est effectué que si l'application est inactive depuis plus de
+    _PING_IDLE_S secondes (veille PC, etc.). Pendant une session active,
+    aucun round-trip supplémentaire n'est nécessaire.
+
     Returns:
         Connection: Une connexion MySQL opérationnelle
 
     Raises:
         RuntimeError: Si impossible d'obtenir une connexion saine
     """
+    global _last_activity
     pool = _get_pool()
+    now = time.monotonic()
     try:
         conn = pool.get_connection()
-        # Vérifier que la connexion est vivante (important après veille PC)
-        if not _ensure_connection_alive(conn):
-            # Si la reconnexion échoue, fermer et récupérer une nouvelle connexion
-            try:
-                conn.close()
-            except Exception:
-                pass
-            conn = pool.get_connection()
+        if (now - _last_activity) > _PING_IDLE_S:
+            if not _ensure_connection_alive(conn):
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+                conn = pool.get_connection()
+        _last_activity = now
         return conn
     except MySQLError as e:
         raise RuntimeError(f"Impossible d'obtenir une connexion DB: {e}") from e

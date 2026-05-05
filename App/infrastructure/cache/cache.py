@@ -24,6 +24,7 @@ from datetime import datetime
 from threading import RLock
 
 _CLEANUP_INTERVAL_SECONDS = 300  # Purge des entrées expirées toutes les 5 minutes
+_MISS = object()  # Sentinelle : distingue "absent du cache" de "valeur None légitime"
 
 
 # ===========================
@@ -197,8 +198,8 @@ class CacheManager:
 
             postes = cache.get_or_set('postes', load_postes, ttl=300)
         """
-        value = self.get(key)
-        if value is not None:
+        value = self.get(key, default=_MISS)
+        if value is not _MISS:
             return value
 
         # Cache miss, créer la valeur
@@ -381,8 +382,8 @@ def cached(ttl: Optional[float] = None, namespace: Optional[str] = None, key_pre
                 key += f":{':'.join(f'{k}={v}' for k, v in sorted(kwargs.items()))}"
 
             # Récupérer depuis le cache
-            result = cache.get(key)
-            if result is not None:
+            result = cache.get(key, default=_MISS)
+            if result is not _MISS:
                 return result
 
             # Cache miss, exécuter la fonction

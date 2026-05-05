@@ -36,7 +36,7 @@ class AtelierService:
         new_id = QueryExecutor.execute_write(
             "INSERT INTO atelier (nom) VALUES (%s)", (nom,)
         )
-        log_hist("CREATION_ATELIER", f"Atelier créé : {nom}")
+        log_hist(action="CREATION_ATELIER", table_name="atelier", record_id=new_id, description=f"Atelier créé : {nom}")
         return new_id
 
     @staticmethod
@@ -45,7 +45,7 @@ class AtelierService:
         QueryExecutor.execute_write(
             "UPDATE atelier SET nom=%s WHERE id=%s", (nom, atelier_id)
         )
-        log_hist("MODIFICATION_ATELIER", f"Atelier #{atelier_id} modifié : {nom}")
+        log_hist(action="MODIFICATION_ATELIER", table_name="atelier", record_id=atelier_id, description=f"Atelier #{atelier_id} modifié : {nom}")
 
     @staticmethod
     def delete(atelier_id: int) -> tuple:
@@ -54,7 +54,7 @@ class AtelierService:
         if count > 0:
             return False, f"Impossible : {count} poste(s) référencent cet atelier."
         QueryExecutor.execute_write("DELETE FROM atelier WHERE id=%s", (atelier_id,))
-        log_hist("SUPPRESSION_ATELIER", f"Atelier #{atelier_id} supprimé")
+        log_hist(action="SUPPRESSION_ATELIER", table_name="atelier", record_id=atelier_id, description=f"Atelier #{atelier_id} supprimé")
         return True, "Atelier supprimé."
 
 
@@ -78,7 +78,7 @@ class ServicesRHService:
             "INSERT INTO services (nom_service, description) VALUES (%s, %s)",
             (nom_service, description)
         )
-        log_hist("CREATION_SERVICE", f"Service créé : {nom_service}")
+        log_hist(action="CREATION_SERVICE", table_name="services", record_id=new_id, description=f"Service créé : {nom_service}")
         return new_id
 
     @staticmethod
@@ -88,7 +88,7 @@ class ServicesRHService:
             "UPDATE services SET nom_service=%s, description=%s WHERE id=%s",
             (nom_service, description, service_id)
         )
-        log_hist("MODIFICATION_SERVICE", f"Service #{service_id} modifié : {nom_service}")
+        log_hist(action="MODIFICATION_SERVICE", table_name="services", record_id=service_id, description=f"Service #{service_id} modifié : {nom_service}")
 
     @staticmethod
     def delete(service_id: int) -> tuple:
@@ -96,7 +96,7 @@ class ServicesRHService:
         if count > 0:
             return False, f"Impossible : {count} personnel(s) sont rattachés à ce service."
         QueryExecutor.execute_write("DELETE FROM services WHERE id=%s", (service_id,))
-        log_hist("SUPPRESSION_SERVICE", f"Service #{service_id} supprimé")
+        log_hist(action="SUPPRESSION_SERVICE", table_name="services", record_id=service_id, description=f"Service #{service_id} supprimé")
         return True, "Service supprimé."
 
 
@@ -124,7 +124,7 @@ class TypeAbsenceService:
             "VALUES (%s, %s, %s, %s, %s)",
             (code, libelle, int(decompte_solde), couleur, int(actif))
         )
-        log_hist("CREATION_TYPE_ABSENCE", f"Type absence créé : {code} - {libelle}")
+        log_hist(action="CREATION_TYPE_ABSENCE", table_name="type_absence", record_id=new_id, description=f"Type absence créé : {code} - {libelle}")
         return new_id
 
     @staticmethod
@@ -137,7 +137,7 @@ class TypeAbsenceService:
             "couleur=%s, actif=%s WHERE id=%s",
             (code, libelle, int(decompte_solde), couleur, int(actif), type_id)
         )
-        log_hist("MODIFICATION_TYPE_ABSENCE", f"Type absence #{type_id} modifié : {code}")
+        log_hist(action="MODIFICATION_TYPE_ABSENCE", table_name="type_absence", record_id=type_id, description=f"Type absence #{type_id} modifié : {code}")
 
     @staticmethod
     def delete(type_id: int) -> tuple:
@@ -145,7 +145,7 @@ class TypeAbsenceService:
         if count > 0:
             return False, f"Impossible : {count} demande(s) d'absence utilisent ce type."
         QueryExecutor.execute_write("DELETE FROM type_absence WHERE id=%s", (type_id,))
-        log_hist("SUPPRESSION_TYPE_ABSENCE", f"Type absence #{type_id} supprimé")
+        log_hist(action="SUPPRESSION_TYPE_ABSENCE", table_name="type_absence", record_id=type_id, description=f"Type absence #{type_id} supprimé")
         return True, "Type d'absence supprimé."
 
 
@@ -169,7 +169,7 @@ class JoursFeriesService:
             "INSERT INTO jours_feries (date_ferie, libelle, fixe) VALUES (%s, %s, %s)",
             (date_ferie, libelle, int(fixe))
         )
-        log_hist("CREATION_JOUR_FERIE", f"Jour férié créé : {date_ferie} - {libelle}")
+        log_hist(action="CREATION_JOUR_FERIE", table_name="jours_feries", record_id=new_id, description=f"Jour férié créé : {date_ferie} - {libelle}")
         return new_id
 
     @staticmethod
@@ -179,12 +179,12 @@ class JoursFeriesService:
             "UPDATE jours_feries SET date_ferie=%s, libelle=%s, fixe=%s WHERE id=%s",
             (date_ferie, libelle, int(fixe), jour_id)
         )
-        log_hist("MODIFICATION_JOUR_FERIE", f"Jour férié #{jour_id} modifié : {date_ferie}")
+        log_hist(action="MODIFICATION_JOUR_FERIE", table_name="jours_feries", record_id=jour_id, description=f"Jour férié #{jour_id} modifié : {date_ferie}")
 
     @staticmethod
     def delete(jour_id: int) -> tuple:
         QueryExecutor.execute_write("DELETE FROM jours_feries WHERE id=%s", (jour_id,))
-        log_hist("SUPPRESSION_JOUR_FERIE", f"Jour férié #{jour_id} supprimé")
+        log_hist(action="SUPPRESSION_JOUR_FERIE", table_name="jours_feries", record_id=jour_id, description=f"Jour férié #{jour_id} supprimé")
         return True, "Jour férié supprimé."
 
 
@@ -214,7 +214,7 @@ class CompetencesCatalogueService:
             "VALUES (%s, %s, %s, %s, %s, %s)",
             (code, libelle, description, categorie, duree_validite_mois, int(actif))
         )
-        log_hist("CREATION_COMPETENCE", f"Compétence créée : {code} - {libelle}")
+        log_hist(action="CREATION_COMPETENCE", table_name="competences_catalogue", record_id=new_id, description=f"Compétence créée : {code} - {libelle}")
         return new_id
 
     @staticmethod
@@ -227,7 +227,7 @@ class CompetencesCatalogueService:
             "categorie=%s, duree_validite_mois=%s, actif=%s WHERE id=%s",
             (code, libelle, description, categorie, duree_validite_mois, int(actif), comp_id)
         )
-        log_hist("MODIFICATION_COMPETENCE", f"Compétence #{comp_id} modifiée : {code}")
+        log_hist(action="MODIFICATION_COMPETENCE", table_name="competences_catalogue", record_id=comp_id, description=f"Compétence #{comp_id} modifiée : {code}")
 
     @staticmethod
     def delete(comp_id: int) -> tuple:
@@ -237,7 +237,7 @@ class CompetencesCatalogueService:
         QueryExecutor.execute_write(
             "DELETE FROM competences_catalogue WHERE id=%s", (comp_id,)
         )
-        log_hist("SUPPRESSION_COMPETENCE", f"Compétence #{comp_id} supprimée")
+        log_hist(action="SUPPRESSION_COMPETENCE", table_name="competences_catalogue", record_id=comp_id, description=f"Compétence #{comp_id} supprimée")
         return True, "Compétence supprimée."
 
 
@@ -265,7 +265,7 @@ class CategoriesDocsService:
             "VALUES (%s, %s, %s, %s, %s)",
             (nom, description, couleur, int(exige_date_expiration), ordre_affichage)
         )
-        log_hist("CREATION_CATEGORIE_DOC", f"Catégorie document créée : {nom}")
+        log_hist(action="CREATION_CATEGORIE_DOC", table_name="categories_documents", record_id=new_id, description=f"Catégorie document créée : {nom}")
         return new_id
 
     @staticmethod
@@ -277,7 +277,7 @@ class CategoriesDocsService:
             "exige_date_expiration=%s, ordre_affichage=%s WHERE id=%s",
             (nom, description, couleur, int(exige_date_expiration), ordre_affichage, cat_id)
         )
-        log_hist("MODIFICATION_CATEGORIE_DOC", f"Catégorie document #{cat_id} modifiée : {nom}")
+        log_hist(action="MODIFICATION_CATEGORIE_DOC", table_name="categories_documents", record_id=cat_id, description=f"Catégorie document #{cat_id} modifiée : {nom}")
 
     @staticmethod
     def delete(cat_id: int) -> tuple:
@@ -287,7 +287,7 @@ class CategoriesDocsService:
         QueryExecutor.execute_write(
             "DELETE FROM categories_documents WHERE id=%s", (cat_id,)
         )
-        log_hist("SUPPRESSION_CATEGORIE_DOC", f"Catégorie document #{cat_id} supprimée")
+        log_hist(action="SUPPRESSION_CATEGORIE_DOC", table_name="categories_documents", record_id=cat_id, description=f"Catégorie document #{cat_id} supprimée")
         return True, "Catégorie supprimée."
 
 
@@ -311,7 +311,7 @@ class RefMotifSortieService:
             "INSERT INTO ref_motif_sortie (libelle, actif) VALUES (%s, %s)",
             (libelle, int(actif))
         )
-        log_hist("CREATION_MOTIF_SORTIE", f"Motif de sortie créé : {libelle}")
+        log_hist(action="CREATION_MOTIF_SORTIE", table_name="ref_motif_sortie", record_id=new_id, description=f"Motif de sortie créé : {libelle}")
         return new_id
 
     @staticmethod
@@ -321,14 +321,14 @@ class RefMotifSortieService:
             "UPDATE ref_motif_sortie SET libelle=%s, actif=%s WHERE id=%s",
             (libelle, int(actif), motif_id)
         )
-        log_hist("MODIFICATION_MOTIF_SORTIE", f"Motif de sortie #{motif_id} modifié : {libelle}")
+        log_hist(action="MODIFICATION_MOTIF_SORTIE", table_name="ref_motif_sortie", record_id=motif_id, description=f"Motif de sortie #{motif_id} modifié : {libelle}")
 
     @staticmethod
     def delete(motif_id: int) -> tuple:
         QueryExecutor.execute_write(
             "DELETE FROM ref_motif_sortie WHERE id=%s", (motif_id,)
         )
-        log_hist("SUPPRESSION_MOTIF_SORTIE", f"Motif de sortie #{motif_id} supprimé")
+        log_hist(action="SUPPRESSION_MOTIF_SORTIE", table_name="ref_motif_sortie", record_id=motif_id, description=f"Motif de sortie #{motif_id} supprimé")
         return True, "Motif de sortie supprimé."
 
 
@@ -352,7 +352,7 @@ class TranchesAgeService:
             "INSERT INTO tranche_age (libelle, age_min, age_max) VALUES (%s, %s, %s)",
             (libelle, age_min, age_max)
         )
-        log_hist("CREATION_TRANCHE_AGE", f"Tranche d'âge créée : {libelle}")
+        log_hist(action="CREATION_TRANCHE_AGE", table_name="tranche_age", record_id=new_id, description=f"Tranche d'âge créée : {libelle}")
         return new_id
 
     @staticmethod
@@ -362,14 +362,14 @@ class TranchesAgeService:
             "UPDATE tranche_age SET libelle=%s, age_min=%s, age_max=%s WHERE id=%s",
             (libelle, age_min, age_max, tranche_id)
         )
-        log_hist("MODIFICATION_TRANCHE_AGE", f"Tranche d'âge #{tranche_id} modifiée : {libelle}")
+        log_hist(action="MODIFICATION_TRANCHE_AGE", table_name="tranche_age", record_id=tranche_id, description=f"Tranche d'âge #{tranche_id} modifiée : {libelle}")
 
     @staticmethod
     def delete(tranche_id: int) -> tuple:
         QueryExecutor.execute_write(
             "DELETE FROM tranche_age WHERE id=%s", (tranche_id,)
         )
-        log_hist("SUPPRESSION_TRANCHE_AGE", f"Tranche d'âge #{tranche_id} supprimée")
+        log_hist(action="SUPPRESSION_TRANCHE_AGE", table_name="tranche_age", record_id=tranche_id, description=f"Tranche d'âge #{tranche_id} supprimée")
         return True, "Tranche d'âge supprimée."
 
 
@@ -393,7 +393,7 @@ class RolesConfigService:
             "INSERT INTO roles (nom, description) VALUES (%s, %s)",
             (nom, description)
         )
-        log_hist("CREATION_ROLE", f"Rôle créé : {nom}")
+        log_hist(action="CREATION_ROLE", table_name="roles", record_id=new_id, description=f"Rôle créé : {nom}")
         return new_id
 
     @staticmethod
@@ -403,7 +403,7 @@ class RolesConfigService:
             "UPDATE roles SET nom=%s, description=%s WHERE id=%s",
             (nom, description, role_id)
         )
-        log_hist("MODIFICATION_ROLE", f"Rôle #{role_id} modifié : {nom}")
+        log_hist(action="MODIFICATION_ROLE", table_name="roles", record_id=role_id, description=f"Rôle #{role_id} modifié : {nom}")
 
     @staticmethod
     def delete(role_id: int) -> tuple:
@@ -411,7 +411,7 @@ class RolesConfigService:
         if count > 0:
             return False, f"Impossible : {count} utilisateur(s) ont ce rôle."
         QueryExecutor.execute_write("DELETE FROM roles WHERE id=%s", (role_id,))
-        log_hist("SUPPRESSION_ROLE", f"Rôle #{role_id} supprimé")
+        log_hist(action="SUPPRESSION_ROLE", table_name="roles", record_id=role_id, description=f"Rôle #{role_id} supprimé")
         return True, "Rôle supprimé."
 
 
@@ -448,7 +448,7 @@ class SoldeCongesService:
             "VALUES (%s, %s, %s, %s, %s, %s, %s, NOW())",
             (personnel_id, annee, cp_acquis, cp_n_1, cp_pris, rtt_acquis, rtt_pris)
         )
-        log_hist("CREATION_SOLDE_CONGES", f"Solde congés créé : personnel #{personnel_id} année {annee}")
+        log_hist(action="CREATION_SOLDE_CONGES", table_name="solde_conges", record_id=new_id, description=f"Solde congés créé : personnel #{personnel_id} année {annee}")
         return new_id
 
     @staticmethod
@@ -460,12 +460,12 @@ class SoldeCongesService:
             "WHERE id=%s",
             (personnel_id, annee, cp_acquis, cp_n_1, cp_pris, rtt_acquis, rtt_pris, solde_id)
         )
-        log_hist("MODIFICATION_SOLDE_CONGES", f"Solde congés #{solde_id} modifié")
+        log_hist(action="MODIFICATION_SOLDE_CONGES", table_name="solde_conges", record_id=solde_id, description=f"Solde congés #{solde_id} modifié")
 
     @staticmethod
     def delete(solde_id: int) -> tuple:
         QueryExecutor.execute_write("DELETE FROM solde_conges WHERE id=%s", (solde_id,))
-        log_hist("SUPPRESSION_SOLDE_CONGES", f"Solde congés #{solde_id} supprimé")
+        log_hist(action="SUPPRESSION_SOLDE_CONGES", table_name="solde_conges", record_id=solde_id, description=f"Solde congés #{solde_id} supprimé")
         return True, "Solde de congés supprimé."
 
 
@@ -502,7 +502,7 @@ class DocumentEventRulesService:
             "VALUES (%s, %s, %s, %s, %s, %s)",
             (event_name, template_id, execution_mode, priority, int(actif), description)
         )
-        log_hist("CREATION_DOC_EVENT_RULE", f"Règle événement créée : {event_name}")
+        log_hist(action="CREATION_DOC_EVENT_RULE", table_name="document_event_rules", record_id=new_id, description=f"Règle événement créée : {event_name}")
         return new_id
 
     @staticmethod
@@ -515,12 +515,12 @@ class DocumentEventRulesService:
             "execution_mode=%s, priority=%s, actif=%s, description=%s WHERE id=%s",
             (event_name, template_id, execution_mode, priority, int(actif), description, rule_id)
         )
-        log_hist("MODIFICATION_DOC_EVENT_RULE", f"Règle événement #{rule_id} modifiée : {event_name}")
+        log_hist(action="MODIFICATION_DOC_EVENT_RULE", table_name="document_event_rules", record_id=rule_id, description=f"Règle événement #{rule_id} modifiée : {event_name}")
 
     @staticmethod
     def delete(rule_id: int) -> tuple:
         QueryExecutor.execute_write("DELETE FROM document_event_rules WHERE id=%s", (rule_id,))
-        log_hist("SUPPRESSION_DOC_EVENT_RULE", f"Règle événement #{rule_id} supprimée")
+        log_hist(action="SUPPRESSION_DOC_EVENT_RULE", table_name="document_event_rules", record_id=rule_id, description=f"Règle événement #{rule_id} supprimée")
         return True, "Règle supprimée."
 
 
@@ -548,12 +548,12 @@ class DemandeAbsenceAdminService:
             "date_validation=NOW() WHERE id=%s",
             (statut, commentaire, demande_id)
         )
-        log_hist("MODIF_STATUT_DEMANDE_ABSENCE", f"Demande absence #{demande_id} → {statut}")
+        log_hist(action="MODIF_STATUT_DEMANDE_ABSENCE", table_name="demande_absence", record_id=demande_id, description=f"Demande absence #{demande_id} → {statut}")
 
     @staticmethod
     def delete(demande_id: int) -> tuple:
         QueryExecutor.execute_write("DELETE FROM demande_absence WHERE id=%s", (demande_id,))
-        log_hist("SUPPRESSION_DEMANDE_ABSENCE", f"Demande absence #{demande_id} supprimée")
+        log_hist(action="SUPPRESSION_DEMANDE_ABSENCE", table_name="demande_absence", record_id=demande_id, description=f"Demande absence #{demande_id} supprimée")
         return True, "Demande d'absence supprimée."
 
 
@@ -584,12 +584,12 @@ class PolyvalenceAdminService:
             "prochaine_evaluation=%s WHERE id=%s",
             (niveau, date_evaluation, prochaine_evaluation, polyvalence_id)
         )
-        log_hist("ADMIN_MODIF_POLYVALENCE", f"Polyvalence #{polyvalence_id} modifiée (admin)")
+        log_hist(action="ADMIN_MODIF_POLYVALENCE", table_name="polyvalence", record_id=polyvalence_id, description=f"Polyvalence #{polyvalence_id} modifiée (admin)")
 
     @staticmethod
     def delete(polyvalence_id: int) -> tuple:
         QueryExecutor.execute_write("DELETE FROM polyvalence WHERE id=%s", (polyvalence_id,))
-        log_hist("ADMIN_SUPPRESSION_POLYVALENCE", f"Polyvalence #{polyvalence_id} supprimée (admin)")
+        log_hist(action="ADMIN_SUPPRESSION_POLYVALENCE", table_name="polyvalence", record_id=polyvalence_id, description=f"Polyvalence #{polyvalence_id} supprimée (admin)")
         return True, "Entrée de polyvalence supprimée."
 
 
