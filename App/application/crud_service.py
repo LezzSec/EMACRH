@@ -26,7 +26,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
-from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist_async
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -127,7 +127,7 @@ class CRUDService:
             record_id = repo.create(dict(kwargs))
 
             operateur_id = kwargs.get("operateur_id") or kwargs.get("personnel_id")
-            log_hist(
+            log_hist_async(
                 action=f"{cls.ACTION_PREFIX}CREATION",
                 table_name=cls.TABLE_NAME,
                 record_id=record_id,
@@ -185,7 +185,7 @@ class CRUDService:
             if not operateur_id:
                 operateur_id = repo.get_owner_id(record_id)
 
-            log_hist(
+            log_hist_async(
                 action=f"{cls.ACTION_PREFIX}UPDATE",
                 table_name=cls.TABLE_NAME,
                 record_id=record_id,
@@ -242,7 +242,7 @@ class CRUDService:
                 action = f"{cls.ACTION_PREFIX}DELETE"
                 description = f"Enregistrement {record_id} supprimé"
 
-            log_hist(
+            log_hist_async(
                 action=action,
                 table_name=cls.TABLE_NAME,
                 record_id=record_id,

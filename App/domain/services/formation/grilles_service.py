@@ -25,7 +25,7 @@ from datetime import date, timedelta
 from typing import Dict, List, Optional, Tuple, Any
 
 from infrastructure.db.query_executor import QueryExecutor
-from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist_async
 
 logger = logging.getLogger(__name__)
 
@@ -414,7 +414,7 @@ class GrillesService:
                     "type": "modification"
                 }, ensure_ascii=False)
 
-            log_hist(action, "polyvalence", None, description,
+            log_hist_async(action, "polyvalence", None, description,
                      operateur_id=operateur_id, poste_id=poste_id, utilisateur=utilisateur)
 
         except Exception as e:
@@ -493,7 +493,7 @@ class GrillesService:
                     "changes": changes,
                     "type": "ajout" if action == 'INSERT' else "modification"
                 }, ensure_ascii=False)
-                log_hist(action, "polyvalence", None, description,
+                log_hist_async(action, "polyvalence", None, description,
                          operateur_id=operateur_id, poste_id=poste_id, utilisateur=utilisateur)
                 count += 1
             except Exception as e:

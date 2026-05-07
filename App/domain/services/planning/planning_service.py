@@ -59,12 +59,13 @@ def creer_declaration(operateur_id: int, type_decl: str,
         """, (operateur_id, type_decl, date_debut, date_fin, motif or None),
         return_lastrowid=True)
 
-        from infrastructure.logging.optimized_db_logger import log_hist
-        log_hist(
-            "INSERT",
-            f"Déclaration d'absence : {type_decl}",
-            operateur_id,
-            None
+        from infrastructure.logging.optimized_db_logger import log_hist_async
+        log_hist_async(
+            action="INSERT",
+            table_name="declaration",
+            record_id=new_id,
+            description=f"Déclaration d'absence : {type_decl}",
+            operateur_id=operateur_id,
         )
         return new_id
 

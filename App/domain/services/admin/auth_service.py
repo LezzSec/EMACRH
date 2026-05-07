@@ -17,10 +17,12 @@ import re
 import logging
 import os
 import socket
-from datetime import datetime
+import threading
+from collections import defaultdict, deque
+from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
-from typing import Optional, Dict, List, Tuple
+from typing import Deque, Optional, Dict, List, Tuple
 from infrastructure.db.configbd import DatabaseConnection
 from infrastructure.db.query_executor import QueryExecutor
 
@@ -66,15 +68,16 @@ def _log_failed_attempt(username: str, reason: str) -> None:
         username: Nom d'utilisateur tenté
         reason: Raison de l'échec (user_not_found, wrong_password, account_inactive)
     """
+    client_ip = _get_client_ip()
     try:
         QueryExecutor.execute_write(
             "INSERT INTO logs_tentatives_connexion (username, ip_address, reason, attempt_time) VALUES (%s, %s, %s, %s)",
-            (username, _get_client_ip(), reason, datetime.now()),
+            (username, client_ip, reason, datetime.now()),
             return_lastrowid=False
         )
     except Exception as e:
-        # Ne pas bloquer si la table n'existe pas encore
-        logger.debug(f"Impossible de logger la tentative échouée: {e}")
+        _record_fallback_attempt(username, client_ip)
+        logger.debug(f"Impossible de logger la tentative echouee, fallback memoire actif: {e}")
 
 
 # Paliers de blocage progressifs : (nb_tentatives, durée_blocage_minutes)
@@ -82,27 +85,59 @@ def _log_failed_attempt(username: str, reason: str) -> None:
 _RATE_LIMIT_TIERS = [(5, 1), (10, 5)]
 # Fenêtre de recherche : assez large pour couvrir le palier le plus long
 _RATE_LIMIT_SEARCH_WINDOW_MINUTES = 60
+_rate_limit_lock = threading.Lock()
+_fallback_attempts_by_user: Dict[str, Deque[datetime]] = defaultdict(deque)
+_fallback_attempts_by_ip: Dict[str, Deque[datetime]] = defaultdict(deque)
 
 
-def _remaining_seconds_for_tier(column_filter: str, value: str, nth: int, lockout_minutes: int) -> int:
-    """
-    Calcule les secondes restantes avant expiration du blocage pour un palier donné.
-    Trouve la Nème tentative la plus récente et vérifie si lockout_minutes n'est pas encore écoulé.
-    """
-    from datetime import timedelta
-    window_start = datetime.now() - timedelta(minutes=_RATE_LIMIT_SEARCH_WINDOW_MINUTES)
-    rows = QueryExecutor.fetch_all(
-        f"SELECT attempt_time FROM logs_tentatives_connexion"
-        f" WHERE {column_filter} = %s AND attempt_time >= %s"
-        f" ORDER BY attempt_time DESC",
-        (value, window_start),
-    )
-    if not rows or len(rows) < nth:
+def _prune_attempts(attempts: Deque[datetime], now: datetime) -> None:
+    window_start = now - timedelta(minutes=_RATE_LIMIT_SEARCH_WINDOW_MINUTES)
+    while attempts and attempts[0] < window_start:
+        attempts.popleft()
+
+
+def _record_fallback_attempt(username: str, ip_address: str) -> None:
+    """Enregistre une tentative en memoire si la table d'audit est indisponible."""
+    now = datetime.now()
+    with _rate_limit_lock:
+        user_attempts = _fallback_attempts_by_user[username]
+        ip_attempts = _fallback_attempts_by_ip[ip_address]
+        _prune_attempts(user_attempts, now)
+        _prune_attempts(ip_attempts, now)
+        user_attempts.append(now)
+        ip_attempts.append(now)
+
+
+def _remaining_seconds_from_attempts(attempts: List[datetime], nth: int, lockout_minutes: int) -> int:
+    """Calcule le blocage restant depuis une liste de tentatives descendante."""
+    if len(attempts) < nth:
         return 0
-    nth_attempt = rows[nth - 1][0] if isinstance(rows[nth - 1], (list, tuple)) else rows[nth - 1]['attempt_time']
+    nth_attempt = attempts[nth - 1]
     expires = nth_attempt + timedelta(minutes=lockout_minutes)
     remaining = int((expires - datetime.now()).total_seconds())
     return max(0, remaining)
+
+
+def _check_rate_limit_fallback(username: str, ip_address: str) -> Tuple[bool, int, str]:
+    """Fallback fail-soft: rate-limit en memoire quand la DB d'audit est indisponible."""
+    now = datetime.now()
+    with _rate_limit_lock:
+        user_attempts = _fallback_attempts_by_user[username]
+        ip_attempts = _fallback_attempts_by_ip[ip_address]
+        _prune_attempts(user_attempts, now)
+        _prune_attempts(ip_attempts, now)
+        by_user = sorted(user_attempts, reverse=True)
+        by_ip = sorted(ip_attempts, reverse=True)
+
+    for threshold, lockout_min in reversed(_RATE_LIMIT_TIERS):
+        wait = _remaining_seconds_from_attempts(by_user, threshold, lockout_min)
+        if wait > 0:
+            return True, wait, "Trop de tentatives échouées pour ce compte."
+        wait = _remaining_seconds_from_attempts(by_ip, threshold, lockout_min)
+        if wait > 0:
+            return True, wait, "Trop de tentatives échouées depuis ce poste."
+
+    return False, 0, ""
 
 
 def _check_rate_limit(username: str, ip_address: str) -> Tuple[bool, int, str]:
@@ -113,37 +148,33 @@ def _check_rate_limit(username: str, ip_address: str) -> Tuple[bool, int, str]:
         (blocked, seconds_to_wait, reason)
     """
     try:
-        from datetime import timedelta
         window_start = datetime.now() - timedelta(minutes=_RATE_LIMIT_SEARCH_WINDOW_MINUTES)
 
-        row = QueryExecutor.fetch_one(
-            """SELECT
-                 SUM(CASE WHEN username = %s THEN 1 ELSE 0 END) AS by_user,
-                 SUM(CASE WHEN ip_address = %s THEN 1 ELSE 0 END) AS by_ip
+        rows = QueryExecutor.fetch_all(
+            """SELECT username, ip_address, attempt_time
                FROM logs_tentatives_connexion
-               WHERE attempt_time >= %s""",
-            (username, ip_address, window_start),
+               WHERE attempt_time >= %s
+                 AND (username = %s OR ip_address = %s)
+               ORDER BY attempt_time DESC""",
+            (window_start, username, ip_address),
             dictionary=True,
         )
-        by_user = int(row['by_user'] or 0) if row else 0
-        by_ip = int(row['by_ip'] or 0) if row else 0
+        attempts_by_user = [row['attempt_time'] for row in rows if row.get('username') == username]
+        attempts_by_ip = [row['attempt_time'] for row in rows if row.get('ip_address') == ip_address]
 
         # Évaluation du palier le plus élevé applicable (de haut en bas)
         for (threshold, lockout_min) in reversed(_RATE_LIMIT_TIERS):
-            if by_user >= threshold:
-                wait = _remaining_seconds_for_tier('username', username, threshold, lockout_min)
-                if wait > 0:
-                    return True, wait, "Trop de tentatives échouées pour ce compte."
-            if by_ip >= threshold:
-                wait = _remaining_seconds_for_tier('ip_address', ip_address, threshold, lockout_min)
-                if wait > 0:
-                    return True, wait, "Trop de tentatives échouées depuis ce poste."
+            wait = _remaining_seconds_from_attempts(attempts_by_user, threshold, lockout_min)
+            if wait > 0:
+                return True, wait, "Trop de tentatives échouées pour ce compte."
+            wait = _remaining_seconds_from_attempts(attempts_by_ip, threshold, lockout_min)
+            if wait > 0:
+                return True, wait, "Trop de tentatives échouées depuis ce poste."
 
         return False, 0, ""
     except Exception as e:
-        # En cas d'erreur SQL on NE bloque PAS (disponibilité > sécurité stricte ici)
-        logger.warning(f"check_rate_limit a échoué, bypass: {e}")
-        return False, 0, ""
+        logger.warning(f"check_rate_limit DB a échoué, fallback mémoire: {e}")
+        return _check_rate_limit_fallback(username, ip_address)
 
 
 # =============================================================================
@@ -615,8 +646,8 @@ def logout_user():
         try:
             from application.permission_manager import PermissionManager
             PermissionManager.reset()
-        except Exception:
-            pass
+        except Exception as e:
+            logger.debug(f"PermissionManager.reset() échoué à la déconnexion: {e}")
 
 
 def has_permission(module: str, action: str = 'lecture') -> bool:
@@ -642,8 +673,8 @@ def has_permission(module: str, action: str = 'lecture') -> bool:
             feature_key = _map_to_feature(module, action)
             if feature_key:
                 return perm.can(feature_key)
-    except Exception:
-        pass  # Fallback vers l'ancien système
+    except Exception as e:
+        logger.debug(f"Vérification feature échouée, fallback ancien système: {e}")
 
     # Ancien système (compatibilité)
     permissions = session.get_permissions()
@@ -728,8 +759,8 @@ def is_admin() -> bool:
         from application.permission_manager import perm
         if perm.is_loaded() and perm.can('admin.permissions'):
             return True
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Vérification feature admin échouée: {e}")
 
     return False
 

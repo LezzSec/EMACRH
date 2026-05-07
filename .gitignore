@@ -86,7 +86,8 @@ App/database/backups/
 *.sql.gz
 *.sql.zip
 # Migrations
-App/database/migrations/
+App/database/migrations/*
+!App/database/migrations/057_add_feature_metadata.sql
 
 # Backups et export temporaires
 *.backup

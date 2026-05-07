@@ -18,7 +18,7 @@ from datetime import date
 from typing import List, Dict, Optional, Tuple, Any
 
 from infrastructure.db.query_executor import QueryExecutor
-from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist_async
 from application.permission_manager import require
 from infrastructure.logging.logging_config import get_logger
 from infrastructure.cache.emac_cache import get_cached_competences_catalogue, invalidate_static_lists_cache
@@ -142,7 +142,7 @@ def create_competence(
             (code.strip().upper(), libelle.strip(), categorie, description, duree_validite_mois)
         )
 
-        log_hist(
+        log_hist_async(
             action="CREATION_COMPETENCE_CATALOGUE",
             table_name="competences_catalogue",
             record_id=competence_id,
@@ -187,7 +187,7 @@ def update_competence(competence_id: int, **kwargs) -> Tuple[bool, str]:
             values, return_lastrowid=False
         )
 
-        log_hist(
+        log_hist_async(
             action="MODIFICATION_COMPETENCE_CATALOGUE",
             table_name="competences_catalogue",
             record_id=competence_id,
@@ -234,7 +234,7 @@ def delete_competence(competence_id: int) -> Tuple[bool, str]:
             )
             msg = "Compétence supprimée"
 
-        log_hist(
+        log_hist_async(
             action="SUPPRESSION_COMPETENCE_CATALOGUE",
             table_name="competences_catalogue",
             record_id=competence_id,
@@ -390,7 +390,7 @@ def assign_competence(
             (personnel_id, competence_id, date_acquisition, date_expiration, commentaire, document_id)
         )
 
-        log_hist(
+        log_hist_async(
             action="ASSIGNATION_COMPETENCE",
             table_name="personnel_competences",
             record_id=assignment_id,
@@ -433,7 +433,7 @@ def update_assignment(assignment_id: int, **kwargs) -> Tuple[bool, str]:
             values, return_lastrowid=False
         )
 
-        log_hist(
+        log_hist_async(
             action="MODIFICATION_COMPETENCE_PERSONNEL",
             table_name="personnel_competences",
             record_id=assignment_id,
@@ -476,7 +476,7 @@ def remove_assignment(assignment_id: int) -> Tuple[bool, str]:
             (assignment_id,), return_lastrowid=False
         )
 
-        log_hist(
+        log_hist_async(
             action="RETRAIT_COMPETENCE",
             table_name="personnel_competences",
             record_id=assignment_id,

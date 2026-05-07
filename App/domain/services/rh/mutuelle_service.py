@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Tuple
 
 from infrastructure.db.query_executor import QueryExecutor
 from application.permission_manager import require
-from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist_async
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -66,7 +66,7 @@ def create_mutuelle(personnel_id: int, data: Dict) -> Tuple[bool, str, Optional[
                 data.get('commentaire') or None,
             ),
         )
-        log_hist(
+        log_hist_async(
             "CREATION_MUTUELLE",
             f"Mutuelle créée (statut: {data.get('statut_adhesion')}) pour personnel {personnel_id}",
             operateur_id=personnel_id,
@@ -114,7 +114,7 @@ def update_mutuelle(record_id: int, data: Dict) -> Tuple[bool, str]:
                 record_id,
             ),
         )
-        log_hist(action="MODIFICATION_MUTUELLE", table_name="mutuelle", record_id=record_id, description=f"Mutuelle {record_id} modifiée")
+        log_hist_async(action="MODIFICATION_MUTUELLE", table_name="mutuelle", record_id=record_id, description=f"Mutuelle {record_id} modifiée")
         return True, "Enregistrement mis à jour"
     except Exception as e:
         logger.exception(f"Erreur update_mutuelle: {e}")
@@ -126,7 +126,7 @@ def delete_mutuelle(record_id: int) -> Tuple[bool, str]:
     require('rh.mutuelle.edit')
     try:
         QueryExecutor.execute_write("DELETE FROM mutuelle WHERE id = %s", (record_id,))
-        log_hist(action="SUPPRESSION_MUTUELLE", table_name="mutuelle", record_id=record_id, description=f"Mutuelle {record_id} supprimée")
+        log_hist_async(action="SUPPRESSION_MUTUELLE", table_name="mutuelle", record_id=record_id, description=f"Mutuelle {record_id} supprimée")
         return True, "Enregistrement supprimé"
     except Exception as e:
         logger.exception(f"Erreur delete_mutuelle: {e}")

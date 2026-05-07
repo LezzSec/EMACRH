@@ -247,12 +247,20 @@ class DomaineGeneral(DomaineWidget):
         else:
             QMessageBox.critical(self, "Erreur", f"Impossible de supprimer le véhicule : {msg}")
 
+    def _adresse_reference_mobilite(self) -> dict:
+        return {
+            'adresse1': self._donnees.get('adresse1'),
+            'cp_adresse': self._donnees.get('cp_adresse'),
+            'ville_adresse': self._donnees.get('ville_adresse'),
+        }
+
     def _add_mobilite(self, vehicule: dict):
         if not self._operateur:
             return
         dialog = EditMobiliteDialog(
             self._operateur['id'],
             vehicule=vehicule,
+            adresse_reference=self._adresse_reference_mobilite(),
             distance_auto=self._donnees.get('distance_domicile_km'),
             duree_auto=self._donnees.get('duree_trajet_min'),
             parent=self,
@@ -263,6 +271,12 @@ class DomaineGeneral(DomaineWidget):
     def _edit_mobilite(self, mobilite: dict, vehicule: dict):
         if not self._operateur:
             return
-        dialog = EditMobiliteDialog(self._operateur['id'], mobilite=mobilite, vehicule=vehicule, parent=self)
+        dialog = EditMobiliteDialog(
+            self._operateur['id'],
+            mobilite=mobilite,
+            vehicule=vehicule,
+            adresse_reference=self._adresse_reference_mobilite(),
+            parent=self,
+        )
         if dialog.exec_() == QDialog.Accepted:
             self.refresh_requested.emit()

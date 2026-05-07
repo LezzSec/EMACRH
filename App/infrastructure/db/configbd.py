@@ -9,6 +9,8 @@ import os
 import sys
 import time
 import logging
+import threading
+from contextlib import contextmanager
 from pathlib import Path
 
 import mysql.connector
@@ -23,6 +25,69 @@ _env_loaded = False
 _last_activity: float = 0.0
 # Ping only when the app has been idle longer than this (covers PC-sleep reconnect).
 _PING_IDLE_S: int = 300
+_timeout_context = threading.local()
+
+
+def _get_statement_timeout_ms() -> int:
+    """Retourne le timeout SQL courant du thread, en millisecondes."""
+    return int(getattr(_timeout_context, "statement_timeout_ms", 0) or 0)
+
+
+@contextmanager
+def db_statement_timeout(seconds: float | None):
+    """
+    Définit un timeout SQL pour les connexions ouvertes dans le thread courant.
+
+    MySQL applique MAX_EXECUTION_TIME aux SELECT. Les écritures et le code Python
+    restent couverts par la cancellation logique du worker.
+    """
+    previous = _get_statement_timeout_ms()
+    timeout_ms = int(seconds * 1000) if seconds and seconds > 0 else 0
+    _timeout_context.statement_timeout_ms = timeout_ms
+    try:
+        yield
+    finally:
+        _timeout_context.statement_timeout_ms = previous
+
+
+def _set_session_statement_timeout(conn, timeout_ms: int) -> bool:
+    """
+    Applique MAX_EXECUTION_TIME sur la session MySQL courante.
+    Retourne True si une valeur a été appliquée et doit être remise à zéro.
+    """
+    if timeout_ms <= 0:
+        return False
+
+    cur = None
+    try:
+        cur = conn.cursor()
+        cur.execute("SET SESSION MAX_EXECUTION_TIME = %s", (timeout_ms,))
+        return True
+    except Exception as e:
+        logger.debug(f"Timeout SQL non appliqué (MAX_EXECUTION_TIME={timeout_ms}ms): {e}")
+        return False
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
+
+
+def _clear_session_statement_timeout(conn) -> None:
+    """Remet le timeout SQL de la session MySQL à zéro."""
+    cur = None
+    try:
+        cur = conn.cursor()
+        cur.execute("SET SESSION MAX_EXECUTION_TIME = 0")
+    except Exception as e:
+        logger.debug(f"Reset timeout SQL ignoré: {e}")
+    finally:
+        try:
+            if cur:
+                cur.close()
+        except Exception:
+            pass
 
 
 def _load_env_once() -> None:
@@ -252,9 +317,13 @@ class DatabaseConnection:
         self.conn = None
         self.auto_commit = auto_commit
         self._committed = False
+        self._statement_timeout_applied = False
 
     def __enter__(self):
         self.conn = get_connection()
+        self._statement_timeout_applied = _set_session_statement_timeout(
+            self.conn, _get_statement_timeout_ms()
+        )
         return self.conn
 
     def __exit__(self, exc_type, exc_val, exc_tb):
@@ -270,6 +339,8 @@ class DatabaseConnection:
                 # Ignorer les erreurs de rollback/commit pendant le cleanup
                 pass
             finally:
+                if self._statement_timeout_applied:
+                    _clear_session_statement_timeout(self.conn)
                 try:
                     self.conn.close()
                 except Exception:
@@ -311,9 +382,13 @@ class DatabaseCursor:
         self.auto_commit = auto_commit
         self.conn = None
         self.cursor = None
+        self._statement_timeout_applied = False
 
     def __enter__(self):
         self.conn = get_connection()
+        self._statement_timeout_applied = _set_session_statement_timeout(
+            self.conn, _get_statement_timeout_ms()
+        )
         self.cursor = self.conn.cursor(dictionary=self.dictionary)
         return self.cursor
 
@@ -333,6 +408,8 @@ class DatabaseCursor:
             except Exception:
                 pass
             finally:
+                if self._statement_timeout_applied:
+                    _clear_session_statement_timeout(self.conn)
                 try:
                     self.conn.close()
                 except Exception:

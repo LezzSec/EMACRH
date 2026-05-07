@@ -18,6 +18,7 @@ import math
 import os
 import sqlite3
 import time
+import unicodedata
 import urllib.parse
 import urllib.request
 from datetime import datetime, timedelta
@@ -48,6 +49,7 @@ _USER_AGENT = os.getenv(
 # Cache persistant simple. Peut être déplacé via EMAC_DISTANCE_CACHE_DB.
 _CACHE_DB = Path(os.getenv("EMAC_DISTANCE_CACHE_DB", ".cache/distance_cache.sqlite"))
 _CACHE_TTL_DAYS = int(os.getenv("EMAC_DISTANCE_CACHE_TTL_DAYS", "180"))
+_MAIRIE_CACHE_VERSION = "v2"
 
 _failed_communes: set[str] = set()
 _mairie_cache: dict[str, tuple[float, float]] = {}
@@ -79,6 +81,24 @@ def _valid_coords(coords: Any) -> bool:
         return False
     lat, lon = coords
     return isinstance(lat, (int, float)) and isinstance(lon, (int, float)) and -90 <= lat <= 90 and -180 <= lon <= 180
+
+
+def _normalize_geo_name(value: Any) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.lower()
+    for sep in ("-", "'", "\u2019", "`", "_", ",", ".", "(", ")"):
+        text = text.replace(sep, " ")
+    return " ".join(text.split())
+
+
+def _geo_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    radius_km = 6371.0
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    d_phi = math.radians(lat2 - lat1)
+    d_lambda = math.radians(lon2 - lon1)
+    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
+    return 2 * radius_km * math.asin(math.sqrt(a))
 
 
 def _http_json(url: str, *, timeout: int, method: str = "GET", data: bytes | None = None) -> Any | None:
@@ -202,8 +222,43 @@ def resolve_commune(cp: str, ville: str) -> Optional[dict]:
     return result
 
 
+def _osm_element_coords(el: dict) -> Optional[tuple[float, float]]:
+    lat = el.get("lat") or (el.get("center") or {}).get("lat")
+    lon = el.get("lon") or (el.get("center") or {}).get("lon")
+    if lat is None or lon is None:
+        return None
+    coords = (float(lat), float(lon))
+    return coords if _valid_coords(coords) else None
+
+
+def _townhall_match_quality(tags: dict, commune_nom: str) -> int | None:
+    target = _normalize_geo_name(commune_nom)
+    if not target:
+        return None
+
+    for field in ("addr:city", "contact:city", "is_in:city"):
+        if _normalize_geo_name(tags.get(field)) == target:
+            return 0
+
+    for field in ("name", "official_name", "operator", "description", "is_in"):
+        value = _normalize_geo_name(tags.get(field))
+        if value and target in value:
+            return 1
+
+    return None
+
+
+def _is_generic_townhall(tags: dict) -> bool:
+    return _normalize_geo_name(tags.get("name")) in {"mairie", "hotel de ville"}
+
+
+def _overpass_safe(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
+
+
 def _get_townhall_overpass(commune_nom: str, hint_lat: float | None, hint_lon: float | None) -> Optional[tuple[float, float]]:
     # Recherche limitée autour du centroïde quand possible, sinon par nom France.
+    safe_name = _overpass_safe(commune_nom)
     if hint_lat is not None and hint_lon is not None:
         query = f"""
         [out:json][timeout:12];
@@ -212,10 +267,9 @@ def _get_townhall_overpass(commune_nom: str, hint_lat: float | None, hint_lon: f
           way["amenity"="townhall"](around:15000,{hint_lat},{hint_lon});
           relation["amenity"="townhall"](around:15000,{hint_lat},{hint_lon});
         );
-        out center tags 10;
+        out center tags 100;
         """
     else:
-        safe_name = commune_nom.replace('"', '\\"')
         query = f"""
         [out:json][timeout:12];
         area["ISO3166-1"="FR"][admin_level=2]->.fr;
@@ -224,7 +278,7 @@ def _get_townhall_overpass(commune_nom: str, hint_lat: float | None, hint_lon: f
           way["amenity"="townhall"]["addr:city"~"^{safe_name}$",i](area.fr);
           relation["amenity"="townhall"]["addr:city"~"^{safe_name}$",i](area.fr);
         );
-        out center tags 10;
+        out center tags 50;
         """
 
     data = urllib.parse.urlencode({"data": query}).encode("utf-8")
@@ -233,23 +287,33 @@ def _get_townhall_overpass(commune_nom: str, hint_lat: float | None, hint_lon: f
     if not elements:
         return None
 
-    def score(el: dict) -> float:
-        tags = el.get("tags", {}) or {}
-        name = (tags.get("name") or "").lower()
-        s = 0.0 if commune_nom.lower() in name or "mairie" in name else 10.0
-        lat = el.get("lat") or (el.get("center") or {}).get("lat")
-        lon = el.get("lon") or (el.get("center") or {}).get("lon")
-        if hint_lat is not None and hint_lon is not None and lat is not None and lon is not None:
-            s += math.hypot(float(lat) - hint_lat, float(lon) - hint_lon)
-        return s
+    exact_candidates = []
+    generic_candidates = []
 
-    for el in sorted(elements, key=score):
-        lat = el.get("lat") or (el.get("center") or {}).get("lat")
-        lon = el.get("lon") or (el.get("center") or {}).get("lon")
-        if lat is not None and lon is not None:
-            coords = (float(lat), float(lon))
-            if _valid_coords(coords):
-                return coords
+    def distance_from_hint(coords: tuple[float, float]) -> float:
+        if hint_lat is None or hint_lon is None:
+            return 0.0
+        return _geo_distance_km(hint_lat, hint_lon, coords[0], coords[1])
+
+    for el in elements:
+        tags = el.get("tags", {}) or {}
+        coords = _osm_element_coords(el)
+        if coords is None:
+            continue
+
+        quality = _townhall_match_quality(tags, commune_nom)
+        distance = distance_from_hint(coords)
+        if quality is not None:
+            exact_candidates.append((quality, distance, coords))
+        elif hint_lat is not None and hint_lon is not None and _is_generic_townhall(tags) and distance <= 3.0:
+            generic_candidates.append((distance, coords))
+
+    if exact_candidates:
+        return sorted(exact_candidates, key=lambda item: (item[0], item[1]))[0][2]
+
+    if generic_candidates:
+        return sorted(generic_candidates, key=lambda item: item[0])[0][1]
+
     return None
 
 
@@ -276,7 +340,8 @@ def _get_townhall_nominatim(commune_nom: str, hint_lat: float | None, hint_lon: 
 def get_mairie_coords(commune_nom: str, code_insee: str = None, hint_lat: float = None, hint_lon: float = None) -> Optional[tuple[float, float]]:
     if not commune_nom:
         return None
-    cache_key = f"mairie:{code_insee or commune_nom.strip().lower()}"
+    cache_id = code_insee or _normalize_geo_name(commune_nom)
+    cache_key = f"mairie:{_MAIRIE_CACHE_VERSION}:{cache_id}"
     if cache_key in _mairie_cache:
         return _mairie_cache[cache_key]
     cached = _cache_get(cache_key)

@@ -111,6 +111,16 @@ class SessionMixin:
     def closeEvent(self, event):
         if self._timeout_manager:
             self._timeout_manager.stop()
+        try:
+            from gui.workers.db_worker import DbWorker
+            DbWorker.cancel_all()
+        except Exception as e:
+            logger.debug(f"Annulation workers DB ignorée à la fermeture: {e}")
+        try:
+            from infrastructure.logging.optimized_db_logger import flush_db_logs
+            flush_db_logs()
+        except Exception as e:
+            logger.debug(f"Flush logs DB ignoré à la fermeture: {e}")
         event.accept()
 
     def export_logs_today(self):

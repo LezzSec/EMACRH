@@ -14,9 +14,10 @@ Optimisations appliquées:
 """
 
 import json
+import atexit
 import threading
 import time
-from queue import Queue, Empty
+from queue import Queue, Empty, Full
 from typing import Optional, List, Dict, Any
 
 
@@ -190,10 +191,10 @@ class OptimizedDBLogger:
         batch = []
         last_flush = time.time()
 
-        while self.running:
+        while self.running or not self.queue.empty():
             try:
                 # Récupérer un log de la queue (timeout 0.5s)
-                log_entry = self.queue.get(timeout=0.5)
+                log_entry = self.queue.get(timeout=0.5 if self.running else 0.0)
                 batch.append(log_entry)
 
                 # Flush si batch plein
@@ -204,7 +205,7 @@ class OptimizedDBLogger:
 
             except Empty:
                 # Timeout → flush si nécessaire
-                if batch and (time.time() - last_flush) >= DBLogConfig.FLUSH_INTERVAL:
+                if batch and ((time.time() - last_flush) >= DBLogConfig.FLUSH_INTERVAL or not self.running):
                     self._flush_batch(batch)
                     batch.clear()
                     last_flush = time.time()
@@ -228,20 +229,26 @@ class OptimizedDBLogger:
 
         try:
             from infrastructure.db.configbd import DatabaseConnection
-            import json
-
             with DatabaseConnection(auto_commit=True) as conn:
                 cur = conn.cursor()
 
                 # Préparer les valeurs
                 values = []
                 for entry in batch:
+                    final_description = entry.get('description')
+                    if entry.get('details') is not None:
+                        details_str = _to_json_str(entry.get('details'))
+                        final_description = (
+                            f"{final_description} | Details: {details_str}"
+                            if final_description else details_str
+                        )
+
                     values.append((
                         entry.get('action'),
                         entry.get('table_name'),
                         str(entry.get('record_id')) if entry.get('record_id') is not None else None,
                         entry.get('utilisateur'),
-                        entry.get('description'),
+                        final_description,
                         entry.get('operateur_id'),
                         entry.get('poste_id'),
                     ))
@@ -302,12 +309,14 @@ class OptimizedDBLogger:
                 'poste_id': poste_id,
                 'timestamp': time.time()
             })
-        except Exception:
+        except Full:
             # Queue pleine → fallback sur logger synchrone
             self._log_sync(
                 action, table_name, record_id, description,
-                details, source, utilisateur
+                details, source, utilisateur, operateur_id, poste_id
             )
+        except Exception as e:
+            _logger.warning(f"Erreur enqueue log_hist_async action={action}: {e}")
 
     def _log_sync(
         self,
@@ -317,7 +326,9 @@ class OptimizedDBLogger:
         description: Optional[str],
         details: Any,
         source: Optional[str],
-        utilisateur: Optional[str]
+        utilisateur: Optional[str],
+        operateur_id: Optional[int],
+        poste_id: Optional[int],
     ):
         """Fallback synchrone si queue pleine"""
         try:
@@ -328,14 +339,26 @@ class OptimizedDBLogger:
                 description=description,
                 details=details,
                 source=source,
-                utilisateur=utilisateur
+                utilisateur=utilisateur,
+                operateur_id=operateur_id,
+                poste_id=poste_id,
             )
-        except Exception:
-            pass
+        except Exception as e:
+            _logger.warning(f"Fallback log_hist synchrone échoué (log perdu) action={action}: {e}")
 
     def flush(self):
         """Force le flush immédiat (pour les cas critiques)"""
-        # Temporiser pour permettre au worker de traiter
+        batch = []
+        while True:
+            try:
+                batch.append(self.queue.get_nowait())
+            except Empty:
+                break
+
+        if batch:
+            self._flush_batch(batch)
+
+        # Laisser aussi au worker le temps de finir un batch déjà consommé.
         time.sleep(0.1)
 
 
@@ -419,6 +442,9 @@ def flush_db_logs():
 def shutdown_db_logger():
     """Arrête le logger DB (appeler avant quitter l'app)"""
     _db_logger.stop()
+
+
+atexit.register(shutdown_db_logger)
 
 
 # ===========================

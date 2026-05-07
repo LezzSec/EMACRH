@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 PERMISSION_CACHE_TTL_SECONDS = 300  # 5 minutes
 
 T = TypeVar('T')
+_FEATURE_METADATA_COLUMNS_AVAILABLE: Optional[bool] = None
 
 
 class PermissionError(Exception):
@@ -416,15 +417,34 @@ def invalidate_and_reload_permissions() -> None:
 # Service pour la gestion des features (CRUD)
 # ============================================================================
 
+def _features_support_metadata_columns() -> bool:
+    """Indique si la table features expose les metadata UI externalisees."""
+    global _FEATURE_METADATA_COLUMNS_AVAILABLE
+    if _FEATURE_METADATA_COLUMNS_AVAILABLE is not None:
+        return _FEATURE_METADATA_COLUMNS_AVAILABLE
+
+    try:
+        sensitivity_col = QueryExecutor.fetch_one("SHOW COLUMNS FROM features LIKE 'sensitivity'")
+        screens_col = QueryExecutor.fetch_one("SHOW COLUMNS FROM features LIKE 'screens'")
+        _FEATURE_METADATA_COLUMNS_AVAILABLE = bool(sensitivity_col and screens_col)
+    except Exception as e:
+        logger.debug(f"Colonnes metadata features indisponibles: {e}")
+        _FEATURE_METADATA_COLUMNS_AVAILABLE = False
+
+    return _FEATURE_METADATA_COLUMNS_AVAILABLE
+
+
 def get_all_features() -> List[Dict]:
     """Récupère toutes les features du catalogue, groupées par module"""
     try:
-        return QueryExecutor.fetch_all("""
-            SELECT id, key_code, label, module, description, display_order, is_active
+        metadata_columns = ", sensitivity, screens" if _features_support_metadata_columns() else ""
+        query = f"""
+            SELECT id, key_code, label, module, description, display_order, is_active{metadata_columns}
             FROM features
             WHERE is_active = TRUE
             ORDER BY module, display_order, key_code
-        """, dictionary=True)
+        """
+        return QueryExecutor.fetch_all(query, dictionary=True)
     except Exception as e:
         logger.error(f"Erreur get_all_features: {e}")
         return []
@@ -555,7 +575,9 @@ def save_user_feature_overrides(user_id: int, overrides: Dict[str, Optional[bool
         QueryExecutor.with_transaction(_save)
 
         # SÉCURITÉ: Invalider le cache ET recharger le PermissionManager
-        invalidate_user_cache(reload_current_user=True)
+        invalidate_user_cache()
+        if perm.is_loaded():
+            perm.reload()
 
         log_hist_async(
             action="MODIFICATION_FEATURES_UTILISATEUR",
@@ -587,7 +609,9 @@ def reset_user_feature_overrides(user_id: int) -> tuple[bool, Optional[str]]:
         )
 
         # SÉCURITÉ: Invalider le cache ET recharger le PermissionManager
-        invalidate_user_cache(reload_current_user=True)
+        invalidate_user_cache()
+        if perm.is_loaded():
+            perm.reload()
 
         current_user = get_current_user()
         log_hist_async(

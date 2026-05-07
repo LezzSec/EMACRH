@@ -135,15 +135,21 @@ class EditMobiliteDialog(EmacFormDialog):
     }
 
     def __init__(self, personnel_id: int, mobilite: dict = None, vehicule: dict = None,
-                 distance_auto: float = None, duree_auto: int = None, parent=None):
+                 adresse_reference: dict = None, distance_auto: float = None,
+                 duree_auto: int = None, parent=None):
         self.personnel_id = personnel_id
         self.mobilite = mobilite or {}
         self.vehicule = vehicule or {}
+        self.adresse_reference = adresse_reference or {}
         self.is_edit = bool(mobilite)
         self.distance_auto = distance_auto
         self.duree_auto = duree_auto
         title = "Modifier la mobilité" if self.is_edit else "Déclarer la mobilité"
         super().__init__(title=title, min_width=440, min_height=380, add_title_bar=False, parent=parent)
+
+    def _ref_value(self, key: str) -> str:
+        value = self.adresse_reference.get(key)
+        return str(value).strip() if value is not None else ""
 
     def init_ui(self):
         # Bannière distance calculée automatiquement
@@ -175,7 +181,7 @@ class EditMobiliteDialog(EmacFormDialog):
 
         self.distance = QDoubleSpinBox()
         self.distance.setRange(0, 999)
-        self.distance.setDecimals(1)
+        self.distance.setDecimals(2)
         self.distance.setSuffix(" km")
         self.distance.setValue(float(self.mobilite.get('distance_km') or 0))
         self.distance.valueChanged.connect(self._update_apercu)
@@ -200,15 +206,18 @@ class EditMobiliteDialog(EmacFormDialog):
         self.cv_fiscaux.valueChanged.connect(self._update_apercu)
         form.addRow("Puissance fiscale :", self.cv_fiscaux)
 
-        self.adresse = QLineEdit(self.mobilite.get('adresse_depart') or '')
+        adresse_depart = self.mobilite.get('adresse_depart') or self._ref_value('adresse1')
+        self.adresse = QLineEdit(adresse_depart or '')
         self.adresse.setPlaceholderText("Si différente de l'adresse enregistrée")
         form.addRow("Adresse de départ :", self.adresse)
 
-        self.cp = QLineEdit(self.mobilite.get('cp_depart') or '')
+        cp_depart = self._ref_value('cp_adresse') or self.mobilite.get('cp_depart') or ''
+        self.cp = QLineEdit(cp_depart)
         self.cp.setPlaceholderText("Code postal")
         form.addRow("Code postal :", self.cp)
 
-        self.ville = QLineEdit(self.mobilite.get('ville_depart') or '')
+        ville_depart = self._ref_value('ville_adresse') or self.mobilite.get('ville_depart') or ''
+        self.ville = QLineEdit(ville_depart)
         self.ville.setPlaceholderText("Ville")
         form.addRow("Ville :", self.ville)
 
@@ -291,8 +300,8 @@ class EditMobiliteDialog(EmacFormDialog):
         from gui.workers.db_worker import DbWorker, DbThreadPool
         from domain.services.geo.distance_service import compute_distances_for_commune
 
-        cp = self.cp.text().strip() or self.mobilite.get('cp_depart', '')
-        ville = self.ville.text().strip() or self.mobilite.get('ville_depart', '')
+        cp = self.cp.text().strip() or self._ref_value('cp_adresse') or self.mobilite.get('cp_depart', '')
+        ville = self.ville.text().strip() or self._ref_value('ville_adresse') or self.mobilite.get('ville_depart', '')
 
         if not cp or not ville:
             self._recalc_status.setText("Renseignez le code postal et la ville d'abord.")
@@ -337,8 +346,8 @@ class EditMobiliteDialog(EmacFormDialog):
         self._recalc_status.setToolTip(str(error_msg))
 
     def validate(self):
-        if self.distance.value() <= 0:
-            return False, "La distance doit être supérieure à 0 km."
+        if self.distance.value() < 0:
+            return False, "La distance ne peut pas être négative."
         return True, ""
 
     def save_to_db(self):

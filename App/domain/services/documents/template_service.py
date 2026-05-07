@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import List, Dict, Optional, Tuple
 
 from infrastructure.db.query_executor import QueryExecutor
-from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist_async
 from infrastructure.logging.logging_config import get_logger
 from infrastructure.config.date_format import format_date, format_timestamp
 
@@ -282,9 +282,10 @@ def generate_filled_template(
             logger.warning(f"Pre-remplissage echoue pour {template['nom']}: {e}")
 
     # Logger l'action
-    log_hist(
-        "GENERATION_TEMPLATE",
-        f"Generation du template '{template['nom']}' pour {operateur_complet}"
+    log_hist_async(
+        action="GENERATION_TEMPLATE",
+        table_name="documents_templates",
+        description=f"Generation du template '{template['nom']}' pour {operateur_complet}"
     )
 
     return True, "Fichier genere avec succes", str(output_path)

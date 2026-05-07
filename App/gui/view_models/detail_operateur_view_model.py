@@ -19,7 +19,7 @@ from domain.services.rh.contrat_service_crud import ContratServiceCRUD
 from domain.services.formation.formation_service_crud import FormationServiceCRUD
 from domain.services.rh import medical_service
 from infrastructure.logging.logging_config import get_logger
-from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist_async
 
 logger = get_logger(__name__)
 
@@ -311,7 +311,7 @@ class DetailOperateurViewModel(QObject):
 
             pers_info = PersonnelRepository.get_info_basique(self.operateur_id)
             if pers_info:
-                log_hist(
+                log_hist_async(
                     action="UPDATE",
                     table_name="personnel",
                     record_id=self.operateur_id,

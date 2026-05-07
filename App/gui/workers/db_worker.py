@@ -151,8 +151,11 @@ class DbWorker(QRunnable):
         try:
             self.signals.started.emit()
 
-            # Exécuter la fonction
-            result = self.fn(*self.args, **self.kwargs)
+            # Exécuter la fonction. Le contexte SQL permet à QueryExecutor /
+            # DatabaseConnection d'appliquer un timeout côté MySQL aux SELECT.
+            from infrastructure.db.configbd import db_statement_timeout
+            with db_statement_timeout(self.timeout):
+                result = self.fn(*self.args, **self.kwargs)
 
             # Vérifier timeout
             elapsed = time.time() - start_time
@@ -287,8 +290,8 @@ class DbThreadPool:
         try:
             config = _get_db_config()
             pool_size = config.get('pool_size', 5)
-            # On met légèrement moins pour laisser de la marge
-            max_threads = max(2, pool_size - 1)
+            # Garder au moins deux connexions libres pour logs, alertes et actions sync.
+            max_threads = max(2, pool_size - 2)
             DbThreadPool._pool.setMaxThreadCount(max_threads)
             logger.debug(f"DbThreadPool configuré : {max_threads} threads max (pool MySQL: {pool_size})")
         except Exception as e:

@@ -276,8 +276,8 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
 
             new_id = QueryExecutor.with_transaction(_do_insert)
 
-            from infrastructure.logging.optimized_db_logger import log_hist
-            log_hist("CREATE", "polyvalence", new_id,
+            from infrastructure.logging.optimized_db_logger import log_hist_async
+            log_hist_async("CREATE", "polyvalence", new_id,
                     f"Compétence N{niveau} créée", operateur_id=operateur_id, poste_id=poste_id)
 
             try:
@@ -337,8 +337,8 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
         try:
             QueryExecutor.execute_write(query, (nouveau_niveau, date_evaluation, prochaine_evaluation, id))
 
-            from infrastructure.logging.optimized_db_logger import log_hist
-            log_hist("UPDATE", "polyvalence", id,
+            from infrastructure.logging.optimized_db_logger import log_hist_async
+            log_hist_async("UPDATE", "polyvalence", id,
                     f"Évaluation: N{old[2]}→N{nouveau_niveau}",
                     operateur_id=old[0], poste_id=old[1])
 
@@ -553,9 +553,15 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
             deleted = QueryExecutor.with_transaction(_do_delete)
 
             if deleted:
-                from infrastructure.logging.optimized_db_logger import log_hist
-                log_hist("DELETE", "polyvalence", None,
-                        f"Compétence supprimée", operateur_id=operateur_id, poste_id=poste_id)
+                from infrastructure.logging.optimized_db_logger import log_hist_async
+                log_hist_async(
+                    action="DELETE",
+                    table_name="polyvalence",
+                    record_id=None,
+                    description="Compétence supprimée",
+                    operateur_id=operateur_id,
+                    poste_id=poste_id,
+                )
 
                 try:
                     from domain.services.admin.polyvalence_logger import log_polyvalence_action

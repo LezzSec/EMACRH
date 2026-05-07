@@ -406,8 +406,8 @@ def create_rule(
             (event_name.strip(), template_id, execution_mode, condition_str, priority, description)
         )
 
-        from infrastructure.logging.optimized_db_logger import log_hist
-        log_hist(
+        from infrastructure.logging.optimized_db_logger import log_hist_async
+        log_hist_async(
             action="CREATION_REGLE_EVENEMENT",
             table_name="document_event_rules",
             record_id=rule_id,

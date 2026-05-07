@@ -179,8 +179,8 @@ class PosteRepository(BaseRepository[Poste]):
 
             new_id = QueryExecutor.with_transaction(_do_insert)
 
-            from infrastructure.logging.optimized_db_logger import log_hist
-            log_hist("CREATE", "postes", new_id, f"Poste {data['poste_code']} créé")
+            from infrastructure.logging.optimized_db_logger import log_hist_async
+            log_hist_async("CREATE", "postes", new_id, f"Poste {data['poste_code']} créé")
 
             return True, "Poste créé", new_id
 
@@ -212,8 +212,8 @@ class PosteRepository(BaseRepository[Poste]):
         try:
             QueryExecutor.execute_write(query, tuple(list(update_data.values()) + [id]))
 
-            from infrastructure.logging.optimized_db_logger import log_hist
-            log_hist("UPDATE", "postes", id, f"Mise à jour: {list(update_data.keys())}")
+            from infrastructure.logging.optimized_db_logger import log_hist_async
+            log_hist_async("UPDATE", "postes", id, f"Mise à jour: {list(update_data.keys())}")
 
             return True, "Poste mis à jour"
 
@@ -245,16 +245,18 @@ class PosteRepository(BaseRepository[Poste]):
     @classmethod
     def delete_by_code(cls, poste_code: str) -> Tuple[bool, str]:
         """Supprime un poste par son code."""
-        from infrastructure.logging.optimized_db_logger import log_hist
-        import json
+        from infrastructure.logging.optimized_db_logger import log_hist_async
         try:
             QueryExecutor.execute_write(
                 "DELETE FROM postes WHERE poste_code = %s",
                 (poste_code,),
             )
-            log_hist(
-                "DELETE", "postes", None,
-                json.dumps({"poste_code": poste_code, "type": "suppression_poste"}, ensure_ascii=False),
+            log_hist_async(
+                action="DELETE",
+                table_name="postes",
+                record_id=None,
+                description="Poste supprimé",
+                details={"poste_code": poste_code, "type": "suppression_poste"},
             )
             return True, f"Poste '{poste_code}' supprimé"
         except Exception as e:

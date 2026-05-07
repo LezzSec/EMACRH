@@ -21,7 +21,14 @@ Usage:
 import re
 from contextlib import contextmanager
 from typing import Any, Dict, Iterator, List, Optional, Tuple, Union
-from infrastructure.db.configbd import DatabaseConnection, DatabaseCursor, get_connection
+from infrastructure.db.configbd import (
+    DatabaseConnection,
+    DatabaseCursor,
+    get_connection,
+    _clear_session_statement_timeout,
+    _get_statement_timeout_ms,
+    _set_session_statement_timeout,
+)
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -406,11 +413,14 @@ class QueryExecutor:
                 one    = q.fetch_one("SELECT ... WHERE id = %s", (uid,))
         """
         conn = get_connection()
+        timeout_applied = _set_session_statement_timeout(conn, _get_statement_timeout_ms())
         executor = _BatchExecutor(conn)
         try:
             yield executor
         finally:
             executor._close_cursors()
+            if timeout_applied:
+                _clear_session_statement_timeout(conn)
             try:
                 conn.close()
             except Exception:

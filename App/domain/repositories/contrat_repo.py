@@ -214,8 +214,8 @@ class ContratRepository(BaseRepository[Contrat]):
 
             new_id = QueryExecutor.with_transaction(_do_insert)
 
-            from infrastructure.logging.optimized_db_logger import log_hist
-            log_hist("CREATE", "contrat", new_id,
+            from infrastructure.logging.optimized_db_logger import log_hist_async
+            log_hist_async("CREATE", "contrat", new_id,
                         f"Contrat {data.get('type_contrat')} créé pour personnel {data.get('personnel_id')}")
 
             from application.event_bus import EventBus
@@ -265,8 +265,8 @@ class ContratRepository(BaseRepository[Contrat]):
         try:
             QueryExecutor.execute_write(query, tuple(list(update_data.values()) + [id]))
 
-            from infrastructure.logging.optimized_db_logger import log_hist
-            log_hist("UPDATE", "contrat", id, f"Mise à jour: {list(update_data.keys())}")
+            from infrastructure.logging.optimized_db_logger import log_hist_async
+            log_hist_async("UPDATE", "contrat", id, f"Mise à jour: {list(update_data.keys())}")
 
             return True, "Contrat mis à jour"
 

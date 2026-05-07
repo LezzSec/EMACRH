@@ -30,6 +30,9 @@ if __name__ == "__main__":
         qInstallMessageHandler(lambda *_: None)
 
         app = QApplication(sys.argv)
+        from infrastructure.logging.optimized_db_logger import flush_db_logs, shutdown_db_logger
+        app.aboutToQuit.connect(flush_db_logs)
+        app.aboutToQuit.connect(shutdown_db_logger)
 
         # Charger et appliquer le thème
         from gui.components.ui_theme import EmacTheme

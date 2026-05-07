@@ -34,7 +34,7 @@ from threading import Lock
 from application.event_bus import EventBus, DomainEvent
 from application.event_rule_service import get_matching_templates
 from domain.services.documents.template_service import generate_filled_template, open_template_file
-from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist_async
 
 logger = logging.getLogger(__name__)
 
@@ -288,7 +288,7 @@ class DocumentTriggerService:
 
             if success and path:
                 open_template_file(path)
-                log_hist(
+                log_hist_async(
                     "DOCUMENT_AUTO_GENERATED",
                     "documents_templates",
                     template['template_id'],
@@ -406,7 +406,7 @@ class DocumentTriggerService:
             op_id: ID opérateur
             event_name: Nom de l'événement
         """
-        log_hist(
+        log_hist_async(
             "DOCUMENT_SILENT_TRIGGER",
             "documents_templates",
             template['template_id'],
@@ -550,7 +550,7 @@ class DocumentTriggerService:
             if not path:
                 return False, "Document formation introuvable", None
 
-            log_hist(
+            log_hist_async(
                 action,
                 "documents_formation_polyvalence",
                 pending.formation_doc_id,
@@ -600,7 +600,7 @@ class DocumentTriggerService:
             )
 
             if success:
-                log_hist(
+                log_hist_async(
                     "DOCUMENT_PROPOSED_GENERATED",
                     "documents_templates",
                     pending.template_id,
@@ -737,7 +737,7 @@ class DocumentTriggerService:
             )
 
             if success:
-                log_hist(
+                log_hist_async(
                     "DOCUMENT_ON_DEMAND_GENERATED",
                     "documents_templates",
                     pending.template_id,

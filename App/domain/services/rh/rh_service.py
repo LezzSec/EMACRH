@@ -7,9 +7,6 @@ Cette version utilise les nouveaux patterns:
 - Services CRUD au lieu de requêtes manuelles + logging manuel
 - Code simplifié et maintenable
 
-COMPARAISON:
-- AVANT: 1,633 lignes, 45+ with Database*, logging manuel partout
-- APRÈS: ~1,200 lignes (-26%), services CRUD réutilisés, logging automatique
 
 Domaines gérés:
 - GENERAL: Données générales de l'opérateur
@@ -167,30 +164,14 @@ def get_donnees_domaine(
     AVANT: 300+ lignes avec multiples try/with DatabaseCursor
     APRÈS: 250 lignes, même logique, moins de boilerplate
     """
-    try:
-        if domaine == DomaineRH.GENERAL:
-            return _get_donnees_general(operateur_id)
-        elif domaine == DomaineRH.CONTRAT:
-            return _get_donnees_contrat(operateur_id)
-        elif domaine == DomaineRH.DECLARATION:
-            return _get_donnees_declaration(operateur_id)
-        elif domaine == DomaineRH.COMPETENCES:
-            return _get_donnees_competences(operateur_id)
-        elif domaine == DomaineRH.FORMATION:
-            return _get_donnees_formation(operateur_id)
-        elif domaine == DomaineRH.MEDICAL:
-            return _get_donnees_medical(operateur_id)
-        elif domaine == DomaineRH.VIE_SALARIE:
-            return _get_donnees_vie_salarie(operateur_id)
-        elif domaine == DomaineRH.POLYVALENCE:
-            return _get_donnees_polyvalence(operateur_id)
-        elif domaine == DomaineRH.MUTUELLE:
-            return _get_donnees_mutuelle(operateur_id)
-        else:
-            return {}
+    loader = _DOMAIN_LOADERS.get(domaine)
+    if loader is None:
+        return {}
 
+    try:
+        return loader(operateur_id)
     except Exception as e:
-        logger.exception(f"Erreur get_donnees_domaine: {e}")
+        logger.exception(f"Erreur get_donnees_domaine({domaine.value}): {e}")
         return {}
 
 
@@ -424,6 +405,19 @@ def _get_donnees_polyvalence(operateur_id: int) -> Dict:
         return {'polyvalences': []}
 
 
+_DOMAIN_LOADERS = {
+    DomaineRH.GENERAL: _get_donnees_general,
+    DomaineRH.CONTRAT: _get_donnees_contrat,
+    DomaineRH.DECLARATION: _get_donnees_declaration,
+    DomaineRH.COMPETENCES: _get_donnees_competences,
+    DomaineRH.FORMATION: _get_donnees_formation,
+    DomaineRH.MEDICAL: _get_donnees_medical,
+    DomaineRH.VIE_SALARIE: _get_donnees_vie_salarie,
+    DomaineRH.POLYVALENCE: _get_donnees_polyvalence,
+    DomaineRH.MUTUELLE: _get_donnees_mutuelle,
+}
+
+
 # ============================================================
 # 3. GESTION DES CONTRATS
 # ============================================================
@@ -611,8 +605,8 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
             PersonnelRepository.upsert_infos(operateur_id, infos_data)
 
         # Logging manuel (pour l'instant, en attendant PersonnelService.update())
-        from infrastructure.logging.optimized_db_logger import log_hist
-        log_hist(
+        from infrastructure.logging.optimized_db_logger import log_hist_async
+        log_hist_async(
             action="UPDATE_INFOS_GENERALES",
             table_name="personnel",
             record_id=operateur_id,

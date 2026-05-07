@@ -523,8 +523,8 @@ def importer_ancienne_polyvalence(operateur_id: int, poste_id: int, niveau: int,
             """, (operateur_id, poste_id, niveau, date_eval, date_prochaine)),
         ])
 
-        from infrastructure.logging.optimized_db_logger import log_hist
-        log_hist(
+        from infrastructure.logging.optimized_db_logger import log_hist_async
+        log_hist_async(
             action="IMPORT_MANUEL",
             table_name="polyvalence",
             record_id=None,
@@ -559,8 +559,8 @@ def update_date_evaluation_polyvalence(poly_id: int, new_date_eval, prochaine_ev
             WHERE id = %s
         """, (new_date_eval, prochaine_eval, poly_id))
 
-        from infrastructure.logging.optimized_db_logger import log_hist
-        log_hist(
+        from infrastructure.logging.optimized_db_logger import log_hist_async
+        log_hist_async(
             action="UPDATE",
             table_name="polyvalence",
             record_id=poly_id,
@@ -614,8 +614,8 @@ def update_date_champ_polyvalence(poly_id: int, field: str, new_date) -> bool:
 
         QueryExecutor.execute_write(query_update, (new_date, poly_id))
 
-        from infrastructure.logging.optimized_db_logger import log_hist
-        log_hist(
+        from infrastructure.logging.optimized_db_logger import log_hist_async
+        log_hist_async(
             action="UPDATE",
             table_name="polyvalence",
             record_id=poly_id,
@@ -672,8 +672,8 @@ def supprimer_polyvalence_par_id(poly_id: int) -> bool:
     try:
         QueryExecutor.execute_write("DELETE FROM polyvalence WHERE id = %s", (poly_id,))
 
-        from infrastructure.logging.optimized_db_logger import log_hist
-        log_hist(
+        from infrastructure.logging.optimized_db_logger import log_hist_async
+        log_hist_async(
             action="DELETE",
             table_name="polyvalence",
             record_id=poly_id,

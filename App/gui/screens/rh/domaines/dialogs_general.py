@@ -197,7 +197,7 @@ class EditInfosGeneralesDialog(EmacFormDialog):
             if not ok:
                 return
 
-        if not self.ville.text().strip():
+        if len(cities) > 1 or not self.ville.text().strip():
             self.ville.setText(ville_choisie)
         if not self.pays_adresse.text().strip():
             self.pays_adresse.setText("France")

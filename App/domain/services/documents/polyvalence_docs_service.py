@@ -13,7 +13,7 @@ from typing import Optional, List, Dict, Tuple
 logger = logging.getLogger(__name__)
 
 from infrastructure.db.query_executor import QueryExecutor
-from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist_async
 
 
 # ---------------------------------------------------------------------------
@@ -208,9 +208,11 @@ def ajouter_document(
              type_mime, taille, description, ajoute_par)
         )
 
-        log_hist(
-            "AJOUT_DOC_FORMATION_POLYVALENCE",
-            f"Document '{nom_affichage}' ajouté pour poste_id={poste_id} niveau={niveau}",
+        log_hist_async(
+            action="AJOUT_DOC_FORMATION_POLYVALENCE",
+            table_name="documents_formation_polyvalence",
+            record_id=new_id,
+            description=f"Document '{nom_affichage}' ajouté pour poste_id={poste_id} niveau={niveau}",
             poste_id=poste_id
         )
         return True, "Document ajouté avec succès", new_id
@@ -237,9 +239,11 @@ def supprimer_document(doc_id: int) -> Tuple[bool, str]:
             (doc_id,)
         )
 
-        log_hist(
-            "SUPPRESSION_DOC_FORMATION_POLYVALENCE",
-            f"Document '{row['nom_affichage']}' supprimé (poste_id={row['poste_id']}, niveau={row['niveau']})",
+        log_hist_async(
+            action="SUPPRESSION_DOC_FORMATION_POLYVALENCE",
+            table_name="documents_formation_polyvalence",
+            record_id=doc_id,
+            description=f"Document '{row['nom_affichage']}' supprimé (poste_id={row['poste_id']}, niveau={row['niveau']})",
             poste_id=row['poste_id']
         )
         return True, "Document supprimé"

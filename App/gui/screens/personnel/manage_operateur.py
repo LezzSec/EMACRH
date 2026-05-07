@@ -11,7 +11,7 @@ from domain.repositories.personnel_repo import PersonnelRepository
 from domain.repositories.poste_repo import PosteRepository
 from domain.repositories.polyvalence_repo import PolyvalenceRepository
 from domain.services.personnel.matricule_service import generer_prochain_matricule
-from infrastructure.logging.optimized_db_logger import log_hist
+from infrastructure.logging.optimized_db_logger import log_hist_async
 from gui.components.emac_ui_kit import show_error_message
 from application.permission_manager import require
 from infrastructure.logging.logging_config import get_logger
@@ -316,7 +316,7 @@ class ManageOperatorsDialog(QDialog):
                     operateur_id, poste_id, niveau, date_iso
                 )
 
-                log_hist(
+                log_hist_async(
                     action="INSERT",
                     table_name="polyvalence",
                     record_id=None,

@@ -150,13 +150,14 @@ class PersonnelService(CRUDService):
             True si succès, False sinon
         """
         from domain.repositories.personnel_repo import PersonnelRepository
-        from infrastructure.logging.optimized_db_logger import log_hist
+        from infrastructure.logging.optimized_db_logger import log_hist_async
         result = PersonnelRepository.save_date_entree(personnel_id, date_entree)
         if result:
-            log_hist(
+            log_hist_async(
                 action="AFFECTATION_DATE_ENTREE",
                 table_name="personnel",
                 record_id=personnel_id,
                 description=f"Date d'entrée affectée: {date_entree}",
+                operateur_id=personnel_id,
             )
         return result

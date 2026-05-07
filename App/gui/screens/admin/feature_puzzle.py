@@ -22,59 +22,9 @@ logger = get_logger(__name__)
 
 _admin_role_id_cache = None
 
-# Metadata complémentaire par feature : niveau de sensibilité + écrans concernés.
-# La description métier vient de la DB (colonne description de la table features).
-FEATURE_META = {
-    'rh.view':                  {'sensitivity': 'Standard', 'screens': 'Menu RH principal'},
-    'rh.bulk_operations':       {'description': 'Accéder aux actions appliquées à plusieurs salariés en une seule fois.', 'sensitivity': 'Sensible', 'screens': 'Gestion du personnel → Opérations en masse'},
-    'rh.bulk_operations.formations': {'description': 'Attribuer ou planifier une formation pour plusieurs salariés en une seule action.', 'sensitivity': 'Sensible', 'screens': 'Gestion du personnel → Formations en masse'},
-    'rh.bulk_operations.absences':   {'description': 'Créer ou modifier des absences pour plusieurs salariés en une seule action.', 'sensitivity': 'Sensible', 'screens': 'Gestion du personnel → Absences en masse'},
-    'rh.bulk_operations.medical':    {'description': 'Créer ou planifier des visites médicales pour plusieurs salariés en une seule action.', 'sensitivity': 'Sensible', 'screens': 'Gestion du personnel → Visites médicales en masse'},
-    'rh.personnel.view':        {'sensitivity': 'Standard', 'screens': 'Gestion du personnel → liste'},
-    'rh.personnel.create':      {'sensitivity': 'Sensible', 'screens': 'Gestion du personnel → Ajouter un employé'},
-    'rh.personnel.edit':        {'sensitivity': 'Sensible', 'screens': 'Gestion du personnel → Modifier fiche'},
-    'rh.personnel.delete':      {'sensitivity': 'Sensible', 'screens': 'Gestion du personnel → Désactiver / supprimer'},
-    'rh.contrats.view':         {'sensitivity': 'Standard', 'screens': 'Onglet Contrats → consultation'},
-    'rh.contrats.edit':         {'sensitivity': 'Sensible', 'screens': 'Onglet Contrats → créer / modifier'},
-    'rh.contrats.delete':       {'sensitivity': 'Sensible', 'screens': 'Onglet Contrats → supprimer'},
-    'rh.documents.view':        {'sensitivity': 'Standard', 'screens': 'Onglet Documents → consultation'},
-    'rh.documents.edit':        {'sensitivity': 'Sensible', 'screens': 'Onglet Documents → ajouter / modifier'},
-    'rh.documents.print':       {'sensitivity': 'Standard', 'screens': 'Onglet Documents → générer / imprimer'},
-    'rh.templates.view':        {'sensitivity': 'Standard', 'screens': 'Modèles de documents → consultation'},
-    'rh.templates.edit':        {'sensitivity': 'Sensible', 'screens': 'Modèles de documents → créer / modifier'},
-    'rh.formations.view':       {'sensitivity': 'Standard', 'screens': 'Formations → consultation'},
-    'rh.formations.edit':       {'sensitivity': 'Sensible', 'screens': 'Formations → ajouter / modifier'},
-    'rh.formations.delete':     {'sensitivity': 'Sensible', 'screens': 'Formations → supprimer'},
-    'rh.competences.view':      {'description': 'Consulter les compétences associées aux salariés et au catalogue.', 'sensitivity': 'Standard', 'screens': 'Compétences → consultation'},
-    'rh.competences.catalogue': {'description': 'Ajouter, modifier ou organiser les compétences disponibles dans le catalogue RH.', 'sensitivity': 'Sensible', 'screens': 'Compétences → catalogue'},
-    'rh.competences.edit':      {'sensitivity': 'Sensible', 'screens': 'Compétences → modifier niveaux'},
-    'rh.competences.delete':    {'sensitivity': 'Sensible', 'screens': 'Compétences → supprimer'},
-    'rh.medical.edit':          {'sensitivity': 'Sensible', 'screens': 'Visites médicales → créer / modifier'},
-    'rh.vie_salarie.edit':      {'sensitivity': 'Sensible', 'screens': 'Sanctions / entretiens → créer / modifier'},
-    'rh.declarations.edit':     {'sensitivity': 'Sensible', 'screens': 'Déclarations → créer / modifier'},
-    'rh.mobilite.edit':         {'sensitivity': 'Standard', 'screens': 'Mobilité / véhicule → modifier'},
-    'production.view':              {'sensitivity': 'Standard', 'screens': 'Menu Production principal'},
-    'production.evaluations.view':  {'sensitivity': 'Standard', 'screens': 'Évaluations → consultation'},
-    'production.evaluations.edit':  {'sensitivity': 'Sensible', 'screens': 'Évaluations → planifier / modifier'},
-    'production.polyvalence.view':  {'sensitivity': 'Standard', 'screens': 'Matrice de polyvalence → consultation'},
-    'production.polyvalence.edit':  {'sensitivity': 'Sensible', 'screens': 'Matrice de polyvalence → modifier niveaux'},
-    'production.postes.view':       {'sensitivity': 'Standard', 'screens': 'Postes de travail → consultation'},
-    'production.postes.edit':       {'sensitivity': 'Sensible', 'screens': 'Postes de travail → créer / modifier / supprimer'},
-    'production.grilles.view':      {'sensitivity': 'Standard', 'screens': 'Grilles de compétences → consultation'},
-    'production.grilles.export':    {'sensitivity': 'Standard', 'screens': 'Grilles de compétences → export Excel / PDF'},
-    'planning.view':            {'sensitivity': 'Standard', 'screens': 'Menu Planning principal'},
-    'planning.absences.view':   {'sensitivity': 'Standard', 'screens': 'Absences → consultation'},
-    'planning.absences.edit':   {'sensitivity': 'Sensible', 'screens': 'Absences → créer / modifier'},
-    'admin.view':               {'sensitivity': 'Admin',    'screens': 'Menu Administration principal'},
-    'admin.users.view':         {'sensitivity': 'Admin',    'screens': 'Gestion utilisateurs → liste'},
-    'admin.users.create':       {'sensitivity': 'Admin',    'screens': 'Gestion utilisateurs → créer un compte'},
-    'admin.users.edit':         {'sensitivity': 'Admin',    'screens': 'Gestion utilisateurs → modifier un compte'},
-    'admin.users.delete':       {'sensitivity': 'Admin',    'screens': 'Gestion utilisateurs → supprimer un compte'},
-    'admin.permissions':        {'sensitivity': 'Admin',    'screens': 'Gestion des permissions (cet écran)'},
-    'admin.roles.edit':         {'sensitivity': 'Admin',    'screens': 'Permissions → modifier droits des rôles'},
-    'admin.historique.view':    {'sensitivity': 'Admin',    'screens': 'Historique / logs → consultation'},
-    'admin.historique.export':  {'sensitivity': 'Admin',    'screens': 'Historique / logs → export'},
-}
+# Metadata UI lue depuis la table features (colonnes sensitivity, screens).
+# Une base non migree affiche simplement les descriptions DB sans badge ecran.
+_DEFAULT_SENSITIVITY_BY_MODULE = {'Admin': 'Admin'}
 
 # (background, foreground, label) par niveau de sensibilité
 _SENSITIVITY_STYLES = {
@@ -280,11 +230,13 @@ class FeatureRow(QWidget):
     def __init__(self, feature: dict, toggle: FeatureToggle, parent=None):
         super().__init__(parent)
         self._key = feature['key_code']
-        meta = FEATURE_META.get(self._key, {})
         self._label_text = feature.get('label') or self._key
-        self._description = meta.get('description') or feature.get('description') or ''
-        self._sensitivity = meta.get('sensitivity', 'Standard')
-        self._screens = meta.get('screens', '')
+        self._description = feature.get('description') or ''
+        self._sensitivity = (
+            feature.get('sensitivity')
+            or _DEFAULT_SENSITIVITY_BY_MODULE.get(feature.get('module'), 'Standard')
+        )
+        self._screens = feature.get('screens') or ''
 
         self._setup_ui(toggle)
 

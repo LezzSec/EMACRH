@@ -27,6 +27,9 @@ def _crash_handler(exc_type, exc_value, exc_tb):
 sys.excepthook = _crash_handler
 
 app = QApplication(sys.argv)
+from infrastructure.logging.optimized_db_logger import flush_db_logs, shutdown_db_logger
+app.aboutToQuit.connect(flush_db_logs)
+app.aboutToQuit.connect(shutdown_db_logger)
 
 from gui.main_qt._shared import get_theme_components
 EmacTheme = get_theme_components()['EmacTheme']

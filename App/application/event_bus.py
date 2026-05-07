@@ -45,8 +45,6 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from threading import Lock
 
-from PyQt5.QtCore import QObject, pyqtSignal
-
 logger = logging.getLogger(__name__)
 
 
@@ -70,23 +68,30 @@ class DomainEvent:
         return f"DomainEvent(name='{self.name}', data={self.data}, source={self.source})"
 
 
-class EventSignals(QObject):
+def _create_qt_event_signals():
     """
-    Signaux PyQt5 pour les événements.
+    Cree l'adaptateur Qt a la demande.
 
-    Permet une communication thread-safe avec l'UI.
-    Les handlers connectés à ces signaux sont exécutés dans le thread principal Qt.
+    La couche application reste importable sans PyQt5 ; seule l'UI appelle
+    get_qt_signals() et paye donc cette dependance.
     """
-    # Signal émis pour chaque événement (event_name, data_dict)
-    event_emitted = pyqtSignal(str, dict)
+    try:
+        from PyQt5.QtCore import QObject, pyqtSignal
+    except Exception as e:
+        logger.warning(f"Signaux Qt indisponibles pour EventBus: {e}")
+        return None
 
-    # Signaux spécifiques pour les événements courants (optionnel, pour typage fort)
-    personnel_created = pyqtSignal(dict)
-    personnel_updated = pyqtSignal(dict)
-    contrat_created = pyqtSignal(dict)
-    contrat_renewed = pyqtSignal(dict)
-    polyvalence_created = pyqtSignal(dict)
-    polyvalence_niveau_changed = pyqtSignal(dict)
+    class EventSignals(QObject):
+        """Signaux PyQt5 pour les evenements metier."""
+        event_emitted = pyqtSignal(str, dict)
+        personnel_created = pyqtSignal(dict)
+        personnel_updated = pyqtSignal(dict)
+        contrat_created = pyqtSignal(dict)
+        contrat_renewed = pyqtSignal(dict)
+        polyvalence_created = pyqtSignal(dict)
+        polyvalence_niveau_changed = pyqtSignal(dict)
+
+    return EventSignals()
 
 
 class EventBus:
@@ -115,7 +120,7 @@ class EventBus:
     def _initialize(self):
         """Initialise l'instance (appelé une seule fois)."""
         self._subscribers: Dict[str, List[Callable]] = {}
-        self._qt_signals = EventSignals()
+        self._qt_signals = None
         self._history: List[DomainEvent] = []
         self._max_history = 100
         self._enabled = True
@@ -186,20 +191,20 @@ class EventBus:
                 except Exception as e:
                     logger.error(f"Erreur dans handler global '*': {e}", exc_info=True)
 
-        # 4. Émettre le signal Qt (thread-safe pour UI)
-        instance._qt_signals.event_emitted.emit(event_name, data)
+        # 4. Emettre les signaux Qt seulement si l'UI les a demandes.
+        if instance._qt_signals is not None:
+            instance._qt_signals.event_emitted.emit(event_name, data)
 
-        # 5. Émettre les signaux spécifiques si définis
-        signal_map = {
-            'personnel.created': instance._qt_signals.personnel_created,
-            'personnel.updated': instance._qt_signals.personnel_updated,
-            'contrat.created': instance._qt_signals.contrat_created,
-            'contrat.renewed': instance._qt_signals.contrat_renewed,
-            'polyvalence.created': instance._qt_signals.polyvalence_created,
-            'polyvalence.niveau_changed': instance._qt_signals.polyvalence_niveau_changed,
-        }
-        if event_name in signal_map:
-            signal_map[event_name].emit(data)
+            signal_map = {
+                'personnel.created': instance._qt_signals.personnel_created,
+                'personnel.updated': instance._qt_signals.personnel_updated,
+                'contrat.created': instance._qt_signals.contrat_created,
+                'contrat.renewed': instance._qt_signals.contrat_renewed,
+                'polyvalence.created': instance._qt_signals.polyvalence_created,
+                'polyvalence.niveau_changed': instance._qt_signals.polyvalence_niveau_changed,
+            }
+            if event_name in signal_map:
+                signal_map[event_name].emit(data)
 
     @classmethod
     def subscribe(cls, event_name: str, callback: Callable[[DomainEvent], None]):
@@ -249,7 +254,7 @@ class EventBus:
                 logger.debug(f"EventBus: tous les handlers de '{event_name}' retirés")
 
     @classmethod
-    def get_qt_signals(cls) -> EventSignals:
+    def get_qt_signals(cls):
         """
         Retourne les signaux Qt pour connexion UI.
 
@@ -264,7 +269,12 @@ class EventBus:
         Returns:
             EventSignals: Objet contenant les signaux Qt
         """
-        return cls()._qt_signals
+        instance = cls()
+        if instance._qt_signals is None:
+            instance._qt_signals = _create_qt_event_signals()
+        if instance._qt_signals is None:
+            raise RuntimeError("Les signaux Qt de l'EventBus sont indisponibles")
+        return instance._qt_signals
 
     @classmethod
     def get_history(cls, event_name: str = None) -> List[DomainEvent]:
