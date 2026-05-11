@@ -13,6 +13,7 @@ from typing import List, Dict, Optional
 
 from infrastructure.db.query_executor import QueryExecutor
 from infrastructure.logging.logging_config import get_logger
+from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
 
 logger = get_logger(__name__)
 
@@ -143,7 +144,7 @@ def mettre_a_jour_evaluation(polyvalence_id: int, nouveau_niveau: int,
     """
     require('production.evaluations.edit')
 
-    if nouveau_niveau not in [1, 2, 3, 4]:
+    if nouveau_niveau not in NiveauPolyvalenceRepository.get_codes_actifs():
         return False
 
     try:

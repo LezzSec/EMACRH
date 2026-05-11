@@ -31,12 +31,11 @@ from domain.services.formation.evaluation_service import (
     supprimer_polyvalence_par_id,
     compter_polyvalences_operateur,
 )
+from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
 from gui.workers.db_worker import DbWorker, DbThreadPool
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
-
-_JOURS_PAR_NIVEAU = {1: 30, 2: 30, 3: 3650, 4: 3650}
 
 
 class EvaluationViewModel(QObject):
@@ -158,14 +157,14 @@ class EvaluationViewModel(QObject):
         Met à jour le niveau d'une polyvalence et calcule la prochaine évaluation.
         Émet l'événement EventBus si le niveau a changé.
         """
-        if nouveau_niveau not in [1, 2, 3, 4]:
-            self.error_occurred.emit("Niveau invalide — doit être 1, 2, 3 ou 4.")
+        if nouveau_niveau not in NiveauPolyvalenceRepository.get_codes_actifs():
+            self.error_occurred.emit(f"Niveau {nouveau_niveau} invalide.")
             return False
 
         if date_eval is None:
             date_eval = date.today()
 
-        jours = _JOURS_PAR_NIVEAU.get(nouveau_niveau, 30)
+        jours = NiveauPolyvalenceRepository.get_frequence_jours(nouveau_niveau)
         prochaine_eval = date_eval + timedelta(days=jours)
 
         try:
@@ -208,7 +207,7 @@ class EvaluationViewModel(QObject):
             operateur_id = (poly_info.get('personnel_id') or poly_info.get('operateur_id')) if poly_info else None
             poste_id = poly_info['poste_id'] if poly_info else None
 
-            jours = _JOURS_PAR_NIVEAU.get(niveau, 30)
+            jours = NiveauPolyvalenceRepository.get_frequence_jours(niveau)
             prochaine_eval = date_eval + timedelta(days=jours)
 
             if not update_date_evaluation_polyvalence(poly_id, date_eval, prochaine_eval):

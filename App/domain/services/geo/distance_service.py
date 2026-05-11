@@ -47,7 +47,12 @@ _USER_AGENT = os.getenv(
 )
 
 # Cache persistant simple. Peut être déplacé via EMAC_DISTANCE_CACHE_DB.
-_CACHE_DB = Path(os.getenv("EMAC_DISTANCE_CACHE_DB", ".cache/distance_cache.sqlite"))
+_CACHE_DB_ENV = os.getenv("EMAC_DISTANCE_CACHE_DB")
+_CACHE_DB = (
+    Path(_CACHE_DB_ENV)
+    if _CACHE_DB_ENV
+    else Path(__file__).resolve().parents[3] / ".cache" / "distance_cache.sqlite"
+)
 _CACHE_TTL_DAYS = int(os.getenv("EMAC_DISTANCE_CACHE_TTL_DAYS", "180"))
 _MAIRIE_CACHE_VERSION = "v2"
 
@@ -56,6 +61,7 @@ _mairie_cache: dict[str, tuple[float, float]] = {}
 _route_cache: dict[str, tuple[float, int]] = {}
 _company_commune_cache: Optional[tuple[float, float]] = None
 _company_mairie_cache: Optional[tuple[float, float]] = None
+_cache_initialized: bool = False
 
 
 def _commune_key(cp: str, ville: str) -> str:
@@ -120,6 +126,9 @@ def _http_json(url: str, *, timeout: int, method: str = "GET", data: bytes | Non
 
 
 def _cache_init() -> None:
+    global _cache_initialized
+    if _cache_initialized:
+        return
     try:
         _CACHE_DB.parent.mkdir(parents=True, exist_ok=True)
         with sqlite3.connect(_CACHE_DB) as con:
@@ -132,6 +141,7 @@ def _cache_init() -> None:
                 )
                 """
             )
+        _cache_initialized = True
     except Exception as exc:
         logger.debug("Cache SQLite indisponible: %s", exc)
 

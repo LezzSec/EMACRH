@@ -23,6 +23,7 @@ from datetime import date, timedelta
 from infrastructure.db.query_executor import QueryExecutor
 from domain.models import Polyvalence, EvaluationResume, StatistiquesEvaluations
 from domain.repositories.base import BaseRepository
+from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
 from infrastructure.config.performance_monitor import monitor_query
 
 logger = logging.getLogger(__name__)
@@ -255,8 +256,8 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
                date_evaluation: Optional[date] = None,
                prochaine_evaluation: Optional[date] = None) -> Tuple[bool, str, Optional[int]]:
         """Crée une nouvelle compétence."""
-        if niveau not in [1, 2, 3, 4]:
-            return False, "Le niveau doit être entre 1 et 4", None
+        if niveau not in NiveauPolyvalenceRepository.get_codes_actifs():
+            return False, f"Niveau {niveau} invalide", None
 
         # Vérifier si existe déjà
         if QueryExecutor.fetch_one(
@@ -319,8 +320,8 @@ class PolyvalenceRepository(BaseRepository[Polyvalence]):
     def update_niveau(cls, id: int, nouveau_niveau: int,
                       date_evaluation: date, prochaine_evaluation: date) -> Tuple[bool, str]:
         """Met à jour le niveau d'une compétence après évaluation."""
-        if nouveau_niveau not in [1, 2, 3, 4]:
-            return False, "Le niveau doit être entre 1 et 4"
+        if nouveau_niveau not in NiveauPolyvalenceRepository.get_codes_actifs():
+            return False, f"Niveau {nouveau_niveau} invalide"
 
         # Récupérer l'ancien niveau pour le log
         old = QueryExecutor.fetch_one(

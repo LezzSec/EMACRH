@@ -26,6 +26,7 @@ from typing import Dict, List, Optional, Tuple, Any
 
 from infrastructure.db.query_executor import QueryExecutor
 from infrastructure.logging.optimized_db_logger import log_hist_async
+from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
 
 logger = logging.getLogger(__name__)
 
@@ -200,7 +201,7 @@ class GrillesService:
             new_niveau_int = int(new_niveau_str)
 
             # Calculer la prochaine évaluation
-            jours = 30 if new_niveau_int in [1, 2] else 3650
+            jours = NiveauPolyvalenceRepository.get_frequence_jours(new_niveau_int)
             prochaine_eval = date.today() + timedelta(days=jours)
 
             if old_niveau is None:
@@ -264,7 +265,7 @@ class GrillesService:
             old_niveau, new_niveau_int,
             old_date_eval,
             date.today() if action != 'DELETE' else None,
-            (date.today() + timedelta(days=30 if new_niveau_int in [1, 2] else 3650)) if new_niveau_int else None
+            (date.today() + timedelta(days=NiveauPolyvalenceRepository.get_frequence_jours(new_niveau_int))) if new_niveau_int else None
         )
 
         return action, old_niveau, new_niveau_int

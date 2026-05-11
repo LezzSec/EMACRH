@@ -437,13 +437,21 @@ def _features_support_metadata_columns() -> bool:
 def get_all_features() -> List[Dict]:
     """Récupère toutes les features du catalogue, groupées par module"""
     try:
-        metadata_columns = ", sensitivity, screens" if _features_support_metadata_columns() else ""
-        query = f"""
-            SELECT id, key_code, label, module, description, display_order, is_active{metadata_columns}
-            FROM features
-            WHERE is_active = TRUE
-            ORDER BY module, display_order, key_code
-        """
+        if _features_support_metadata_columns():
+            query = """
+                SELECT id, key_code, label, module, description, display_order, is_active,
+                       sensitivity, screens
+                FROM features
+                WHERE is_active = TRUE
+                ORDER BY module, display_order, key_code
+            """
+        else:
+            query = """
+                SELECT id, key_code, label, module, description, display_order, is_active
+                FROM features
+                WHERE is_active = TRUE
+                ORDER BY module, display_order, key_code
+            """
         return QueryExecutor.fetch_all(query, dictionary=True)
     except Exception as e:
         logger.error(f"Erreur get_all_features: {e}")

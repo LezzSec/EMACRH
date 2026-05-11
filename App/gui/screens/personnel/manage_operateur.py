@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 
+from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
 from domain.repositories.personnel_repo import PersonnelRepository
 from domain.repositories.poste_repo import PosteRepository
 from domain.repositories.polyvalence_repo import PolyvalenceRepository
@@ -87,23 +88,11 @@ class EvaluationDateDialog(QDialog):
         layout.addLayout(btn_row)
 
     def _calculer_date_evaluation(self):
-        """Calcule automatiquement la date de prochaine évaluation selon le niveau choisi."""
         niveau = self.niveau_combo.currentData()
         if niveau is None:
             return
-
-        # Calcul selon le niveau
-        if niveau == 1:
-            jours = 30  # 1 mois
-        elif niveau == 2:
-            jours = 30  # 1 mois
-        elif niveau in [3, 4]:
-            jours = 3650  # 10 ans
-        else:
-            jours = 30  # Par défaut 1 mois
-
-        date_future = QDate.currentDate().addDays(jours)
-        self.date_edit.setDate(date_future)
+        jours = NiveauPolyvalenceRepository.get_frequence_jours(niveau)
+        self.date_edit.setDate(QDate.currentDate().addDays(jours))
 
     def _charger_postes(self):
         """Remplit le combo avec les postes visibles (id + poste_code)."""
