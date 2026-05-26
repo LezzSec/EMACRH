@@ -8,6 +8,7 @@ from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QFont
 
 from gui.components.emac_ui_kit import show_error_message
+from gui.screens.formation.gestion_formations.formation_documents_widget import FormationDocumentsWidget
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -24,7 +25,7 @@ class AddEditFormationDialog(QDialog):
         self._vm = vm
 
         self.setWindowTitle("Modifier la formation" if self.is_edit else "Nouvelle formation")
-        self.setFixedSize(640, 820)
+        self.resize(640, 960)
 
         self.init_ui()
         self._connect_viewmodel()
@@ -176,6 +177,19 @@ class AddEditFormationDialog(QDialog):
         attestation_layout.addLayout(btn_attestation_layout)
         attestation_group.setLayout(attestation_layout)
         layout.addWidget(attestation_group)
+
+        fichiers_group = QGroupBox("Fichiers joints")
+        fichiers_layout = QVBoxLayout()
+        formation_id = self.formation.get('id') if self.is_edit else None
+        operateur_id = self.formation.get('operateur_id') or self.formation.get('personnel_id') if self.is_edit else None
+        self.fichiers_widget = FormationDocumentsWidget(
+            formation_id=formation_id,
+            operateur_id=operateur_id,
+            parent=self,
+        )
+        fichiers_layout.addWidget(self.fichiers_widget)
+        fichiers_group.setLayout(fichiers_layout)
+        layout.addWidget(fichiers_group)
 
         layout.addStretch()
 

@@ -30,12 +30,10 @@ class HistoriqueTab(QWidget):
 
         filter_layout.addWidget(QLabel("Type :"))
         self.history_type_combo = QComboBox()
-        self.history_type_combo.addItems([
-            "Tous", "CongePaye", "RTT", "Maladie",
-            "AccidentTravail", "ArretTravail", "Formation", "Autre",
-        ])
+        self.history_type_combo.addItem("Tous", "Tous")
         self.history_type_combo.currentIndexChanged.connect(self.load_data)
         filter_layout.addWidget(self.history_type_combo)
+        self._load_types_filter()
 
         filter_layout.addWidget(QLabel("Période :"))
         self.period_combo = QComboBox()
@@ -83,9 +81,17 @@ class HistoriqueTab(QWidget):
         btn_layout.addWidget(delete_btn)
         layout.addLayout(btn_layout)
 
+    def _load_types_filter(self):
+        from domain.services.rh.declaration_service_crud import DeclarationServiceCRUD
+        try:
+            for t in DeclarationServiceCRUD.get_types_declaration():
+                self.history_type_combo.addItem(t['libelle'], t['code'])
+        except Exception as e:
+            logger.exception(f"Erreur chargement types filtre: {e}")
+
     def load_data(self):
         try:
-            type_filter = self.history_type_combo.currentText()
+            type_filter = self.history_type_combo.currentData() or self.history_type_combo.currentText()
             period = self.period_combo.currentText()
             rows = get_historique_declarations(type_filter=type_filter, period=period)
 

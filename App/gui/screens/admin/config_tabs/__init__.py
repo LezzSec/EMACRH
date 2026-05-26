@@ -8,7 +8,7 @@ depuis admin_data_panel.py.
 
 from .tabs_rh import AteliersTab, ServicesTab, TranchesAgeTab, MotifsortieTab
 from .tabs_absences import TypesAbsenceTab, JoursFeriesTab, SoldeCongesTab, DemandeAbsenceTab
-from .tabs_production import CompetencesTab, PolyvalenceAdminTab
+from .tabs_production import CompetencesTab, NiveauxPolyvalenceTab, PostesTab, PolyvalenceAdminTab
 from .tabs_documents import CategoriesDocsTab, DocumentEventRulesTab
 from .tabs_system import RolesTab, HistoriqueAdminTab, LogsConnexionTab
 from .tabs_modules import ModulesApplicationTab
@@ -16,7 +16,7 @@ from .tabs_modules import ModulesApplicationTab
 __all__ = [
     'AteliersTab', 'ServicesTab', 'TranchesAgeTab', 'MotifsortieTab',
     'TypesAbsenceTab', 'JoursFeriesTab', 'SoldeCongesTab', 'DemandeAbsenceTab',
-    'CompetencesTab', 'PolyvalenceAdminTab',
+    'CompetencesTab', 'NiveauxPolyvalenceTab', 'PostesTab', 'PolyvalenceAdminTab',
     'CategoriesDocsTab', 'DocumentEventRulesTab',
     'RolesTab', 'HistoriqueAdminTab', 'LogsConnexionTab',
     'ModulesApplicationTab',

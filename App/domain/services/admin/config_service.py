@@ -67,9 +67,9 @@ class ServicesRHService:
     @staticmethod
     def get_all() -> list:
         return QueryExecutor.fetch_all(
-            "SELECT id, nom_service, description FROM services ORDER BY nom_service",
+            "SELECT id, nom_service, description, actif FROM services ORDER BY nom_service",
             dictionary=True
-        )
+        ) or []
 
     @staticmethod
     def create(nom_service: str, description: str = None) -> int:
@@ -89,6 +89,25 @@ class ServicesRHService:
             (nom_service, description, service_id)
         )
         log_hist_async(action="MODIFICATION_SERVICE", table_name="services", record_id=service_id, description=f"Service #{service_id} modifié : {nom_service}")
+
+    @staticmethod
+    def deactivate(service_id: int) -> tuple:
+        QueryExecutor.execute_write("UPDATE services SET actif = 0 WHERE id = %s", (service_id,))
+        log_hist_async(action="DESACTIVATION_SERVICE", table_name="services", record_id=service_id, description=f"Service #{service_id} désactivé")
+        return True, "Service désactivé."
+
+    @staticmethod
+    def reactivate(service_id: int) -> None:
+        QueryExecutor.execute_write("UPDATE services SET actif = 1 WHERE id = %s", (service_id,))
+        log_hist_async(action="REACTIVATION_SERVICE", table_name="services", record_id=service_id, description=f"Service #{service_id} réactivé")
+
+    @staticmethod
+    def count_personnel_using(service_id: int) -> int:
+        """Compte le personnel actif rattaché à ce service (pour l'analyse d'impact)."""
+        return QueryExecutor.fetch_scalar(
+            "SELECT COUNT(*) FROM personnel WHERE service_id = %s AND statut = 'ACTIF'",
+            (service_id,)
+        ) or 0
 
     @staticmethod
     def delete(service_id: int) -> tuple:
@@ -591,6 +610,156 @@ class PolyvalenceAdminService:
         QueryExecutor.execute_write("DELETE FROM polyvalence WHERE id=%s", (polyvalence_id,))
         log_hist_async(action="ADMIN_SUPPRESSION_POLYVALENCE", table_name="polyvalence", record_id=polyvalence_id, description=f"Polyvalence #{polyvalence_id} supprimée (admin)")
         return True, "Entrée de polyvalence supprimée."
+
+
+# ─────────────────────────────────────────
+# Niveaux de polyvalence
+# ─────────────────────────────────────────
+
+class NiveauPolyvalenceService:
+
+    @staticmethod
+    def get_all() -> list:
+        return QueryExecutor.fetch_all(
+            "SELECT id, code, nom, description, frequence_evaluation_jours, "
+            "ordre, couleur, nom_evenement, actif "
+            "FROM niveau_polyvalence ORDER BY ordre, code",
+            dictionary=True
+        ) or []
+
+    @staticmethod
+    def create(nom: str, code: int, description: str | None,
+               frequence_evaluation_jours: int, ordre: int,
+               couleur: str | None, nom_evenement: str | None) -> None:
+        from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
+        new_id = QueryExecutor.execute_write(
+            "INSERT INTO niveau_polyvalence "
+            "(nom, code, description, frequence_evaluation_jours, ordre, couleur, nom_evenement, actif) "
+            "VALUES (%s, %s, %s, %s, %s, %s, %s, 1)",
+            (nom, code, description, frequence_evaluation_jours, ordre,
+             couleur or '#3498db', nom_evenement)
+        )
+        NiveauPolyvalenceRepository.invalidate_cache()
+        log_hist_async(action="NIVEAU_POLYVALENCE_CREATION", table_name="niveau_polyvalence",
+                       record_id=new_id, description=f"Niveau '{nom}' (code {code}) créé")
+
+    @staticmethod
+    def update(niveau_id: int, nom: str, code: int, description: str | None,
+               frequence_evaluation_jours: int, ordre: int,
+               couleur: str | None, nom_evenement: str | None) -> None:
+        from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
+        QueryExecutor.execute_write(
+            "UPDATE niveau_polyvalence SET nom=%s, code=%s, description=%s, "
+            "frequence_evaluation_jours=%s, ordre=%s, couleur=%s, nom_evenement=%s "
+            "WHERE id=%s",
+            (nom, code, description, frequence_evaluation_jours, ordre,
+             couleur or '#3498db', nom_evenement, niveau_id)
+        )
+        NiveauPolyvalenceRepository.invalidate_cache()
+        log_hist_async(action="NIVEAU_POLYVALENCE_MODIFICATION", table_name="niveau_polyvalence",
+                       record_id=niveau_id, description=f"Niveau #{niveau_id} '{nom}' modifié")
+
+    @staticmethod
+    def deactivate(niveau_id: int) -> tuple:
+        from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
+        count = QueryExecutor.fetch_scalar(
+            "SELECT COUNT(*) FROM niveau_polyvalence WHERE actif = 1 AND id != %s",
+            (niveau_id,)
+        ) or 0
+        if count < 1:
+            return False, "Impossible de désactiver le dernier niveau actif."
+        QueryExecutor.execute_write(
+            "UPDATE niveau_polyvalence SET actif = 0 WHERE id = %s", (niveau_id,)
+        )
+        NiveauPolyvalenceRepository.invalidate_cache()
+        log_hist_async(action="NIVEAU_POLYVALENCE_DESACTIVATION", table_name="niveau_polyvalence",
+                       record_id=niveau_id, description=f"Niveau #{niveau_id} désactivé")
+        return True, "Niveau désactivé."
+
+    @staticmethod
+    def reactivate(niveau_id: int) -> None:
+        from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
+        QueryExecutor.execute_write(
+            "UPDATE niveau_polyvalence SET actif = 1 WHERE id = %s", (niveau_id,)
+        )
+        NiveauPolyvalenceRepository.invalidate_cache()
+        log_hist_async(action="NIVEAU_POLYVALENCE_REACTIVATION", table_name="niveau_polyvalence",
+                       record_id=niveau_id, description=f"Niveau #{niveau_id} réactivé")
+
+    @staticmethod
+    def count_polyvalences_using(niveau_id: int) -> int:
+        """Compte les polyvalences actuelles utilisant ce niveau (pour l'analyse d'impact)."""
+        return QueryExecutor.fetch_scalar(
+            "SELECT COUNT(*) FROM polyvalence p "
+            "JOIN niveau_polyvalence np ON np.code = p.niveau "
+            "WHERE np.id = %s",
+            (niveau_id,)
+        ) or 0
+
+
+
+# ─────────────────────────────────────────
+# Postes
+# ─────────────────────────────────────────
+
+class PostesService:
+
+    @staticmethod
+    def get_all() -> list:
+        return QueryExecutor.fetch_all(
+            """
+            SELECT p.id, p.poste_code, p.visible, p.besoins_postes,
+                   p.atelier_id, a.nom AS atelier_nom
+            FROM postes p
+            LEFT JOIN atelier a ON p.atelier_id = a.id
+            ORDER BY a.nom, p.poste_code
+            """,
+            dictionary=True
+        ) or []
+
+    @staticmethod
+    def create(poste_code: str, atelier_id: int | None, besoins_postes: int = 0) -> tuple:
+        from domain.repositories.poste_repo import PosteRepository
+        return PosteRepository.create({
+            'poste_code': poste_code.strip().upper(),
+            'atelier_id': atelier_id,
+            'besoins_postes': besoins_postes,
+            'visible': True,
+        })
+
+    @staticmethod
+    def update(poste_id: int, poste_code: str, atelier_id: int | None,
+               besoins_postes: int) -> tuple:
+        from domain.repositories.poste_repo import PosteRepository
+        return PosteRepository.update(poste_id, {
+            'poste_code': poste_code.strip().upper(),
+            'atelier_id': atelier_id,
+            'besoins_postes': besoins_postes,
+        })
+
+    @staticmethod
+    def deactivate(poste_id: int) -> tuple:
+        from domain.repositories.poste_repo import PosteRepository
+        ok, msg = PosteRepository.set_visible(poste_id, False)
+        if ok:
+            log_hist_async(action="DESACTIVATION_POSTE", table_name="postes",
+                           record_id=poste_id, description=f"Poste #{poste_id} désactivé (masqué)")
+        return ok, msg
+
+    @staticmethod
+    def reactivate(poste_id: int) -> None:
+        from domain.repositories.poste_repo import PosteRepository
+        PosteRepository.set_visible(poste_id, True)
+        log_hist_async(action="REACTIVATION_POSTE", table_name="postes",
+                       record_id=poste_id, description=f"Poste #{poste_id} réactivé")
+
+    @staticmethod
+    def count_polyvalences_using(poste_id: int) -> int:
+        """Compte les polyvalences (tous statuts) liées à ce poste."""
+        return QueryExecutor.fetch_scalar(
+            "SELECT COUNT(*) FROM polyvalence WHERE poste_id = %s",
+            (poste_id,)
+        ) or 0
 
 
 # ─────────────────────────────────────────

@@ -17,6 +17,7 @@ from gui.components.ui_theme import EmacButton
 from gui.components.emac_dialog import EmacFormDialog
 from gui.screens.rh.domaines.dialogs_shared import JustificatifMixin
 from domain.services.rh.rh_service import create_formation, update_formation
+from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
 
 
 class EditFormationDialog(JustificatifMixin, EmacFormDialog):
@@ -504,10 +505,12 @@ class AjouterDocFormationDialog:
 
         self._niveau_combo = QComboBox()
         self._niveau_combo.addItem("Tous les niveaux", None)
-        self._niveau_combo.addItem("Niveau 1 – Apprentissage", 1)
-        self._niveau_combo.addItem("Niveau 2 – En cours", 2)
-        self._niveau_combo.addItem("Niveau 3 – Autonome", 3)
-        self._niveau_combo.addItem("Niveau 4 – Expert / Formateur", 4)
+        try:
+            for n in NiveauPolyvalenceRepository.get_all_actifs():
+                self._niveau_combo.addItem(f"Niveau {n['code']} – {n['nom']}", n['code'])
+        except Exception:
+            for code, nom in [(1, "Apprentissage"), (2, "En cours"), (3, "Autonome"), (4, "Expert / Formateur")]:
+                self._niveau_combo.addItem(f"Niveau {code} – {nom}", code)
         form.addRow("Niveau concerné :", self._niveau_combo)
 
         self._desc_input = QTextEdit()

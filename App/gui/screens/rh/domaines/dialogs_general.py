@@ -142,17 +142,26 @@ class EditInfosGeneralesDialog(EmacFormDialog):
         profil_layout.addRow("Catégorie:", self.categorie_combo)
 
         self.numposte_combo = QComboBox()
-        self.numposte_combo.setEditable(True)
-        self.numposte_combo.addItems([
-            '', 'Production', 'Administratif', 'Labo', 'R&D', 'Méthode', 'Maintenance', 'Logistique'
-        ])
-        svc = self.donnees.get('numposte') or ''
-        if svc:
-            idx = self.numposte_combo.findText(svc)
+        self.numposte_combo.addItem('', None)
+        self.numposte_combo.addItem('Production', None)
+        try:
+            from domain.services.admin.config_service import ServicesRHService
+            for s in ServicesRHService.get_all():
+                if s['actif']:
+                    self.numposte_combo.addItem(s['nom_service'], s['id'])
+        except Exception as e:
+            logger.exception(f"Erreur chargement services RH: {e}")
+
+        svc_id = self.donnees.get('service_id')
+        svc_text = self.donnees.get('numposte') or ''
+        if svc_id is not None:
+            idx = self.numposte_combo.findData(svc_id)
             if idx >= 0:
                 self.numposte_combo.setCurrentIndex(idx)
-            else:
-                self.numposte_combo.setCurrentText(svc)
+        elif svc_text:
+            idx = self.numposte_combo.findText(svc_text)
+            if idx >= 0:
+                self.numposte_combo.setCurrentIndex(idx)
         profil_layout.addRow("Service / Poste:", self.numposte_combo)
 
         self.content_layout.addWidget(profil_group)
@@ -254,6 +263,7 @@ class EditInfosGeneralesDialog(EmacFormDialog):
             'email': self.email.text().strip(),
             'categorie': self.categorie_combo.currentText()[:1] or None,
             'numposte': self.numposte_combo.currentText().strip() or None,
+            'service_id': self.numposte_combo.currentData(),
         }
 
         success, message = update_infos_generales(self.operateur_id, data)

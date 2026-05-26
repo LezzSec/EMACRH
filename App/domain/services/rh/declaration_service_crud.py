@@ -25,19 +25,11 @@ from infrastructure.logging.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-# Types de déclaration disponibles
-TYPES_DECLARATION = [
-    'CongePaye',
-    'RTT',
-    'SansSolde',
-    'Maladie',
-    'AccidentTravail',
-    'AccidentTrajet',
-    'ArretTravail',
-    'CongeNaissance',
-    'Formation',
-    'Autorisation',
-    'Autre'
+# Fallback si la table type_absence est vide ou inaccessible
+_TYPES_DECLARATION_FALLBACK = [
+    'CongePaye', 'RTT', 'SansSolde', 'Maladie',
+    'AccidentTravail', 'AccidentTrajet', 'ArretTravail',
+    'CongeNaissance', 'Formation', 'Autorisation', 'Autre',
 ]
 
 
@@ -114,6 +106,15 @@ class DeclarationServiceCRUD(CRUDService):
             return 0
 
     @classmethod
-    def get_types_declaration(cls) -> List[str]:
-        """Retourne la liste des types de déclaration disponibles."""
-        return TYPES_DECLARATION
+    def get_types_declaration(cls) -> List[dict]:
+        """Retourne les types d'absence actifs depuis la BDD (code + libelle)."""
+        try:
+            rows = QueryExecutor.fetch_all(
+                "SELECT code, libelle FROM type_absence WHERE actif = TRUE ORDER BY code",
+                dictionary=True
+            )
+            if rows:
+                return rows
+        except Exception as e:
+            logger.warning(f"Fallback types déclaration: {e}")
+        return [{'code': t, 'libelle': t} for t in _TYPES_DECLARATION_FALLBACK]

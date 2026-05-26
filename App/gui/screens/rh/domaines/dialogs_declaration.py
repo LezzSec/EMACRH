@@ -31,9 +31,12 @@ class EditDeclarationDialog(JustificatifMixin, EmacFormDialog):
         situation_form.setSpacing(10)
 
         self.type_combo = QComboBox()
-        self.type_combo.addItems(get_types_declaration())
+        for t in get_types_declaration():
+            self.type_combo.addItem(t['libelle'], t['code'])
         if self.declaration and self.declaration.get('type_declaration'):
-            idx = self.type_combo.findText(self.declaration['type_declaration'])
+            idx = self.type_combo.findData(self.declaration['type_declaration'])
+            if idx < 0:
+                idx = self.type_combo.findText(self.declaration['type_declaration'])
             if idx >= 0:
                 self.type_combo.setCurrentIndex(idx)
         situation_form.addRow("Type :", self.type_combo)
@@ -111,7 +114,7 @@ class EditDeclarationDialog(JustificatifMixin, EmacFormDialog):
 
     def save_to_db(self):
         data = {
-            'type_declaration': self.type_combo.currentText(),
+            'type_declaration': self.type_combo.currentData() or self.type_combo.currentText(),
             'date_debut': self.date_debut.date().toPyDate(),
             'date_fin': self.date_fin.date().toPyDate(),
             'motif': self.motif.toPlainText().strip() or None,

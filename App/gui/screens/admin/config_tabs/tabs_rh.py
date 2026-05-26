@@ -7,6 +7,7 @@ from PyQt5.QtWidgets import (
     QDialog, QLineEdit, QTextEdit, QCheckBox, QSpinBox, QMessageBox
 )
 
+from gui.components.ui_theme import EmacButton
 from infrastructure.logging.logging_config import get_logger
 from .base import _ConfigTab, _SimpleFormDialog, _txt
 
@@ -100,9 +101,79 @@ class _ServiceRHForm(_SimpleFormDialog):
 
 
 class ServicesTab(_ConfigTab):
-    COLUMNS = [("ID", "id"), ("Nom", "nom_service"), ("Description", "description")]
+    COLUMNS = [("ID", "id"), ("Nom", "nom_service"), ("Description", "description"), ("Actif", "actif")]
+    BOOL_KEYS = {'actif'}
     DESCRIPTION = "Services RH — divisions fonctionnelles du personnel (ex : Maintenance, Logistique…)."
     USAGE = "Fiche personnel, filtres RH, statistiques par service"
+
+    def _build_ui(self):
+        self._all_records = []
+        super()._build_ui()
+
+        self.btn_del.setText("Désactiver")
+        self.btn_del.setToolTip("Désactive le service sélectionné (conserve l'historique)")
+
+        btn_bar = self.layout().itemAt(1).layout()
+        self.btn_reactivate = EmacButton("Réactiver", variant='ghost')
+        self.btn_reactivate.clicked.connect(self._on_reactivate)
+        self.btn_reactivate.setEnabled(False)
+        self.btn_reactivate.setToolTip("Sélectionnez un service inactif pour le réactiver")
+        btn_bar.insertWidget(3, self.btn_reactivate)
+
+        self._chk_inactifs = QCheckBox("Afficher les inactifs")
+        self._chk_inactifs.setStyleSheet("color: #6b7280; font-size: 12px;")
+        self._chk_inactifs.toggled.connect(self._apply_filter_ui)
+        btn_bar.insertWidget(4, self._chk_inactifs)
+
+    def _on_data_loaded(self, records: list):
+        self._all_records = records or []
+        self._apply_filter_ui()
+        self.btn_refresh.setEnabled(True)
+        self._emit_count(len(self._records))
+
+    def _apply_filter_ui(self):
+        show_inactive = self._chk_inactifs.isChecked()
+        self._records = self._all_records if show_inactive else [
+            r for r in self._all_records if r.get('actif')
+        ]
+        self._populate_table(self._records)
+        n = len(self._records)
+        hidden = len(self._all_records) - n
+        suffix = f"  ({hidden} inactif(s) masqué(s))" if hidden else ""
+        self.lbl_status.setText(
+            f"{n} service(s){suffix}  —  Cliquez sur une ligne pour activer Modifier / Désactiver"
+        )
+
+    def _on_selection_changed(self):
+        rec = self._get_selected_record()
+        has_sel = rec is not None
+        is_inactive = has_sel and not rec.get('actif')
+        self.btn_edit.setEnabled(has_sel)
+        self.btn_del.setEnabled(has_sel and not is_inactive)
+        self.btn_reactivate.setEnabled(is_inactive)
+
+    def _on_delete(self):
+        rec = self._get_selected_record()
+        if not rec:
+            return
+        from domain.services.admin.config_service import ServicesRHService
+        count = ServicesRHService.count_personnel_using(rec['id'])
+        msg = f"Désactiver le service « {rec.get('nom_service', '')} » ?\n\n"
+        if count > 0:
+            msg += f"{count} personnel(s) actif(s) sont rattachés à ce service.\n"
+            msg += "Ils conserveront leur rattachement mais le service ne sera plus proposé à la création.\n\n"
+        msg += "Cette action est réversible via le bouton « Réactiver »."
+        reply = QMessageBox.question(
+            self, "Confirmer la désactivation", msg,
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply != QMessageBox.Yes:
+            return
+        ok, err_msg = self.delete_record(rec['id'])
+        if ok:
+            self._load_async()
+        else:
+            QMessageBox.warning(self, "Désactivation impossible", err_msg)
 
     def fetch_data(self):
         from domain.services.admin.config_service import ServicesRHService
@@ -125,7 +196,22 @@ class ServicesTab(_ConfigTab):
 
     def delete_record(self, record_id):
         from domain.services.admin.config_service import ServicesRHService
-        return ServicesRHService.delete(record_id)
+        return ServicesRHService.deactivate(record_id)
+
+    def _on_reactivate(self):
+        rec = self._get_selected_record()
+        if not rec:
+            return
+        from domain.services.admin.config_service import ServicesRHService
+        try:
+            ServicesRHService.reactivate(rec['id'])
+            self._load_async()
+        except Exception as e:
+            logger.exception(f"Erreur réactivation service: {e}")
+            QMessageBox.critical(self, "Erreur", "Une erreur est survenue. Consultez les logs pour plus de détails.")
+
+    def _get_display_name(self, record):
+        return record.get('nom_service') or f"#{record.get('id', '?')}"
 
 
 # ════════════════════════════════════════════════════════════════

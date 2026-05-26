@@ -594,7 +594,7 @@ def update_infos_generales(operateur_id: int, data: Dict) -> Tuple[bool, str]:
             return False, "La date d'entrée ne peut pas être antérieure à la date de naissance."
 
         # Séparer les données personnel vs personnel_infos
-        personnel_fields = ['nom', 'prenom', 'matricule', 'statut', 'numposte']
+        personnel_fields = ['nom', 'prenom', 'matricule', 'statut', 'numposte', 'service_id']
         personnel_data = {k: v for k, v in data.items() if k in personnel_fields}
         infos_data = {k: v for k, v in data.items() if k not in personnel_fields and k != 'operateur_id'}
 

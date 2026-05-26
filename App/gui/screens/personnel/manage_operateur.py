@@ -12,6 +12,7 @@ from domain.repositories.personnel_repo import PersonnelRepository
 from domain.repositories.poste_repo import PosteRepository
 from domain.repositories.polyvalence_repo import PolyvalenceRepository
 from domain.services.personnel.matricule_service import generer_prochain_matricule
+from domain.services.admin.config_service import ServicesRHService
 from infrastructure.logging.optimized_db_logger import log_hist_async
 from gui.components.emac_ui_kit import show_error_message
 from application.permission_manager import require
@@ -51,10 +52,16 @@ class EvaluationDateDialog(QDialog):
         self._charger_postes()
 
         self.niveau_combo = QComboBox(self)
-        self.niveau_combo.addItem("Niveau 1 - Débutant (réévaluation dans 1 mois)", 1)
-        self.niveau_combo.addItem("Niveau 2 - Intermédiaire (réévaluation dans 1 mois)", 2)
-        self.niveau_combo.addItem("Niveau 3 - Confirmé (réévaluation dans 10 ans)", 3)
-        self.niveau_combo.addItem("Niveau 4 - Expert/Formateur (réévaluation dans 10 ans)", 4)
+        try:
+            for n in NiveauPolyvalenceRepository.get_all_actifs():
+                freq = int(n.get('frequence_evaluation_jours') or 30)
+                freq_label = f"{round(freq / 365)} an(s)" if freq >= 365 else f"{freq} j"
+                self.niveau_combo.addItem(
+                    f"Niveau {n['code']} – {n['nom']} (rééval. {freq_label})", n['code']
+                )
+        except Exception:
+            for code, nom in [(1, "Débutant"), (2, "Intermédiaire"), (3, "Confirmé"), (4, "Expert/Formateur")]:
+                self.niveau_combo.addItem(f"Niveau {code} – {nom}", code)
         self.niveau_combo.currentIndexChanged.connect(self._calculer_date_evaluation)
         form.addRow("Niveau de compétence :", self.niveau_combo)
 
@@ -212,20 +219,31 @@ class ManageOperatorsDialog(QDialog):
 
         is_production = "Production" in type_personnel
 
-        # Si non-production, demander le service
+        # Si non-production, demander le service (depuis la table services)
         service_numposte = None
+        service_id_value = None
         if not is_production:
+            try:
+                services = ServicesRHService.get_all()
+                services_actifs = [s for s in services if s['actif']]
+            except Exception as e:
+                logger.exception(f"Erreur chargement services: {e}")
+                services_actifs = []
+
+            if not services_actifs:
+                QMessageBox.warning(self, "Aucun service", "Aucun service actif disponible.\nVeuillez en créer un dans Administration > Configuration.")
+                return
+
+            service_names = [s['nom_service'] for s in services_actifs]
+            id_par_nom = {s['nom_service']: s['id'] for s in services_actifs}
+
             service_value, ok_svc = QInputDialog.getItem(
-                self,
-                "Service",
-                "Sélectionner le service :",
-                ["Administratif", "Labo", "R&D", "Méthode", "Maintenance", "Logistique", "Autre"],
-                0,
-                False
+                self, "Service", "Sélectionner le service :", service_names, 0, False
             )
             if not ok_svc:
                 return
             service_numposte = service_value
+            service_id_value = id_par_nom.get(service_value)
 
         # Ensuite vérifier nom et prénom
         nom = self.add_nom_input.text().strip()
@@ -282,6 +300,8 @@ class ManageOperatorsDialog(QDialog):
                     data["numposte"] = "Production"
                 elif service_numposte:
                     data["numposte"] = service_numposte
+                    if service_id_value is not None:
+                        data["service_id"] = service_id_value
 
                 ok, msg_create, new_id = PersonnelRepository.create(data)
                 if not ok or not new_id:
@@ -294,12 +314,7 @@ class ManageOperatorsDialog(QDialog):
 
             # Ajouter la polyvalence si demandée
             if add_polyvalence and poste_id:
-                niveau_texte = {
-                    1: "Niveau 1 - Débutant",
-                    2: "Niveau 2 - Intermédiaire",
-                    3: "Niveau 3 - Confirmé",
-                    4: "Niveau 4 - Expert/Formateur",
-                }.get(niveau, f"Niveau {niveau}")
+                niveau_texte = dlg.niveau_combo.currentText()
 
                 PolyvalenceRepository.upsert_prochaine_evaluation(
                     operateur_id, poste_id, niveau, date_iso

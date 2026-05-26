@@ -37,11 +37,6 @@ class DeclarationTab(QWidget):
         form_layout.addRow("Personnel :", self.personnel_combo)
 
         self.type_combo = QComboBox()
-        self.type_combo.addItems([
-            "CongePaye", "RTT", "SansSolde", "Maladie",
-            "AccidentTravail", "AccidentTrajet", "ArretTravail",
-            "CongeNaissance", "Formation", "Autorisation", "Autre",
-        ])
         form_layout.addRow("Type :", self.type_combo)
 
         self.date_debut_edit = QDateEdit()
@@ -95,6 +90,16 @@ class DeclarationTab(QWidget):
         except Exception as e:
             logger.exception(f"Erreur chargement personnel: {e}")
             show_error_message(self, "Erreur", "Impossible de charger le personnel", e)
+        self._load_types()
+
+    def _load_types(self):
+        from domain.services.rh.declaration_service_crud import DeclarationServiceCRUD
+        try:
+            self.type_combo.clear()
+            for t in DeclarationServiceCRUD.get_types_declaration():
+                self.type_combo.addItem(t['libelle'], t['code'])
+        except Exception as e:
+            logger.exception(f"Erreur chargement types déclaration: {e}")
 
     def _submit_declaration(self):
         if self.personnel_combo.currentIndex() == -1:
@@ -102,7 +107,7 @@ class DeclarationTab(QWidget):
             return
 
         operateur_id = self.personnel_combo.currentData()
-        type_decl = self.type_combo.currentText()
+        type_decl = self.type_combo.currentData() or self.type_combo.currentText()
         date_debut = self.date_debut_edit.date().toPyDate()
         date_fin = self.date_fin_edit.date().toPyDate()
         motif = self.motif_edit.toPlainText().strip()

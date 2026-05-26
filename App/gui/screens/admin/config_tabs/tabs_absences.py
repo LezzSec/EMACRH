@@ -12,6 +12,8 @@ from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QColor
 from PyQt5.QtWidgets import QColorDialog
 
+from gui.components.ui_theme import EmacButton
+from gui.workers.db_worker import DbWorker, DbThreadPool
 from infrastructure.logging.logging_config import get_logger
 from .base import _ConfigTab, _SimpleFormDialog
 
@@ -106,6 +108,46 @@ class TypesAbsenceTab(_ConfigTab):
     BOOL_KEYS = {'decompte_solde', 'actif'}
     DESCRIPTION = "Types d'absence — catégories disponibles lors de la déclaration d'une absence (CP, RTT, maladie…)."
     USAGE = "Module Planning, déclarations d'absence, calcul des soldes de congés"
+
+    def _build_ui(self):
+        super()._build_ui()
+        self.btn_import = EmacButton("Importer depuis SQL Server", variant='ghost')
+        self.btn_import.setToolTip("Importer les libellés d'absence depuis HOPMOTI (base externe SQL Server)")
+        self.btn_import.clicked.connect(self._on_import)
+        # Insertion dans la barre de boutons existante, avant le stretch
+        btn_bar = self.layout().itemAt(1).layout()
+        btn_bar.insertWidget(3, self.btn_import)
+
+    def _on_import(self):
+        from domain.services.external.absence_import_service import import_types_absence_from_sqlserver
+
+        self.btn_import.setEnabled(False)
+        self.btn_import.setText("Import en cours…")
+
+        def _do(**_):
+            return import_types_absence_from_sqlserver()
+
+        def _on_done(result):
+            inserted, skipped = result
+            self.btn_import.setEnabled(True)
+            self.btn_import.setText("Importer depuis SQL Server")
+            QMessageBox.information(
+                self, "Import terminé",
+                f"{inserted} type(s) importé(s)\n{skipped} ignoré(s) (déjà présents dans EMAC)"
+            )
+            if inserted > 0:
+                self._load_async()
+
+        def _on_error(msg):
+            self.btn_import.setEnabled(True)
+            self.btn_import.setText("Importer depuis SQL Server")
+            logger.error(f"Erreur import types absence : {msg}")
+            QMessageBox.critical(self, "Erreur d'import", f"Impossible d'importer :\n{msg}")
+
+        worker = DbWorker(_do)
+        worker.signals.result.connect(_on_done)
+        worker.signals.error.connect(_on_error)
+        DbThreadPool.start(worker)
 
     def fetch_data(self):
         from domain.services.admin.config_service import TypeAbsenceService

@@ -296,6 +296,7 @@ class HistoriquePersonnelTab(QWidget):
         self.operateur_nom = operateur_nom
         self.operateur_prenom = operateur_prenom
         self.current_data = []  # Données actuellement affichées
+        self._niveau_couleurs = self._charger_couleurs_niveaux()
 
         self._init_ui()
         self._load_data()
@@ -378,6 +379,18 @@ class HistoriquePersonnelTab(QWidget):
 
         layout.addWidget(self.table, 1)
 
+
+    @staticmethod
+    def _charger_couleurs_niveaux() -> dict:
+        try:
+            from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
+            return {
+                int(n['code']): n['couleur']
+                for n in NiveauPolyvalenceRepository.get_all_actifs()
+                if n.get('couleur')
+            }
+        except Exception:
+            return {}
 
     def _format_date(self, date_val):
         """Formate une date."""
@@ -480,19 +493,16 @@ class HistoriquePersonnelTab(QWidget):
             niveau = poly.get("niveau")
             niveau_item = QTableWidgetItem(f"N{niveau}" if niveau else "N/A")
             niveau_item.setTextAlignment(Qt.AlignCenter)
-            if niveau:
-                if niveau == 1:
-                    niveau_item.setBackground(QColor("#fef2f2"))
-                    niveau_item.setForeground(QColor("#dc2626"))
-                elif niveau == 2:
-                    niveau_item.setBackground(QColor("#fffbeb"))
-                    niveau_item.setForeground(QColor("#d97706"))
-                elif niveau == 3:
-                    niveau_item.setBackground(QColor("#f0fdf4"))
-                    niveau_item.setForeground(QColor("#059669"))
-                elif niveau == 4:
-                    niveau_item.setBackground(QColor("#eff6ff"))
-                    niveau_item.setForeground(QColor("#2563eb"))
+            couleur_hex = self._niveau_couleurs.get(niveau) if niveau else None
+            if couleur_hex:
+                fg = QColor(couleur_hex)
+                bg = QColor(
+                    int(fg.red() + (255 - fg.red()) * 0.85),
+                    int(fg.green() + (255 - fg.green()) * 0.85),
+                    int(fg.blue() + (255 - fg.blue()) * 0.85),
+                )
+                niveau_item.setBackground(bg)
+                niveau_item.setForeground(fg)
             self.table.setItem(row, 2, niveau_item)
 
             # Colonne 3 : Date évaluation

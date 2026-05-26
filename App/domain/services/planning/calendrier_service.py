@@ -6,6 +6,8 @@ Calcule les prochaines dates d'evaluation en fonction du niveau de competence
 from datetime import date, timedelta
 from typing import Optional
 
+from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
+
 
 def calculer_prochaine_evaluation(date_evaluation: date, niveau: int) -> date:
     """
@@ -27,18 +29,10 @@ def calculer_prochaine_evaluation(date_evaluation: date, niveau: int) -> date:
     Raises:
         ValueError: Si le niveau n'est pas entre 1 et 4
     """
-    if niveau not in [1, 2, 3, 4]:
-        raise ValueError(f"Niveau invalide: {niveau}. Doit etre entre 1 et 4.")
+    if niveau not in NiveauPolyvalenceRepository.get_codes_actifs():
+        raise ValueError(f"Niveau invalide: {niveau}.")
 
-    # Definir les delais selon le niveau (ACTUALISÉ)
-    delais_par_niveau = {
-        1: 30,    # 1 mois
-        2: 30,    # 1 mois
-        3: 3650,  # 10 ans
-        4: 3650   # 10 ans
-    }
-
-    delai_jours = delais_par_niveau[niveau]
+    delai_jours = NiveauPolyvalenceRepository.get_frequence_jours(niveau)
     prochaine_date = date_evaluation + timedelta(days=delai_jours)
 
     # S'assurer que c'est un jour ouvrable (lundi-vendredi)

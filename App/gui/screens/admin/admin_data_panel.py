@@ -25,7 +25,7 @@ from infrastructure.logging.logging_config import get_logger
 from .config_tabs import (
     AteliersTab, ServicesTab, TranchesAgeTab, MotifsortieTab,
     TypesAbsenceTab, JoursFeriesTab, SoldeCongesTab, DemandeAbsenceTab,
-    CompetencesTab, PolyvalenceAdminTab,
+    CompetencesTab, NiveauxPolyvalenceTab, PostesTab, PolyvalenceAdminTab,
     CategoriesDocsTab, DocumentEventRulesTab,
     RolesTab, HistoriqueAdminTab, LogsConnexionTab,
     ModulesApplicationTab,
@@ -152,7 +152,9 @@ class AdminDataPanelDialog(QDialog):
                 ("Demandes",           lambda: DemandeAbsenceTab()),
             ]),
             ("Production", [
+                ("Postes",             lambda: PostesTab()),
                 ("Compétences",        lambda: CompetencesTab()),
+                ("Niveaux polyvalence", lambda: NiveauxPolyvalenceTab()),
                 ("Polyvalence",        lambda: PolyvalenceAdminTab()),
             ]),
             ("Documents", [

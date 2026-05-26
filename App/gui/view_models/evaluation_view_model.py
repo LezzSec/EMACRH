@@ -272,27 +272,16 @@ class EvaluationViewModel(QObject):
             EventBus.emit('polyvalence.niveau_changed', event_data,
                           source='EvaluationViewModel.mettre_a_jour_niveau')
 
+            nom_evt = NiveauPolyvalenceRepository.get_nom_evenement(nouveau_niveau)
+            payload = {**event_data, 'niveau': nouveau_niveau}
             if nouveau_niveau == 1:
                 is_premier = not has_operateur_deja_eu_niveau_1(
                     operateur_id,
                     old_niveau=ancien_niveau,
                     exclude_poste_id=None,
                 )
-                EventBus.emit('polyvalence.niveau_1_reached', {
-                    **event_data, 'niveau': 1, 'is_premier_niveau_1': is_premier,
-                }, source='EvaluationViewModel.mettre_a_jour_niveau')
-            elif nouveau_niveau == 2:
-                EventBus.emit('polyvalence.niveau_2_reached', {
-                    **event_data, 'niveau': 2,
-                }, source='EvaluationViewModel.mettre_a_jour_niveau')
-            elif nouveau_niveau == 3:
-                EventBus.emit('polyvalence.niveau_3_reached', {
-                    **event_data, 'niveau': 3,
-                }, source='EvaluationViewModel.mettre_a_jour_niveau')
-            elif nouveau_niveau == 4:
-                EventBus.emit('polyvalence.niveau_4_reached', {
-                    **event_data, 'niveau': 4,
-                }, source='EvaluationViewModel.mettre_a_jour_niveau')
+                payload['is_premier_niveau_1'] = is_premier
+            EventBus.emit(nom_evt, payload, source='EvaluationViewModel.mettre_a_jour_niveau')
 
         except Exception as e:
             logger.warning(f"EventBus non disponible: {e}")

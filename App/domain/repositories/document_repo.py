@@ -233,6 +233,29 @@ class DocumentRepository:
         )
 
     # ------------------------------------------------------------------
+    # Documents par formation
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def get_by_formation(cls, formation_id: int) -> List[Dict[str, Any]]:
+        """
+        Retourne les documents actifs liés à une formation (via formation_id).
+
+        Returns:
+            Liste de dicts (id, nom_affichage, nom_fichier, taille_octets, date_upload, type_mime)
+        """
+        return QueryExecutor.fetch_all(
+            """
+            SELECT id, nom_affichage, nom_fichier, taille_octets, date_upload, type_mime
+            FROM documents
+            WHERE formation_id = %s AND (statut IS NULL OR statut != 'archive')
+            ORDER BY date_upload DESC
+            """,
+            (formation_id,),
+            dictionary=True,
+        )
+
+    # ------------------------------------------------------------------
     # Résumé documents d'un opérateur
     # ------------------------------------------------------------------
 

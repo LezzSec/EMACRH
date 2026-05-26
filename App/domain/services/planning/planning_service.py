@@ -162,7 +162,15 @@ def get_historique_declarations(type_filter: str = None, period: str = None) -> 
         type_filter: Type de déclaration ("Tous" ou type spécifique)
         period: Période ("30 derniers jours", "3 derniers mois", etc.)
     """
-    _ALLOWED_TYPES = {
+    try:
+        _codes = QueryExecutor.fetch_all(
+            "SELECT code FROM type_absence WHERE actif = TRUE", dictionary=True
+        )
+        _ALLOWED_TYPES = {r['code'] for r in _codes} if _codes else set()
+    except Exception:
+        _ALLOWED_TYPES = set()
+    # Fallback statique si la table est vide
+    _ALLOWED_TYPES |= {
         'CongePaye', 'RTT', 'Maladie', 'ArretTravail',
         'AccidentTravail', 'AccidentTrajet', 'Formation',
         'CongeMaternite', 'CongeParentalite', 'Autre',

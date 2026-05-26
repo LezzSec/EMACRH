@@ -13,6 +13,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
+from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
 from gui.view_models.evaluation_view_model import EvaluationViewModel
 from infrastructure.logging.logging_config import get_logger
 from infrastructure.config.date_format import format_date, format_datetime
@@ -393,10 +394,11 @@ class DetailOperateurDialog(QDialog):
 
             try:
                 new_niveau = int(new_value)
-                if new_niveau not in [1, 2, 3, 4]:
+                if new_niveau not in NiveauPolyvalenceRepository.get_codes_actifs():
                     raise ValueError()
             except ValueError:
-                QMessageBox.warning(self, "Valeur invalide", "Le niveau doit être 1, 2, 3 ou 4")
+                codes = NiveauPolyvalenceRepository.get_codes_actifs()
+                QMessageBox.warning(self, "Valeur invalide", f"Niveau invalide. Valeurs acceptées : {codes}")
                 self._load_data()
                 return
 

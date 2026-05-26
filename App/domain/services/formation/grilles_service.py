@@ -314,6 +314,8 @@ class GrillesService:
                 EventBus.emit('polyvalence.niveau_changed', event_data,
                               source='GrillesService.update_polyvalence_from_grille')
 
+                nom_evt = NiveauPolyvalenceRepository.get_nom_evenement(new_niveau)
+                payload = {**event_data, 'niveau': new_niveau}
                 if new_niveau == 1:
                     from domain.services.formation.evaluation_service import has_operateur_deja_eu_niveau_1
                     is_premier = not has_operateur_deja_eu_niveau_1(
@@ -321,19 +323,8 @@ class GrillesService:
                         old_niveau=old_niveau,
                         exclude_poste_id=poste_id if action == 'INSERT' else None,
                     )
-                    EventBus.emit('polyvalence.niveau_1_reached', {
-                        **event_data, 'niveau': 1,
-                        'is_premier_niveau_1': is_premier,
-                    }, source='GrillesService.update_polyvalence_from_grille')
-                elif new_niveau == 2:
-                    EventBus.emit('polyvalence.niveau_2_reached', {**event_data, 'niveau': 2},
-                                  source='GrillesService.update_polyvalence_from_grille')
-                elif new_niveau == 3:
-                    EventBus.emit('polyvalence.niveau_3_reached', {**event_data, 'niveau': 3},
-                                  source='GrillesService.update_polyvalence_from_grille')
-                elif new_niveau == 4:
-                    EventBus.emit('polyvalence.niveau_4_reached', {**event_data, 'niveau': 4},
-                                  source='GrillesService.update_polyvalence_from_grille')
+                    payload['is_premier_niveau_1'] = is_premier
+                EventBus.emit(nom_evt, payload, source='GrillesService.update_polyvalence_from_grille')
 
         except Exception as e:
             logger.warning(f"Erreur émission événement polyvalence: {e}")
