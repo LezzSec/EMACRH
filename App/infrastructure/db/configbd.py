@@ -167,6 +167,12 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def get_db_pool_size() -> int:
+    """Retourne la taille du pool MySQL configurée (pour aligner le pool de threads)."""
+    config = _get_db_config()
+    return config.get('pool_size', 5)
+
+
 def _get_db_config() -> dict:
     """
     Centralise la config DB.

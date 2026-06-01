@@ -218,7 +218,7 @@ class FormationDocumentsWidget(QWidget):
         if reply != QMessageBox.Yes:
             return
         try:
-            success, msg = self._get_doc_service().delete_document(doc_id)
+            success, msg = self._get_doc_service().hard_delete_document(doc_id)
             if success:
                 self.load_documents()
             else:

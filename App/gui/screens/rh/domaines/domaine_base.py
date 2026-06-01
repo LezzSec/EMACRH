@@ -4,9 +4,36 @@ Classe de base pour tous les widgets de domaine RH.
 """
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QFrame, QHBoxLayout, QLabel
 from PyQt5.QtCore import pyqtSignal
+from typing import Dict, Tuple
 
 from gui.components.ui_theme import EmacButton
 from infrastructure.config.date_format import format_date
+
+
+def get_niveau_display_maps() -> Tuple[Dict[int, str], Dict[int, str]]:
+    """
+    Retourne (labels, colors) construits depuis la table niveau_polyvalence.
+
+    labels : {code: "N1 - Apprentissage", ...}
+    colors : {code: "#ef4444", ...}
+
+    Fallback statique si la table est indisponible.
+    """
+    _FALLBACK_LABELS = {
+        1: "N1 - Apprentissage", 2: "N2 - En cours",
+        3: "N3 - Autonome",      4: "N4 - Expert/Formateur",
+    }
+    _FALLBACK_COLORS = {1: "#ef4444", 2: "#f97316", 3: "#3b82f6", 4: "#22c55e"}
+    try:
+        from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceRepository
+        niveaux = NiveauPolyvalenceRepository.get_all_actifs()
+        if not niveaux:
+            return _FALLBACK_LABELS, _FALLBACK_COLORS
+        labels = {int(n['code']): f"N{n['code']} - {n['nom']}" for n in niveaux}
+        colors = {int(n['code']): (n.get('couleur') or _FALLBACK_COLORS.get(int(n['code']), "#6b7280")) for n in niveaux}
+        return labels, colors
+    except Exception:
+        return _FALLBACK_LABELS, _FALLBACK_COLORS
 
 
 class DomaineWidget(QWidget):

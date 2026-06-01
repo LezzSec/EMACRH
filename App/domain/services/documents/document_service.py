@@ -9,6 +9,7 @@ Les anciens documents sur filesystem (legacy) restent accessibles via chemin_fic
 
 import tempfile
 import logging
+import unicodedata
 
 logger = logging.getLogger(__name__)
 from datetime import date
@@ -42,6 +43,114 @@ class DocumentService:
             else:
                 safe_chars.append('_')
         return ''.join(safe_chars)
+
+    @staticmethod
+    def _get_safe_name(text: str) -> str:
+        """Convertit un texte en nom de dossier safe (sans accents, sans caracteres speciaux)."""
+        normalized = unicodedata.normalize('NFKD', text)
+        ascii_text = normalized.encode('ascii', 'ignore').decode('ascii')
+        safe = []
+        for c in ascii_text:
+            if c.isalnum() or c == '-':
+                safe.append(c)
+            elif c in (' ', '_'):
+                safe.append('_')
+        return ''.join(safe) or 'inconnu'
+
+    def _get_person_folder_name(self, personnel_id: int) -> Optional[str]:
+        """Retourne le nom de dossier pour une personne : NOM_Prenom_Matricule."""
+        try:
+            row = QueryExecutor.fetch_one(
+                "SELECT nom, prenom, matricule FROM personnel WHERE id = %s",
+                (personnel_id,), dictionary=True
+            )
+            if not row:
+                return None
+            nom = self._get_safe_name(row.get('nom', '') or '').upper()
+            prenom = self._get_safe_name(row.get('prenom', '') or '')
+            matricule = self._get_safe_name(row.get('matricule', '') or '')
+            parts = [p for p in [nom, prenom, matricule] if p]
+            return '_'.join(parts)
+        except Exception as e:
+            logger.warning(f"Impossible de resoudre le nom du dossier personnel {personnel_id}: {e}")
+            return None
+
+    def _get_categorie_folder_name(self, categorie_id: int) -> str:
+        """Retourne le nom de dossier pour une categorie."""
+        try:
+            row = QueryExecutor.fetch_one(
+                "SELECT nom FROM categories_documents WHERE id = %s",
+                (categorie_id,), dictionary=True
+            )
+            if row and row.get('nom'):
+                return self._get_safe_name(row['nom']) or f"categorie_{categorie_id}"
+        except Exception:
+            pass
+        return f"categorie_{categorie_id}"
+
+    def _sync_to_person_folder(self, personnel_id: int, categorie_id: int, nom_fichier: str, contenu: bytes) -> None:
+        """Ecrit une copie du document dans EMAC/dossiers/{personne}/{categorie}/."""
+        try:
+            from infrastructure.config.app_paths import get_dossiers_dir
+            person_name = self._get_person_folder_name(personnel_id)
+            if not person_name:
+                return
+            cat_name = self._get_categorie_folder_name(categorie_id)
+            target_dir = get_dossiers_dir() / person_name / cat_name
+            target_dir.mkdir(parents=True, exist_ok=True)
+            target_file = target_dir / nom_fichier
+            with open(target_file, 'wb') as f:
+                f.write(contenu)
+        except Exception as e:
+            logger.warning(f"Sync dossier personnel impossible (personnel_id={personnel_id}): {e}")
+
+    def _remove_from_person_folder(self, personnel_id: int, categorie_id: int, nom_fichier: str) -> None:
+        """Supprime la copie du document dans EMAC/dossiers/{personne}/{categorie}/."""
+        try:
+            from infrastructure.config.app_paths import get_dossiers_dir
+            person_name = self._get_person_folder_name(personnel_id)
+            if not person_name:
+                return
+            cat_name = self._get_categorie_folder_name(categorie_id)
+            target_file = get_dossiers_dir() / person_name / cat_name / nom_fichier
+            if target_file.exists():
+                target_file.unlink()
+        except Exception as e:
+            logger.warning(f"Suppression dossier personnel impossible (personnel_id={personnel_id}): {e}")
+
+    def _move_to_historique(self, personnel_id: int, categorie_id: int, nom_fichier: str, document_id: int = None) -> bool:
+        """Deplace (ou copie depuis BLOB) un document vers Historique/ dans le dossier personnel.
+
+        Retourne True si l'operation a reussi, False sinon.
+        """
+        try:
+            from infrastructure.config.app_paths import get_dossiers_dir
+            from datetime import datetime
+            person_name = self._get_person_folder_name(personnel_id)
+            if not person_name:
+                return False
+            cat_name = self._get_categorie_folder_name(categorie_id)
+            historique_dir = get_dossiers_dir() / person_name / 'Historique'
+            historique_dir.mkdir(parents=True, exist_ok=True)
+            dest = historique_dir / nom_fichier
+            if dest.exists():
+                suffix = datetime.now().strftime('%Y%m%d_%H%M%S')
+                stem = Path(nom_fichier).stem
+                ext = Path(nom_fichier).suffix
+                dest = historique_dir / f"{stem}_{suffix}{ext}"
+            source = get_dossiers_dir() / person_name / cat_name / nom_fichier
+            if source.exists():
+                source.rename(dest)
+            elif document_id is not None:
+                result = self.get_document_content(document_id)
+                if result:
+                    contenu, _, _ = result
+                    with open(dest, 'wb') as f:
+                        f.write(contenu)
+            return True
+        except Exception as e:
+            logger.warning(f"Deplacement vers Historique impossible (personnel_id={personnel_id}): {e}")
+            return False
 
     def add_document(
         self,
@@ -134,6 +243,7 @@ class DocumentService:
             )
 
             logger.info(f"Document '{nom_affichage}' ajoute en BLOB (ID: {document_id}, {taille_octets} octets)")
+            self._sync_to_person_folder(personnel_id, categorie_id, nom_fichier_clean, contenu_fichier)
             return True, f"Document '{nom_affichage}' ajoute avec succes", document_id
 
         except Exception as e:
@@ -238,8 +348,15 @@ class DocumentService:
 
         temp_path = doc_temp_dir / self._sanitize_filename(nom_fichier)
 
-        with open(temp_path, 'wb') as f:
-            f.write(contenu)
+        try:
+            with open(temp_path, 'wb') as f:
+                f.write(contenu)
+        except PermissionError:
+            # Fichier verrouillé par une application tierce (ex : Excel ouvert).
+            # On le retourne tel quel uniquement si un contenu existe déjà.
+            if temp_path.exists() and temp_path.stat().st_size > 0:
+                return temp_path
+            raise
 
         return temp_path
 
@@ -294,8 +411,13 @@ class DocumentService:
             return None
 
     def delete_document(self, document_id: int) -> Tuple[bool, str]:
+        """Archive le document au lieu de le supprimer definitivement (conservation de la trace)."""
+        return self.archive_document(document_id)
+
+    def hard_delete_document(self, document_id: int) -> Tuple[bool, str]:
         """
-        Supprime un document (BLOB en base + entree BDD).
+        Suppression definitive d'un document (BLOB en base + entree BDD).
+        Reserver aux cas exceptionnels (RGPD, nettoyage admin).
 
         Args:
             document_id: ID du document
@@ -307,7 +429,8 @@ class DocumentService:
         require("rh.documents.edit")
         try:
             doc = QueryExecutor.fetch_one(
-                "SELECT stockage_type, chemin_fichier, nom_affichage FROM documents WHERE id = %s",
+                "SELECT stockage_type, chemin_fichier, nom_affichage, personnel_id, categorie_id, nom_fichier "
+                "FROM documents WHERE id = %s",
                 (document_id,),
                 dictionary=True
             )
@@ -315,13 +438,17 @@ class DocumentService:
             if not doc:
                 return False, "Document introuvable"
 
-            # Si legacy filesystem, supprimer le fichier physique
+            if not self._move_to_historique(doc['personnel_id'], doc['categorie_id'], doc['nom_fichier'], document_id):
+                logger.warning(
+                    f"hard_delete_document: sauvegarde Historique impossible pour doc {document_id} "
+                    f"('{doc['nom_affichage']}') — suppression DB continue quand meme"
+                )
+
             if doc['stockage_type'] == 'FILESYSTEM' and doc['chemin_fichier']:
                 legacy_path = self._resolve_legacy_path(doc['chemin_fichier'])
                 if legacy_path and legacy_path.exists():
                     legacy_path.unlink()
 
-            # Nettoyer le fichier temporaire s'il existe
             temp_path = self._temp_dir / str(document_id)
             if temp_path.exists():
                 import shutil
@@ -331,7 +458,7 @@ class DocumentService:
                 "DELETE FROM documents WHERE id = %s", (document_id,), return_lastrowid=False
             )
 
-            logger.info(f"Document '{doc['nom_affichage']}' supprime (ID: {document_id})")
+            logger.info(f"Document '{doc['nom_affichage']}' supprime definitivement (ID: {document_id})")
             return True, f"Document '{doc['nom_affichage']}' supprime avec succes"
 
         except Exception as e:
@@ -339,14 +466,20 @@ class DocumentService:
             return False, f"Erreur lors de la suppression: {str(e)}"
 
     def archive_document(self, document_id: int) -> Tuple[bool, str]:
-        """Archive un document (change son statut)"""
+        """Archive un document (change son statut) et le deplace dans Historique/."""
         from application.permission_manager import require
         require("rh.documents.edit")
         try:
+            doc = QueryExecutor.fetch_one(
+                "SELECT personnel_id, categorie_id, nom_fichier FROM documents WHERE id = %s",
+                (document_id,), dictionary=True
+            )
             QueryExecutor.execute_write(
                 "UPDATE documents SET statut = 'archive' WHERE id = %s",
                 (document_id,), return_lastrowid=False
             )
+            if doc:
+                self._move_to_historique(doc['personnel_id'], doc['categorie_id'], doc['nom_fichier'], document_id)
             return True, "Document archive avec succes"
 
         except Exception as e:

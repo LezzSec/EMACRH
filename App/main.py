@@ -21,7 +21,6 @@ if application_path not in sys.path:
 
 # Importer et lancer l'application
 if __name__ == "__main__":
-    import traceback
     from PyQt5.QtWidgets import QApplication, QMessageBox
     from PyQt5.QtCore import qInstallMessageHandler
 
@@ -51,25 +50,18 @@ if __name__ == "__main__":
             sys.exit(0)
 
     except Exception as e:
-        print("\n" + "="*60)
-        print("ERREUR CRITIQUE:")
-        print("="*60)
-        print(f"Type: {type(e).__name__}")
-        print(f"Message: {str(e)}")
-        print("\nTraceback complet:")
-        traceback.print_exc()
-        print("="*60)
+        import logging
+        logging.basicConfig()
+        logging.getLogger(__name__).exception("Erreur critique au démarrage de l'application")
 
-        # Afficher aussi une boîte de dialogue si possible
         try:
             app = QApplication.instance() or QApplication(sys.argv)
             QMessageBox.critical(
                 None,
                 "Erreur EMAC",
-                f"Une erreur critique est survenue:\n\n{type(e).__name__}: {str(e)}\n\nConsultez la console pour plus de détails."
+                "Une erreur inattendue est survenue au démarrage.\n\nConsultez le fichier de log pour les détails."
             )
         except Exception:
             pass
 
-        input("\nAppuyez sur Entrée pour fermer...")
         sys.exit(1)

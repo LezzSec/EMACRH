@@ -26,6 +26,11 @@ python-dateutil==2.9.0.post0
 # Variables d'environnement
 python-dotenv==1.0.0
 
+# Connexion SQL Server externe (optionnel - synchronisation matricules hopempl)
+# Décommenter si la fonctionnalité est activée, et installer le driver ODBC:
+# https://learn.microsoft.com/fr-fr/sql/connect/odbc/download-odbc-driver-for-sql-server
+# pyodbc>=5.0.0
+
 # ====================================================================================
 # MODULES SUPPRIMÉS (non utilisés - économie: ~81 MB au build):
 # ====================================================================================

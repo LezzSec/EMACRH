@@ -61,22 +61,26 @@ def get_docs_pour_operateur(operateur_id: int) -> List[Dict]:
     """
     Retourne les polyvalences d'un operateur avec les documents de formation associes.
 
-    Retourne une liste de dicts avec les champs polyvalence + liste 'documents'.
+    Chaque dict inclut 'eval_doc_id' et 'eval_doc_nom' (document d'evaluation joint
+    a l'instance de polyvalence, distinct des dossiers de formation par poste/niveau).
     """
     try:
         polyvalences = QueryExecutor.fetch_all(
             """
             SELECT
                 pv.id AS polyvalence_id,
+                pv.document_id AS eval_doc_id,
                 pv.poste_id,
                 pv.niveau,
                 pv.date_evaluation,
                 pv.prochaine_evaluation,
                 po.poste_code,
-                a.nom AS atelier_nom
+                a.nom AS atelier_nom,
+                d.nom_affichage AS eval_doc_nom
             FROM polyvalence pv
             JOIN postes po ON po.id = pv.poste_id
             LEFT JOIN atelier a ON a.id = po.atelier_id
+            LEFT JOIN documents d ON d.id = pv.document_id
             WHERE pv.personnel_id = %s
             ORDER BY a.nom ASC, po.poste_code ASC
             """,
@@ -91,6 +95,82 @@ def get_docs_pour_operateur(operateur_id: int) -> List[Dict]:
 
     except Exception as e:
         logger.exception(f"Erreur get_docs_pour_operateur(op={operateur_id}): {e}")
+        return []
+
+
+def attacher_document_evaluation(poly_id: int, document_id: int) -> Tuple[bool, str]:
+    """Lie un document d'evaluation a une instance de polyvalence."""
+    from application.permission_manager import require
+    require("rh.documents.edit")
+    try:
+        QueryExecutor.execute_write(
+            "UPDATE polyvalence SET document_id = %s WHERE id = %s",
+            (document_id, poly_id),
+            return_lastrowid=False,
+        )
+        return True, "Document d'evaluation attache avec succes"
+    except Exception as e:
+        logger.exception(f"Erreur attacher_document_evaluation(poly={poly_id}): {e}")
+        return False, f"Erreur lors de l'attachement : {e}"
+
+
+def retirer_document_evaluation(poly_id: int) -> Tuple[bool, str]:
+    """Delie et archive le document d'evaluation d'une polyvalence."""
+    from application.permission_manager import require
+    require("rh.documents.edit")
+    try:
+        row = QueryExecutor.fetch_one(
+            "SELECT document_id FROM polyvalence WHERE id = %s",
+            (poly_id,), dictionary=True
+        )
+        doc_id = row.get('document_id') if row else None
+
+        QueryExecutor.execute_write(
+            "UPDATE polyvalence SET document_id = NULL WHERE id = %s",
+            (poly_id,),
+            return_lastrowid=False,
+        )
+
+        if doc_id:
+            from domain.services.documents.document_service import DocumentService
+            DocumentService().archive_document(doc_id)
+
+        return True, "Document archive"
+    except Exception as e:
+        logger.exception(f"Erreur retirer_document_evaluation(poly={poly_id}): {e}")
+        return False, f"Erreur lors du retrait : {e}"
+
+
+def get_polyvalences_synthese() -> List[Dict]:
+    """
+    Retourne toutes les polyvalences du personnel actif avec leur document d'evaluation.
+
+    Utilise dans l'onglet Formation > Synthese polyvalences.
+    """
+    try:
+        return QueryExecutor.fetch_all(
+            """
+            SELECT
+                pv.id AS polyvalence_id,
+                pv.document_id AS eval_doc_id,
+                pv.niveau,
+                pv.date_evaluation,
+                po.poste_code,
+                a.nom AS atelier_nom,
+                p.nom, p.prenom, p.matricule,
+                d.nom_affichage AS eval_doc_nom
+            FROM polyvalence pv
+            JOIN personnel p ON p.id = pv.personnel_id
+            JOIN postes po ON po.id = pv.poste_id
+            LEFT JOIN atelier a ON a.id = po.atelier_id
+            LEFT JOIN documents d ON d.id = pv.document_id
+            WHERE p.statut = 'ACTIF'
+            ORDER BY p.nom ASC, p.prenom ASC, a.nom ASC, po.poste_code ASC
+            """,
+            dictionary=True,
+        )
+    except Exception as e:
+        logger.exception(f"Erreur get_polyvalences_synthese: {e}")
         return []
 
 

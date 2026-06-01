@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QTableWidget,
     QTableWidgetItem, QLineEdit, QComboBox, QMessageBox,
-    QWidget, QAbstractItemView, QMenu, QGroupBox
+    QWidget, QAbstractItemView, QMenu, QGroupBox, QTabWidget
 )
 from PyQt5.QtCore import Qt, pyqtSignal
 from PyQt5.QtGui import QFont, QColor
@@ -41,18 +41,41 @@ class GestionFormationsDialog(QDialog):
         title_bar = add_custom_title_bar(self, "Gestion des Formations")
         main_layout.addWidget(title_bar)
 
-        content_widget = QWidget()
-        layout = QVBoxLayout(content_widget)
+        tabs = QTabWidget()
+        tabs.setStyleSheet("""
+            QTabWidget::pane { border: none; }
+            QTabBar::tab {
+                background: #f3f4f6; color: #374151;
+                padding: 8px 20px;
+                border: 1px solid #e5e7eb; border-bottom: none;
+                border-top-left-radius: 6px; border-top-right-radius: 6px;
+                margin-right: 2px;
+            }
+            QTabBar::tab:selected { background: white; color: #3b82f6; font-weight: bold; }
+            QTabBar::tab:hover { background: #e5e7eb; }
+        """)
+
+        # --- Onglet 1 : Liste des formations (contenu existant) ---
+        tab_formations = QWidget()
+        layout = QVBoxLayout(tab_formations)
         layout.setContentsMargins(15, 15, 15, 15)
         layout.setSpacing(16)
-
         self._create_header(layout)
         self._create_filters(layout)
         self._create_table(layout)
         self._create_stats(layout)
         self._create_action_buttons(layout)
+        tabs.addTab(tab_formations, "Formations")
 
-        main_layout.addWidget(content_widget)
+        # --- Onglet 2 : Synthèse polyvalences ---
+        from gui.screens.formation.gestion_formations.polyvalence_synthese_widget import PolyvalenceSyntheseWidget
+        tab_poly = QWidget()
+        poly_layout = QVBoxLayout(tab_poly)
+        poly_layout.setContentsMargins(15, 10, 15, 15)
+        poly_layout.addWidget(PolyvalenceSyntheseWidget())
+        tabs.addTab(tab_poly, "Synthese polyvalences")
+
+        main_layout.addWidget(tabs, 1)
 
     def _create_header(self, layout):
         if THEME_AVAILABLE:

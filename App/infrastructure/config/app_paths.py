@@ -117,6 +117,31 @@ def get_documents_dir():
     return docs_dir
 
 
+def get_dossiers_dir(create: bool = True):
+    """
+    Retourne le répertoire des dossiers personnel (un sous-dossier par salarié).
+
+    En mode développement : EMAC/dossiers/  (racine du projet, au-dessus de App/)
+    En mode .exe : %APPDATA%\\EMAC\\dossiers\\
+
+    Args:
+        create: Si True (défaut), crée le répertoire s'il n'existe pas.
+
+    Returns:
+        Path: Chemin absolu vers le répertoire dossiers/
+    """
+    if is_frozen():
+        dossiers_dir = get_data_dir() / 'dossiers'
+    else:
+        # Remonter d'un niveau au-dessus de App/ pour atteindre la racine EMAC/
+        dossiers_dir = get_base_dir().parent / 'dossiers'
+
+    if create:
+        dossiers_dir.mkdir(parents=True, exist_ok=True)
+
+    return dossiers_dir
+
+
 def get_exports_dir(create: bool = False):
     """
     Retourne le répertoire des exports de l'application.

@@ -2,13 +2,13 @@
 """
 Domaine RH : Formations.
 """
-from PyQt5.QtWidgets import QDialog, QLabel, QHBoxLayout, QVBoxLayout, QFrame, QMessageBox
+from PyQt5.QtWidgets import QDialog, QLabel, QHBoxLayout, QVBoxLayout, QFrame, QMessageBox, QPushButton
 from PyQt5.QtCore import Qt
 
 from gui.components.ui_theme import EmacCard, EmacButton
 from gui.screens.rh.gestion_rh_dialogs import EditFormationDialog, ConsulterFormationDialog
 from application.permission_manager import can
-from .domaine_base import DomaineWidget
+from .domaine_base import DomaineWidget, get_niveau_display_maps
 
 
 class DomaineFormation(DomaineWidget):
@@ -111,6 +111,87 @@ class DomaineFormation(DomaineWidget):
         else:
             card_list.body.addWidget(QLabel("Aucune formation enregistrée"))
         self._layout.addWidget(card_list)
+
+        # --- Carte synthèse polyvalences ---
+        polyvalences = donnees.get('polyvalences', [])
+        self._build_polyvalence_card(polyvalences)
+
+    def _build_polyvalence_card(self, polyvalences: list):
+        NIVEAU_LABELS, NIVEAU_COLORS = get_niveau_display_maps()
+
+        card = EmacCard("Polyvalences et documents d'évaluation")
+
+        if not polyvalences:
+            card.body.addWidget(QLabel("Aucune polyvalence enregistrée."))
+            self._layout.addWidget(card)
+            return
+
+        ateliers = {}
+        for poly in polyvalences:
+            atelier = poly.get('atelier_nom') or 'Sans atelier'
+            ateliers.setdefault(atelier, []).append(poly)
+
+        for atelier_nom, postes in ateliers.items():
+            grp_label = QLabel(f"<b>{atelier_nom}</b>")
+            grp_label.setStyleSheet("color: #374151; font-size: 12px; margin-top: 6px;")
+            card.body.addWidget(grp_label)
+
+            for poly in postes:
+                row = QHBoxLayout()
+                row.setSpacing(8)
+
+                badge_poste = QLabel(f"<b>{poly.get('poste_code', '?')}</b>")
+                badge_poste.setStyleSheet("font-size: 13px; min-width: 55px;")
+                row.addWidget(badge_poste)
+
+                niveau = poly.get('niveau')
+                niveau_label = NIVEAU_LABELS.get(niveau, f"N{niveau}") if niveau else "Niveau non défini"
+                color = NIVEAU_COLORS.get(niveau, "#6b7280")
+                badge_niv = QLabel(niveau_label)
+                badge_niv.setStyleSheet(
+                    f"background: {color}20; color: {color}; border: 1px solid {color}60;"
+                    " border-radius: 4px; padding: 2px 8px; font-size: 11px;"
+                )
+                row.addWidget(badge_niv)
+
+                if poly.get('date_evaluation'):
+                    lbl_date = QLabel(f"Éval : {self._format_date(poly['date_evaluation'])}")
+                    lbl_date.setStyleSheet("color: #6b7280; font-size: 11px;")
+                    row.addWidget(lbl_date)
+
+                row.addStretch()
+
+                eval_doc_id = poly.get('eval_doc_id')
+                eval_doc_nom = poly.get('eval_doc_nom')
+                if eval_doc_id and eval_doc_nom:
+                    lbl_doc = QLabel(f"  {eval_doc_nom}")
+                    lbl_doc.setStyleSheet("color: #15803d; font-size: 11px;")
+                    lbl_doc.setToolTip(eval_doc_nom)
+                    row.addWidget(lbl_doc)
+                    btn_voir = QPushButton("Voir doc")
+                    btn_voir.setFixedHeight(26)
+                    btn_voir.setStyleSheet(
+                        "QPushButton { background: #3b82f6; color: white; border: none;"
+                        " border-radius: 4px; padding: 2px 10px; font-size: 11px; }"
+                        "QPushButton:hover { background: #2563eb; }"
+                    )
+                    btn_voir.clicked.connect(
+                        lambda checked, did=eval_doc_id: self._vm.ouvrir_doc_eval_polyvalence(did)
+                    )
+                    row.addWidget(btn_voir)
+                else:
+                    lbl_no = QLabel("Aucun doc d'éval.")
+                    lbl_no.setStyleSheet("color: #9ca3af; font-size: 11px; font-style: italic;")
+                    row.addWidget(lbl_no)
+
+                card.body.addLayout(row)
+
+            sep = QFrame()
+            sep.setFrameShape(QFrame.HLine)
+            sep.setStyleSheet("background: #e2e8f0; margin: 2px 0;")
+            card.body.addWidget(sep)
+
+        self._layout.addWidget(card)
 
     def _format_money(self, value) -> str:
         if value in (None, ''):

@@ -756,9 +756,13 @@ def is_admin() -> bool:
 
     # Vérification par feature
     try:
-        from application.permission_manager import perm
-        if perm.is_loaded() and perm.can('admin.permissions'):
-            return True
+        from application.permission_manager import perm, require
+        if not perm.is_loaded():
+            return False
+        require('admin.permissions')
+        return True
+    except PermissionError:
+        pass
     except Exception as e:
         logger.debug(f"Vérification feature admin échouée: {e}")
 

@@ -279,7 +279,12 @@ def _get_donnees_formation(operateur_id: int) -> Dict:
         'planifiees': len([f for f in formations if f.get('statut') == 'Planifiée']),
         'avec_certificat': len([f for f in formations if f.get('certificat_obtenu')]),
     }
-    return {'formations': formations, 'statistiques': statistiques}
+    try:
+        from domain.services.documents.polyvalence_docs_service import get_docs_pour_operateur
+        polyvalences = get_docs_pour_operateur(operateur_id)
+    except Exception:
+        polyvalences = []
+    return {'formations': formations, 'statistiques': statistiques, 'polyvalences': polyvalences}
 
 
 def _get_donnees_declaration(operateur_id: int) -> Dict:

@@ -82,6 +82,7 @@ class GestionRHViewModel(QObject):
     action_succeeded = pyqtSignal(str)
     error_occurred = pyqtSignal(str)
     permission_denied = pyqtSignal(str)
+    document_restored = pyqtSignal()
 
     def __init__(self, parent: QObject = None) -> None:
         super().__init__(parent)
@@ -313,6 +314,7 @@ class GestionRHViewModel(QObject):
             success, message = doc_service.restore_document(doc_id)
             if success:
                 self.action_succeeded.emit("Document restauré avec succès")
+                self.document_restored.emit()
                 self.rafraichir()
                 self.charger_archives()
             else:
@@ -378,6 +380,96 @@ class GestionRHViewModel(QObject):
                 self.error_occurred.emit("Le dossier de formation n'a pas pu être ouvert.")
         except Exception as e:
             logger.exception(f"Erreur extraction doc formation {doc_id}: {e}")
+            self.error_occurred.emit(str(e))
+
+    def attacher_doc_polyvalence(self, poly_id: int, fichier_source: str, operateur_id: int) -> None:
+        """
+        Upload un fichier en BLOB et le lie comme document d'evaluation a une polyvalence.
+        Rafraichit le domaine silencieusement en cas de succes.
+        """
+        def fetch(progress_callback=None):
+            from domain.services.documents.document_service import DocumentService
+            from domain.services.documents.polyvalence_docs_service import attacher_document_evaluation
+
+            from infrastructure.cache.emac_cache import get_cached_categories_documents
+            svc = DocumentService()
+            cats = get_cached_categories_documents()
+            categorie_id = None
+            for cat in cats:
+                if 'formation' in (cat.get('nom') or '').lower() or 'polyvalence' in (cat.get('nom') or '').lower():
+                    categorie_id = cat['id']
+                    break
+            if categorie_id is None and cats:
+                categorie_id = cats[0]['id']
+            if categorie_id is None:
+                return False, "Aucune categorie de document disponible", None
+
+            success, msg, doc_id = svc.add_document(
+                personnel_id=operateur_id,
+                categorie_id=categorie_id,
+                fichier_source=fichier_source,
+            )
+            if not success:
+                return False, msg, None
+
+            ok, msg2 = attacher_document_evaluation(poly_id, doc_id)
+            if not ok:
+                # Nettoyage : le document a été inséré mais le lien a échoué
+                try:
+                    svc.hard_delete_document(doc_id)
+                except Exception:
+                    pass
+            return ok, msg2, doc_id
+
+        def on_success(result):
+            ok, msg, _doc_id = result
+            if ok:
+                self.rafraichir()
+            else:
+                self.error_occurred.emit(msg)
+
+        def on_error(err):
+            logger.exception(f"Erreur attacher_doc_polyvalence: {err}")
+            self.error_occurred.emit(str(err))
+
+        worker = DbWorker(fetch)
+        worker.signals.result.connect(on_success)
+        worker.signals.error.connect(on_error)
+        DbThreadPool.start(worker)
+
+    def retirer_doc_polyvalence(self, poly_id: int) -> None:
+        """Retire le lien document d'evaluation d'une polyvalence et rafraichit."""
+        def fetch(progress_callback=None):
+            from domain.services.documents.polyvalence_docs_service import retirer_document_evaluation
+            return retirer_document_evaluation(poly_id)
+
+        def on_success(result):
+            ok, msg = result
+            if ok:
+                self.rafraichir()
+            else:
+                self.error_occurred.emit(msg)
+
+        def on_error(err):
+            logger.exception(f"Erreur retirer_doc_polyvalence: {err}")
+            self.error_occurred.emit(str(err))
+
+        worker = DbWorker(fetch)
+        worker.signals.result.connect(on_success)
+        worker.signals.error.connect(on_error)
+        DbThreadPool.start(worker)
+
+    def ouvrir_doc_eval_polyvalence(self, doc_id: int) -> None:
+        """Extrait et ouvre le document d'evaluation joint a une polyvalence."""
+        try:
+            from domain.services.documents.document_service import DocumentService
+            path = DocumentService().get_document_path(doc_id)
+            if path and path.exists():
+                self.document_path_ready.emit(str(path))
+            else:
+                self.error_occurred.emit("Le document d'evaluation est introuvable.")
+        except Exception as e:
+            logger.exception(f"Erreur ouvrir_doc_eval_polyvalence {doc_id}: {e}")
             self.error_occurred.emit(str(e))
 
     def generer_dossier_formation(self, formation_id: int) -> None:

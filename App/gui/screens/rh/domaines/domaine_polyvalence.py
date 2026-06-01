@@ -6,7 +6,8 @@ from PyQt5.QtWidgets import QLabel, QHBoxLayout, QVBoxLayout, QFrame, QWidget
 from PyQt5.QtCore import Qt
 
 from gui.components.ui_theme import EmacCard, EmacButton
-from .domaine_base import DomaineWidget
+from .domaine_base import DomaineWidget, get_niveau_display_maps
+from .polyvalence_doc_drop_zone import PolyvalenceDocDropZone
 
 
 class DomainePolyvalence(DomaineWidget):
@@ -20,13 +21,7 @@ class DomainePolyvalence(DomaineWidget):
             self._layout.addWidget(card_empty)
             return
 
-        NIVEAU_LABELS = {
-            1: "Niv.1 - Apprentissage",
-            2: "Niv.2 - En cours",
-            3: "Niv.3 - Autonome",
-            4: "Niv.4 - Expert/Formateur",
-        }
-        NIVEAU_COLORS = {1: "#ef4444", 2: "#f97316", 3: "#3b82f6", 4: "#22c55e"}
+        NIVEAU_LABELS, NIVEAU_COLORS = get_niveau_display_maps()
 
         ateliers = {}
         for poly in polyvalences:
@@ -37,11 +32,13 @@ class DomainePolyvalence(DomaineWidget):
         resume_layout = QHBoxLayout()
         nb_docs = sum(len(poly.get('documents', [])) for poly in polyvalences)
         niveau_max = max([poly.get('niveau') or 0 for poly in polyvalences] or [0])
+        nb_eval_docs = sum(1 for poly in polyvalences if poly.get('eval_doc_id'))
         for label, valeur in [
             ("Postes suivis", len(polyvalences)),
             ("Ateliers", len(ateliers)),
             ("Niveau max", niveau_max if niveau_max else "-"),
             ("Dossiers lisibles", nb_docs),
+            ("Docs éval. joints", nb_eval_docs),
         ]:
             badge = QLabel(f"<b>{label}</b><br/>{valeur}")
             badge.setStyleSheet("background: #f1f5f9; color: #475569; padding: 8px 14px; border-radius: 6px;")
@@ -54,9 +51,12 @@ class DomainePolyvalence(DomaineWidget):
             card = EmacCard(atelier_nom)
 
             for poly in postes:
+                poly_id = poly.get('polyvalence_id')
                 poste_code = poly.get('poste_code', '?')
                 niveau = poly.get('niveau')
                 docs = poly.get('documents', [])
+                eval_doc_id = poly.get('eval_doc_id')
+                eval_doc_nom = poly.get('eval_doc_nom')
 
                 poste_row = QHBoxLayout()
                 poste_row.setSpacing(8)
@@ -87,6 +87,23 @@ class DomainePolyvalence(DomaineWidget):
                 poste_row.addStretch()
                 card.body.addLayout(poste_row)
 
+                # --- Zone de dépôt document d'évaluation ---
+                drop_zone = PolyvalenceDocDropZone(
+                    existing_doc_nom=eval_doc_nom,
+                    parent=self,
+                )
+                drop_zone.file_chosen.connect(
+                    lambda path, pid=poly_id: self._on_attach_doc(pid, path)
+                )
+                drop_zone.open_requested.connect(
+                    lambda did=eval_doc_id: self._vm.ouvrir_doc_eval_polyvalence(did)
+                )
+                drop_zone.remove_requested.connect(
+                    lambda pid=poly_id: self._on_remove_doc(pid)
+                )
+                card.body.addWidget(drop_zone)
+
+                # --- Dossiers de formation (template poste/niveau) ---
                 if docs:
                     docs_container = QWidget()
                     docs_container.setStyleSheet(
@@ -132,6 +149,20 @@ class DomainePolyvalence(DomaineWidget):
 
             self._layout.addWidget(card)
 
+    # ------------------------------------------------------------------
+    # Actions
+    # ------------------------------------------------------------------
+
     def _ouvrir_doc_formation(self, doc_id: int):
         self._vm.extraire_doc_formation(doc_id)
 
+    def _on_attach_doc(self, poly_id: int, fichier_source: str):
+        operateur_id = self.operateur_id
+        if not operateur_id or not poly_id:
+            return
+        self._vm.attacher_doc_polyvalence(poly_id, fichier_source, operateur_id)
+
+    def _on_remove_doc(self, poly_id: int):
+        if not poly_id:
+            return
+        self._vm.retirer_doc_polyvalence(poly_id)

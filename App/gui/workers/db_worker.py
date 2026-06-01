@@ -286,10 +286,9 @@ class DbThreadPool:
         # IMPORTANT : Limiter la concurrence en cohérence avec le pool MySQL
         # Si pool MySQL = 5, on limite à 5 threads DB maximum
         # Cela évite d'avoir 10 workers qui attendent une connexion
-        from infrastructure.db.configbd import _get_db_config
+        from infrastructure.db.configbd import get_db_pool_size
         try:
-            config = _get_db_config()
-            pool_size = config.get('pool_size', 5)
+            pool_size = get_db_pool_size()
             # Garder au moins deux connexions libres pour logs, alertes et actions sync.
             max_threads = max(2, pool_size - 2)
             DbThreadPool._pool.setMaxThreadCount(max_threads)

@@ -2,17 +2,19 @@
 """
 Connexion en lecture seule à la base de données SQL Server externe.
 Variables d'environnement (dans .env) :
-    EMAC_EXT_SS_SERVER    - Nom ou IP du serveur (ex: SERVEUR\\INSTANCE ou 192.168.1.10)
+    EMAC_EXT_SS_SERVER    - Nom ou IP du serveur (ex: SERVEUR\\INSTANCE ou 192.168.142.10)
     EMAC_EXT_SS_DATABASE  - Nom de la base de données
     EMAC_EXT_SS_USER      - Utilisateur SQL (laisser vide pour auth Windows)
     EMAC_EXT_SS_PASSWORD  - Mot de passe SQL (laisser vide pour auth Windows)
-    EMAC_EXT_SS_DRIVER    - Driver ODBC (défaut: ODBC Driver 17 for SQL Server)
+    EMAC_EXT_SS_DRIVER    - Driver ODBC (défaut: ODBC Driver 18 for SQL Server)
     EMAC_EXT_SS_TIMEOUT   - Timeout de connexion en secondes (défaut: 10)
+    EMAC_EXT_SS_ENCRYPT   - Chiffrement TLS : yes/no/optional (défaut: yes)
 """
 
 import os
 import logging
 from contextlib import contextmanager
+from functools import lru_cache
 
 try:
     import pyodbc
@@ -24,6 +26,7 @@ from infrastructure.db.configbd import _load_env_once
 logger = logging.getLogger(__name__)
 
 
+@lru_cache(maxsize=None)
 def _get_sqlserver_config() -> dict:
     _load_env_once()
     return {
@@ -33,11 +36,12 @@ def _get_sqlserver_config() -> dict:
         "password": os.getenv("EMAC_EXT_SS_PASSWORD", ""),
         "driver":   os.getenv("EMAC_EXT_SS_DRIVER", "ODBC Driver 18 for SQL Server"),
         "timeout":  int(os.getenv("EMAC_EXT_SS_TIMEOUT", "10")),
+        "encrypt":  os.getenv("EMAC_EXT_SS_ENCRYPT", "yes"),
     }
 
 
 def _build_connection_string(cfg: dict) -> str:
-    base = f"DRIVER={{{cfg['driver']}}};SERVER={cfg['server']};DATABASE={cfg['database']};Encrypt=no;"
+    base = f"DRIVER={{{cfg['driver']}}};SERVER={cfg['server']};DATABASE={cfg['database']};Encrypt={cfg['encrypt']};"
     if cfg["user"]:
         return base + f"UID={cfg['user']};PWD={cfg['password']};"
     return base + "Trusted_Connection=yes;"

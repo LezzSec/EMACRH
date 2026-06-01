@@ -194,16 +194,16 @@ class GestionRHDialog(QDialog):
             self._domain_stack.addWidget(widget_domaine)
             self._domaine_widgets[domaine_key] = widget_domaine
 
-        inner_layout.addWidget(self._domain_stack)
+        inner_layout.addWidget(self._domain_stack, 0)
 
         self._docs_panel = RhDocumentsPanel(self._vm)
         self._docs_panel.refresh_requested.connect(self._on_document_action)
         self._docs_panel.refresh_requested.connect(self.data_changed)
         self._docs_panel.show_archives_requested.connect(self._header.activate_archives)
         self._docs_panel.setVisible(False)
-        inner_layout.addWidget(self._docs_panel)
+        inner_layout.addWidget(self._docs_panel, 0)
 
-        inner_layout.addStretch()
+        inner_layout.addStretch(1)
         scroll.setWidget(inner)
         layout.addWidget(scroll, 1)
 
@@ -263,6 +263,7 @@ class GestionRHDialog(QDialog):
         self._vm.action_succeeded.connect(lambda msg: QMessageBox.information(self, "Succès", msg))
         self._vm.error_occurred.connect(lambda msg: QMessageBox.critical(self, "Erreur", msg))
         self._vm.permission_denied.connect(lambda msg: QMessageBox.warning(self, "Accès refusé", msg))
+        self._vm.document_restored.connect(self._on_document_restored)
 
         QTimer.singleShot(100, self._executer_recherche)
 
@@ -295,14 +296,27 @@ class GestionRHDialog(QDialog):
     def _on_domaine_change(self, code_domaine: str):
         self.domaine_actif = DomaineRH(code_domaine)
         self._header.set_domaine(code_domaine)
+        self._domain_stack.setVisible(True)
         self._domain_stack.setCurrentWidget(self._domaine_widgets[self.domaine_actif])
         if self.operateur_selectionne:
             self._charger_contenu_domaine()
 
+    def _ajuster_hauteur_stack(self):
+        w = self._domain_stack.currentWidget()
+        if w:
+            self._domain_stack.setMaximumHeight(w.sizeHint().height())
+            self._domain_stack.updateGeometry()
+
     def _on_archives_click(self):
+        self._domain_stack.setMaximumHeight(16777215)
+        self._domain_stack.setVisible(False)
         self._docs_panel.setVisible(False)
         if self.operateur_selectionne:
             self._vm.charger_archives()
+
+    def _on_document_restored(self):
+        self._header.btn_archives.setChecked(False)
+        self._domain_stack.setVisible(True)
 
     def _charger_contenu_domaine(self):
         if not self.operateur_selectionne:
@@ -314,9 +328,10 @@ class GestionRHDialog(QDialog):
         if widget:
             widget.refresh(self.operateur_selectionne, donnees, documents)
 
+        has_active_docs = any(d.get('statut') != 'archive' for d in documents)
         show_docs = (
             domaine != DomaineRH.CONTRAT
-            and self._domaine_a_contenu(donnees, domaine)
+            and (self._domaine_a_contenu(donnees, domaine) or has_active_docs)
         )
         if show_docs:
             self._docs_panel.set_context(self.operateur_selectionne, self.domaine_actif)
@@ -325,11 +340,15 @@ class GestionRHDialog(QDialog):
         else:
             self._docs_panel.setVisible(False)
 
+        QTimer.singleShot(0, self._ajuster_hauteur_stack)
+
     def _on_archives_loaded(self, archives: list):
         self._header.update_archives_count(len(archives))
         if self._header.archives_actif:
             self._docs_panel.show_archives(archives)
             self._docs_panel.setVisible(True)
+        else:
+            self._domain_stack.setVisible(True)
 
     def _on_document_action(self):
         self._charger_contenu_domaine()

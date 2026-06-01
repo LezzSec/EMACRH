@@ -109,9 +109,28 @@ class RhDocumentsPanel(QWidget):
         details = f"{doc.get('categorie_nom', '-')} • Ajouté le {format_date(doc.get('date_upload')) if doc.get('date_upload') else '-'}"
         if not archived and doc.get('date_expiration'):
             details += f" • Expire le {format_date(doc['date_expiration'])}"
+        if doc.get('uploaded_by'):
+            details += f" • Par {doc['uploaded_by']}"
+        taille = doc.get('taille_octets')
+        if taille:
+            if taille >= 1024 * 1024:
+                details += f" • {taille / (1024 * 1024):.1f} Mo"
+            else:
+                details += f" • {taille / 1024:.0f} Ko"
         details_label = QLabel(details)
         details_label.setStyleSheet("color: #6b7280; font-size: 11px; background: transparent;")
         info_layout.addWidget(details_label)
+
+        if doc.get('notes'):
+            notes_label = QLabel(doc['notes'])
+            notes_label.setStyleSheet("color: #9ca3af; font-size: 11px; font-style: italic; background: transparent;")
+            notes_label.setWordWrap(True)
+            info_layout.addWidget(notes_label)
+
+        if archived and doc.get('date_expiration'):
+            exp_label = QLabel(f"Expirait le {format_date(doc['date_expiration'])}")
+            exp_label.setStyleSheet("color: #f97316; font-size: 11px; background: transparent;")
+            info_layout.addWidget(exp_label)
         doc_layout.addLayout(info_layout, 1)
 
         doc_id = doc.get('id')
