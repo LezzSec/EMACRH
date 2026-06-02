@@ -250,7 +250,6 @@ def generate_filled_template(
     if not date_str:
         date_str = format_date(datetime.now())
 
-    # Nom complet de l'operateur
     operateur_complet = f"{operateur_prenom} {operateur_nom}".strip()
 
     # Creer le nom du fichier de sortie
@@ -258,7 +257,6 @@ def generate_filled_template(
     safe_name = "".join(c for c in safe_name if c.isalnum() or c in (' ', '_', '-')).strip()
     output_filename = f"{safe_name}{extension}"
 
-    # Ecrire dans le repertoire temporaire
     temp_dir = get_temp_dir()
     output_path = temp_dir / output_filename
 
