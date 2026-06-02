@@ -9,6 +9,7 @@ build/
 dist/
 _archive/
 .claude/
+dossiers/
 *.zip
 CLAUDE.md
 
