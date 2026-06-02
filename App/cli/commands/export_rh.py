@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-Commande export-paie — export CSV du personnel pour intégration logiciel de paie / ERP.
+Commande export-rh — export CSV du personnel pour intégration ERP / systèmes RH externes.
 
 Usage (depuis App/) :
-    python -m cli export-paie
-    python -m cli export-paie --output exports/paie_avril.csv
-    python -m cli export-paie --statut ACTIF --format paie
-    python -m cli export-paie --format polyvalence --output grille.csv
+    python -m cli export-rh
+    python -m cli export-rh --output exports/rh_avril.csv
+    python -m cli export-rh --statut ACTIF --format paie
+    python -m cli export-rh --format polyvalence --output grille.csv
 
 Formats disponibles :
-    paie        : matricule, nom, prénom, contrat actif, dates → intégration paie / RH
+    paie        : matricule, nom, prénom, contrat actif, dates → intégration RH / ERP
     polyvalence : matricule, nom, prénom, postes certifiés, niveau moyen → ERP / pointeuse
     complet     : fusion des deux
 
@@ -151,8 +151,8 @@ def _build_row(pers: Dict, poly_summary: Dict, fmt: str) -> Dict:
 # Point d'entrée
 # ---------------------------------------------------------------------------
 
-def run_export_paie(args) -> None:
-    """Lance l'export paie/polyvalence en CSV."""
+def run_export_rh(args) -> None:
+    """Lance l'export RH/polyvalence en CSV."""
     setup_logging(production_mode=False)
 
     fmt = getattr(args, "format", "paie") or "paie"
@@ -166,7 +166,7 @@ def run_export_paie(args) -> None:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         exports_dir = Path(__file__).parents[3] / "exports"
         exports_dir.mkdir(parents=True, exist_ok=True)
-        output_path = exports_dir / f"paie_{fmt}_{ts}.csv"
+        output_path = exports_dir / f"rh_{fmt}_{ts}.csv"
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
 

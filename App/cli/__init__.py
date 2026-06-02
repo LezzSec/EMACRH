@@ -70,12 +70,12 @@ def main() -> None:
         help="Vérifier la connectivité et le volume des tables",
     )
 
-    # ---- export-paie ----
-    p_exp = sub.add_parser("export-paie", help="Export CSV personnel / polyvalence (intégration paie, ERP)")
+    # ---- export-rh ----
+    p_exp = sub.add_parser("export-rh", help="Export CSV personnel / polyvalence (intégration ERP, RH externe)")
     p_exp.add_argument(
         "--output", "-o",
         metavar="FICHIER",
-        help="Chemin du fichier CSV de sortie (défaut : exports/paie_<format>_<horodatage>.csv)",
+        help="Chemin du fichier CSV de sortie (défaut : exports/rh_<format>_<horodatage>.csv)",
     )
     p_exp.add_argument(
         "--format", "-f",
@@ -98,6 +98,6 @@ def main() -> None:
     elif args.command == "diagnose":
         from cli.commands.diagnose import run_diagnose
         run_diagnose(args)
-    elif args.command == "export-paie":
-        from cli.commands.export_paie import run_export_paie
-        run_export_paie(args)
+    elif args.command == "export-rh":
+        from cli.commands.export_rh import run_export_rh
+        run_export_rh(args)
