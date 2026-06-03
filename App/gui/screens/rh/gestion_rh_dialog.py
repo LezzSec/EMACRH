@@ -4,8 +4,6 @@
 Assemble les sous-widgets et connecte les signaux du ViewModel.
 """
 import logging
-import os
-import subprocess
 
 from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QWidget, QFrame, QStackedWidget,
@@ -355,10 +353,10 @@ class GestionRHDialog(QDialog):
         self._vm.charger_archives()
 
     def _on_document_path_ready(self, path: str):
-        if os.name == 'nt':
-            os.startfile(path)
-        else:
-            subprocess.run(['xdg-open', path])
+        from infrastructure.storage.file_opener import open_file
+        ok, msg = open_file(path)
+        if not ok:
+            QMessageBox.warning(self, "Erreur", msg)
 
     def _on_dossier_formation_ready(self, success: bool, msg: str, path: str):
         if success and path:

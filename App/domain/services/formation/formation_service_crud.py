@@ -496,7 +496,6 @@ class FormationServiceCRUD(CRUDService):
     @classmethod
     def get_catalogue_competences(cls) -> list:
         """Retourne le catalogue des compétences actives (id, code, libelle, categorie, duree_validite_mois)."""
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT id, code, libelle, categorie, duree_validite_mois

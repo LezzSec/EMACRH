@@ -14,14 +14,15 @@ SÉCURITÉ:
 
 import bcrypt
 import re
-import logging
 import os
 import socket
 import threading
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
 
-logger = logging.getLogger(__name__)
+from infrastructure.logging.logging_config import get_logger
+
+logger = get_logger(__name__)
 from typing import Deque, Optional, Dict, List, Tuple
 from infrastructure.db.configbd import DatabaseConnection
 from infrastructure.db.query_executor import QueryExecutor

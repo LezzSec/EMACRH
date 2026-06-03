@@ -12,8 +12,6 @@ Les anciens templates sur filesystem (legacy) restent accessibles via fichier_so
 import os
 import sys
 import json
-import tempfile
-import mimetypes
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional, Tuple
@@ -22,6 +20,9 @@ from infrastructure.db.query_executor import QueryExecutor
 from infrastructure.logging.optimized_db_logger import log_hist_async
 from infrastructure.logging.logging_config import get_logger
 from infrastructure.config.date_format import format_date, format_timestamp
+from infrastructure.storage.file_storage import (
+    sanitize_filename, get_temp_base, read_upload, UploadError
+)
 
 logger = get_logger(__name__)
 
@@ -58,7 +59,7 @@ def get_templates_dir() -> Path:
 
 def get_temp_dir() -> Path:
     """Retourne le repertoire temporaire pour les fichiers generes."""
-    temp_base = Path(tempfile.gettempdir()) / 'EMAC_templates'
+    temp_base = get_temp_base() / 'EMAC_templates'
     temp_base.mkdir(parents=True, exist_ok=True)
     return temp_base
 
@@ -254,14 +255,18 @@ def generate_filled_template(
 
     # Creer le nom du fichier de sortie
     safe_name = f"{template['nom']}_{operateur_complet}_{format_timestamp()}"
-    safe_name = "".join(c for c in safe_name if c.isalnum() or c in (' ', '_', '-')).strip()
+    safe_name = sanitize_filename(safe_name)
     output_filename = f"{safe_name}{extension}"
 
     temp_dir = get_temp_dir()
     output_path = temp_dir / output_filename
 
-    with open(output_path, 'wb') as f:
-        f.write(contenu)
+    try:
+        with open(output_path, 'wb') as f:
+            f.write(contenu)
+    except OSError as e:
+        logger.exception(f"Ecriture du fichier genere impossible ({output_path}): {e}")
+        return False, "Impossible d'ecrire le fichier (disque plein ou repertoire verrouille)", None
 
     # Pre-remplir si c'est un Excel
     if extension.lower() in ('.xlsx', '.xlsm', '.xls'):
@@ -305,23 +310,15 @@ def upload_template(
     """
     from application.permission_manager import require
     require("rh.documents.edit")
-    source_path = Path(fichier_source)
-    if not source_path.exists():
-        return False, f"Fichier introuvable: {fichier_source}"
-
-    taille = source_path.stat().st_size
-    if taille > MAX_TEMPLATE_SIZE_BYTES:
-        taille_mo = taille / (1024 * 1024)
-        return False, f"Fichier trop volumineux ({taille_mo:.1f} Mo). Maximum: 16 Mo"
 
     try:
-        with open(source_path, 'rb') as f:
-            contenu = f.read()
+        contenu, type_mime, taille = read_upload(fichier_source, MAX_TEMPLATE_SIZE_BYTES)
+    except UploadError as e:
+        return False, str(e)
 
-        type_mime, _ = mimetypes.guess_type(str(source_path))
-        if type_mime is None:
-            type_mime = "application/octet-stream"
+    source_path = Path(fichier_source)
 
+    try:
         QueryExecutor.execute_write(
             """UPDATE documents_templates
                SET contenu_fichier = %s,
@@ -374,23 +371,15 @@ def add_template(
     """
     from application.permission_manager import require
     require("rh.documents.edit")
-    source_path = Path(fichier_source)
-    if not source_path.exists():
-        return False, f"Fichier introuvable: {fichier_source}", None
-
-    taille = source_path.stat().st_size
-    if taille > MAX_TEMPLATE_SIZE_BYTES:
-        taille_mo = taille / (1024 * 1024)
-        return False, f"Fichier trop volumineux ({taille_mo:.1f} Mo). Maximum: 16 Mo", None
 
     try:
-        with open(source_path, 'rb') as f:
-            contenu = f.read()
+        contenu, type_mime, taille = read_upload(fichier_source, MAX_TEMPLATE_SIZE_BYTES)
+    except UploadError as e:
+        return False, str(e), None
 
-        type_mime, _ = mimetypes.guess_type(str(source_path))
-        if type_mime is None:
-            type_mime = "application/octet-stream"
+    source_path = Path(fichier_source)
 
+    try:
         postes_json = json.dumps(postes_associes) if postes_associes else None
 
         template_id = QueryExecutor.execute_write(
@@ -466,53 +455,8 @@ def open_template_file(file_path: str) -> Tuple[bool, str]:
 
     SECURITE: Valide le chemin avant ouverture.
     """
-    import subprocess
-    import platform
-
-    try:
-        path = Path(file_path).resolve()
-
-        if not path.exists():
-            return False, "Fichier non trouve"
-
-        if not path.is_file():
-            return False, "Chemin invalide"
-
-        # SECURITE: Verifier que le chemin est dans un repertoire autorise
-        temp_dir = get_temp_dir().resolve()
-        templates_dir = get_templates_dir().resolve()
-
-        is_in_temp = False
-        is_in_templates = False
-        try:
-            path.relative_to(temp_dir)
-            is_in_temp = True
-        except ValueError:
-            pass
-        try:
-            path.relative_to(templates_dir)
-            is_in_templates = True
-        except ValueError:
-            pass
-
-        if not (is_in_temp or is_in_templates):
-            logger.warning(f"Tentative d'ouverture de fichier hors zone autorisee: {path}")
-            return False, "Acces au fichier refuse"
-
-        file_str = str(path)
-
-        if platform.system() == 'Windows':
-            os.startfile(file_str)
-        elif platform.system() == 'Darwin':
-            subprocess.run(['open', file_str], check=True)
-        else:
-            subprocess.run(['xdg-open', file_str], check=True)
-
-        return True, "Fichier ouvert"
-
-    except Exception as e:
-        logger.error(f"Erreur ouverture fichier: {e}")
-        return False, "Impossible d'ouvrir le fichier"
+    from infrastructure.storage.file_opener import open_file
+    return open_file(file_path, allowed_roots=[get_temp_dir(), get_templates_dir()])
 
 
 def print_template_file(file_path: str, printer_name: str) -> Tuple[bool, str]:
@@ -572,6 +516,7 @@ def print_template_file(file_path: str, printer_name: str) -> Tuple[bool, str]:
             def _ps_b64(value: str) -> str:
                 """Encode une valeur en base64 UTF-16LE pour PowerShell."""
                 return _b64.b64encode(value.encode('utf-16-le')).decode('ascii')
+            
 
             path_b64 = _ps_b64(str(path))
             printer_b64 = _ps_b64(printer_name)
@@ -672,12 +617,12 @@ def get_all_templates_for_operateur(operateur_id: int) -> Dict[str, List[Dict]]:
     }
 
     postes = get_postes_for_operateur(operateur_id)
-
-    seen_ids = set()
-    for code_poste in postes:
-        templates = get_templates_for_poste(code_poste)
-        for t in templates:
-            if t['id'] not in seen_ids:
+    if postes:
+        postes_set = set(postes)
+        all_poste_templates = get_templates_by_contexte('POSTE')
+        seen_ids = set()
+        for t in all_poste_templates:
+            if t['id'] not in seen_ids and any(code in postes_set for code in t['postes_associes']):
                 seen_ids.add(t['id'])
                 result['POSTE'].append(t)
 

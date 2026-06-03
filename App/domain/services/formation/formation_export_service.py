@@ -14,7 +14,6 @@ Usage:
     # path = chemin vers le fichier xlsx généré
 """
 
-import os
 from datetime import date, datetime
 from pathlib import Path
 from typing import Dict, Optional, Tuple
@@ -852,14 +851,7 @@ class FormationExportService:
     @staticmethod
     def open_file(path: str):
         """Ouvre le fichier avec l'application par défaut du système."""
-        import subprocess
-        import sys
-        try:
-            if sys.platform == "win32":
-                os.startfile(path)
-            elif sys.platform == "darwin":
-                subprocess.run(["open", path])
-            else:
-                subprocess.run(["xdg-open", path])
-        except Exception as e:
-            logger.error(f"Impossible d'ouvrir {path}: {e}")
+        from infrastructure.storage.file_opener import open_file as _open_file
+        ok, msg = _open_file(path)
+        if not ok:
+            logger.warning(f"Ouverture fichier impossible: {msg}")

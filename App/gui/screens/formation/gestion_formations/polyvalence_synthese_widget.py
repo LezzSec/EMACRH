@@ -11,11 +11,12 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
     QMessageBox,
 )
-from PyQt5.QtCore import Qt, QUrl, QTimer
-from PyQt5.QtGui import QDesktopServices, QColor, QFont
+from PyQt5.QtCore import Qt, QTimer
+from PyQt5.QtGui import QColor, QFont
 
 from gui.workers.db_worker import DbWorker, DbThreadPool
 from gui.components.loading_components import LoadingLabel
+from gui.components.ui_kit.stylesheet import get_colors
 from infrastructure.logging.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -31,6 +32,7 @@ class PolyvalenceSyntheseWidget(QWidget):
         super().__init__(parent)
         self._rows_data = []
         self._loading = None
+        self._colors = get_colors()
         self._init_ui()
         QTimer.singleShot(100, self._load_async)
 
@@ -47,15 +49,15 @@ class PolyvalenceSyntheseWidget(QWidget):
         bar = QHBoxLayout()
         title = QLabel("Synthèse des polyvalences et documents d'évaluation")
         title.setFont(QFont("Segoe UI", 12, QFont.Bold))
-        title.setStyleSheet("color: #1e293b;")
+        title.setStyleSheet(f"color: {self._colors['TXT']};")
         bar.addWidget(title)
         bar.addStretch()
 
         btn_refresh = QPushButton("Actualiser")
         btn_refresh.setStyleSheet(
-            "QPushButton { background: transparent; color: #3b82f6; border: 1px solid #3b82f6;"
-            " border-radius: 4px; padding: 4px 12px; }"
-            "QPushButton:hover { background: #eff6ff; }"
+            f"QPushButton {{ background: transparent; color: {self._colors['INFO']}; border: 1px solid {self._colors['INFO']};"
+            f" border-radius: 4px; padding: 4px 12px; }}"
+            f"QPushButton:hover {{ background: {self._colors['INFO_BG']}; }}"
         )
         btn_refresh.clicked.connect(self.load_data)
         bar.addWidget(btn_refresh)
@@ -70,20 +72,20 @@ class PolyvalenceSyntheseWidget(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.setWordWrap(False)
         self.table.verticalHeader().setVisible(False)
-        self.table.setStyleSheet("""
-            QTableWidget {
-                border: 1px solid #e5e7eb;
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                border: 1px solid {self._colors['BDR']};
                 border-radius: 6px;
-                gridline-color: #f1f5f9;
-            }
-            QHeaderView::section {
-                background: #f8fafc;
+                gridline-color: {self._colors['BG']};
+            }}
+            QHeaderView::section {{
+                background: {self._colors['BG']};
                 padding: 6px 8px;
                 border: none;
-                border-bottom: 1px solid #e5e7eb;
+                border-bottom: 1px solid {self._colors['BDR']};
                 font-weight: bold;
-                color: #374151;
-            }
+                color: {self._colors['TXT']};
+            }}
         """)
         hdr = self.table.horizontalHeader()
         hdr.setSectionResizeMode(0, QHeaderView.ResizeToContents)  # Personnel
@@ -99,7 +101,7 @@ class PolyvalenceSyntheseWidget(QWidget):
 
         # Compteur
         self.lbl_count = QLabel("")
-        self.lbl_count.setStyleSheet("color: #6b7280; font-size: 11px;")
+        self.lbl_count.setStyleSheet(f"color: {self._colors['TXT_DIM']}; font-size: 11px;")
         layout.addWidget(self.lbl_count)
 
     # ------------------------------------------------------------------
@@ -166,7 +168,7 @@ class PolyvalenceSyntheseWidget(QWidget):
             doc_nom = row.get('eval_doc_nom') or ''
             doc_item = QTableWidgetItem(doc_nom if doc_nom else 'Aucun document joint')
             if not doc_nom:
-                doc_item.setForeground(QColor("#9ca3af"))
+                doc_item.setForeground(QColor(self._colors['TXT_DIM']))
                 doc_item.setFont(QFont("Segoe UI", 9, italic=True))
             self.table.setItem(row_idx, 6, doc_item)
 
@@ -175,9 +177,9 @@ class PolyvalenceSyntheseWidget(QWidget):
                 btn = QPushButton("Voir")
                 btn.setFixedHeight(26)
                 btn.setStyleSheet(
-                    "QPushButton { background: #3b82f6; color: white; border: none;"
-                    " border-radius: 4px; font-size: 11px; }"
-                    "QPushButton:hover { background: #2563eb; }"
+                    f"QPushButton {{ background: {self._colors['INFO']}; color: white; border: none;"
+                    f" border-radius: 4px; font-size: 11px; }}"
+                    f"QPushButton:hover {{ background: #2563eb; }}"
                 )
                 btn.clicked.connect(
                     lambda checked, did=row['eval_doc_id']: self._ouvrir_doc(did)
@@ -196,10 +198,13 @@ class PolyvalenceSyntheseWidget(QWidget):
 
     def _ouvrir_doc(self, doc_id: int):
         try:
+            from infrastructure.storage.file_opener import open_file
             from domain.services.documents.document_service import DocumentService
             path = DocumentService().get_document_path(doc_id)
             if path and path.exists():
-                QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+                ok, msg = open_file(str(path))
+                if not ok:
+                    QMessageBox.warning(self, "Erreur", msg)
             else:
                 QMessageBox.warning(self, "Introuvable", "Le document est introuvable.")
         except Exception as e:

@@ -7,17 +7,19 @@ Stockage : Les fichiers sont stockes en BLOB dans la base de donnees MySQL.
 Les anciens documents sur filesystem (legacy) restent accessibles via chemin_fichier.
 """
 
-import tempfile
-import logging
 import unicodedata
 
-logger = logging.getLogger(__name__)
+from infrastructure.logging.logging_config import get_logger
+
+logger = get_logger(__name__)
 from datetime import date
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
-import mimetypes
 
 from infrastructure.db.query_executor import QueryExecutor
+from infrastructure.storage.file_storage import (
+    sanitize_filename, get_temp_base, extract_blob_to_temp, read_upload, UploadError
+)
 
 
 # Taille max recommandee pour un fichier (16 Mo)
@@ -30,19 +32,12 @@ class DocumentService:
     def __init__(self):
         """Initialise le service documentaire"""
         # Repertoire temporaire pour extraire les BLOBs a ouvrir
-        self._temp_dir = Path(tempfile.gettempdir()) / "emac_documents"
+        self._temp_dir = get_temp_base() / "emac_documents"
         self._temp_dir.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
     def _sanitize_filename(filename: str) -> str:
-        """Nettoie un nom de fichier pour eviter les problemes"""
-        safe_chars = []
-        for char in filename:
-            if char.isalnum() or char in ['.', '-', '_', ' ']:
-                safe_chars.append(char)
-            else:
-                safe_chars.append('_')
-        return ''.join(safe_chars)
+        return sanitize_filename(filename)
 
     @staticmethod
     def _get_safe_name(text: str) -> str:
@@ -89,7 +84,13 @@ class DocumentService:
         return f"categorie_{categorie_id}"
 
     def _sync_to_person_folder(self, personnel_id: int, categorie_id: int, nom_fichier: str, contenu: bytes) -> None:
-        """Ecrit une copie du document dans EMAC/dossiers/{personne}/{categorie}/."""
+        """Miroir best-effort sur le filesystem (EMAC/dossiers/{personne}/{categorie}/).
+
+        Source de vérité = BLOB en base. Cette copie FS n'existe que pour permettre
+        aux RH de naviguer dans l'explorateur Windows. Une désynchro DB/FS est possible
+        et acceptée : si ce miroir échoue, le document reste accessible via l'application.
+        Ne jamais utiliser ce chemin comme source autoritaire de contenu.
+        """
         try:
             from infrastructure.config.app_paths import get_dossiers_dir
             person_name = self._get_person_folder_name(personnel_id)
@@ -185,18 +186,15 @@ class DocumentService:
         """
         from application.permission_manager import require
         require("rh.documents.edit")
+
         try:
-            # Verifier que le fichier source existe
-            source_path = Path(fichier_source)
-            if not source_path.exists():
-                return False, f"Fichier source introuvable: {fichier_source}", None
+            contenu_fichier, type_mime, taille_octets = read_upload(fichier_source, MAX_FILE_SIZE_BYTES)
+        except UploadError as e:
+            return False, str(e), None
 
-            # Verifier la taille du fichier
-            taille_octets = source_path.stat().st_size
-            if taille_octets > MAX_FILE_SIZE_BYTES:
-                taille_mo = taille_octets / (1024 * 1024)
-                return False, f"Fichier trop volumineux ({taille_mo:.1f} Mo). Maximum: 16 Mo", None
+        source_path = Path(fichier_source)
 
+        try:
             # Verifier que l'operateur existe
             if not QueryExecutor.exists('personnel', {'id': personnel_id}):
                 return False, f"Operateur ID {personnel_id} introuvable", None
@@ -207,19 +205,10 @@ class DocumentService:
 
             # Preparer le nom de fichier
             nom_fichier_original = source_path.name
-            nom_fichier_clean = self._sanitize_filename(nom_fichier_original)
+            nom_fichier_clean = sanitize_filename(nom_fichier_original)
 
             if nom_affichage is None:
                 nom_affichage = nom_fichier_original
-
-            # Lire le contenu du fichier en binaire
-            with open(source_path, 'rb') as f:
-                contenu_fichier = f.read()
-
-            # Determiner le type MIME
-            type_mime, _ = mimetypes.guess_type(str(source_path))
-            if type_mime is None:
-                type_mime = "application/octet-stream"
 
             document_id = QueryExecutor.execute_write(
                 """INSERT INTO documents (
@@ -243,7 +232,7 @@ class DocumentService:
             )
 
             logger.info(f"Document '{nom_affichage}' ajoute en BLOB (ID: {document_id}, {taille_octets} octets)")
-            self._sync_to_person_folder(personnel_id, categorie_id, nom_fichier_clean, contenu_fichier)
+            self._sync_to_person_folder(personnel_id, categorie_id, nom_fichier_clean, contenu_fichier)  # miroir FS best-effort
             return True, f"Document '{nom_affichage}' ajoute avec succes", document_id
 
         except Exception as e:
@@ -340,25 +329,17 @@ class DocumentService:
         if not result:
             return None
 
-        contenu, nom_fichier, type_mime = result
-
-        # Creer un sous-dossier par document pour eviter les conflits
-        doc_temp_dir = self._temp_dir / str(document_id)
-        doc_temp_dir.mkdir(parents=True, exist_ok=True)
-
-        temp_path = doc_temp_dir / self._sanitize_filename(nom_fichier)
+        contenu, nom_fichier, _ = result
 
         try:
-            with open(temp_path, 'wb') as f:
-                f.write(contenu)
+            return extract_blob_to_temp(contenu, nom_fichier, "emac_documents", document_id)
         except PermissionError:
             # Fichier verrouillé par une application tierce (ex : Excel ouvert).
             # On le retourne tel quel uniquement si un contenu existe déjà.
+            temp_path = self._temp_dir / str(document_id) / sanitize_filename(nom_fichier)
             if temp_path.exists() and temp_path.stat().st_size > 0:
                 return temp_path
             raise
-
-        return temp_path
 
     def get_document_path(self, document_id: int) -> Optional[Path]:
         """
@@ -597,7 +578,6 @@ class DocumentService:
     def get_document_nom(self, document_id: int) -> Optional[str]:
         """Retourne le nom de fichier affiché d'un document (nom_fichier)."""
         try:
-            from infrastructure.db.query_executor import QueryExecutor
             row = QueryExecutor.fetch_one(
                 "SELECT nom_fichier FROM documents WHERE id = %s",
                 (document_id,),
@@ -611,7 +591,6 @@ class DocumentService:
     def check_module_installed(self) -> bool:
         """Vérifie que les tables du module documentaire existent."""
         try:
-            from infrastructure.db.query_executor import QueryExecutor
             cat_exists = QueryExecutor.fetch_one("SHOW TABLES LIKE 'categories_documents'")
             doc_exists = QueryExecutor.fetch_one("SHOW TABLES LIKE 'documents'")
             return bool(cat_exists and doc_exists)
@@ -622,7 +601,6 @@ class DocumentService:
     def get_all_non_contrats(self) -> list:
         """Retourne tous les documents hors catégorie 'Contrats de travail'."""
         try:
-            from infrastructure.db.query_executor import QueryExecutor
             return QueryExecutor.fetch_all(
                 """
                 SELECT * FROM v_documents_complet

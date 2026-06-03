@@ -3,8 +3,7 @@ import datetime as dt
 import os
 
 from PyQt5.QtWidgets import QMessageBox, QDialog
-from PyQt5.QtCore import QUrl, QTimer
-from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtCore import QTimer
 
 from infrastructure.logging.logging_config import get_logger, set_log_context, clear_log_context, get_logs_dir
 from gui.components.emac_ui_kit import show_error_message
@@ -132,7 +131,10 @@ class SessionMixin:
             paths = export_day(dt.date.today(), base_dir="logs", make_zip=False)
             dossier = os.path.dirname(paths["csv"])
             QMessageBox.information(self, "Export", f"Export terminé\n\nCSV : {paths['csv']}")
-            QDesktopServices.openUrl(QUrl.fromLocalFile(dossier))
+            from infrastructure.storage.file_opener import open_folder
+            ok, msg = open_folder(dossier)
+            if not ok:
+                show_error_message(self, "Erreur", msg)
         except Exception as e:
             logger.exception(f"Erreur export: {e}")
             show_error_message(self, "Erreur", "Export impossible", e)

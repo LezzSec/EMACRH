@@ -33,6 +33,7 @@ from datetime import date, timedelta
 from functools import lru_cache
 from application.crud_service import CRUDService
 from application.permission_manager import require
+from infrastructure.db.query_executor import QueryExecutor
 
 
 # =============================================================================
@@ -46,7 +47,6 @@ def _get_jours_feries_cached(annee_debut: int, annee_fin: int) -> FrozenSet[date
     Le cache est conservé pendant toute la durée de la session (les jours fériés
     ne changent pas au cours d'une session utilisateur).
     """
-    from infrastructure.db.query_executor import QueryExecutor
     try:
         rows = QueryExecutor.fetch_all(
             "SELECT date_ferie FROM jours_feries WHERE YEAR(date_ferie) BETWEEN %s AND %s",
@@ -346,7 +346,6 @@ class AbsenceServiceCRUD(CRUDService):
     @classmethod
     def get_types_absence(cls) -> list:
         """Retourne les types d'absence actifs (id, code, libelle)."""
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             "SELECT id, code, libelle FROM type_absence WHERE actif = TRUE ORDER BY code",
             dictionary=True,
@@ -358,7 +357,6 @@ class AbsenceServiceCRUD(CRUDService):
         Retourne les demandes EN_ATTENTE avec nom complet et libellé du type.
         Utilisé par la vue de validation manager.
         """
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT da.id,
@@ -397,8 +395,6 @@ class AbsenceServiceCRUD(CRUDService):
             Liste de dicts avec: id, type_libelle, date_debut, date_fin, nb_jours,
                                  motif, statut, validateur, date_validation
         """
-        from infrastructure.db.query_executor import QueryExecutor
-
         conditions = ["da.personnel_id = %s"]
         params = [personnel_id]
 
@@ -439,7 +435,6 @@ class AbsenceServiceCRUD(CRUDService):
         Retourne les demandes VALIDEE qui se chevauchent avec la plage donnée.
         Utilisé par le calendrier de planning pour colorier les jours.
         """
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT da.date_debut, da.date_fin,

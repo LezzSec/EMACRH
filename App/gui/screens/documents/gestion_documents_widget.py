@@ -13,8 +13,8 @@ from PyQt5.QtWidgets import (
     QDialog, QLineEdit, QTextEdit, QDateEdit, QHeaderView, QMenu,
     QAbstractItemView, QGroupBox
 )
-from PyQt5.QtCore import Qt, QDate, QUrl, pyqtSignal
-from PyQt5.QtGui import QColor, QDesktopServices
+from PyQt5.QtCore import Qt, QDate, pyqtSignal
+from PyQt5.QtGui import QColor
 
 # Import du service documentaire
 from domain.services.documents.document_service import DocumentService
@@ -245,7 +245,10 @@ class DocumentWidget(QWidget):
         file_path = self.doc_service.get_document_path(doc_id)
 
         if file_path and file_path.exists():
-            QDesktopServices.openUrl(QUrl.fromLocalFile(str(file_path)))
+            from infrastructure.storage.file_opener import open_file
+            ok, msg = open_file(str(file_path))
+            if not ok:
+                QMessageBox.warning(self, "Fichier introuvable", msg)
         else:
             QMessageBox.warning(
                 self,

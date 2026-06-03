@@ -433,15 +433,14 @@ class GestionDocsFormationDialog:
             self._charger_postes()
 
     def _ouvrir_doc(self, doc_id: int):
-        import os
+        from infrastructure.storage.file_opener import open_file
         from domain.services.documents.polyvalence_docs_service import extraire_vers_fichier_temp
         temp_path = extraire_vers_fichier_temp(doc_id)
         if temp_path and temp_path.exists():
-            if os.name == 'nt':
-                os.startfile(str(temp_path))
-            else:
-                import subprocess
-                subprocess.run(['xdg-open', str(temp_path)])
+            ok, msg = open_file(str(temp_path))
+            if not ok:
+                from PyQt5.QtWidgets import QMessageBox
+                QMessageBox.warning(self._dialog, "Erreur", msg)
         else:
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.warning(self._dialog, "Erreur", "Le fichier n'a pas pu être extrait.")

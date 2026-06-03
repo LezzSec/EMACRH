@@ -6,14 +6,16 @@ Ces documents sont associes a un poste (et optionnellement un niveau 1-4).
 Ils sont lisibles par tous les utilisateurs et administres par les responsables.
 """
 
-import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 
-logger = logging.getLogger(__name__)
+from infrastructure.logging.logging_config import get_logger
+
+logger = get_logger(__name__)
 
 from infrastructure.db.query_executor import QueryExecutor
 from infrastructure.logging.optimized_db_logger import log_hist_async
+from infrastructure.storage.file_storage import extract_blob_to_temp, read_upload, UploadError
 
 
 # ---------------------------------------------------------------------------
@@ -28,30 +30,22 @@ def get_docs_pour_poste(poste_id: int, niveau: Optional[int] = None) -> List[Dic
     (applicables a tous niveaux). Sinon retourne tous les docs du poste.
     """
     try:
+        conditions = ["d.poste_id = %s"]
+        params: list = [poste_id]
         if niveau is not None:
-            sql = """
-                SELECT
-                    d.id, d.poste_id, d.niveau, d.nom_affichage, d.nom_fichier,
-                    d.type_mime, d.taille_octets, d.description, d.date_ajout, d.ajoute_par,
-                    p.poste_code
-                FROM documents_formation_polyvalence d
-                JOIN postes p ON p.id = d.poste_id
-                WHERE d.poste_id = %s AND (d.niveau = %s OR d.niveau IS NULL)
-                ORDER BY d.niveau ASC, d.nom_affichage ASC
-            """
-            return QueryExecutor.fetch_all(sql, (poste_id, niveau), dictionary=True)
-        else:
-            sql = """
-                SELECT
-                    d.id, d.poste_id, d.niveau, d.nom_affichage, d.nom_fichier,
-                    d.type_mime, d.taille_octets, d.description, d.date_ajout, d.ajoute_par,
-                    p.poste_code
-                FROM documents_formation_polyvalence d
-                JOIN postes p ON p.id = d.poste_id
-                WHERE d.poste_id = %s
-                ORDER BY d.niveau ASC, d.nom_affichage ASC
-            """
-            return QueryExecutor.fetch_all(sql, (poste_id,), dictionary=True)
+            conditions.append("(d.niveau = %s OR d.niveau IS NULL)")
+            params.append(niveau)
+        sql = """
+            SELECT
+                d.id, d.poste_id, d.niveau, d.nom_affichage, d.nom_fichier,
+                d.type_mime, d.taille_octets, d.description, d.date_ajout, d.ajoute_par,
+                p.poste_code
+            FROM documents_formation_polyvalence d
+            JOIN postes p ON p.id = d.poste_id
+            WHERE {}
+            ORDER BY d.niveau ASC, d.nom_affichage ASC
+        """.format(" AND ".join(conditions))
+        return QueryExecutor.fetch_all(sql, tuple(params), dictionary=True)
     except Exception as e:
         logger.exception(f"Erreur get_docs_pour_poste(poste_id={poste_id}): {e}")
         return []
@@ -88,8 +82,39 @@ def get_docs_pour_operateur(operateur_id: int) -> List[Dict]:
             dictionary=True
         )
 
+        poste_ids = list({poly['poste_id'] for poly in polyvalences})
+        if poste_ids:
+            placeholders = ','.join(['%s'] * len(poste_ids))
+            all_docs = QueryExecutor.fetch_all(
+                f"""
+                SELECT
+                    d.id, d.poste_id, d.niveau, d.nom_affichage, d.nom_fichier,
+                    d.type_mime, d.taille_octets, d.description, d.date_ajout, d.ajoute_par,
+                    p.poste_code
+                FROM documents_formation_polyvalence d
+                JOIN postes p ON p.id = d.poste_id
+                WHERE d.poste_id IN ({placeholders})
+                ORDER BY d.niveau ASC, d.nom_affichage ASC
+                """,
+                tuple(poste_ids),
+                dictionary=True
+            )
+            docs_by_poste: dict = {}
+            for doc in all_docs:
+                docs_by_poste.setdefault(doc['poste_id'], []).append(doc)
+        else:
+            docs_by_poste = {}
+
         for poly in polyvalences:
-            poly['documents'] = get_docs_pour_poste(poly['poste_id'], poly['niveau'])
+            poste_docs = docs_by_poste.get(poly['poste_id'], [])
+            niveau = poly['niveau']
+            if niveau is None:
+                poly['documents'] = list(poste_docs)
+            else:
+                poly['documents'] = [
+                    d for d in poste_docs
+                    if d['niveau'] is None or d['niveau'] == niveau
+                ]
 
         return polyvalences
 
@@ -234,16 +259,7 @@ def extraire_vers_fichier_temp(doc_id: int) -> Optional[Path]:
     if not result:
         return None
     contenu, nom_fichier, _ = result
-
-    from domain.services.documents.template_service import get_temp_dir
-    temp_dir = get_temp_dir() / "formation_poly" / str(doc_id)
-    temp_dir.mkdir(parents=True, exist_ok=True)
-
-    # Nettoyer le nom de fichier
-    safe_name = ''.join(c if (c.isalnum() or c in '._ -') else '_' for c in nom_fichier)
-    temp_path = temp_dir / safe_name
-    temp_path.write_bytes(contenu)
-    return temp_path
+    return extract_blob_to_temp(contenu, nom_fichier, "EMAC_templates/formation_poly", doc_id)
 
 
 # ---------------------------------------------------------------------------
@@ -264,19 +280,17 @@ def ajouter_document(
     Returns:
         (succes, message, doc_id)
     """
+    from application.permission_manager import require
+    require("rh.documents.edit")
+
     try:
-        source = Path(fichier_source)
-        if not source.exists():
-            return False, f"Fichier introuvable : {fichier_source}", None
+        contenu, type_mime, taille = read_upload(fichier_source, 32 * 1024 * 1024)
+    except UploadError as e:
+        return False, str(e), None
 
-        taille = source.stat().st_size
-        if taille > 32 * 1024 * 1024:  # 32 Mo max
-            return False, "Fichier trop volumineux (max 32 Mo)", None
+    source = Path(fichier_source)
 
-        import mimetypes
-        type_mime = mimetypes.guess_type(str(source))[0] or 'application/octet-stream'
-        contenu = source.read_bytes()
-
+    try:
         new_id = QueryExecutor.execute_write(
             """
             INSERT INTO documents_formation_polyvalence
@@ -304,6 +318,8 @@ def ajouter_document(
 
 def supprimer_document(doc_id: int) -> Tuple[bool, str]:
     """Supprime un document de formation."""
+    from application.permission_manager import require
+    require("rh.documents.edit")
     try:
         # Récupérer les infos pour le log
         row = QueryExecutor.fetch_one(

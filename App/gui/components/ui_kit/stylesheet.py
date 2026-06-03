@@ -6,7 +6,6 @@ _THEME_BASE = """
 
 QMainWindow {{ background: {BG}; }}
 
-/* FIX: Ajout de QDialog pour que les fenêtres secondaires s'inversent en Dark Mode. */
 QWidget, QDialog {{
     color: {TXT};
     background: {BG};
@@ -105,33 +104,14 @@ _THEME_LIGHT = {
     "INFO_BG": "#dbeafe",
 }
 
-_THEME_DARK = {
-    "BG": "#121212",
-    "BG_CARD": "#1e1e1e",
-    "BG_INPUT": "#0a0a0a",
-    "TXT": "#e0e0e0",
-    "TXT_DIM": "#9c9c9c",
-    "BDR": "#2c2c2c",
-    "BDR_STRONG": "#3f3f3f",
-    "HOVER": "#3f3f3f",
-    "PRI": "#4f46e5",
-    "PRI_H": "#4338ca",
-    "ACC_BG": "#374151",
-    "ACC_TXT": "#e0e0e0",
-    "SUCCESS": "#10b981",
-    "SUCCESS_BG": "#064e3b",
-    "WARNING": "#f59e0b",
-    "WARNING_BG": "#78350f",
-    "ERROR": "#ef4444",
-    "ERROR_BG": "#7f1d1d",
-    "INFO": "#3b82f6",
-    "INFO_BG": "#1e3a8a",
-}
+def get_colors() -> dict:
+    """Retourne le dictionnaire de couleurs du thème."""
+    return dict(_THEME_LIGHT)
 
 
-def get_stylesheet(theme="light"):
-    """Retourne la chaîne QSS pour le thème demandé (light ou dark)."""
-    colors = _THEME_DARK if theme == "dark" else _THEME_LIGHT
+def get_stylesheet():
+    """Retourne la chaîne QSS du thème."""
+    colors = _THEME_LIGHT
 
     stylesheet = _THEME_BASE.replace(
         "image: url(data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxNiIgaGVpZ2h0PSIxNiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IiN7VFhUfSIgc3Ryb2tlLXdpZHRoPSIxLjUiIHN0cm9rZS1saW5lY2FwPSJyb3VuZCIgc3Ryb2tlLWxpbmVqb2luPSJyb3VuZCI+PHBvbHlsaW5lIHBvaW50cz0iNiA5IDEyIDE1IDE4IDkiPjwvcG9seWxpbmU+PC9zdmc+);",

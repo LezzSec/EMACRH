@@ -20,8 +20,6 @@ Usage:
 
 import logging
 from typing import List, Dict, Any, Optional, Tuple
-
-from infrastructure.db.query_executor import QueryExecutor
 from domain.models import Personnel, PersonnelResume
 from domain.repositories.base import BaseRepository
 from infrastructure.config.performance_monitor import monitor_query
@@ -372,7 +370,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_by_nom_prenom(cls, nom: str, prenom: str) -> Optional[int]:
         """Retourne l'id d'un personnel si nom+prenom existe, sinon None."""
-        from infrastructure.db.query_executor import QueryExecutor
         row = QueryExecutor.fetch_one(
             "SELECT id FROM personnel WHERE `nom` = %s AND `prenom` = %s ORDER BY id DESC LIMIT 1",
             (nom, prenom),
@@ -382,7 +379,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_first_actif_id(cls) -> Optional[int]:
         """Retourne l'id du premier personnel actif (utilisé pour ouvrir des dialogs)."""
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_scalar(
             "SELECT id FROM personnel WHERE statut = 'ACTIF' LIMIT 1"
         )
@@ -390,7 +386,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def save_date_entree(cls, personnel_id: int, date_entree) -> bool:
         """Upsert la date d'entrée dans personnel_infos."""
-        from infrastructure.db.query_executor import QueryExecutor
         existing = QueryExecutor.exists("personnel_infos", {"personnel_id": personnel_id})
         if existing:
             QueryExecutor.execute_write(
@@ -407,7 +402,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_date_entree(cls, personnel_id: int):
         """Retourne la date d'entrée d'un personnel depuis personnel_infos."""
-        from infrastructure.db.query_executor import QueryExecutor
         row = QueryExecutor.fetch_one(
             "SELECT date_entree FROM personnel_infos WHERE personnel_id = %s",
             (personnel_id,),
@@ -418,7 +412,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_info_basique(cls, personnel_id: int) -> Optional[Dict[str, Any]]:
         """Retourne nom, prenom, matricule, statut pour les exports."""
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_one(
             "SELECT nom, prenom, COALESCE(matricule,'-') AS matricule, UPPER(statut) AS statut "
             "FROM personnel WHERE id = %s",
@@ -429,7 +422,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_personnel_infos(cls, personnel_id: int) -> Optional[Dict[str, Any]]:
         """Retourne l'ensemble des données de personnel_infos."""
-        from infrastructure.db.query_executor import QueryExecutor
         rows = QueryExecutor.fetch_all(
             "SELECT * FROM personnel_infos WHERE personnel_id = %s",
             (personnel_id,),
@@ -443,7 +435,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
         Retourne tous les personnels avec stats polyvalence et contrat actif.
         Utilisé par la liste principale de GestionPersonnelDialog.
         """
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT
@@ -466,7 +457,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
     @classmethod
     def get_personnel_sans_date_entree(cls) -> List[Dict[str, Any]]:
         """Retourne les personnels sans date d'entrée (pour régularisation)."""
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             """
             SELECT p.id, p.nom, p.prenom, p.matricule, p.statut, pi.date_entree
@@ -485,7 +475,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
         Retourne tout le personnel sous forme de dicts (id, nom, prenom, matricule, statut, nom_service).
         Utilisé pour les listes de sélection dans les interfaces.
         """
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_all(
             "SELECT p.id, p.nom, p.prenom, p.matricule, UPPER(p.statut) AS statut, "
             "s.nom_service FROM personnel p LEFT JOIN services s ON p.service_id = s.id "
@@ -501,7 +490,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
         """
         if not ids:
             return []
-        from infrastructure.db.query_executor import QueryExecutor
         placeholders = ','.join(['%s'] * len(ids))
         return QueryExecutor.fetch_all(
             f"SELECT id, nom, prenom FROM personnel WHERE id IN ({placeholders})",
@@ -529,7 +517,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
         Returns:
             Liste de dicts : id, nom, prenom, matricule, statut, numposte, nom_complet
         """
-        from infrastructure.db.query_executor import QueryExecutor
         sql = (
             "SELECT id, nom, prenom, matricule, statut, numposte, "
             "CONCAT(prenom, ' ', nom) AS nom_complet "
@@ -570,7 +557,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
         Returns:
             True si succès
         """
-        from infrastructure.db.query_executor import QueryExecutor
         if not data:
             return True
 
@@ -600,7 +586,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
         Retourne l'adresse actuellement enregistrée et les coordonnées GPS.
         Utilisé pour détecter si l'adresse a changé avant de recalculer la distance.
         """
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_one(
             """SELECT adresse1, cp_adresse, ville_adresse,
                       latitude, longitude, distance_domicile_km
@@ -615,7 +600,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
         Retourne CP + ville + données de distance existantes.
         Utilisé pour détecter si la commune a changé avant recalcul.
         """
-        from infrastructure.db.query_executor import QueryExecutor
         return QueryExecutor.fetch_one(
             """SELECT cp_adresse, ville_adresse,
                       code_insee_commune, distance_commune_km, distance_mairie_km
@@ -639,7 +623,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
         duree_trajet_mairie_min: Optional[int],
     ) -> None:
         """Met à jour toutes les données de distance (mairie + commune)."""
-        from infrastructure.db.query_executor import QueryExecutor
         QueryExecutor.execute_write(
             """UPDATE personnel_infos
                SET code_insee_commune = %s,
@@ -670,7 +653,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
         Met à jour les coordonnées GPS et la distance domicile-entreprise
         d'un membre du personnel.
         """
-        from infrastructure.db.query_executor import QueryExecutor
         QueryExecutor.execute_write(
             """UPDATE personnel_infos
                SET latitude = %s,
@@ -693,7 +675,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
         Returns:
             True si le matricule est disponible
         """
-        from infrastructure.db.query_executor import QueryExecutor
         existing = QueryExecutor.fetch_one(
             "SELECT id FROM personnel WHERE matricule = %s AND id != %s",
             (matricule, exclude_id),
@@ -711,7 +692,6 @@ class PersonnelRepository(BaseRepository[Personnel]):
         Returns:
             {"nb_postes": int, "niveau_moyen": float|None, "evaluations_en_retard": int}
         """
-        from infrastructure.db.query_executor import QueryExecutor
         row = QueryExecutor.fetch_one(
             """
             SELECT

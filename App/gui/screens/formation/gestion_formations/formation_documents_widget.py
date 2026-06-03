@@ -4,8 +4,7 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox,
     QFileDialog, QInputDialog, QAbstractItemView,
 )
-from PyQt5.QtCore import Qt, QUrl
-from PyQt5.QtGui import QDesktopServices
+from PyQt5.QtCore import Qt
 
 from infrastructure.logging.logging_config import get_logger
 
@@ -197,9 +196,12 @@ class FormationDocumentsWidget(QWidget):
         if not doc_id:
             return
         try:
+            from infrastructure.storage.file_opener import open_file
             path = self._get_doc_service().get_document_path(doc_id)
             if path:
-                QDesktopServices.openUrl(QUrl.fromLocalFile(str(path)))
+                ok, msg = open_file(str(path))
+                if not ok:
+                    QMessageBox.warning(self, "Erreur", msg)
             else:
                 QMessageBox.warning(self, "Erreur", "Fichier introuvable.")
         except Exception as e:

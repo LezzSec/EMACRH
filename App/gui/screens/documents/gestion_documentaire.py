@@ -14,8 +14,8 @@ from PyQt5.QtWidgets import (
     QMessageBox, QWidget, QTextEdit, QDateEdit, QGroupBox,
     QAbstractItemView, QMenu, QCheckBox
 )
-from PyQt5.QtCore import Qt, QDate, pyqtSignal, QUrl
-from PyQt5.QtGui import QFont, QColor, QDesktopServices
+from PyQt5.QtCore import Qt, QDate, pyqtSignal
+from PyQt5.QtGui import QFont, QColor
 
 from domain.services.documents.document_service import DocumentService
 from domain.repositories.personnel_repo import PersonnelRepository
@@ -615,11 +615,12 @@ class GestionDocumentaireDialog(QDialog):
 
         if filepath and filepath.exists():
             try:
-                # Ouvrir avec l'application par défaut
-                QDesktopServices.openUrl(QUrl.fromLocalFile(str(filepath)))
-
-                # Log
-                log_hist("CONSULTATION_DOCUMENT", f"Consultation du document ID {doc_id}")
+                from infrastructure.storage.file_opener import open_file
+                ok, msg = open_file(str(filepath))
+                if ok:
+                    log_hist("CONSULTATION_DOCUMENT", f"Consultation du document ID {doc_id}")
+                else:
+                    show_error_message(self, "Erreur", msg)
             except Exception as e:
                 logger.exception(f"Erreur ouverture document: {e}")
                 show_error_message(self, "Erreur", "Impossible d'ouvrir le document", e)

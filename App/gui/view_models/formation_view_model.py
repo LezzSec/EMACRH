@@ -15,9 +15,6 @@ Architecture :
 
 from __future__ import annotations
 
-import os
-import sys
-import subprocess
 from typing import Optional
 
 from PyQt5.QtCore import QObject, pyqtSignal
@@ -210,16 +207,11 @@ class FormationViewModel(QObject):
 
     def open_file(self, path: str) -> None:
         """Ouvre un fichier avec le programme par défaut."""
-        try:
-            if sys.platform == 'win32':
-                os.startfile(path)
-            elif sys.platform == 'darwin':
-                subprocess.run(['open', path])
-            else:
-                subprocess.run(['xdg-open', path])
-        except Exception as e:
-            logger.exception(f"Erreur ouverture fichier: {e}")
-            self.error_occurred.emit(str(e))
+        from infrastructure.storage.file_opener import open_file as _open_file
+        ok, msg = _open_file(path)
+        if not ok:
+            logger.warning(f"Ouverture fichier refusee: {msg}")
+            self.error_occurred.emit(msg)
 
     def get_document_path(self, doc_id: int) -> None:
         """Résout le chemin d'un document et émet document_path_ready."""
