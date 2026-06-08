@@ -23,6 +23,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from domain.models import Personnel, PersonnelResume
 from domain.repositories.base import BaseRepository
 from infrastructure.config.performance_monitor import monitor_query
+from infrastructure.db.query_executor import QueryExecutor
 
 logger = logging.getLogger(__name__)
 
