@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-Domaine RH : Déclarations (arrêts, maladie, AT, congés, etc.).
+Domaine RH : Déclarations (arrêts, maladie, AT, congés, etc.) + Absences.
 """
-from PyQt5.QtWidgets import QDialog, QLabel, QHBoxLayout, QVBoxLayout, QFrame, QMessageBox
+from PyQt5.QtWidgets import (
+    QDialog, QLabel, QHBoxLayout, QVBoxLayout, QFrame, QMessageBox,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView,
+)
 from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QColor
 
 from gui.components.ui_theme import EmacCard, EmacButton
 from gui.components.emac_ui_kit import EmacAlert, EmacChip
@@ -12,9 +16,31 @@ from application.permission_manager import can
 from .domaine_base import DomaineWidget
 
 
+_STATUT_COLOR = {
+    'EN_ATTENTE': ('#b45309', '#fef3c7'),
+    'VALIDEE':    ('#065f46', '#d1fae5'),
+    'REFUSEE':    ('#991b1b', '#fee2e2'),
+    'ANNULEE':    ('#374151', '#f3f4f6'),
+}
+_STATUT_LABEL = {
+    'EN_ATTENTE': 'En attente',
+    'VALIDEE':    'Validée',
+    'REFUSEE':    'Refusée',
+    'ANNULEE':    'Annulée',
+}
+
+
 class DomaineDeclaration(DomaineWidget):
 
     def _build(self, donnees: dict, documents: list):
+        self._build_declarations(donnees, documents)
+        self._build_absences(donnees)
+
+    # -------------------------------------------------------------------------
+    # Section : Déclarations
+    # -------------------------------------------------------------------------
+
+    def _build_declarations(self, donnees: dict, documents: list):
         btn_add = EmacButton("+ Nouvelle déclaration", variant="primary")
         btn_add.setVisible(can("rh.declarations.edit"))
         btn_add.clicked.connect(self._add_declaration)
@@ -116,6 +142,127 @@ class DomaineDeclaration(DomaineWidget):
             card.body.addWidget(QLabel("Aucune déclaration"))
         self._layout.addWidget(card)
 
+    # -------------------------------------------------------------------------
+    # Section : Absences
+    # -------------------------------------------------------------------------
+
+    def _build_absences(self, donnees: dict):
+        absences = donnees.get('absences', [])
+        absences_sirh = donnees.get('absences_sirh', [])
+
+        btn_add = EmacButton("+ Nouvelle absence", variant="primary")
+        btn_add.setVisible(can("planning.absences.edit"))
+        btn_add.clicked.connect(self._add_absence)
+        self._layout.addWidget(btn_add, alignment=Qt.AlignLeft)
+
+        # --- Historique SIRH ---
+        sirh_card = EmacCard(f"Historique des absences ({len(absences_sirh)} périodes)")
+        if absences_sirh:
+            sirh_table = self._make_absence_table(
+                absences_sirh,
+                columns=["Type", "Début", "Fin", "Jours"],
+                row_fn=self._sirh_row,
+            )
+            sirh_card.body.addWidget(sirh_table)
+        else:
+            sirh_card.body.addWidget(QLabel("Aucune absence enregistrée"))
+        self._layout.addWidget(sirh_card)
+
+        # --- Demandes locales ---
+        local_card = EmacCard(f"Demandes d'absence ({len(absences)})")
+        if absences:
+            nb_validees = sum(1 for a in absences if a.get('statut') == 'VALIDEE')
+            nb_attente = sum(1 for a in absences if a.get('statut') == 'EN_ATTENTE')
+            total_jours = sum(float(a.get('nb_jours') or 0) for a in absences if a.get('statut') == 'VALIDEE')
+            stats_widget = QWidget()
+            stats_row = QHBoxLayout(stats_widget)
+            stats_row.setContentsMargins(0, 0, 0, 0)
+            for label, value in [
+                ("Total", str(len(absences))),
+                ("Validées", str(nb_validees)),
+                ("En attente", str(nb_attente)),
+                ("Jours validés", f"{total_jours:g}"),
+            ]:
+                frame = QFrame()
+                frame.setStyleSheet("QFrame { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }")
+                frame.setFixedWidth(90)
+                fl = QVBoxLayout(frame)
+                fl.setContentsMargins(4, 6, 4, 6)
+                fl.setSpacing(2)
+                v_lbl = QLabel(value)
+                v_lbl.setAlignment(Qt.AlignCenter)
+                v_lbl.setStyleSheet("font-size: 18px; font-weight: 700; color: #1e293b; background: transparent;")
+                k_lbl = QLabel(label)
+                k_lbl.setAlignment(Qt.AlignCenter)
+                k_lbl.setStyleSheet("font-size: 11px; color: #64748b; background: transparent;")
+                fl.addWidget(v_lbl)
+                fl.addWidget(k_lbl)
+                stats_row.addWidget(frame)
+            stats_row.addStretch()
+            local_card.body.addWidget(stats_widget)
+            local_table = self._make_absence_table(
+                absences,
+                columns=["Type", "Début", "Fin", "Jours", "Statut", "Motif"],
+                row_fn=self._local_row,
+            )
+            local_card.body.addWidget(local_table)
+        else:
+            local_card.body.addWidget(QLabel("Aucune demande enregistrée"))
+        self._layout.addWidget(local_card)
+
+    def _make_absence_table(self, rows: list, columns: list, row_fn) -> QTableWidget:
+        table = QTableWidget()
+        table.setColumnCount(len(columns))
+        table.setHorizontalHeaderLabels(columns)
+        for i in range(len(columns) - 1):
+            table.horizontalHeader().setSectionResizeMode(i, QHeaderView.ResizeToContents)
+        table.horizontalHeader().setSectionResizeMode(len(columns) - 1, QHeaderView.Stretch)
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        table.setAlternatingRowColors(True)
+        table.verticalHeader().setVisible(False)
+        table.setStyleSheet("QTableWidget { border: 1px solid #e2e8f0; border-radius: 6px; }")
+        table.setRowCount(len(rows))
+        for row_idx, data in enumerate(rows):
+            row_fn(table, row_idx, data)
+        row_height = 28
+        max_visible = 8
+        table.setFixedHeight(row_height * min(len(rows), max_visible) + table.horizontalHeader().height() + 4)
+        return table
+
+    def _sirh_row(self, table: QTableWidget, row: int, ab: dict):
+        for col, val in enumerate([
+            ab.get('type_libelle') or ab.get('motif', '-'),
+            self._format_date(ab.get('date_debut')),
+            self._format_date(ab.get('date_fin')),
+            str(ab.get('nb_jours', '-')),
+        ]):
+            item = QTableWidgetItem(val)
+            item.setForeground(QColor('#374151'))
+            table.setItem(row, col, item)
+
+    def _local_row(self, table: QTableWidget, row: int, ab: dict):
+        statut = ab.get('statut', '')
+        fg, bg = _STATUT_COLOR.get(statut, ('#374151', '#f3f4f6'))
+        for col, val in enumerate([
+            ab.get('type_libelle', '-'),
+            self._format_date(ab.get('date_debut')),
+            self._format_date(ab.get('date_fin')),
+            (f"{float(ab['nb_jours']):g}" if ab.get('nb_jours') is not None else '-'),
+            _STATUT_LABEL.get(statut, statut),
+            ab.get('motif') or '-',
+        ]):
+            item = QTableWidgetItem(val)
+            item.setForeground(QColor(fg if col == 4 else '#374151'))
+            if col == 4:
+                item.setBackground(QColor(bg))
+                item.setTextAlignment(Qt.AlignCenter)
+            table.setItem(row, col, item)
+
+    # -------------------------------------------------------------------------
+    # Actions
+    # -------------------------------------------------------------------------
+
     def _add_declaration(self):
         if not self._operateur:
             return
@@ -139,6 +286,14 @@ class DomaineDeclaration(DomaineWidget):
         )
         if reply == QMessageBox.Yes:
             self._vm.supprimer_declaration(declaration['id'])
+
+    def _add_absence(self):
+        if not self._operateur:
+            return
+        from gui.screens.planning.planning_absences import NouvelleDemande
+        dialog = NouvelleDemande(self._operateur['id'], parent=self)
+        if dialog.exec_() == QDialog.Accepted:
+            self.refresh_requested.emit()
 
     def _jours_declaration(self, declaration: dict):
         debut = declaration.get('date_debut')

@@ -298,6 +298,7 @@ def _get_donnees_declaration(operateur_id: int) -> Dict:
         declarations = DeclarationRepository.get_by_operateur(operateur_id)
 
         from datetime import date as _date
+        from domain.services.planning.absence_service_crud import AbsenceServiceCRUD
         today = _date.today()
         en_cours_list = [
             d for d in declarations
@@ -308,10 +309,21 @@ def _get_donnees_declaration(operateur_id: int) -> Dict:
             'total': len(declarations),
             'en_cours': len(en_cours_list),
         }
+
+        absences = AbsenceServiceCRUD.get_demandes_personnel_details(operateur_id)
+
+        try:
+            from domain.services.external.absences_sirh_import_service import get_sirh_absences_pour_personnel
+            absences_sirh = get_sirh_absences_pour_personnel(operateur_id)
+        except Exception:
+            absences_sirh = []
+
         return {
             'declarations': declarations,
             'en_cours': en_cours_list[0] if en_cours_list else None,
             'statistiques': statistiques,
+            'absences': absences,
+            'absences_sirh': absences_sirh,
         }
 
     except Exception as e:

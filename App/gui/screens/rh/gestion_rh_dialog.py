@@ -383,7 +383,7 @@ class GestionRHDialog(QDialog):
 
     def _domaine_a_contenu(self, donnees: dict, domaine) -> bool:
         if domaine == DomaineRH.DECLARATION:
-            return bool(donnees.get('declarations'))
+            return bool(donnees.get('declarations') or donnees.get('absences') or donnees.get('absences_sirh'))
         if domaine == DomaineRH.COMPETENCES:
             return bool(donnees.get('competences'))
         if domaine == DomaineRH.FORMATION:

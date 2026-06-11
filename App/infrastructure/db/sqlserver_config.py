@@ -36,12 +36,19 @@ def _get_sqlserver_config() -> dict:
         "password": os.getenv("EMAC_EXT_SS_PASSWORD", ""),
         "driver":   os.getenv("EMAC_EXT_SS_DRIVER", "ODBC Driver 18 for SQL Server"),
         "timeout":  int(os.getenv("EMAC_EXT_SS_TIMEOUT", "10")),
-        "encrypt":  os.getenv("EMAC_EXT_SS_ENCRYPT", "yes"),
+        "encrypt":      os.getenv("EMAC_EXT_SS_ENCRYPT", "yes"),
+        "trust_cert":   os.getenv("EMAC_EXT_SS_TRUST_CERT", "yes"),
     }
 
 
 def _build_connection_string(cfg: dict) -> str:
-    base = f"DRIVER={{{cfg['driver']}}};SERVER={cfg['server']};DATABASE={cfg['database']};Encrypt={cfg['encrypt']};"
+    base = (
+        f"DRIVER={{{cfg['driver']}}};"
+        f"SERVER={cfg['server']};"
+        f"DATABASE={cfg['database']};"
+        f"Encrypt={cfg['encrypt']};"
+        f"TrustServerCertificate={cfg['trust_cert']};"
+    )
     if cfg["user"]:
         return base + f"UID={cfg['user']};PWD={cfg['password']};"
     return base + "Trusted_Connection=yes;"

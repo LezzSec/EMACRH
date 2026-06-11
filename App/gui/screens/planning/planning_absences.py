@@ -12,7 +12,7 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtCore import Qt, QDate, pyqtSignal
 from PyQt5.QtGui import QFont, QColor, QTextCharFormat, QBrush
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date as date_type
 
 from domain.services.planning.absence_service_crud import AbsenceServiceCRUD, calculer_jours_ouvres
 from domain.services.planning.planning_service import get_evaluations_mois, get_documents_expirant
@@ -33,8 +33,9 @@ class PlanningAbsencesDialog(QDialog):
     def __init__(self, personnel_id=None, parent=None):
         super().__init__(parent)
         self.personnel_id = personnel_id
-        self.absences_by_date = {}  # Cache des absences par date
-        self.evaluations_by_date = {}  # Cache des évaluations par date
+        self.absences_by_date = {}
+        self.evaluations_by_date = {}
+        self.sirh_by_date = {}
 
         self.setWindowTitle("Planning des Absences & Évaluations")
         self.setGeometry(100, 100, 1200, 800)
@@ -43,6 +44,7 @@ class PlanningAbsencesDialog(QDialog):
         self.init_ui()
         self.load_absences_month()
         self.load_evaluations_month()
+        self.load_sirh_month()
         self.load_documents_expirant()
 
     def init_ui(self):
@@ -146,6 +148,7 @@ class PlanningAbsencesDialog(QDialog):
             }
         """)
         self.calendar.clicked.connect(self.date_selected)
+        self.calendar.activated.connect(self.show_day_detail)
         self.calendar.currentPageChanged.connect(self.month_changed)
         left_layout.addWidget(self.calendar)
 
@@ -172,6 +175,14 @@ class PlanningAbsencesDialog(QDialog):
         lbl_eval = QLabel("Evaluation")
         lbl_eval.setStyleSheet("color: #f39c12; font-weight: bold; font-size: 11px; background: transparent;")
         legend_layout.addWidget(lbl_eval)
+
+        dot_sirh = QLabel()
+        dot_sirh.setFixedSize(12, 12)
+        dot_sirh.setStyleSheet("background: #2563eb; border-radius: 6px;")
+        legend_layout.addWidget(dot_sirh)
+        lbl_sirh = QLabel("Absence SIRH")
+        lbl_sirh.setStyleSheet("color: #2563eb; font-weight: bold; font-size: 11px; background: transparent;")
+        legend_layout.addWidget(lbl_sirh)
 
         legend_layout.addStretch()
         left_layout.addLayout(legend_layout)
@@ -329,6 +340,21 @@ class PlanningAbsencesDialog(QDialog):
         btn_refresh.clicked.connect(self.refresh_data)
         bottom_layout.addWidget(btn_refresh)
 
+        btn_sync_sirh = QPushButton("Synchroniser SIRH")
+        btn_sync_sirh.setStyleSheet("""
+            QPushButton {
+                background: #059669;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                padding: 6px 16px;
+                font-size: 12px;
+            }
+            QPushButton:hover { background: #047857; }
+        """)
+        btn_sync_sirh.clicked.connect(self._sync_sirh)
+        bottom_layout.addWidget(btn_sync_sirh)
+
         bottom_layout.addStretch()
 
         btn_close = QPushButton("Fermer")
@@ -385,9 +411,10 @@ class PlanningAbsencesDialog(QDialog):
 
     def month_changed(self, year, month):
         """Chargement quand on change de mois (flèches ou molette)"""
-        self.update_month_label()      # s'appuie sur yearShown/monthShown
+        self.update_month_label()
         self.load_absences_month(year, month)
         self.load_evaluations_month(year, month)
+        self.load_sirh_month(year, month)
 
 
     def load_absences_month(self, year=None, month=None):
@@ -485,14 +512,23 @@ class PlanningAbsencesDialog(QDialog):
         format_both.setBackground(QBrush(QColor(155, 89, 182, 100)))
         format_both.setForeground(QBrush(QColor(255, 255, 255)))
 
-        all_dates = set(self.absences_by_date.keys()) | set(self.evaluations_by_date.keys())
+        format_sirh = QTextCharFormat()
+        format_sirh.setBackground(QBrush(QColor(37, 99, 235, 80)))
+        format_sirh.setForeground(QBrush(QColor(255, 255, 255)))
+
+        all_dates = (
+            set(self.absences_by_date.keys())
+            | set(self.evaluations_by_date.keys())
+            | set(self.sirh_by_date.keys())
+        )
 
         for date_key in all_dates:
             date_obj = datetime.strptime(date_key, '%Y-%m-%d').date()
             qdate = QDate(date_obj.year, date_obj.month, date_obj.day)
 
-            has_absence = date_key in self.absences_by_date and self.absences_by_date[date_key]
-            has_evaluation = date_key in self.evaluations_by_date and self.evaluations_by_date[date_key]
+            has_absence = bool(self.absences_by_date.get(date_key))
+            has_evaluation = bool(self.evaluations_by_date.get(date_key))
+            has_sirh = bool(self.sirh_by_date.get(date_key))
 
             if has_absence and has_evaluation:
                 self.calendar.setDateTextFormat(qdate, format_both)
@@ -500,39 +536,94 @@ class PlanningAbsencesDialog(QDialog):
                 self.calendar.setDateTextFormat(qdate, format_absence)
             elif has_evaluation:
                 self.calendar.setDateTextFormat(qdate, format_evaluation)
+            elif has_sirh:
+                self.calendar.setDateTextFormat(qdate, format_sirh)
 
 
     def date_selected(self, qdate):
         """Affiche les absences et évaluations pour la date sélectionnée"""
-        # Mettre à jour le label
         date_str = qdate.toString("dddd dd MMMM yyyy")
         self.selected_date_label.setText(date_str.capitalize())
 
-        # Récupérer les absences et évaluations de cette date
         date_key = qdate.toString("yyyy-MM-dd")
         absences = self.absences_by_date.get(date_key, [])
+        sirh = self.sirh_by_date.get(date_key, [])
         evaluations = self.evaluations_by_date.get(date_key, [])
 
-        # Mettre à jour les en-têtes de section
-        self.abs_header_label.setText(f"  ABSENCES — {len(absences)}")
+        self.abs_header_label.setText(f"  ABSENCES — {len(absences) + len(sirh)}")
         self.eval_header_label.setText(f"  EVALUATIONS — {len(evaluations)}")
 
-        # Remplir la table des absences
-        self.absents_table.setRowCount(len(absences))
+        # Table absences : lignes EMAC (blanc) puis lignes SIRH (bleu clair)
+        self.absents_table.setRowCount(len(absences) + len(sirh))
 
         for row, absence in enumerate(absences):
-            self.absents_table.setItem(row, 0, QTableWidgetItem(absence['nom']))
-            self.absents_table.setItem(row, 1, QTableWidgetItem(absence['type']))
-            self.absents_table.setItem(row, 2, QTableWidgetItem(format_date(absence['debut'])))
-            self.absents_table.setItem(row, 3, QTableWidgetItem(format_date(absence['fin'])))
+            self.absents_table.setItem(row, 0, QTableWidgetItem(absence["nom"]))
+            self.absents_table.setItem(row, 1, QTableWidgetItem(absence["type"]))
+            self.absents_table.setItem(row, 2, QTableWidgetItem(format_date(absence["debut"])))
+            self.absents_table.setItem(row, 3, QTableWidgetItem(format_date(absence["fin"])))
 
-        # Remplir la table des évaluations
+        sirh_color = QColor("#dbeafe")
+        for i, s in enumerate(sirh):
+            row = len(absences) + i
+            items = [
+                QTableWidgetItem(s["nom"]),
+                QTableWidgetItem(f"SIRH : {s['type']}"),
+                QTableWidgetItem(format_date(s["debut"])),
+                QTableWidgetItem(format_date(s["fin"])),
+            ]
+            for col, item in enumerate(items):
+                item.setBackground(sirh_color)
+                self.absents_table.setItem(row, col, item)
+
+        # Table évaluations
         self.evaluations_table.setRowCount(len(evaluations))
 
         for row, evaluation in enumerate(evaluations):
-            self.evaluations_table.setItem(row, 0, QTableWidgetItem(evaluation['nom']))
-            self.evaluations_table.setItem(row, 1, QTableWidgetItem(evaluation['poste']))
+            self.evaluations_table.setItem(row, 0, QTableWidgetItem(evaluation["nom"]))
+            self.evaluations_table.setItem(row, 1, QTableWidgetItem(evaluation["poste"]))
             self.evaluations_table.setItem(row, 2, QTableWidgetItem(f"Niveau {evaluation['niveau']}"))
+
+    def load_sirh_month(self, year=None, month=None):
+        """Charge les absences SIRH du mois depuis absences_sirh (MySQL)."""
+        if year is None or month is None:
+            year = self.calendar.yearShown()
+            month = self.calendar.monthShown()
+
+        first_day = QDate(year, month, 1)
+        last_day = QDate(year, month, first_day.daysInMonth())
+
+        try:
+            from domain.services.external.absences_sirh_import_service import (
+                get_sirh_absences_pour_mois,
+            )
+            periods = get_sirh_absences_pour_mois(
+                first_day.toString("yyyy-MM-dd"),
+                last_day.toString("yyyy-MM-dd"),
+            )
+        except Exception:
+            logger.warning("Absences SIRH non disponibles (table manquante ou sync non effectuée)")
+            self.sirh_by_date = {}
+            return
+
+        self.sirh_by_date = {}
+        month_start = first_day.toPyDate()
+        month_end = last_day.toPyDate()
+        for r in periods:
+            debut = r["date_debut"]
+            fin = r["date_fin"]
+            current = debut
+            while current <= min(fin, month_end):
+                if current >= month_start:
+                    date_key = current.strftime("%Y-%m-%d")
+                    self.sirh_by_date.setdefault(date_key, []).append({
+                        "nom": r["nom_complet"],
+                        "type": r["type_libelle"],
+                        "debut": debut,
+                        "fin": fin,
+                    })
+                current += timedelta(days=1)
+
+        self.update_calendar_colors()
 
     def load_documents_expirant(self):
         """Charge les documents expirant dans les 30 prochains jours."""
@@ -576,10 +667,43 @@ class PlanningAbsencesDialog(QDialog):
         """Actualise les données"""
         self.load_absences_month()
         self.load_evaluations_month()
+        self.load_sirh_month()
         self.load_documents_expirant()
         current_date = self.calendar.selectedDate()
         self.date_selected(current_date)
         QMessageBox.information(self, "Actualisation", "Données actualisées avec succès")
+
+    def _sync_sirh(self):
+        """Lance une synchronisation incrémentale depuis HOPHABS."""
+        from domain.services.external.absences_sirh_import_service import sync_absences_sirh
+        try:
+            inserted, updated, skipped = sync_absences_sirh(incremental=True)
+            QMessageBox.information(
+                self, "Synchronisation terminée",
+                f"{inserted} insérés, {updated} mis à jour, {skipped} ignorés."
+            )
+            self.load_sirh_month()
+            self.date_selected(self.calendar.selectedDate())
+        except Exception as e:
+            logger.exception(f"Erreur sync SIRH: {e}")
+            QMessageBox.warning(
+                self, "Erreur",
+                "Synchronisation impossible.\n"
+                "Vérifiez la connexion au serveur SIRH (variables EMAC_EXT_SS_*)."
+            )
+
+    def show_day_detail(self, qdate):
+        """Ouvre le récap détaillé du jour (double-clic sur le calendrier)."""
+        date_key = qdate.toString("yyyy-MM-dd")
+        absences = self.absences_by_date.get(date_key, [])
+        sirh = self.sirh_by_date.get(date_key, [])
+        evaluations = self.evaluations_by_date.get(date_key, [])
+
+        if not absences and not sirh and not evaluations:
+            return
+
+        dialog = DayDetailDialog(qdate, absences, sirh, evaluations, parent=self)
+        dialog.exec_()
 
     def show_nouvelle_demande(self):
         """Ouvre le dialogue de nouvelle demande"""
@@ -602,6 +726,125 @@ class PlanningAbsencesDialog(QDialog):
         if dialog.exec_() == QDialog.Accepted:
             self.refresh_data()
             self.data_changed.emit()
+
+
+class DayDetailDialog(QDialog):
+    """Récap complet d'une journée : absences EMAC, absences SIRH, évaluations."""
+
+    def __init__(self, qdate, absences, sirh, evaluations, parent=None):
+        super().__init__(parent)
+        date_str = qdate.toString("dddd dd MMMM yyyy").capitalize()
+        self.setWindowTitle(f"Détail — {date_str}")
+        self.setMinimumSize(820, 560)
+        self.setModal(True)
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(12)
+
+        # Titre
+        title = QLabel(date_str)
+        title.setFont(QFont("Arial", 14, QFont.Bold))
+        title.setStyleSheet("color: #111827;")
+        layout.addWidget(title)
+
+        # ── Absences (EMAC + SIRH) ────────────────────────────────────
+        layout.addWidget(self._section_header(
+            f"Absences  ({len(absences) + len(sirh)})",
+            bg="#dc2626", text_color="white"
+        ))
+        tbl_abs = self._make_table(["Nom / Prénom", "Type", "Du", "Au"])
+        for a in absences:
+            self._add_row(tbl_abs, [
+                a.get("nom", ""),
+                a.get("type", ""),
+                format_date(a.get("debut")),
+                format_date(a.get("fin")),
+            ], bg="#fff5f5")
+        for s in sirh:
+            self._add_row(tbl_abs, [
+                s.get("nom", ""),
+                s.get("type", ""),
+                format_date(s.get("debut")),
+                format_date(s.get("fin")),
+            ], bg="#eff6ff")
+        tbl_abs.setMinimumHeight(max(tbl_abs.rowCount() * 28 + 30, 55))
+        layout.addWidget(tbl_abs, max(tbl_abs.rowCount(), 1))
+
+        # ── Évaluations ────────────────────────────────────────────────
+        layout.addWidget(self._section_header(
+            f"Évaluations prévues  ({len(evaluations)})",
+            bg="#d97706", text_color="white"
+        ))
+        tbl_eval = self._make_table(["Nom / Prénom", "Poste", "Niveau actuel"])
+        for e in evaluations:
+            self._add_row(tbl_eval, [
+                e.get("nom", ""),
+                e.get("poste", ""),
+                f"Niveau {e.get('niveau', '')}",
+            ], bg="#fffbeb")
+        tbl_eval.setMinimumHeight(max(tbl_eval.rowCount() * 28 + 30, 55))
+        layout.addWidget(tbl_eval, max(tbl_eval.rowCount(), 1))
+
+        # Bouton fermer
+        btn_close = QPushButton("Fermer")
+        btn_close.setFixedWidth(100)
+        btn_close.setStyleSheet(
+            "QPushButton { background: #f3f4f6; border: 1px solid #d1d5db; "
+            "border-radius: 6px; padding: 6px 16px; color: #374151; }"
+            "QPushButton:hover { background: #e5e7eb; }"
+        )
+        btn_close.clicked.connect(self.accept)
+        row = QHBoxLayout()
+        row.addStretch()
+        row.addWidget(btn_close)
+        layout.addLayout(row)
+
+    # ── helpers ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _section_header(text: str, bg: str, text_color: str) -> QLabel:
+        lbl = QLabel(f"  {text}")
+        lbl.setFont(QFont("Arial", 10, QFont.Bold))
+        lbl.setFixedHeight(30)
+        lbl.setStyleSheet(
+            f"background: {bg}; color: {text_color}; "
+            "border-radius: 6px 6px 0 0; padding-left: 8px;"
+        )
+        return lbl
+
+    @staticmethod
+    def _make_table(headers: list) -> QTableWidget:
+        t = QTableWidget()
+        t.setColumnCount(len(headers))
+        t.setHorizontalHeaderLabels(headers)
+        t.setEditTriggers(QTableWidget.NoEditTriggers)
+        t.setSelectionBehavior(QTableWidget.SelectRows)
+        t.verticalHeader().setVisible(False)
+        t.setStyleSheet(
+            "QTableWidget { border: 1px solid #e5e7eb; border-top: none; }"
+            "QHeaderView::section { background: #f9fafb; font-weight: bold; "
+            "font-size: 11px; color: #374151; border: none; "
+            "border-bottom: 1px solid #e5e7eb; padding: 4px; }"
+        )
+        hdr = t.horizontalHeader()
+        hdr.setSectionResizeMode(0, QHeaderView.Interactive)
+        t.setColumnWidth(0, 175)
+        if len(headers) > 1:
+            hdr.setSectionResizeMode(1, QHeaderView.Stretch)
+        for i in range(2, len(headers)):
+            hdr.setSectionResizeMode(i, QHeaderView.ResizeToContents)
+        return t
+
+    @staticmethod
+    def _add_row(table: QTableWidget, values: list, bg: str):
+        row = table.rowCount()
+        table.insertRow(row)
+        color = QColor(bg)
+        for col, val in enumerate(values):
+            item = QTableWidgetItem(str(val))
+            item.setBackground(color)
+            table.setItem(row, col, item)
 
 
 class NouvelleDemande(QDialog):
@@ -712,7 +955,7 @@ class NouvelleDemande(QDialog):
         try:
             types = AbsenceServiceCRUD.get_types_absence()
             for t in types:
-                self.type_combo.addItem(f"{t['libelle']}", t['code'])
+                self.type_combo.addItem(f"{t['libelle']}", t['id'])
         except Exception:
             pass
 
@@ -738,7 +981,7 @@ class NouvelleDemande(QDialog):
             return 'APRES_MIDI'
 
     def valider(self):
-        type_code = self.type_combo.currentData()
+        type_id = self.type_combo.currentData()
         date_debut = self.date_debut.date().toPyDate()
         date_fin = self.date_fin.date().toPyDate()
         demi_debut = self.get_demi_journee(self.demi_debut_group)
@@ -749,11 +992,11 @@ class NouvelleDemande(QDialog):
             nb_jours = calculer_jours_ouvres(date_debut, date_fin, demi_debut, demi_fin)
             success, msg, demande_id = AbsenceServiceCRUD.create(
                 personnel_id=self.personnel_id,
-                type_absence_code=type_code,
+                type_absence_id=type_id,
                 date_debut=date_debut,
                 date_fin=date_fin,
-                demi_debut=demi_debut,
-                demi_fin=demi_fin,
+                demi_journee_debut=demi_debut,
+                demi_journee_fin=demi_fin,
                 nb_jours=nb_jours,
                 motif=motif,
                 statut='EN_ATTENTE'

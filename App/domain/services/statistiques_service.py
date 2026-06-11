@@ -161,22 +161,22 @@ def get_stats_contrats() -> dict:
 # ---------------------------------------------------------------------------
 
 def get_stats_absences() -> dict:
-    """Par type (6 derniers mois) et répartition des jours par mois."""
+    """Par type et par mois (6 derniers mois) — EMAC + SIRH fusionnés."""
+    from collections import defaultdict
     try:
-        par_type = QueryExecutor.fetch_all(
+        emac_type = QueryExecutor.fetch_all(
             """SELECT ta.libelle AS type_absence, COUNT(*) AS nb,
                       ROUND(SUM(da.nb_jours), 1) AS total_jours
                FROM demande_absence da
                JOIN type_absence ta ON da.type_absence_id = ta.id
                WHERE da.statut = 'VALIDEE'
                AND da.date_debut >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
-               GROUP BY ta.id, ta.libelle ORDER BY total_jours DESC""",
+               GROUP BY ta.id, ta.libelle""",
             dictionary=True,
         ) or []
 
-        par_mois = QueryExecutor.fetch_all(
+        emac_mois = QueryExecutor.fetch_all(
             """SELECT DATE_FORMAT(date_debut, '%Y-%m') AS mois,
-                      COUNT(*) AS nb_absences,
                       ROUND(SUM(nb_jours), 1) AS total_jours
                FROM demande_absence
                WHERE statut = 'VALIDEE'
@@ -185,10 +185,51 @@ def get_stats_absences() -> dict:
             dictionary=True,
         ) or []
 
-        return {
-            "par_type": par_type,
-            "par_mois": par_mois,
-        }
+        sirh_type = []
+        sirh_mois = []
+        try:
+            sirh_type = QueryExecutor.fetch_all(
+                """SELECT COALESCE(ta.libelle, a.motif) AS type_absence,
+                          COUNT(*) AS nb,
+                          COUNT(*) AS total_jours
+                   FROM absences_sirh a
+                   LEFT JOIN type_absence ta
+                       ON a.motif COLLATE utf8mb4_general_ci = ta.code COLLATE utf8mb4_general_ci
+                   WHERE a.dat >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+                   GROUP BY a.motif, ta.libelle""",
+                dictionary=True,
+            ) or []
+
+            sirh_mois = QueryExecutor.fetch_all(
+                """SELECT DATE_FORMAT(dat, '%Y-%m') AS mois,
+                          COUNT(*) AS total_jours
+                   FROM absences_sirh
+                   WHERE dat >= DATE_SUB(CURDATE(), INTERVAL 6 MONTH)
+                   GROUP BY mois ORDER BY mois ASC""",
+                dictionary=True,
+            ) or []
+        except Exception:
+            pass
+
+        # Fusion par type (somme des jours)
+        merged_type: dict = defaultdict(float)
+        for r in emac_type + sirh_type:
+            merged_type[r['type_absence']] += float(r.get('total_jours') or 0)
+        par_type = sorted(
+            [{'type_absence': k, 'total_jours': v} for k, v in merged_type.items()],
+            key=lambda r: r['total_jours'], reverse=True,
+        )
+
+        # Fusion par mois (somme des jours)
+        merged_mois: dict = defaultdict(float)
+        for r in emac_mois + sirh_mois:
+            merged_mois[r['mois']] += float(r.get('total_jours') or 0)
+        par_mois = sorted(
+            [{'mois': k, 'total_jours': v} for k, v in merged_mois.items()],
+            key=lambda r: r['mois'],
+        )
+
+        return {"par_type": par_type, "par_mois": par_mois}
     except Exception as e:
         logger.exception(f"get_stats_absences: {e}")
         return {}

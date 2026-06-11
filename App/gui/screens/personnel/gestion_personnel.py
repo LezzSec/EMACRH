@@ -9,8 +9,8 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem, QHeaderView, QLineEdit, QGroupBox,
     QMessageBox, QAbstractItemView, QWidget, QComboBox,
 )
-from PyQt5.QtCore import Qt, QTimer, pyqtSignal
-from PyQt5.QtGui import QFont, QColor
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal, QSize
+from PyQt5.QtGui import QFont, QColor, QPixmap, QPainter, QPen, QIcon
 
 from domain.repositories.personnel_repo import PersonnelRepository
 from gui.workers.db_worker import DbWorker, DbThreadPool
@@ -106,18 +106,28 @@ class GestionPersonnelDialog(QDialog):
 
         vue_layout.addStretch()
 
-        self.refresh_btn = QPushButton("\u27f3")
+        _px = QPixmap(32, 32)
+        _px.fill(Qt.transparent)
+        _p = QPainter(_px)
+        _p.setRenderHint(QPainter.Antialiasing)
+        _p.setPen(QPen(QColor('#2563eb'), 3, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        _p.drawArc(4, 4, 24, 24, 90 * 16, -270 * 16)
+        _p.drawLine(4, 16, 1, 22)
+        _p.drawLine(4, 16, 8, 22)
+        _p.end()
+
+        self.refresh_btn = QPushButton()
+        self.refresh_btn.setIcon(QIcon(_px))
+        self.refresh_btn.setIconSize(QSize(22, 22))
         self.refresh_btn.setToolTip("Actualiser les données depuis le serveur")
-        self.refresh_btn.setFixedWidth(36)
+        self.refresh_btn.setFixedSize(40, 34)
         self.refresh_btn.setStyleSheet("""
             QPushButton {
                 background: transparent;
-                color: #6b7280;
                 border: 1px solid #d1d5db;
                 border-radius: 6px;
-                font-size: 16px;
             }
-            QPushButton:hover { background: #f3f4f6; color: #1e40af; }
+            QPushButton:hover { background: #f3f4f6; }
         """)
         self.refresh_btn.clicked.connect(self.load_data)
         vue_layout.addWidget(self.refresh_btn)

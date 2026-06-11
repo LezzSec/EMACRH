@@ -8,8 +8,8 @@ from PyQt5.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QGridLayout,
     QTabWidget, QWidget, QLabel, QFrame, QScrollArea, QSizePolicy,
 )
-from PyQt5.QtCore import Qt, QTimer
-from PyQt5.QtGui import QFont
+from PyQt5.QtCore import Qt, QTimer, QRectF
+from PyQt5.QtGui import QFont, QPainter, QColor, QPen
 
 from gui.workers.db_worker import DbWorker, DbThreadPool
 from gui.components.loading_components import LoadingLabel
@@ -114,12 +114,11 @@ class _SectionTitle(QLabel):
 
 
 class _BarRow(QWidget):
-    """Ligne de barre horizontale : label | barre | valeur."""
-
-    BAR_MAX_WIDTH = 260
+    """Ligne de barre horizontale : label | barre | % (coloré) | valeur brute."""
 
     def __init__(self, label: str, value: int, max_value: int,
-                 color: str = '#3b82f6', suffix: str = '', parent=None):
+                 color: str = '#3b82f6', suffix: str = '',
+                 pct: float = None, parent=None):
         super().__init__(parent)
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 2, 0, 2)
@@ -132,17 +131,16 @@ class _BarRow(QWidget):
         layout.addWidget(lbl)
 
         bar_bg = QFrame()
-        bar_bg.setFixedHeight(16)
-        bar_bg.setStyleSheet(f"background: {_COLORS['border']}; border-radius: 8px;")
+        bar_bg.setFixedHeight(14)
+        bar_bg.setStyleSheet(f"background: {_COLORS['border']}; border-radius: 7px;")
         bar_bg.setMinimumWidth(60)
         bar_bg.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         layout.addWidget(bar_bg, 1)
 
         bar_fill = QFrame(bar_bg)
-        bar_fill.setFixedHeight(16)
+        bar_fill.setFixedHeight(14)
         proportion = (value / max_value) if max_value > 0 else 0
-        bar_fill.setStyleSheet(f"background: {color}; border-radius: 8px;")
-        # La largeur est fixée via resizeEvent après l'affichage
+        bar_fill.setStyleSheet(f"background: {color}; border-radius: 7px;")
         bar_bg._fill = bar_fill
         bar_bg._proportion = proportion
 
@@ -152,11 +150,75 @@ class _BarRow(QWidget):
 
         bar_bg.resizeEvent = _resize
 
+        if pct is not None:
+            pct_lbl = QLabel(f"{pct:.1f}%")
+            pct_lbl.setFixedWidth(46)
+            pct_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            pct_lbl.setStyleSheet(f"color: {color}; font-size: 12px; font-weight: bold;")
+            layout.addWidget(pct_lbl)
+
         val_lbl = QLabel(f"{value}{' ' + suffix if suffix else ''}")
-        val_lbl.setFixedWidth(60)
+        val_lbl.setFixedWidth(54)
         val_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        val_lbl.setStyleSheet(f"color: {_COLORS['muted']}; font-size: 12px; font-weight: bold;")
+        val_lbl.setStyleSheet(f"color: {_COLORS['muted']}; font-size: 11px;")
         layout.addWidget(val_lbl)
+
+
+class _DonutChart(QWidget):
+    """Donut chart dessiné avec QPainter. data = list of (label, value, color)."""
+
+    def __init__(self, data: list, parent=None):
+        super().__init__(parent)
+        self._data = [(lbl, float(v), c) for lbl, v, c in data if float(v) > 0]
+        self._total = sum(v for _, v, _ in self._data)
+        self.setFixedSize(240, 240)
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        if self._total == 0:
+            return
+
+        w, h = self.width(), self.height()
+        margin = 8
+        size = min(w, h) - 2 * margin
+        x = (w - size) / 2
+        y = (h - size) / 2
+        rect = QRectF(x, y, size, size)
+
+        angle = 90 * 16  # 12 o'clock
+        for _, val, color in self._data:
+            span = int(round(val / self._total * 360 * 16))
+            painter.setBrush(QColor(color))
+            painter.setPen(QPen(QColor('white'), 2))
+            painter.drawPie(rect, angle, -span)
+            angle -= span
+
+        hole_size = size * 0.55
+        hx = x + (size - hole_size) / 2
+        hy = y + (size - hole_size) / 2
+        painter.setBrush(QColor(_COLORS['bg']))
+        painter.setPen(Qt.NoPen)
+        painter.drawEllipse(QRectF(hx, hy, hole_size, hole_size))
+
+        painter.setPen(QColor(_COLORS['text']))
+        font_big = QFont()
+        font_big.setPointSize(16)
+        font_big.setBold(True)
+        painter.setFont(font_big)
+        painter.drawText(
+            QRectF(hx, hy + hole_size * 0.12, hole_size, hole_size * 0.48),
+            Qt.AlignCenter, f"{int(self._total)}"
+        )
+        font_small = QFont()
+        font_small.setPointSize(9)
+        painter.setFont(font_small)
+        painter.setPen(QColor(_COLORS['muted']))
+        painter.drawText(
+            QRectF(hx, hy + hole_size * 0.55, hole_size, hole_size * 0.32),
+            Qt.AlignCenter, "jours"
+        )
 
 
 def _scroll_widget() -> tuple:
@@ -475,35 +537,104 @@ class StatistiquesDialog(QDialog):
     def _build_absences_tab(self, d: dict):
         scroll, _, layout = _scroll_widget()
 
-        layout.addWidget(_SectionTitle("Par type d'absence (6 derniers mois)"))
         par_type = d.get('par_type', [])
+        par_mois = d.get('par_mois', [])
+
+        _PALETTE = [_COLORS['blue'], _COLORS['orange'], _COLORS['purple'],
+                    _COLORS['teal'], _COLORS['red'], _COLORS['green']]
+
+        # --- KPIs ---
+        total_j = sum(float(r.get('total_jours') or 0) for r in par_type)
+        top_type = par_type[0]['type_absence'] if par_type else '—'
+        nb_mois = len(par_mois)
+
+        kpi_row = QHBoxLayout()
+        kpi_row.setSpacing(12)
+        kpi_row.addWidget(_KpiCard("Total jours d'absence", int(total_j), _COLORS['blue'], 'j'))
+        kpi_row.addWidget(_KpiCard("Type principal", top_type, _COLORS['orange']))
+        kpi_row.addWidget(_KpiCard("Mois couverts", nb_mois, _COLORS['teal']))
+        kpi_row.addStretch()
+        layout.addLayout(kpi_row)
+        layout.addWidget(_Separator())
+
+        # --- Par type : donut + légende ---
+        layout.addWidget(_SectionTitle("Répartition par type (6 derniers mois)"))
         if par_type:
-            max_jours = max((float(r.get('total_jours') or 0) for r in par_type), default=1)
-            colors = [_COLORS['blue'], _COLORS['orange'], _COLORS['purple'],
-                      _COLORS['teal'], _COLORS['red'], _COLORS['green']]
-            for i, row in enumerate(par_type):
-                jours = float(row.get('total_jours') or 0)
-                color = colors[i % len(colors)]
-                layout.addWidget(_BarRow(
-                    row['type_absence'], int(jours), int(max_jours) or 1,
-                    color, suffix='j'
-                ))
+            total_j_ref = total_j or 1
+            chart_data = [
+                (row['type_absence'], float(row.get('total_jours') or 0), _PALETTE[i % len(_PALETTE)])
+                for i, row in enumerate(par_type)
+            ]
+
+            chart_row = QHBoxLayout()
+            chart_row.setSpacing(24)
+            chart_row.setContentsMargins(0, 8, 0, 8)
+
+            donut = _DonutChart(chart_data)
+            chart_row.addWidget(donut, 0, Qt.AlignVCenter)
+
+            legend = QWidget()
+            legend.setStyleSheet("background: transparent;")
+            leg_layout = QVBoxLayout(legend)
+            leg_layout.setContentsMargins(0, 0, 0, 0)
+            leg_layout.setSpacing(5)
+
+            for label, val, color in chart_data:
+                row_w = QWidget()
+                row_w.setStyleSheet("background: transparent;")
+                row_h = QHBoxLayout(row_w)
+                row_h.setContentsMargins(0, 0, 0, 0)
+                row_h.setSpacing(8)
+
+                dot = QLabel()
+                dot.setFixedSize(12, 12)
+                dot.setStyleSheet(f"background: {color}; border-radius: 3px;")
+
+                name_lbl = QLabel(label)
+                name_lbl.setStyleSheet(f"color: {_COLORS['text']}; font-size: 12px;")
+
+                pct_lbl = QLabel(f"{val / total_j_ref * 100:.1f}%")
+                pct_lbl.setFixedWidth(46)
+                pct_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                pct_lbl.setStyleSheet(f"color: {color}; font-size: 12px; font-weight: bold;")
+
+                val_lbl = QLabel(f"{int(val)} j")
+                val_lbl.setFixedWidth(50)
+                val_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+                val_lbl.setStyleSheet(f"color: {_COLORS['muted']}; font-size: 11px;")
+
+                row_h.addWidget(dot, 0, Qt.AlignVCenter)
+                row_h.addWidget(name_lbl, 1)
+                row_h.addWidget(pct_lbl)
+                row_h.addWidget(val_lbl)
+                leg_layout.addWidget(row_w)
+
+            leg_layout.addStretch()
+            chart_row.addWidget(legend, 1)
+            layout.addLayout(chart_row)
         else:
-            layout.addWidget(QLabel("Aucune absence validée sur les 6 derniers mois."))
+            lbl = QLabel("Aucune absence sur les 6 derniers mois.")
+            lbl.setStyleSheet(f"color: {_COLORS['muted']}; font-size: 12px;")
+            layout.addWidget(lbl)
 
         layout.addWidget(_Separator())
 
-        layout.addWidget(_SectionTitle("Nombre d'absences validées par mois"))
-        par_mois = d.get('par_mois', [])
+        # --- Par mois ---
+        layout.addWidget(_SectionTitle("Jours d'absence par mois"))
         if par_mois:
-            max_nb = max((r['nb_absences'] for r in par_mois), default=1)
+            max_j_mois = max(float(r.get('total_jours') or 0) for r in par_mois)
+            total_j_mois = sum(float(r.get('total_jours') or 0) for r in par_mois) or 1
             for row in par_mois:
+                jours = float(row.get('total_jours') or 0)
                 layout.addWidget(_BarRow(
-                    row['mois'], row['nb_absences'], max_nb,
-                    _COLORS['blue'], suffix='abs.'
+                    row['mois'], int(jours), int(max_j_mois) or 1,
+                    _COLORS['blue'], suffix='j',
+                    pct=jours / total_j_mois * 100,
                 ))
         else:
-            layout.addWidget(QLabel("Aucune donnée mensuelle."))
+            lbl = QLabel("Aucune donnée mensuelle.")
+            lbl.setStyleSheet(f"color: {_COLORS['muted']}; font-size: 12px;")
+            layout.addWidget(lbl)
 
         layout.addStretch()
         self._replace_tab("Absences", scroll)

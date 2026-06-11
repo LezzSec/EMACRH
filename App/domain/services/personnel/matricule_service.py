@@ -1,32 +1,44 @@
 # -*- coding: utf-8 -*-
 """
 Service de génération automatique de matricules
-Génère des matricules au format M000XXX pour le personnel de production
+Génère des matricules au format 8 chiffres selon le type d'emploi :
+  00xxxxxx → Employé CDI/CDD
+  10xxxxxx → Intérimaire
+  20xxxxxx → Stagiaire
 """
 
 from infrastructure.db.query_executor import QueryExecutor
 
+# regexp de filtrage, valeur de base si aucun matricule n'existe encore
+_TYPE_CONFIG = {
+    'CDI_CDD':     ('^00[0-9]{6}$', 0),
+    'INTERIMAIRE': ('^10[0-9]{6}$', 10_000_000),
+    'STAGIAIRE':   ('^20[0-9]{6}$', 20_000_000),
+}
 
-def generer_prochain_matricule():
+
+def generer_prochain_matricule_par_type(type_emploi='CDI_CDD'):
     """
-    Génère le prochain matricule disponible au format M000XXX
+    Génère le prochain matricule disponible pour le type d'emploi donné.
 
-    IMPORTANT: Cette fonction doit être appelée juste avant l'insertion
-    en base de données. Si le matricule n'est pas inséré immédiatement,
-    des appels successifs retourneront le même matricule.
+    Args:
+        type_emploi (str): 'CDI_CDD', 'INTERIMAIRE' ou 'STAGIAIRE'
 
     Returns:
-        str: Le prochain matricule (ex: 'M000101')
-
-    Raises:
-        Exception: Si impossible de se connecter à la base de données
+        str: Matricule 8 chiffres (ex: '00000438', '10000001', '20000001')
     """
-    dernier_numero = QueryExecutor.fetch_scalar(
-        "SELECT MAX(CAST(SUBSTRING(matricule, 2) AS UNSIGNED)) FROM personnel WHERE matricule REGEXP '^M[0-9]{6}$'",
-        default=0
+    regexp, base = _TYPE_CONFIG.get(type_emploi, _TYPE_CONFIG['CDI_CDD'])
+    dernier = QueryExecutor.fetch_scalar(
+        "SELECT MAX(CAST(matricule AS UNSIGNED)) FROM personnel WHERE matricule REGEXP %s",
+        (regexp,), default=base
     )
-    prochain_numero = (int(dernier_numero) if dernier_numero else 0) + 1
-    return f"M{prochain_numero:06d}"
+    prochain = (int(dernier) if dernier else base) + 1
+    return f"{prochain:08d}"
+
+
+def generer_prochain_matricule():
+    """Alias CDI/CDD — conservé pour compatibilité."""
+    return generer_prochain_matricule_par_type('CDI_CDD')
 
 
 def matricule_existe(matricule):
@@ -86,7 +98,7 @@ def assigner_matricule_si_production(operateur_id, est_production=True):
 def generer_matricule(nom: str, prenom: str) -> str:
     """
     Alias pour generer_prochain_matricule()
-    Génère un nouveau matricule (format M000XXX)
+    Génère un nouveau matricule (format 8 chiffres)
 
     Args:
         nom (str): Nom de l'employé (non utilisé, pour compatibilité)

@@ -14,7 +14,7 @@ Usage:
     # Créer une nouvelle absence
     success, msg, new_id = AbsenceServiceCRUD.create(
         personnel_id=1,
-        type_absence_code="CP",
+        type_absence_id=2,
         date_debut=date.today(),
         date_fin=date.today() + timedelta(days=5),
         nb_jours=5.0,
@@ -131,20 +131,19 @@ class AbsenceServiceCRUD(CRUDService):
     TABLE_NAME = "demande_absence"
     ACTION_PREFIX = "ABSENCE_"
 
-    # Champs autorisés pour les mises à jour (sécurité)
     ALLOWED_FIELDS = [
         'personnel_id',
-        'type_absence_code',
+        'type_absence_id',
         'date_debut',
         'date_fin',
-        'demi_debut',
-        'demi_fin',
+        'demi_journee_debut',
+        'demi_journee_fin',
         'nb_jours',
         'motif',
         'statut',
-        'commentaire',
-        'valideur_id',
-        'date_validation'
+        'commentaire_validation',
+        'validateur_id',
+        'date_validation',
     ]
 
     @classmethod
@@ -244,7 +243,7 @@ class AbsenceServiceCRUD(CRUDService):
         }
 
         if valideur_id:
-            update_data['valideur_id'] = valideur_id
+            update_data['validateur_id'] = valideur_id
 
         return cls.update(record_id=record_id, **update_data)
 
@@ -278,10 +277,10 @@ class AbsenceServiceCRUD(CRUDService):
         }
 
         if commentaire:
-            update_data['commentaire'] = commentaire
+            update_data['commentaire_validation'] = commentaire
 
         if valideur_id:
-            update_data['valideur_id'] = valideur_id
+            update_data['validateur_id'] = valideur_id
 
         return cls.update(record_id=record_id, **update_data)
 
@@ -301,7 +300,7 @@ class AbsenceServiceCRUD(CRUDService):
         update_data = {'statut': 'ANNULEE'}
 
         if commentaire:
-            update_data['commentaire'] = commentaire
+            update_data['commentaire_validation'] = commentaire
 
         return cls.update(record_id=record_id, **update_data)
 
@@ -421,7 +420,7 @@ class AbsenceServiceCRUD(CRUDService):
                    da.date_validation
             FROM demande_absence da
             JOIN type_absence ta ON da.type_absence_id = ta.id
-            LEFT JOIN personnel v ON da.valideur_id = v.id
+            LEFT JOIN personnel v ON da.validateur_id = v.id
             WHERE {where_clause}
             ORDER BY da.date_debut DESC
             """,

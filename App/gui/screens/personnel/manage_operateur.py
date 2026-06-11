@@ -11,7 +11,7 @@ from domain.repositories.niveau_polyvalence_repo import NiveauPolyvalenceReposit
 from domain.repositories.personnel_repo import PersonnelRepository
 from domain.repositories.poste_repo import PosteRepository
 from domain.repositories.polyvalence_repo import PolyvalenceRepository
-from domain.services.personnel.matricule_service import generer_prochain_matricule
+from domain.services.personnel.matricule_service import generer_prochain_matricule_par_type
 from domain.services.admin.config_service import ServicesRHService
 from infrastructure.logging.optimized_db_logger import log_hist_async
 from gui.components.emac_ui_kit import show_error_message
@@ -154,6 +154,17 @@ class ManageOperatorsDialog(QDialog):
         self.add_prenom_input.setPlaceholderText("Prénom")
         layout.addWidget(self.add_prenom_input)
 
+        type_layout = QHBoxLayout()
+        type_label = QLabel("Type d'emploi :")
+        type_label.setFont(QFont("Arial", 10))
+        self.type_emploi_combo = QComboBox(self)
+        self.type_emploi_combo.addItem("Employé CDI/CDD", "CDI_CDD")
+        self.type_emploi_combo.addItem("Intérimaire", "INTERIMAIRE")
+        self.type_emploi_combo.addItem("Stagiaire", "STAGIAIRE")
+        type_layout.addWidget(type_label)
+        type_layout.addWidget(self.type_emploi_combo, 1)
+        layout.addLayout(type_layout)
+
         date_layout = QHBoxLayout()
         date_label = QLabel("Date d'entrée :")
         date_label.setFont(QFont("Arial", 10))
@@ -245,6 +256,10 @@ class ManageOperatorsDialog(QDialog):
             service_numposte = service_value
             service_id_value = id_par_nom.get(service_value)
 
+        # Type d'emploi (détermine le préfixe du matricule)
+        type_emploi = self.type_emploi_combo.currentData()
+        type_emploi_label = self.type_emploi_combo.currentText()
+
         # Ensuite vérifier nom et prénom
         nom = self.add_nom_input.text().strip()
         prenom = self.add_prenom_input.text().strip()
@@ -286,8 +301,8 @@ class ManageOperatorsDialog(QDialog):
             if existing_id:
                 operateur_id = int(existing_id)
             else:
-                # Générer le matricule
-                matricule = generer_prochain_matricule()
+                # Générer le matricule selon le type d'emploi
+                matricule = generer_prochain_matricule_par_type(type_emploi)
 
                 # Créer le personnel via repository (logging + EventBus inclus)
                 data = {
@@ -347,13 +362,14 @@ class ManageOperatorsDialog(QDialog):
                     QMessageBox.information(self, "Info", "Opérateur existant, aucune polyvalence ajoutée.")
             else:
                 if is_production:
-                    msg = f"Opérateur '{prenom} {nom}' créé avec succès !\n\nMatricule : {matricule}\nPoste : Production\nCet opérateur apparaîtra dans les Listes et Grilles."
+                    msg = f"Opérateur '{prenom} {nom}' créé avec succès !\n\nMatricule : {matricule}\nType : {type_emploi_label}\nPoste : Production\nCet opérateur apparaîtra dans les Listes et Grilles."
                     if add_polyvalence and poste_id:
                         msg += f"\nPolyvalence ajoutée au poste {poste_name}"
                 else:
                     msg = (
                         f"Personnel '{prenom} {nom}' créé avec succès.\n\n"
                         f"Matricule : {matricule}\n"
+                        f"Type : {type_emploi_label}\n"
                         f"Ce membre du personnel n'apparaîtra PAS dans les Listes et Grilles."
                     )
                 QMessageBox.information(self, "Succès", msg)
